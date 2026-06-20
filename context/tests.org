@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Test system context — philosophy, coverage, regression, wisp, heap
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -89,6 +90,7 @@ context record.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Testing philosophy
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -550,6 +552,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Core language test specifications
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -795,6 +798,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Heap-related test specifications
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -824,6 +828,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Regression test specifications
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -862,6 +867,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Wisp-specific test specifications
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -897,11 +903,14 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+Cross-reference links to related context nodes. See [[file:connections.org][connections.org]] for the canonical routing table.
 
 * LLM Analysis
 :PROPERTIES:
@@ -1001,9 +1010,12 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 
 * Test Coverage Anchors
 
+Test-driven observations and failure records for the corresponding subsystem.
+
 * Tests Expected Failures
 :PROPERTIES:
 :ID: monadc.context.tests.expected-failures
+:CONTEXT_DESCRIPTION: Test filing and organization
 :CUSTOM_ID: test-anchor-tests-expected-failures
 :END:
 [OBS id:obs.tests.expected-failures.test-anchor src:tests/TIERS.md conf:high]

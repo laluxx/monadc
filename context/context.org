@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-17
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -376,6 +376,7 @@
 ** Language Reference (info/)
 :PROPERTIES:
 :ID: monadc.context.portal.info-zone
+:CONTEXT_DESCRIPTION: Link to info/ language reference files
 :CUSTOM_ID: portal-info-zone
 :CONTEXT_KIND: link
 :CONTEXT_STATUS: active
@@ -389,6 +390,7 @@
 * Formal Category Layer
 :PROPERTIES:
 :ID: monadc.context.portal.round3-category-directory
+:CONTEXT_DESCRIPTION: Formal category layer entry point
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active
 :SOURCE: context/context.org
@@ -401,6 +403,7 @@
 * Live Category Interface
 :PROPERTIES:
 :ID: monadc.context.root.live-category-interface
+:CONTEXT_DESCRIPTION: Live category interface entry point
 :CUSTOM_ID: context-root-live-category-interface
 :CONTEXT_KIND: portal
 :CONTEXT_STATUS: active

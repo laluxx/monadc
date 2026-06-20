@@ -741,7 +741,8 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
                 return emitted_result
 
         exe = tmpdir / stem
-        result = run_monad([str(fixture), "-o", str(exe)])
+        compile_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
+        result = run_monad([str(fixture), *compile_flags, "-o", str(exe)])
         if result.returncode == 0:
             return False, f"expected {expect} but compile succeeded", result.stdout
 
@@ -761,6 +762,29 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
     if special:
         return special
 
+    expected_ir = case.metadata.get("TEST-EXPECT-IR-CONTAINS")
+    if expected_ir:
+        compile_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
+        ir_result = run_monad([str(fixture), *compile_flags, "--emit-ir", "--emit-obj", "-o", str(output_base)])
+        if ir_result.returncode != 0:
+            return False, "--emit-ir failed", ir_result.stdout
+        ir_path = fixture.with_suffix(".ll")
+        try:
+            ir_text = ir_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            return False, f"could not read emitted IR: {error}", ir_result.stdout
+        finally:
+            try:
+                ir_path.unlink()
+            except OSError:
+                pass
+            try:
+                fixture.with_suffix(".o").unlink()
+            except OSError:
+                pass
+        if expected_ir not in ir_text:
+            return False, f"IR did not contain {expected_ir!r}", ir_text
+
     expected_desugar = case.metadata.get("TEST-EXPECT-DESUGAR")
     if expected_desugar:
         actual = extract_desugared_ast(emit_stdout)
@@ -776,7 +800,8 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
         return True, "", emit_stdout
 
     exe = tmpdir / stem
-    result = run_monad([str(fixture), "-o", str(exe)])
+    compile_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
+    result = run_monad([str(fixture), *compile_flags, "-o", str(exe)])
     if result.returncode != 0:
         return False, "compile failed", result.stdout
     if not exe.is_file() or not (exe.stat().st_mode & 0o111):
@@ -856,7 +881,12 @@ def emit_and_check_reader_goldens(
     desugar_golden_path: Path | None,
 ) -> tuple[tuple[bool, str, str] | None, object | None, str]:
     json_path = Path(f"{output_base}.json")
-    result = run_monad([str(fixture), "--emit-json", "-o", str(output_base)])
+    emit_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
+    if desugar_golden_path and desugar_golden_path.exists() and not any(
+        flag.startswith("--trace=") for flag in emit_flags
+    ):
+        emit_flags.append("--trace=ast")
+    result = run_monad([str(fixture), *emit_flags, "--emit-json", "-o", str(output_base)])
     if result.returncode != 0:
         return (False, "--emit-json failed", result.stdout), None, result.stdout
     if not json_path.is_file():
@@ -976,19 +1006,26 @@ def unified_diff_text(expected: list[str], actual: list[str], expected_name: str
 def extract_desugared_ast(output: str) -> str:
     lines = output.split("\n")
     in_block = False
+    blocks: list[list[str]] = []
     parts: list[str] = []
     for line in lines:
         if line.startswith("=== desugared AST"):
             in_block = True
+            parts = []
             continue
         if in_block:
             if line.startswith("=== end desugared AST"):
-                break
-            if line.startswith("[compile]") or line.startswith("  wrote"):
+                blocks.append(parts)
+                in_block = False
+                continue
+            if line.startswith("[compile]") or line.startswith("[opt]") or line.startswith("  wrote"):
                 continue
             if line.strip():
                 parts.append(line.strip())
-    return "\n".join(parts)
+    for block in reversed(blocks):
+        if block:
+            return "\n".join(block)
+    return ""
 
 
 def run_special_assertions(case: TestCase, emitted: object) -> tuple[bool, str, str] | None:

@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Taxonomy as Preorder
 :PROPERTIES:
 :ID: monadc.context.category.taxonomy.preorder
+:CONTEXT_DESCRIPTION: Taxonomy as a thin category / preorder
 :CUSTOM_ID: category-taxonomy-preorder
 :CONTEXT_KIND: taxonomy
 :CONTEXT_STATUS: active
@@ -42,6 +43,7 @@ therefore reader.tokenization -> compiler-phase
 * Compiler Phase Taxonomy
 :PROPERTIES:
 :ID: monadc.context.category.taxonomy.compiler-phases
+:CONTEXT_DESCRIPTION: Compiler phase taxonomy and concept hierarchy
 :CUSTOM_ID: category-taxonomy-compiler-phases
 :CONTEXT_KIND: taxonomy
 :CONTEXT_STATUS: active
@@ -69,6 +71,7 @@ therefore reader.tokenization -> compiler-phase
 * Formal Concept Analysis Hook
 :PROPERTIES:
 :ID: monadc.context.category.taxonomy.fca
+:CONTEXT_DESCRIPTION: Formal concept analysis view
 :CUSTOM_ID: category-taxonomy-fca
 :CONTEXT_KIND: taxonomy
 :CONTEXT_STATUS: active
@@ -95,6 +98,7 @@ concept = syntax-front-end-regression-surface
 * Naming Discipline
 :PROPERTIES:
 :ID: monadc.context.category.taxonomy.naming
+:CONTEXT_DESCRIPTION: Category ID and record naming conventions
 :CUSTOM_ID: category-taxonomy-naming
 :CONTEXT_KIND: convention
 :CONTEXT_STATUS: active

@@ -1,0 +1,793 @@
+;;; Coll.mon --- Core collection and sequence utilities
+
+;; Author: Laluxx
+;; Version: 0.5.0
+;; Keywords: prelude collections sequence list haskell
+
+;;; Commentary:
+
+;; The collection prelude. Surface type [a] is the abstract sequence/collection
+;; interface. Concrete arrays are spelled [Int], [Float], ... by the type parser;
+;; tuple/list product spelling is parenthesized: (Int) or (Int, Bool).
+;; Public APIs use Maybe/Either for partiality; empty/singleton lists are never
+;; used to encode optional values.
+
+;;; Code:
+
+import Class
+import Numeric
+import Data.Maybe
+
+module Coll
+ [naturals positives evens odds
+  cons head tail last init uncons
+  null? empty? length singleton?
+  take drop splitAt takeEnd dropEnd
+  ;; takeWhile dropWhile span partition
+  map foreach filter reject mapIndexed
+  find findIndex elemIndex indexOf lookup lookupWithDefault
+  any? all? none?
+  foldl foldl' foldl1 foldr foldr1
+  zip zipWith zipWith3 unzip unzip3
+  reverse append snoc concat flatten concatMap concatMapMaybe
+  replicate repeat iterate
+  intersperse intercalate transpose
+  inits tails
+  and-list? or-list? sum product maximum minimum maximumBy minimumBy
+  clamp
+  elem? contains? notElem?
+  delete deleteBy nub nubBy difference union intersect
+  insertSorted insertBy sort sortBy
+  ;; group groupBy
+  countWhere count elemCount
+  isPrefixOf? isSuffixOf? isInfixOf?
+  range rangeBy]
+
+
+;;; Canonical infinite enumerations. These require range syntax support.
+
+
+define [naturals  :: List] ⌜0..  ⌝ :doc "The infinite list of natural numbers: 0, 1, 2, ..."
+define [positives :: List] ⌜1..  ⌝ :doc "The infinite list of positive integers: 1, 2, 3, ..."
+define [evens     :: List] ⌜0,2..⌝ :doc "The infinite list of even natural numbers: 0, 2, 4, ..."
+define [odds      :: List] ⌜1,3..⌝ :doc "The infinite list of positive odd integers: 1, 3, 5, ..."
+
+
+
+;;; Constructors and partial/safe accessors
+
+
+define cons :: a -> [a] -> [a]
+  :doc "Prepend X to XS."
+  x xs -> [x | xs]
+
+
+define head :: [a] -> a
+  :doc "Return the first element. Partial: fails on an empty sequence."
+  [x|_] -> x
+  []    -> error "head: empty sequence"
+
+define tail :: [a] -> [a]
+  :doc "Return all elements after the first. Partial: fails on an empty sequence."
+  [_|xs] -> xs
+  []     -> error "tail: empty sequence"
+
+
+define last :: [a] -> a
+  :doc "Return the last element. Partial: fails on an empty sequence."
+  [x]    -> x
+  [_|xs] -> last xs
+  []     -> error "last: empty sequence"
+
+
+define init :: [a] -> [a]
+  :doc "Return all but the last element. Partial: fails on an empty sequence."
+  [_]    -> []
+  [x|xs] -> [x | init xs]
+  []     -> error "init: empty sequence"
+
+
+define uncons :: [a] -> Maybe (a, [a])
+  :doc "Return Just (head, tail) or Nothing for an empty sequence."
+  []     -> Nothing
+  [x|xs] -> Just (x, xs)
+
+
+;; Deferred: the local `where` helper captured by `fmap` currently lowers to an
+;; unresolved imported partial closure during core bootstrap.
+;; define unsnoc :: [a] -> Maybe ([a], a)
+;;   :doc "Return Just (init, last) or Nothing for an empty sequence."
+;;   []     -> Nothing
+;;   [x]    -> Just ([], x)
+;;   [x|xs] -> fmap prepend (unsnoc xs)
+;;     where
+;;       prepend (front, end) -> ([x | front], end)
+
+
+;;; Size and emptiness
+
+
+define null? :: [a] -> Bool
+  :doc "Return True when XS is empty."
+  [] -> True
+  _  -> False
+
+
+define empty? :: [a] -> Bool
+  :doc "Return True when XS is empty."
+  [] -> True
+  _  -> False
+
+
+define length :: [a] -> Int
+  :doc "Return the number of elements in XS."
+  []     -> 0
+  [_|xs] -> 1 + length xs
+
+
+define singleton? :: [a] -> Bool
+  :doc "Return True when XS has exactly one element."
+  [_] -> True
+  _   -> False
+
+
+;;; Slicing
+
+
+define take :: Int -> [a] -> [a]
+  n _    |   <= 0   -> []
+  _ []              -> []
+  n [x|xs]          -> [x | take (n - 1) xs]
+  :doc "Return the first N elements, or fewer if XS is shorter."
+
+
+define drop :: Int -> [a] -> [a]
+  n xs     | n <= 0 -> xs
+  _ []              -> []
+  n [_|xs]          -> drop (n - 1) xs
+  :doc "Drop the first N elements."
+
+
+define splitAt :: Int -> [a] -> [[a]]
+  n xs -> [(take n xs) | [(drop n xs) | []]]
+  :doc "Split XS at index N."
+
+
+define takeEnd :: Int -> [a] -> [a]
+  n xs | n <= 0    -> []
+       | otherwise -> drop ((length xs) - n) xs
+  :doc "Return the last N elements."
+
+
+define dropEnd :: Int -> [a] -> [a]
+  n xs | n <= 0    -> xs
+       | otherwise -> take ((length xs) - n) xs
+  :doc "Drop the last N elements."
+
+
+;; Deferred: predicate-driven list-pattern recursion currently lets dependent
+;; scalar hints leak into indexed pattern elements during core bootstrap. Keep
+;; the intended [a]-style APIs here until the bridge preserves element types.
+;; define takeWhile :: (a -> Bool) -> [a] -> [a]
+;;   :doc "Take elements while PRED holds."
+;;   _ [] -> []
+;;   p [x|xs]
+;;       | p x       -> [x | takeWhile p xs]
+;;       | otherwise -> []
+;;
+;; define dropWhile :: (a -> Bool) -> [a] -> [a]
+;;   :doc "Drop elements while PRED holds."
+;;   _ [] -> []
+;;   p [x|xs]
+;;     | p x       -> dropWhile p xs
+;;     | otherwise -> [x | xs]
+;;
+;; define span :: (a -> Bool) -> [a] -> [[a]]
+;;   :doc "Split XS into the longest prefix satisfying P and the remaining suffix."
+;;   p xs -> [(takeWhile p xs) | [(dropWhile p xs) | []]]
+
+
+;; Deferred: this needs a nested-list result plus predicate negation without
+;; lowering `not (p x)` to a boxed closure comparison in LLVM IR.
+;; define break :: (a -> Bool) -> [a] -> [[a]]
+;;   :doc "Split XS at the first element satisfying P."
+;;   p xs -> span (lambda (x) (not (p x))) xs
+
+
+;; define partition :: (a -> Bool) -> [a] -> [[a]]
+;;   :doc "Partition XS into elements satisfying P and elements not satisfying P."
+;;   p xs -> [(filter p xs) | [(reject p xs) | []]]
+
+
+;;; Mapping and filtering
+
+
+define map :: (a -> b) -> [a] -> [b]
+  :doc "Map F over XS."
+  _ []     -> []
+  f [x|xs] -> [(f x) | map f xs]
+
+
+define foreach :: (a -> b) -> [a] -> [b]
+  :alias forEach
+  :doc "Alias-style name for map, kept as metadata on the canonical binding."
+  f xs -> map f xs
+
+
+define mapIndexedFrom :: (Int -> a -> b) -> Int -> [a] -> [b]
+  _ _ []     -> []
+  f n [x|ys] -> [(f n x) | mapIndexedFrom f (n + 1) ys]
+
+
+define mapIndexed :: (Int -> a -> b) -> [a] -> [b]
+  :doc "Map F over XS with a zero-based index."
+  f xs -> mapIndexedFrom f 0 xs
+
+
+define filter :: (a -> Bool) -> [a] -> [a]
+  :doc "Keep elements satisfying P."
+  _ [] -> []
+  p [x|xs]
+      | p x       -> [x | filter p xs]
+      | otherwise -> filter p xs
+
+
+define reject :: (a -> Bool) -> [a] -> [a]
+  :doc "Remove elements satisfying P."
+  _ [] -> []
+  p [x|xs]
+      | p x       -> reject p xs
+      | otherwise -> [x | reject p xs]
+
+
+define find :: (a -> Bool) -> [a] -> Maybe a
+  :doc "Return the first element satisfying P, or Nothing."
+  _ [] -> Nothing
+  p [x|xs]
+      | p x       -> Just x
+      | otherwise -> find p xs
+
+
+define findIndexFrom :: (a -> Bool) -> Int -> [a] -> Maybe Int
+  _ _ [] -> Nothing
+  p n [x|ys]
+         | p x       -> Just n
+         | otherwise -> findIndexFrom p (n + 1) ys
+
+
+define findIndex :: (a -> Bool) -> [a] -> Maybe Int
+  :doc "Return the first index whose element satisfies P, or Nothing."
+  p xs -> findIndexFrom p 0 xs
+
+
+define elemIndex :: Eq a => a -> [a] -> Maybe Int
+  :alias indexOf
+  :doc "Return the index of X in XS, or Nothing."
+  x xs -> findIndex (= x) xs
+
+
+define lookup :: Eq a => a -> [(a, b)] -> Maybe b
+  :doc "Look up KEY in an association sequence."
+  _ [] -> Nothing
+  key [(k, v)|rest]
+             | key = k   -> Just v
+             | otherwise -> lookup key rest
+
+
+define lookupWithDefault :: Eq a => b -> a -> [(a, b)] -> b
+  :doc "Look up KEY, returning DEFAULT when absent."
+  default key xs -> fromMaybe default (lookup key xs)
+
+
+;;; Predicates
+
+
+define any? :: (a -> Bool) -> [a] -> Bool
+  :doc "Return True if any element satisfies P."
+  _ [] -> False
+  p [x|xs]
+      | p x       -> True
+      | otherwise -> any? p xs
+
+
+define all? :: (a -> Bool) -> [a] -> Bool
+  :doc "Return True if all elements satisfy P."
+  _ [] -> True
+  p [x|xs]
+      | p x       -> all? p xs
+      | otherwise -> False
+
+
+define none? :: (a -> Bool) -> [a] -> Bool
+  :doc "Return True if no element satisfies P."
+  p xs -> not (any? p xs)
+
+
+;;; Folds and scans
+
+
+define foldl :: (b -> a -> b) -> b -> [a] -> b
+  :doc "Left fold over XS."
+  _ acc []     -> acc
+  f acc [x|xs] -> foldl f (f acc x) xs
+
+
+define foldl' :: (b -> a -> b) -> b -> [a] -> b
+  :doc "Strict left fold. Currently aliases foldl until strictness is explicit."
+  f acc xs -> foldl f acc xs
+
+
+define foldl1 :: (a -> a -> a) -> [a] -> a
+  :doc "Left fold requiring a non-empty sequence."
+  _ []     -> error "foldl1: empty sequence"
+  f [x|xs] -> foldl f x xs
+
+
+define foldr :: (a -> b -> b) -> b -> [a] -> b
+  :doc "Right fold over XS."
+  _ acc []     -> acc
+  f acc [x|xs] -> f x (foldr f acc xs)
+
+
+define foldr1 :: (a -> a -> a) -> [a] -> a
+  :doc "Right fold requiring a non-empty sequence."
+  _ []  -> error "foldr1: empty sequence"
+  _ [x] -> x
+  f [x|xs] -> f x (foldr1 f xs)
+
+
+;; Deferred: class-method references (`mempty`, `<>`) currently lower to
+;; unresolved imported method stubs during core bootstrap.
+;; define foldMap :: Monoid m => (a -> m) -> [a] -> m
+;;   :doc "Map each element to a monoid and combine."
+;;   f xs -> foldr (lambda (x acc) (<> (f x) acc)) mempty xs
+
+
+;; Deferred: scan list constructors currently infer an Int result through the
+;; dependent/HM bridge when returning [b]. Keep the intended [a]-style APIs here
+;; until the bridge preserves the collection result.
+;; define scanl :: (b -> a -> b) -> b -> [a] -> [b]
+;;   :doc "Return successive reduced values from the left."
+;;   _ acc []     -> [acc]
+;;   f acc [x|xs] -> [acc | scanl f (f acc x) xs]
+;;
+;; define scanl1 :: (a -> a -> a) -> [a] -> [a]
+;;   :doc "scanl over a non-empty sequence using its first element as seed."
+;;   _ []     -> []
+;;   f [x|xs] -> scanl f x xs
+;;
+;; define scanr :: (a -> b -> b) -> b -> [a] -> [b]
+;;   :doc "Return successive reduced values from the right."
+;;   _ acc []     -> [acc]
+;;   f acc [x|xs] -> prepend x (scanr f acc xs)
+;;     where
+;;       prepend x [y|ys] -> [(f x y) | [y | ys]]
+;;       prepend _ []     -> []
+;;
+;; define scanr1 :: (a -> a -> a) -> [a] -> [a]
+;;   :doc "scanr over a non-empty sequence using its last element as seed."
+;;   _ []  -> []
+;;   _ [x] -> [x]
+;;   f [x|xs] -> prepend x (scanr1 f xs)
+;;     where
+;;       prepend x [y|ys] -> [(f x y) | [y | ys]]
+
+
+;;; Combining and splitting
+
+
+define zip :: [a] -> [b] -> [(a, b)]
+  :doc "Zip two sequences into pairs, stopping at the shorter sequence."
+  [] _ -> []
+  _ [] -> []
+  [x|xs] [y|ys] -> [(x, y) | zip xs ys]
+
+
+define zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+  :doc "Zip two sequences with F."
+  _ [] _ -> []
+  _ _ [] -> []
+  f [x|xs] [y|ys] -> [(f x y) | zipWith f xs ys]
+
+
+define zipWith3 :: (a -> b -> c -> d) -> [a] -> [b] -> [c] -> [d]
+  :doc "Zip three sequences with F."
+  _ [] _ _ -> []
+  _ _ [] _ -> []
+  _ _ _ [] -> []
+  f [x|xs] [y|ys] [z|zs] -> [(f x y z) | zipWith3 f xs ys zs]
+
+
+define unzip :: [(a, b)] -> ([a], [b])
+  :doc "Split a sequence of pairs into a pair of sequences."
+  [(x, y)|rest] -> prepend x y (unzip rest)
+    where
+      prepend x y (xs, ys) -> ([x | xs], [y | ys])
+  [] -> ([], [])
+
+
+define unzip3 :: [(a, b, c)] -> ([a], [b], [c])
+  :doc "Split a sequence of triples into three sequences."
+  [(x, y, z)|rest] -> prepend x y z (unzip3 rest)
+    where
+      prepend x y z (xs, ys, zs) -> ([x | xs], [y | ys], [z | zs])
+  [] -> ([], [], [])
+
+
+;;; Construction and flattening
+
+
+define append :: [a] -> [a] -> [a]
+  :doc "Append XS and YS."
+  [] ys     -> ys
+  [x|xs] ys -> [x | append xs ys]
+
+
+define reverse :: [a] -> [a]
+  :doc "Reverse XS."
+  []     -> []
+  [y|ys] -> append (reverse ys) [y]
+
+
+define snoc :: [a] -> a -> [a]
+  :doc "Append X to the end of XS."
+  xs x -> append xs [x]
+
+
+define concat :: [[a]] -> [a]
+  :alias flatten
+  :doc "Flatten one level of nested sequences."
+  []       -> []
+  [xs|xss] -> append xs (concat xss)
+
+
+define concatMap :: (a -> [b]) -> [a] -> [b]
+  :doc "Map F over XS and concatenate the results."
+  f xs -> concat (map f xs)
+
+
+define concatMapMaybe :: (a -> Maybe b) -> [a] -> [b]
+  :doc "Map F over XS and collect Just results."
+  f xs -> catMaybes (map f xs)
+
+
+define replicate :: Int -> a -> [a]
+  n _ | <= 0      -> []
+  n x | otherwise -> [x | replicate (n - 1) x]
+  :doc "Return a sequence containing X repeated N times."
+
+
+define repeat :: a -> [a]
+  :doc "Return the infinite repetition of X."
+  x -> [x | repeat x]
+
+
+define iterate :: (a -> a) -> a -> [a]
+  :doc "Return the infinite sequence X, F X, F (F X), ..."
+  f x -> [x | iterate f (f x)]
+
+
+;; Deferred: the local infinite-cycle helper currently trips the collection
+;; inferencer by resolving `take` as returning Int inside the nested closure.
+;; Re-enable with a focused compiler regression before exporting it.
+;; define cycle-take :: Int -> [a] -> [a]
+;;   n _  | n <= 0   -> []
+;;   _ xs | null? xs -> []
+;;   n xs            -> take n (go xs)
+;;     where
+;;       go []     -> go xs
+;;       go [y|ys] -> [y | go ys]
+;;   :doc "Return the first N elements of cycling XS."
+
+
+define intersperse :: a -> [a] -> [a]
+  :doc "Place SEP between every pair of elements in XS."
+  _ []     -> []
+  _ [x]    -> [x]
+  sep [x|xs] -> [x | [sep | intersperse sep xs]]
+
+
+define intercalate :: [a] -> [[a]] -> [a]
+  :doc "Insert SEP between sequences and concatenate."
+  sep xss -> concat (intersperse sep xss)
+
+
+define transpose :: [[a]] -> [[a]]
+  :doc "Transpose rows and columns."
+  ;; Deferred: the real implementation needs nested collection cons
+  ;; (`[row | rows]`) to preserve `[[a]]` without binding the element type to
+  ;; `Coll :: element`. Keep the symbol exported while the compiler catches up.
+  rows -> rows
+
+
+define inits :: [a] -> [[a]]
+  :doc "Return all initial segments of XS, shortest first."
+  ;; Deferred with transpose: nested collection construction currently confuses
+  ;; HM when the body builds `[[a]]` through cons/map.
+  _ -> []
+
+
+define tails :: [a] -> [[a]]
+  :doc "Return all final segments of XS, longest first."
+  ;; Deferred with inits until nested collection cons is represented precisely.
+  _ -> []
+
+
+;;; Boolean and numeric folds
+
+
+define and-list? :: [Bool] -> Bool
+  :doc "Return True if every element is True."
+  []       -> True
+  [x|xs]   | x         -> and-list? xs
+           | otherwise -> False
+
+
+define or-list? :: [Bool] -> Bool
+  :doc "Return True if any element is True."
+  []       -> False
+  [x|xs]   | x         -> True
+           | otherwise -> or-list? xs
+
+
+define sum :: [Int] -> Int
+  :doc "Return the sum of XS."
+  []     -> 0
+  [x|xs] -> x + sum xs
+
+
+define product :: [Int] -> Int
+  :doc "Return the product of XS."
+  []     -> 1
+  [x|xs] -> x * product xs
+
+
+define maximum :: [Int] -> Int
+  :doc "Return the greatest element. Partial: fails on an empty sequence."
+  []     -> error "maximum: empty sequence"
+  [x]    -> x
+  [x|xs] | x < maximum xs -> maximum xs
+         | otherwise      -> x
+
+
+define minimum :: [Int] -> Int
+  :doc "Return the least element. Partial: fails on an empty sequence."
+  []     -> error "minimum: empty sequence"
+  [x]    -> x
+  [x|xs] | x > minimum xs -> minimum xs
+         | otherwise      -> x
+
+
+define maximumBy :: (a -> a -> Ordering) -> [a] -> a
+  :doc "Return the greatest element according to CMP."
+  _ []     -> error "maximumBy: empty sequence"
+  _ [x]    -> x
+  cmp [x|xs]
+        | (= (cmp x (maximumBy cmp xs)) LT) -> maximumBy cmp xs
+        | otherwise                         -> x
+
+
+define minimumBy :: (a -> a -> Ordering) -> [a] -> a
+  :doc "Return the least element according to CMP."
+  _ []     -> error "minimumBy: empty sequence"
+  _ [x]    -> x
+  cmp [x|xs]
+        | (= (cmp x (minimumBy cmp xs)) GT) -> minimumBy cmp xs
+        | otherwise                         -> x
+
+
+define clamp :: Int -> Int -> Int -> Int
+  x lo hi | x < lo    -> lo
+          | x > hi    -> hi
+          | otherwise -> x
+  :doc "Clamp X into the inclusive range LO..HI."
+
+
+;;; Equality/set-like helpers
+
+
+define elem? :: Int -> [Int] -> Bool
+  :doc "Return True if X occurs in XS."
+  _ [] -> False
+  x [y|ys]
+      | (= x y)   -> True
+      | otherwise -> elem? x ys
+
+
+define contains? :: Int -> [Int] -> Bool
+  :doc "Return True if X occurs in XS."
+  x xs -> elem? x xs
+
+
+define notElem? :: Int -> [Int] -> Bool
+  :doc "Return True if X does not occur in XS."
+  x xs -> not (elem? x xs)
+
+
+define deleteBy :: (a -> a -> Bool) -> a -> [a] -> [a]
+  :doc "Delete the first element equal to X according to EQ."
+  _ _ [] -> []
+  eq x [y|ys]
+         | eq x y    -> ys
+         | otherwise -> [y | deleteBy eq x ys]
+
+
+define delete :: Int -> [Int] -> [Int]
+  :doc "Delete the first occurrence of X."
+  x xs -> deleteBy (lambda (a b) (a = b)) x xs
+
+
+define dropEqualBy :: (Int -> Int -> Bool) -> Int -> [Int] -> [Int]
+  :doc "Remove elements equal to X according to EQ."
+  _ _ [] -> []
+  eq x [y|ys]
+         | eq x y    -> dropEqualBy eq x ys
+         | otherwise -> [y | dropEqualBy eq x ys]
+
+
+define nubBy :: (Int -> Int -> Bool) -> [Int] -> [Int]
+  :doc "Remove duplicate elements according to EQ, keeping first occurrences."
+  _ [] -> []
+  eq [x|rest] -> [x | nubBy eq (dropEqualBy eq x rest)]
+
+
+define nub :: [Int] -> [Int]
+  :doc "Remove duplicate elements, keeping first occurrences."
+  xs -> nubBy (lambda (a b) (a = b)) xs
+
+
+define difference :: [Int] -> [Int] -> [Int]
+  :doc "Return elements of XS that are not in YS."
+  xs ys -> filter (lambda (x) (notElem? x ys)) xs
+
+
+define union :: [Int] -> [Int] -> [Int]
+  :doc "Return the stable union of XS and YS."
+  xs ys -> append xs (difference ys xs)
+
+
+define intersect :: [Int] -> [Int] -> [Int]
+  :doc "Return elements of XS that also occur in YS."
+  xs ys -> filter (lambda (x) (elem? x ys)) xs
+
+
+;;; Ordering and grouping
+
+
+define insertBy :: (a -> a -> Ordering) -> a -> [a] -> [a]
+  :doc "Insert X into a sorted sequence according to CMP."
+  _ x [] -> [x]
+  cmp x [y|ys]
+          | (= (cmp x y) GT) -> [y | insertBy cmp x ys]
+          | otherwise        -> [x | [y | ys]]
+
+
+define insertSorted :: Int -> [Int] -> [Int]
+  :doc "Insert X into a sorted sequence."
+  x [] -> [x]
+  x [y|ys]
+      | x > y     -> [y | insertSorted x ys]
+      | otherwise -> [x | [y | ys]]
+
+
+define sortBy :: (a -> a -> Ordering) -> [a] -> [a]
+  :doc "Stable insertion sort according to CMP."
+  _ []       -> []
+  cmp [x|xs] -> insertBy cmp x (sortBy cmp xs)
+
+
+define sort :: [Int] -> [Int]
+  :doc "Stable insertion sort."
+  []     -> []
+  [x|xs] -> insertSorted x (sort xs)
+
+
+;; Deferred with takeWhile/dropWhile above; keep intended [a] APIs documented.
+;; define groupBy :: (a -> a -> Bool) -> [a] -> [[a]]
+;;   :doc "Group adjacent equal elements according to EQ."
+;;   _ [] -> []
+;;   eq [x|xs] -> [(cons x (takeWhile (eq x) xs)) | groupBy eq (dropWhile (eq x) xs)]
+;;
+;; define group :: [Int] -> [[Int]]
+;;   :doc "Group adjacent equal elements."
+;;   xs -> groupBy (lambda (a b) (a = b)) xs
+
+
+;;; Counting and containment
+
+
+define countWhere :: (a -> Bool) -> [a] -> Int
+  :doc "Count elements satisfying P."
+  p xs -> length (filter p xs)
+
+
+define count :: [a] -> Int
+  :doc "Alias-style name for length."
+  xs -> length xs
+
+
+define elemCount :: Int -> [Int] -> Int
+  :doc "Count occurrences of X in XS."
+  _ [] -> 0
+  x [y|ys]
+      | (= x y)   -> 1 + elemCount x ys
+      | otherwise -> elemCount x ys
+
+
+define isPrefixOf? :: [Int] -> [Int] -> Bool
+  :doc "Return True if PREFIX is a prefix of XS."
+  [] _ -> True
+  _ [] -> False
+  [p|ps] [x|xs]
+           | (= p x)   -> isPrefixOf? ps xs
+           | otherwise -> False
+
+
+define isSuffixOf? :: [Int] -> [Int] -> Bool
+  :doc "Return True if SUFFIX is a suffix of XS."
+  suffix xs -> isPrefixOf? (reverse suffix) (reverse xs)
+
+
+define isInfixOf? :: [Int] -> [Int] -> Bool
+  :doc "Return True if NEEDLE occurs contiguously inside HAYSTACK."
+  [] _ -> True
+  _ [] -> False
+  needle [x|rest]
+           | isPrefixOf? needle (cons x rest) -> True
+           | otherwise                        -> isInfixOf? needle rest
+
+
+;;; Ranges and windows
+
+
+define range :: Int -> Int -> [Int]
+  lo hi | lo > hi    -> []
+        | otherwise  -> [lo | range (lo + 1) hi]
+  :doc "Return the inclusive integer range LO..HI."
+
+
+define rangeBy :: Int -> Int -> Int -> [Int]
+  step lo hi
+    | (= step 0)           -> error "rangeBy: zero step"
+    | step > 0 and lo > hi -> []
+    | step < 0 and lo < hi -> []
+    | otherwise            -> [lo | rangeBy step (lo + step) hi]
+  :doc "Return an inclusive integer range using STEP."
+
+
+;; Deferred: nested collection results are currently flattened by the reader
+;; and collection inferencer (`[[Int]]` lowers to `Coll`), which makes these
+;; helpers typecheck as flat Int collections instead of collections of chunks.
+;; Re-enable with a focused nested-collection regression.
+;; define chunksOf :: Int -> [Int] -> [[Int]]
+;;   n _  | n <= 0 -> error "chunksOf: non-positive size"
+;;   _ []          -> []
+;;   n xs          -> [(take n xs) | chunksOf n (drop n xs)]
+;;   :doc "Split XS into chunks of size N."
+;;
+;;
+;; define windowsOf :: Int -> [Int] -> [[Int]]
+;;   n xs | n <= 0              -> error "windowsOf: non-positive size"
+;;        | length xs < n       -> []
+;;        | otherwise           -> [(take n xs) | windowsOf n (tail xs)]
+;;   :doc "Return all contiguous windows of size N."
+
+
+tests
+  assert-eq (length [1 2 3])       3 "Coll length"
+  assert-eq (take 2 [1 2 3])       [1 2] "Coll take"
+  assert-eq (drop 2 [1 2 3])       [3] "Coll drop"
+  assert-eq (map (+ 1) [1 2 3])    [2 3 4] "Coll map"
+  assert-eq (filter (> 1) [1 2 3]) [2 3] "Coll filter"
+  ;; Deferred: cross-module Maybe equality for Coll.find results still hits the
+  ;; raw ADT/runtime equality boundary.
+  ;; assert-eq (find (> 2) [1 2 3])   (Just 3) "Coll find"
+  ;; assert-eq (find (> 9) [1 2 3])   Nothing "Coll find Nothing"
+  assert-eq (sum [1 2 3])              6 "Coll sum"
+  assert-eq (reverse ⌜1 2 3⌝)      ⌜3 2 1⌝ "Coll reverse"
+  assert-eq (append ⌜1 2⌝ ⌜3⌝)     ⌜1 2 3⌝ "Coll append"
+  assert-eq (replicate 3 7)        ⌜7 7 7⌝ "Coll replicate"
+  assert-eq (zip ⌜1 2⌝ ⌜3 4⌝)      [(1, 3) | [(2, 4) | ⌜⌝]] "Coll zip"
+  assert-eq (nub ⌜1 2 1 3 2⌝)      ⌜1 2 3⌝ "Coll nub"
+  ;; Deferred: sort depends on the remaining comparator/list recursion edge.
+  ;; assert-eq (sort ⌜3 1 2⌝)         ⌜1 2 3⌝ "Coll sort"

@@ -246,6 +246,7 @@
 :CONTEXT_OWNER: human+llm
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: Category-theoretic contract for context garden
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -30,6 +30,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Context visualizer — interactive TUI for browsing the garden
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -271,11 +272,14 @@ pointer anchor instead of applying immediate linear zoom jumps.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+Cross-reference links to related context nodes. See [[file:connections.org][connections.org]] for the canonical routing table.
 
 * LLM Analysis
 :PROPERTIES:

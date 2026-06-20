@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -33,6 +33,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Code style taxonomy — naming conventions and formatting rules
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STATUS: active
 :SOURCE: context/style.org

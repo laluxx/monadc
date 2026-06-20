@@ -2,7 +2,7 @@
 #+AUTHOR: big-pickle (claude-opencode)
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -33,6 +33,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: LLM opinions on the context system — design notes and reflections
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: volatile
 :CONTEXT_STATUS: active
@@ -149,6 +150,8 @@
 :SOURCE: context/opinions.org
 :CONFIDENCE: high
 :END:
+
+Format specification, schema, and structural conventions.
 
 ** Pain 1: Property Drawer Boilerplate
 [OBS id:obs.opinions.drawer-boilerplate src:context/reader.org,context/language.org,context/build.org,context/tests.org,context/workflow.org,context/rules.org,context/visualizer.org,context/index.org,context/opinions.org conf:high]
@@ -681,6 +684,7 @@
 * Opinion: Make Category Context Executable
 :PROPERTIES:
 :ID: monadc.context.opinions.round3-category-system
+:CONTEXT_DESCRIPTION: Opinion record on context garden practices
 :CONTEXT_KIND: opinion
 :CONTEXT_STATUS: active
 :SOURCE: context/opinions.org
@@ -699,6 +703,7 @@
 * Opinion — Live Category Tooling
 :PROPERTIES:
 :ID: monadc.context.opinions.live-category-tooling
+:CONTEXT_DESCRIPTION: Opinion record on context garden practices
 :CUSTOM_ID: opinions-live-category-tooling
 :CONTEXT_KIND: opinion
 :CONTEXT_STATUS: active
@@ -717,6 +722,7 @@
 * Opinion — Catface should be Zig-first
 :PROPERTIES:
 :ID: monadc.context.opinions.catface-zig
+:CONTEXT_DESCRIPTION: Opinion record on context garden practices
 :CUSTOM_ID: opinions-catface-zig
 :CONTEXT_KIND: opinion
 :CONTEXT_STATUS: active

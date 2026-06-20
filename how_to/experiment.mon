@@ -2,6 +2,8 @@
 
 
 
+define type-id :: ∀a -> a
+  _ -> a
 
 
 data T = A | B | C deriving [Bounded Enum Show]

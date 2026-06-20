@@ -11,6 +11,109 @@ extern int g_trace_depth;
 extern bool g_trace_enabled;
 extern void shared_trace_indent(void);
 
+static bool g_infer_trace_enabled = false;
+
+void infer_set_trace(bool enabled) {
+    g_infer_trace_enabled = enabled;
+}
+
+static bool infer_runtime_collection_helper(const char *name) {
+    return name &&
+           (strcmp(name, "rt_coll_concat") == 0 ||
+            strcmp(name, "rt_coll_drop") == 0 ||
+            strcmp(name, "rt_coll_empty") == 0 ||
+            strcmp(name, "rt_coll_wrap") == 0);
+}
+
+static bool infer_is_cons_literal_tail(AST *ast) {
+    if (!ast) return false;
+    if (ast->type == AST_ARRAY) return true;
+    if (ast->type == AST_LIST &&
+        ast->list.count > 0 &&
+        ast->list.items[0] &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "rt_coll_concat") == 0)
+        return true;
+    return false;
+}
+
+Type *infer_freshen_annotation_vars(InferCtx *ctx, Type *t,
+                                    int *from, Type **to, int *count) {
+    if (!t) return NULL;
+
+    if (t->kind == TYPE_VAR) {
+        for (int i = 0; i < *count; i++) {
+            if (from[i] == t->var_id)
+                return type_clone(to[i]);
+        }
+        if (*count < 64) {
+            from[*count] = t->var_id;
+            to[*count] = infer_fresh(ctx);
+            (*count)++;
+            return type_clone(to[*count - 1]);
+        }
+        return type_clone(t);
+    }
+
+    switch (t->kind) {
+    case TYPE_LIST: {
+        Type **items = NULL;
+        if (t->list_count > 0) {
+            items = malloc(sizeof(Type *) * t->list_count);
+            for (int i = 0; i < t->list_count; i++)
+                items[i] = infer_freshen_annotation_vars(ctx, t->list_types[i],
+                                                         from, to, count);
+        }
+        Type *ret = type_list(items, t->list_count);
+        free(items);
+        if (t->list_elem)
+            ret->list_elem = infer_freshen_annotation_vars(ctx, t->list_elem,
+                                                           from, to, count);
+        return ret;
+    }
+    case TYPE_COLL: {
+        Type *ret = type_coll();
+        ret->element_type = t->element_type
+            ? infer_freshen_annotation_vars(ctx, t->element_type, from, to, count)
+            : type_unknown();
+        return ret;
+    }
+    case TYPE_ARR: {
+        Type *ret = type_arr(t->arr_element_type
+                                 ? infer_freshen_annotation_vars(ctx, t->arr_element_type,
+                                                                 from, to, count)
+                                 : NULL,
+                             t->arr_size);
+        ret->arr_is_fat = t->arr_is_fat;
+        ret->arr_is_heap = t->arr_is_heap;
+        return ret;
+    }
+    case TYPE_ARROW:
+        return type_arrow(infer_freshen_annotation_vars(ctx, t->arrow_param,
+                                                        from, to, count),
+                          infer_freshen_annotation_vars(ctx, t->arrow_ret,
+                                                        from, to, count));
+    case TYPE_APP:
+        return type_app(t->app_constructor,
+                        t->app_arg
+                            ? infer_freshen_annotation_vars(ctx, t->app_arg,
+                                                            from, to, count)
+                            : type_unknown());
+    case TYPE_OPTIONAL:
+        return type_optional(t->element_type
+                                 ? infer_freshen_annotation_vars(ctx, t->element_type,
+                                                                 from, to, count)
+                                 : type_unknown());
+    case TYPE_PTR:
+        return type_ptr(t->element_type
+                            ? infer_freshen_annotation_vars(ctx, t->element_type,
+                                                            from, to, count)
+                            : NULL);
+    default:
+        return type_clone(t);
+    }
+}
+
 /// InferEnv
 
 #define INFER_ENV_BUCKETS 64
@@ -220,6 +323,13 @@ static Type *subst_apply_depth(Substitution *s, Type *t, int depth) {
         return type_arrow(p, r);
     }
 
+    case TYPE_APP: {
+        if (!t->app_arg) return t;
+        Type *arg = subst_apply_depth(s, t->app_arg, depth + 1);
+        if (arg == t->app_arg) return t;
+        return type_app(t->app_constructor, arg);
+    }
+
     default:
         return t;
     }
@@ -290,6 +400,8 @@ bool infer_occurs(Substitution *s, int var_id, Type *t) {
     case TYPE_ARROW:
         return infer_occurs(s, var_id, t->arrow_param)
             || infer_occurs(s, var_id, t->arrow_ret);
+    case TYPE_APP:
+        return infer_occurs(s, var_id, t->app_arg);
     default:
         return false;
     }
@@ -503,24 +615,33 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         /* TYPE_INT_ARBITRARY ~ TYPE_CHAR — same reasoning */
         if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_CHAR) return true;
         if (a->kind == TYPE_CHAR && b->kind == TYPE_INT_ARBITRARY) return true;
-        /* TYPE_COLL is compatible with any collection type */
+        /* Single-element TYPE_LIST is a parenthesized scalar type, e.g. (Float)
+         * or (Coll :: a). Unwrap it before collection compatibility below;
+         * otherwise Coll ~ (Coll :: a) is mistaken for collection element
+         * unification and tries to solve a ~ Coll :: a. */
+        if (a->kind == TYPE_LIST && a->list_count == 1 && b->kind != TYPE_LIST)
+            return infer_unify_one_internal(ctx, a->list_types[0], b, line, col);
+        if (b->kind == TYPE_LIST && b->list_count == 1 && a->kind != TYPE_LIST)
+            return infer_unify_one_internal(ctx, a, b->list_types[0], line, col);
+
+        /* TYPE_COLL is compatible with any collection type.  A TYPE_LIST with
+         * more than one item is a tuple/product value, so Coll element
+         * unification must treat it as one element instead of flattening it.
+         * This preserves collection-of-pair results such as zip :: [a] -> [b]
+         * -> [(a, b)]. */
         if (a->kind == TYPE_COLL && b->kind == TYPE_LIST) {
             if (b->list_count == 1) {
                 return infer_unify_one(ctx, a->element_type, b->list_types[0], line, col);
             }
-            for (int i = 0; i < b->list_count; i++) {
-                if (!infer_unify_one(ctx, a->element_type, b->list_types[i], line, col)) return false;
-            }
-            return true;
+            if (!a->element_type || a->element_type->kind == TYPE_UNKNOWN) return true;
+            return infer_unify_one(ctx, a->element_type, b, line, col);
         }
         if (b->kind == TYPE_COLL && a->kind == TYPE_LIST) {
             if (a->list_count == 1) {
                 return infer_unify_one(ctx, b->element_type, a->list_types[0], line, col);
             }
-            for (int i = 0; i < a->list_count; i++) {
-                if (!infer_unify_one(ctx, b->element_type, a->list_types[i], line, col)) return false;
-            }
-            return true;
+            if (!b->element_type || b->element_type->kind == TYPE_UNKNOWN) return true;
+            return infer_unify_one(ctx, b->element_type, a, line, col);
         }
         if (a->kind == TYPE_COLL && b->kind == TYPE_ARR) {
             return infer_unify_one(ctx, a->element_type, b->arr_element_type, line, col);
@@ -544,15 +665,6 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         if (b->kind == TYPE_COLL && a->kind == TYPE_SET   ) return true;
         if (a->kind == TYPE_APP && b->kind  == TYPE_LAYOUT) return true;
         if (b->kind == TYPE_APP && a->kind  == TYPE_LAYOUT) return true;
-        if (a->kind == TYPE_APP && b->kind  == TYPE_APP   ) return true;
-
-        /* Single-element TYPE_LIST is a parenthesized scalar type, e.g. (Float).
-         * The dep checker wraps annotated param types like [x : Float] as
-         * TYPE_LIST{Float} — unwrap and retry so (Float) ~ Float succeeds.   */
-        if (a->kind == TYPE_LIST && a->list_count == 1 && b->kind != TYPE_LIST)
-            return infer_unify_one_internal(ctx, a->list_types[0], b, line, col);
-        if (b->kind == TYPE_LIST && b->list_count == 1 && a->kind != TYPE_LIST)
-            return infer_unify_one_internal(ctx, a, b->list_types[0], line, col);
 
         /* TYPE_APP ~ TYPE_APP: both are type constructor applications (e.g. Maybe a ~ Maybe b) */
         if (a->kind == TYPE_APP && b->kind == TYPE_APP) {
@@ -672,6 +784,16 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         return true;
 
     case TYPE_APP:
+        if (a->app_constructor && b->app_constructor &&
+            strcmp(a->app_constructor, b->app_constructor) != 0) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: type error: cannot unify %s with %s",
+                     ctx->filename, line, col, type_to_string(a), type_to_string(b));
+            ctx->had_error = true;
+            return false;
+        }
+        if (a->app_arg && b->app_arg)
+            return infer_unify_one(ctx, a->app_arg, b->app_arg, line, col);
         return true;
 
     case TYPE_COLL:
@@ -736,6 +858,9 @@ void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int ca
         break;
     case TYPE_ARR:
         infer_free_vars_type(s, t->arr_element_type, out, count, cap);
+        break;
+    case TYPE_APP:
+        infer_free_vars_type(s, t->app_arg, out, count, cap);
         break;
     case TYPE_ARROW:
         infer_free_vars_type(s, t->arrow_param, out, count, cap);
@@ -812,37 +937,114 @@ TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env) {
     return sc;
 }
 
+static Type *infer_substitute_vars(Type *t, int *from, Type **to, int count) {
+    if (!t) return NULL;
+
+    if (t->kind == TYPE_VAR) {
+        for (int i = 0; i < count; i++) {
+            if (t->var_id == from[i])
+                return type_clone(to[i]);
+        }
+        return type_var(t->var_id);
+    }
+
+    switch (t->kind) {
+    case TYPE_ARROW:
+        return type_arrow(infer_substitute_vars(t->arrow_param, from, to, count),
+                          infer_substitute_vars(t->arrow_ret,   from, to, count));
+
+    case TYPE_LIST: {
+        if (t->list_count > 0 && t->list_types) {
+            Type **items = malloc(sizeof(Type *) * t->list_count);
+            for (int i = 0; i < t->list_count; i++)
+                items[i] = infer_substitute_vars(t->list_types[i], from, to, count);
+            Type *ret = type_list(items, t->list_count);
+            for (int i = 0; i < t->list_count; i++) type_free(items[i]);
+            free(items);
+            return ret;
+        }
+        Type *ret = type_list(NULL, 0);
+        if (t->list_elem)
+            ret->list_elem = infer_substitute_vars(t->list_elem, from, to, count);
+        return ret;
+    }
+
+    case TYPE_COLL: {
+        Type *ret = type_coll();
+        if (t->element_type)
+            ret->element_type = infer_substitute_vars(t->element_type, from, to, count);
+        return ret;
+    }
+
+    case TYPE_ARR: {
+        Type *elem = t->arr_element_type
+            ? infer_substitute_vars(t->arr_element_type, from, to, count)
+            : NULL;
+        Type *ret = type_arr(elem, t->arr_size);
+        ret->arr_is_fat = t->arr_is_fat;
+        ret->arr_is_heap = t->arr_is_heap;
+        return ret;
+    }
+
+    case TYPE_PTR:
+        return type_ptr(t->element_type
+            ? infer_substitute_vars(t->element_type, from, to, count)
+            : NULL);
+
+    case TYPE_OPTIONAL:
+        return type_optional(t->element_type
+            ? infer_substitute_vars(t->element_type, from, to, count)
+            : type_unknown());
+
+    case TYPE_APP:
+        return type_app(t->app_constructor,
+                        t->app_arg
+                            ? infer_substitute_vars(t->app_arg, from, to, count)
+                            : type_unknown());
+
+    case TYPE_FN: {
+        FnParam *params = NULL;
+        if (t->param_count > 0 && t->params) {
+            params = calloc((size_t)t->param_count, sizeof(FnParam));
+            for (int i = 0; i < t->param_count; i++) {
+                params[i].name = t->params[i].name ? strdup(t->params[i].name) : NULL;
+                params[i].type = t->params[i].type
+                    ? infer_substitute_vars(t->params[i].type, from, to, count)
+                    : NULL;
+                params[i].optional = t->params[i].optional;
+                params[i].rest = t->params[i].rest;
+            }
+        }
+        return type_fn(params, t->param_count,
+                       t->return_type
+                           ? infer_substitute_vars(t->return_type, from, to, count)
+                           : NULL);
+    }
+
+    default:
+        return type_clone(t);
+    }
+}
+
+static int infer_fresh_not_quantified(InferCtx *ctx, int *quantified, int count) {
+    int id = subst_fresh(ctx->subst);
+    while (int_array_contains(quantified, count, id))
+        id = subst_fresh(ctx->subst);
+    return id;
+}
+
 Type *infer_instantiate(InferCtx *ctx, TypeScheme *scheme) {
     if (scheme->quantified_count == 0)
         return subst_apply(ctx->subst, scheme->type);
 
-    /* Build a local substitution: quantified vars → fresh vars */
-    int fresh_ids[INFER_MAX_VARS];
-    for (int i = 0; i < scheme->quantified_count; i++)
-        fresh_ids[i] = subst_fresh(ctx->subst);
-
-    /* Walk the scheme type and substitute quantified vars */
-    /* We do this by temporarily binding each quantified var
-     * to a fresh one in the substitution, applying, then clearing */
-    Substitution *s = ctx->subst;
-
-    /* Save old bindings (should be NULL since they're quantified) */
+    Type *fresh[INFER_MAX_VARS];
     for (int i = 0; i < scheme->quantified_count; i++) {
-        int qv   = scheme->quantified[i];
-        int root = subst_find(s, qv);
-        subst_bind(s, root, type_var(fresh_ids[i]));
+        fresh[i] = type_var(infer_fresh_not_quantified(ctx, scheme->quantified,
+                                                       scheme->quantified_count));
     }
 
-    Type *result = subst_apply(s, scheme->type);
-
-    /* Clear the temporary bindings */
-    for (int i = 0; i < scheme->quantified_count; i++) {
-        int qv   = scheme->quantified[i];
-        int root = subst_find(s, qv);
-        s->bound[root] = NULL;
-    }
-
-    return result;
+    return infer_substitute_vars(scheme->type, scheme->quantified, fresh,
+                                 scheme->quantified_count);
 }
 
 Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
@@ -855,39 +1057,13 @@ Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
         return subst_apply(ctx->subst, scheme->type);
     }
 
-    Substitution *s = ctx->subst;
-    int fresh_ids[INFER_MAX_VARS];
-
     for (int i = 0; i < scheme->quantified_count; i++) {
-        fresh_ids[i] = subst_fresh(s);
         ts->from[i]  = scheme->quantified[i];
+        ts->to[i]    = type_var(infer_fresh_not_quantified(ctx, scheme->quantified,
+                                                           scheme->quantified_count));
     }
 
-    /* Temporarily bind quantified vars to fresh vars */
-    for (int i = 0; i < scheme->quantified_count; i++) {
-        int qv   = scheme->quantified[i];
-        int root = subst_find(s, qv);
-        subst_bind(s, root, type_var(fresh_ids[i]));
-    }
-
-    Type *result = subst_apply(s, scheme->type);
-
-    /* Clear temporary bindings */
-    for (int i = 0; i < scheme->quantified_count; i++) {
-        int qv   = scheme->quantified[i];
-        int root = subst_find(s, qv);
-        s->bound[root] = NULL;
-    }
-
-    /* Record what each quantified var mapped to after unification.
-     * At call site, after unification runs, fresh_ids[i] will be
-     * bound to the concrete type — we record that mapping.        */
-    for (int i = 0; i < scheme->quantified_count; i++) {
-        ts->from[i] = scheme->quantified[i];
-        ts->to[i]   = type_var(fresh_ids[i]);  /* will be resolved after unification */
-    }
-
-    return result;
+    return infer_substitute_vars(scheme->type, ts->from, ts->to, ts->count);
 }
 
 
@@ -1102,6 +1278,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
     }
 
     case AST_ARRAY: {
+        if (ast->array.element_count == 0) {
+            result = type_coll();
+            result->element_type = infer_fresh(ctx);
+            break;
+        }
+
         Type *elem_t = infer_fresh(ctx);
         for (size_t i = 0; i < ast->array.element_count; i++) {
             Type *et = infer_expr(ctx, ast->array.elements[i]);
@@ -1119,6 +1301,9 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         ctx->env        = child;
 
         Type **param_types = malloc(sizeof(Type *) * (ast->lambda.param_count + 1));
+        int ann_from[64];
+        Type *ann_to[64];
+        int ann_count = 0;
         for (int i = 0; i < ast->lambda.param_count; i++) {
             ASTParam *p = &ast->lambda.params[i];
             Type *pt;
@@ -1126,6 +1311,9 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                 Type *elem = NULL;
                 if (p->type_name) {
                     elem = type_from_name(p->type_name);
+                    if (elem)
+                        elem = infer_freshen_annotation_vars(ctx, elem, ann_from,
+                                                             ann_to, &ann_count);
                     if (!elem && p->type_name[0] >= 'A' && p->type_name[0] <= 'Z')
                         elem = type_layout(p->type_name, NULL, 0, 0, false, 0);
                 }
@@ -1150,11 +1338,15 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         tname = tname_buf;
                     }
                 }
-                /* Strip pointer/fn qualifiers — HM works on value types only;
-                 * pointer-vs-value distinction is handled in codegen.         */
+                /* Strip pointer qualifiers — HM works on value types only;
+                 * pointer-vs-value distinction is handled in codegen.
+                 * Keep Fn :: (...) intact so type_from_name can recover the
+                 * callback's full arrow type.                                */
                 if (strncmp(tname, "Pointer :: ", 11) == 0) tname += 11;
-                else if (strncmp(tname, "Fn :: ", 6) == 0) tname += 6;
                 pt = type_from_name(tname);
+                if (pt)
+                    pt = infer_freshen_annotation_vars(ctx, pt, ann_from, ann_to,
+                                                       &ann_count);
                 /* type_from_name only knows builtin scalars. For user-defined
                  * layout types like Vec3 it returns NULL. If the name starts
                  * with an uppercase letter, treat it as a layout type so HM
@@ -1171,6 +1363,9 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                  * like "(a)" or "[a]" should get TYPE_COLL — bare names get 'a. */
                 if (p->type_name) {
                     pt = type_from_name(p->type_name);
+                    if (pt)
+                        pt = infer_freshen_annotation_vars(ctx, pt, ann_from,
+                                                           ann_to, &ann_count);
                     if (!pt) pt = infer_fresh(ctx);
                 } else {
                     pt = infer_fresh(ctx);
@@ -1187,7 +1382,13 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             if (i == ast->lambda.body_count - 1) {
                 if (ast->lambda.return_type) {
                     Type *ann = type_from_name(ast->lambda.return_type);
-                    if (ann) infer_constrain(ctx, bt, ann, ast->line, ast->column);
+                    if (ann)
+                        ann = infer_freshen_annotation_vars(ctx, ann, ann_from,
+                                                            ann_to, &ann_count);
+                    if (ann) {
+                        infer_constrain(ctx, bt, ann, ast->line, ast->column);
+                        bt = ann;
+                    }
                 }
                 ret_t = bt;
             }
@@ -1212,6 +1413,31 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         AST *head = ast->list.items[0];
+
+        bool is_tuple_expr = false;
+        for (size_t i = 0; i < ast->list.count; i++) {
+            AST *item = ast->list.items[i];
+            if (item && item->type == AST_SYMBOL && item->symbol &&
+                strcmp(item->symbol, ",") == 0) {
+                is_tuple_expr = true;
+                break;
+            }
+        }
+        if (is_tuple_expr) {
+            Type **elems = malloc(sizeof(Type *) * ast->list.count);
+            int elem_count = 0;
+            for (size_t i = 0; i < ast->list.count; i++) {
+                AST *item = ast->list.items[i];
+                if (item && item->type == AST_SYMBOL && item->symbol &&
+                    strcmp(item->symbol, ",") == 0) {
+                    continue;
+                }
+                elems[elem_count++] = infer_expr(ctx, item);
+            }
+            result = type_list(elems, elem_count);
+            free(elems);
+            break;
+        }
 
         /* ---- define -------------------------------------------------- */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "define") == 0) {
@@ -1358,6 +1584,124 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        /* ---- reader/runtime collection concat -------------------------- */
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "rt_coll_concat") == 0 &&
+            ast->list.count == 3) {
+            Type *left_t = infer_expr(ctx, ast->list.items[1]);
+            Type *right_t = infer_expr(ctx, ast->list.items[2]);
+            Type *left_applied = subst_apply(ctx->subst, left_t);
+
+            bool left_is_collection =
+                left_applied &&
+                (left_applied->kind == TYPE_COLL ||
+                 left_applied->kind == TYPE_ARR  ||
+                 left_applied->kind == TYPE_SET  ||
+                 left_applied->kind == TYPE_MAP  ||
+                 left_applied->kind == TYPE_STRING);
+
+            if (!left_is_collection &&
+                ast->list.items[1]->type == AST_LIST &&
+                ast->list.items[1]->list.count > 0 &&
+                ast->list.items[1]->list.items[0]->type == AST_SYMBOL) {
+                TypeScheme *left_sc = infer_env_lookup(
+                    ctx, ast->list.items[1]->list.items[0]->symbol);
+                if (left_sc) {
+                    Type *left_sig = infer_instantiate(ctx, left_sc);
+                    bool saw_arrow = false;
+                    while (left_sig && left_sig->kind == TYPE_ARROW) {
+                        saw_arrow = true;
+                        left_sig = left_sig->arrow_ret;
+                    }
+                    left_sig = subst_apply(ctx->subst, left_sig);
+                    if (left_sig && left_sig->kind == TYPE_LIST &&
+                        left_sig->list_count == 1)
+                        left_sig = left_sig->list_types[0];
+                    left_is_collection =
+                        saw_arrow &&
+                        left_sig &&
+                        (left_sig->kind == TYPE_COLL ||
+                         left_sig->kind == TYPE_ARR  ||
+                         left_sig->kind == TYPE_SET  ||
+                         left_sig->kind == TYPE_MAP  ||
+                         left_sig->kind == TYPE_STRING);
+                }
+            }
+
+            bool right_is_cons_literal_tail =
+                infer_is_cons_literal_tail(ast->list.items[2]);
+
+            if (left_is_collection && !right_is_cons_literal_tail) {
+                infer_constrain(ctx, left_t, right_t, ast->line, ast->column);
+                result = right_t;
+            } else {
+                Type *tail_t = type_coll();
+                tail_t->element_type = type_clone(left_t);
+                infer_constrain(ctx, right_t, tail_t, ast->line, ast->column);
+                Type *out_t = type_coll();
+                out_t->element_type = type_clone(left_t);
+                result = out_t;
+            }
+            break;
+        }
+
+        /* ---- runtime collection helpers -------------------------------- */
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "rt_coll_is_empty") == 0 &&
+            ast->list.count == 2) {
+            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
+            infer_constrain(ctx, arg_t, type_coll(), ast->line, ast->column);
+            result = type_bool();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "count") == 0 ||
+             strcmp(head->symbol, "length") == 0) &&
+            ast->list.count == 2) {
+            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
+            infer_constrain(ctx, arg_t, type_coll(), ast->line, ast->column);
+            result = type_int();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "rt_coll_drop") == 0 &&
+            ast->list.count == 3) {
+            Type *coll_t = infer_expr(ctx, ast->list.items[1]);
+            Type *idx_t = infer_expr(ctx, ast->list.items[2]);
+            infer_constrain(ctx, idx_t, type_int(), ast->list.items[2]->line,
+                            ast->list.items[2]->column);
+
+            Type *coll_applied = subst_apply(ctx->subst, coll_t);
+            Type *elem_t = NULL;
+            if (coll_applied && coll_applied->kind == TYPE_COLL)
+                elem_t = coll_applied->element_type;
+            else if (coll_applied && coll_applied->kind == TYPE_ARR)
+                elem_t = coll_applied->arr_element_type;
+            if (!elem_t)
+                elem_t = infer_fresh(ctx);
+
+            Type *expected_coll = type_coll();
+            expected_coll->element_type = type_clone(elem_t);
+            infer_constrain(ctx, coll_t, expected_coll, ast->line, ast->column);
+
+            result = type_coll();
+            result->element_type = type_clone(elem_t);
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "rt_coll_empty") == 0 &&
+            ast->list.count == 2) {
+            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
+            infer_constrain(ctx, arg_t, type_coll(), ast->line, ast->column);
+
+            result = type_coll();
+            result->element_type = infer_fresh(ctx);
+            break;
+        }
+
         /* ---- begin --------------------------------------------------- */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "begin") == 0) {
             if (ast->list.count < 2) {
@@ -1488,6 +1832,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
             if (head_sc) {
                 Type *head_t = subst_apply(ctx->subst, head_sc->type);
+                if (head_t && head_t->kind == TYPE_LIST && head_t->list_count == 1) {
+                    for (size_t i = 1; i < ast->list.count; i++)
+                        infer_expr(ctx, ast->list.items[i]);
+                    result = subst_apply(ctx->subst, head_t->list_types[0]);
+                    break;
+                }
                 if (head_t && (head_t->kind == TYPE_ARR     ||
                                head_t->kind == TYPE_SET     ||
                                head_t->kind == TYPE_MAP     ||
@@ -1499,6 +1849,10 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                     /* Return Char for String indexing, unknown for others */
                     if (head_t->kind == TYPE_STRING)
                         result = type_char();
+                    else if (head_t->kind == TYPE_COLL && head_t->element_type)
+                        result = subst_apply(ctx->subst, head_t->element_type);
+                    else if (head_t->kind == TYPE_ARR && head_t->arr_element_type)
+                        result = subst_apply(ctx->subst, head_t->arr_element_type);
                     else
                         result = infer_fresh(ctx);
                     break;
@@ -1589,6 +1943,40 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
             if (!sc) {
                 dep_hint_trustworthy = false;
+            } else if (result && result->kind == TYPE_VAR && sc->quantified_count == 0) {
+                /* Local params/pattern bindings are represented as bare HM
+                 * variables. Dep hints on those symbols can be artifacts of
+                 * pattern lowering and can over-specialize polymorphic
+                 * annotations, e.g. forcing safe-head :: [a] -> Maybe a into
+                 * [Bool] -> Maybe Bool. Let HM context and explicit signatures
+                 * solve local variables instead. */
+                dep_hint_trustworthy = false;
+            }
+        }
+
+        if (dep_hint_trustworthy && ast->type == AST_LIST &&
+            ast->list.count >= 2 &&
+            ast->list.items[0] &&
+            ast->list.items[0]->type == AST_SYMBOL) {
+            if (infer_runtime_collection_helper(ast->list.items[0]->symbol)) {
+                dep_hint_trustworthy = false;
+            }
+            TypeScheme *head_sc = infer_env_lookup(ctx, ast->list.items[0]->symbol);
+            if (!head_sc) {
+                dep_hint_trustworthy = false;
+            } else {
+                Type *head_t = subst_apply(ctx->subst, head_sc->type);
+                if (head_t && (head_t->kind == TYPE_COLL ||
+                               head_t->kind == TYPE_ARROW ||
+                               head_t->kind == TYPE_FN ||
+                               head_t->kind == TYPE_ARR ||
+                               head_t->kind == TYPE_SET ||
+                               head_t->kind == TYPE_MAP ||
+                               head_t->kind == TYPE_STRING ||
+                               head_t->kind == TYPE_UNKNOWN ||
+                               head_t->kind == TYPE_VAR)) {
+                    dep_hint_trustworthy = false;
+                }
             }
         }
 
@@ -1608,10 +1996,17 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                  * itself; HM correctly sees the full arrow type — trust HM. */
                 dep_hint_trustworthy = false;
             }
+            if (result_is_arrow && k != TYPE_ARROW && k != TYPE_FN) {
+                /* The dep checker may attach a constructor result type such as
+                 * Maybe a to the constructor symbol `Just`; HM has the usable
+                 * function type a -> Maybe a and must keep it. */
+                dep_hint_trustworthy = false;
+            }
         }
 
         if (dep_hint_trustworthy) {
-            fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
+            if (g_infer_trace_enabled)
+                fprintf(stderr, "├─ \033[34mInterop\033[0m HM unifies with prior Dependent Type check: %s\n", type_to_string(ast->inferred_type));
             infer_constrain(ctx, result, ast->inferred_type, ast->line, ast->column);
         } else {
             ast->inferred_type = result;
@@ -1654,9 +2049,40 @@ void infer_register_builtins(InferCtx *ctx) {
         type_arrow(a3_col, type_arrow(a3_key, type_bool())), ctx->env);
     infer_env_insert(ctx->env, "contains?", contains_sc);
 
+    /* Core ADT constructors used across the prelude.  The dependent checker
+     * owns full ADT validation; these HM schemes keep imported constructors
+     * from collapsing to their payload types during core bootstrap. */
+    Type *maybe_a = infer_fresh(ctx);
+    Type *maybe_app = type_app("Maybe", type_clone(maybe_a));
+    TypeScheme *nothing_sc = infer_generalise(ctx, type_clone(maybe_app), ctx->env);
+    TypeScheme *just_sc = infer_generalise(ctx,
+        type_arrow(maybe_a, maybe_app), ctx->env);
+    infer_env_insert(ctx->env, "Nothing", nothing_sc);
+    infer_env_insert(ctx->env, "Just", just_sc);
+
     /* ∀a. Coll → Int  (count works on sets, maps, lists, arrays, strings) */
     TypeScheme *count_sc = scheme_mono(type_arrow(type_coll(), type_int()));
     infer_env_insert(ctx->env, "count", count_sc);
+
+    Type *rt_drop_a = infer_fresh(ctx);
+    Type *rt_drop_in = type_coll();
+    Type *rt_drop_out = type_coll();
+    rt_drop_in->element_type = type_clone(rt_drop_a);
+    rt_drop_out->element_type = type_clone(rt_drop_a);
+    TypeScheme *rt_drop_sc = infer_generalise(ctx,
+        type_arrow(rt_drop_in, type_arrow(type_int(), rt_drop_out)), ctx->env);
+    infer_env_insert(ctx->env, "rt_coll_drop", rt_drop_sc);
+
+    Type *rt_empty_ref = infer_fresh(ctx);
+    Type *rt_empty_a = infer_fresh(ctx);
+    Type *rt_empty_out = type_coll();
+    rt_empty_out->element_type = type_clone(rt_empty_a);
+    TypeScheme *rt_empty_sc = infer_generalise(ctx,
+        type_arrow(rt_empty_ref, rt_empty_out), ctx->env);
+    infer_env_insert(ctx->env, "rt_coll_empty", rt_empty_sc);
+
+    TypeScheme *rt_is_empty_sc = scheme_mono(type_arrow(type_coll(), type_bool()));
+    infer_env_insert(ctx->env, "rt_coll_is_empty", rt_is_empty_sc);
 
     /* ∀a. a → Bool */
     Type *a4 = infer_fresh(ctx);

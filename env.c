@@ -14,6 +14,33 @@ static unsigned int hash(const char *str) {
     return h;
 }
 
+static bool adt_type_application_compatible(Type *a, Type *b) {
+    if (!a || !b) return false;
+    if (types_equal(a, b)) return true;
+
+    if (a->kind == TYPE_APP && b->kind == TYPE_LAYOUT) {
+        if (a->app_constructor && b->layout_name &&
+            strcmp(a->app_constructor, b->layout_name) == 0)
+            return true;
+        const char *bname = b->layout_name ? b->layout_name : "";
+        if (strncmp(bname, "__type_", 7) == 0 && a->app_constructor &&
+            strcmp(a->app_constructor, bname + 7) == 0)
+            return true;
+    }
+
+    if (b->kind == TYPE_APP && a->kind == TYPE_LAYOUT) {
+        if (b->app_constructor && a->layout_name &&
+            strcmp(b->app_constructor, a->layout_name) == 0)
+            return true;
+        const char *aname = a->layout_name ? a->layout_name : "";
+        if (strncmp(aname, "__type_", 7) == 0 && b->app_constructor &&
+            strcmp(b->app_constructor, aname + 7) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 Env *env_create(void) {
     Env *t     = malloc(sizeof(Env));
     t->size    = INITIAL_SIZE;
@@ -555,6 +582,31 @@ void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
     e->scheme = scheme ? scheme_clone(scheme) : NULL;
 }
 
+static Type *hm_signature_from_lambda(InferCtx *ctx, AST *lambda_ast) {
+    if (!lambda_ast || lambda_ast->type != AST_LAMBDA) return NULL;
+    if (!lambda_ast->lambda.return_type) return NULL;
+
+    Type *sig = type_from_name(lambda_ast->lambda.return_type);
+    if (!sig) sig = type_unknown();
+
+    int ann_from[64];
+    Type *ann_to[64];
+    int ann_count = 0;
+    sig = infer_freshen_annotation_vars(ctx, sig, ann_from, ann_to, &ann_count);
+
+    for (int i = lambda_ast->lambda.param_count - 1; i >= 0; i--) {
+        Type *p = NULL;
+        if (lambda_ast->lambda.params[i].type_name) {
+            p = type_from_name(lambda_ast->lambda.params[i].type_name);
+        }
+        if (!p) p = type_unknown();
+        p = infer_freshen_annotation_vars(ctx, p, ann_from, ann_to, &ann_count);
+        sig = type_arrow(p, sig);
+    }
+
+    return sig;
+}
+
 static void normalize_vars(Type *t, int *map, int *next_id) {
     if (!t) return;
     if (t->kind == TYPE_VAR) {
@@ -593,30 +645,25 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
 
     InferEnv *child = infer_env_create_child(ienv);
     InferCtx *ctx   = infer_ctx_create(child, env_get_dep(env), filename ? filename : "<unknown>");
-    /* Pre-bind with a fresh var so recursive calls resolve.
-     * We use a high ID so it doesn't pollute the visible var names. */
-    ctx->subst->next_id = 1000;
-    Type *self_t = infer_fresh(ctx);
-    ctx->subst->next_id = 0;  /* reset so params get 'a, 'b, 'c... */
+    /* Pre-bind recursive self references.
+     * If the function has an explicit signature, recursive calls must use
+     * that signature while inferring the body. Otherwise a recursive call can
+     * float as a fresh variable and later drift into bogus higher-nested types
+     * such as Maybe (Maybe a). */
+    Type *self_t = hm_signature_from_lambda(ctx, lambda_ast);
+    if (!self_t) {
+        ctx->subst->next_id = 1000;
+        self_t = infer_fresh(ctx);
+        ctx->subst->next_id = 0;  /* reset so params get 'a, 'b, 'c... */
+    }
+
     infer_env_insert(child, name, scheme_mono(self_t));
     Type *inferred = infer_toplevel(ctx, lambda_ast);
 
     TypeScheme *scheme = NULL;
 
     if (ctx->had_error) {
-        Type *sig = NULL;
-        if (lambda_ast && lambda_ast->type == AST_LAMBDA && lambda_ast->lambda.return_type) {
-            sig = type_from_name(lambda_ast->lambda.return_type);
-            if (!sig) sig = type_unknown();
-            for (int i = lambda_ast->lambda.param_count - 1; i >= 0; i--) {
-                Type *p = NULL;
-                if (lambda_ast->lambda.params[i].type_name) {
-                    p = type_from_name(lambda_ast->lambda.params[i].type_name);
-                }
-                if (!p) p = type_unknown();
-                sig = type_arrow(p, sig);
-            }
-        }
+        Type *sig = hm_signature_from_lambda(ctx, lambda_ast);
 
         if (inferred && inferred->kind == TYPE_ARROW && sig && sig->kind == TYPE_ARROW) {
             Type *inf_ret = inferred; while(inf_ret->kind == TYPE_ARROW) inf_ret = inf_ret->arrow_ret;
@@ -703,6 +750,10 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                 }
             }
         }
+
+        Type *declared_t = hm_signature_from_lambda(ctx, lambda_ast);
+        if (declared_t)
+            inferred = declared_t;
 
         /* Fully apply substitution so the scheme's type nodes are concrete
          * ground types — no TYPE_VAR nodes that reference the now-dead ctx */
@@ -999,6 +1050,9 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                 if ((arg->kind == TYPE_NIL && param->kind == TYPE_OPTIONAL) ||
                     (arg->kind == TYPE_OPTIONAL && param->kind == TYPE_NIL)) {
                     /* nil is perfectly compatible with any Optional argument */
+                } else if (adt_type_application_compatible(arg, param)) {
+                    /* Nullary ADT constructors such as Nothing have the bare
+                     * layout type, while polymorphic APIs expect Maybe a. */
                 } else {
                     /* Allow numeric widening: any int kind satisfies Int param */
                     bool arg_is_int   = (arg->kind   == TYPE_INT || arg->kind == TYPE_HEX ||

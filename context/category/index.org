@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -18,6 +18,7 @@
 * Purpose
 :PROPERTIES:
 :ID: monadc.context.category.index.purpose
+:CONTEXT_DESCRIPTION: Purpose of the category directory
 :CUSTOM_ID: category-index-purpose
 :CONTEXT_KIND: portal
 :CONTEXT_STATUS: active
@@ -43,6 +44,7 @@
 * Map
 :PROPERTIES:
 :ID: monadc.context.category.index.map
+:CONTEXT_DESCRIPTION: Category file map and role descriptions
 :CUSTOM_ID: category-index-map
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active
@@ -74,6 +76,7 @@
 * Working Definition
 :PROPERTIES:
 :ID: monadc.context.category.index.definition
+:CONTEXT_DESCRIPTION: Working definition of a context category
 :CUSTOM_ID: category-index-definition
 :CONTEXT_KIND: definition
 :CONTEXT_STATUS: active
@@ -96,6 +99,7 @@
 * Executable Contract
 :PROPERTIES:
 :ID: monadc.context.category.index.executable-contract
+:CONTEXT_DESCRIPTION: Executable health contract for category scripts
 :CUSTOM_ID: category-index-executable-contract
 :CONTEXT_KIND: contract
 :CONTEXT_STATUS: active
@@ -117,6 +121,7 @@
 * Live Tooling Layer
 :PROPERTIES:
 :ID: monadc.context.category.index.live-tooling
+:CONTEXT_DESCRIPTION: Live tooling layer: Catface and query language
 :CUSTOM_ID: category-index-live-tooling
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active

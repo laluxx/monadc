@@ -1,0 +1,60 @@
+;;; Tuple.mon --- Product helpers
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Data.Tuple tuple pair curry uncurry
+
+;;; Commentary:
+
+;; Tuple helpers for two-element products. Native tuple syntax is preferred over
+;; encoding pairs as two-element lists.
+
+;;; Code:
+
+module Data.Tuple
+  [fst snd swap curry uncurry dup both first second]
+
+
+define fst :: (a, b) -> a
+  :doc "Return the first component of a pair."
+  pair -> pair 0
+
+
+define snd :: (a, b) -> b
+  :doc "Return the second component of a pair."
+  pair -> pair 1
+
+
+define swap :: (a, b) -> (b, a)
+  :doc "Swap the components of a pair."
+  pair -> (pair 1, pair 0)
+
+
+define curry :: ((a, b) -> c) -> a -> b -> c
+  :doc "Convert a function on a pair into a curried function."
+  f x y -> f (x, y)
+
+
+define uncurry :: (a -> b -> c) -> (a, b) -> c
+  :doc "Convert a curried function into a function on a pair."
+  f pair -> f (pair 0) (pair 1)
+
+
+define dup :: a -> (a, a)
+  :doc "Duplicate X into a pair."
+  x -> (x, x)
+
+
+define first :: (a -> c) -> (a, b) -> (c, b)
+  :doc "Map the first component of a pair."
+  f pair -> ((f (pair 0)), pair 1)
+
+
+define second :: (b -> c) -> (a, b) -> (a, c)
+  :doc "Map the second component of a pair."
+  f pair -> (pair 0, (f (pair 1)))
+
+
+define both :: (a -> b) -> (a, a) -> (b, b)
+  :doc "Map both components of a homogeneous pair."
+  f pair -> ((f (pair 0)), (f (pair 1)))

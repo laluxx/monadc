@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-17
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,9 +34,9 @@
 :END:
 
 [OBS id:obs.inventory.snapshot src:context/*.org conf:high]
-  Generated on 2026-06-18. The garden currently contains 73 org files (excluding info/),
-  35211 lines, 930 heading IDs, and
-  2671 bracket records.
+   Generated on 2026-06-18. The garden currently contains 73 org files (excluding info/),
+   35948 lines, 936 heading IDs, and
+   2699 bracket records.
 
 #+CAPTION: File inventory
 | File | Title | Lines | Headings | IDs | Records |
@@ -239,6 +239,7 @@
 * Round 4 Tooling Snapshot
 :PROPERTIES:
 :ID: monadc.context.inventory.round4-tooling
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: inventory-round4-tooling
 :CONTEXT_KIND: inventory
 :CONTEXT_STATUS: active
@@ -268,6 +269,7 @@
 * Round 6: Language Reference Zone (info/)
 :PROPERTIES:
 :ID: monadc.context.inventory.round6-info-zone
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: inventory-round6-info-zone
 :CONTEXT_KIND: inventory
 :CONTEXT_STATUS: active

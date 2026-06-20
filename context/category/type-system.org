@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Type Judgments
 :PROPERTIES:
 :ID: monadc.context.category.types.judgments
+:CONTEXT_DESCRIPTION: Context type system judgments
 :CUSTOM_ID: category-types-judgments
 :CONTEXT_KIND: type-system
 :CONTEXT_STATUS: active
@@ -37,6 +38,7 @@
 * Object Kinds
 :PROPERTIES:
 :ID: monadc.context.category.types.objects
+:CONTEXT_DESCRIPTION: Object kind types and invariants
 :CUSTOM_ID: category-types-objects
 :CONTEXT_KIND: type-system
 :CONTEXT_STATUS: active
@@ -58,6 +60,7 @@
 * Morphism Type Rules
 :PROPERTIES:
 :ID: monadc.context.category.types.morphisms
+:CONTEXT_DESCRIPTION: Morphism typing rules
 :CUSTOM_ID: category-types-morphisms
 :CONTEXT_KIND: type-system
 :CONTEXT_STATUS: active
@@ -85,6 +88,7 @@
 * Context Metadata Types
 :PROPERTIES:
 :ID: monadc.context.category.types.metadata
+:CONTEXT_DESCRIPTION: Context metadata type system
 :CUSTOM_ID: category-types-metadata
 :CONTEXT_KIND: type-system
 :CONTEXT_STATUS: active
@@ -112,6 +116,7 @@
 * Proof Obligations
 :PROPERTIES:
 :ID: monadc.context.category.types.proof-obligations
+:CONTEXT_DESCRIPTION: Structural proof obligations for the verifier
 :CUSTOM_ID: category-types-proof-obligations
 :CONTEXT_KIND: validation
 :CONTEXT_STATUS: active

@@ -79,6 +79,7 @@ typedef struct {
 
 void codegen_init(CodegenContext *ctx, const char *module_name);
 void codegen_dispose(CodegenContext *ctx);
+void codegen_set_trace(bool enabled);
 
 // Format string getters
 LLVMValueRef get_fmt_str(CodegenContext *ctx);

@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include "reader.h"
 
-/// §1  Includes and constants
+/// §1 Includes and constants
 
 //// Module System
  //
@@ -53,7 +53,7 @@
 #define MODULE_INDEX_BUCKETS 256
 #define MODULE_HASH_HEX_LEN  16   /* 64-bit FNV-1a, hex-encoded */
 
-/// §2  Export lists and module declarations
+/// §2 Export lists and module declarations
 
 //// Export modes
  //
@@ -105,7 +105,7 @@ void module_decl_add_reexport(ModuleDecl *decl, struct ReExportDecl *re);
 bool module_decl_is_exported(ModuleDecl *decl, const char *symbol);
 bool module_name_is_valid(const char *name);
 
-/// §3  Re-export declarations
+/// §3 Re-export declarations
 
 //// Re-export declaration
  //
@@ -127,7 +127,7 @@ ReExportDecl *reexport_decl_create(const char *module_name, bool reexport_all);
 void reexport_decl_add_symbol(ReExportDecl *re, const char *symbol);
 void reexport_decl_free(ReExportDecl *re);
 
-/// §4  Import declarations
+/// §4 Import declarations
 
 //// Import modes
  //
@@ -167,7 +167,7 @@ void import_decl_add_symbol(ImportDecl *decl, const char *symbol);
 bool import_decl_includes_symbol(ImportDecl *decl, const char *symbol);
 const char *import_decl_prefix(const ImportDecl *decl);
 
-/// §5  Module context (per-file compilation state)
+/// §5 Module context (per-file compilation state)
 
 //// Module context
  //
@@ -190,7 +190,7 @@ void module_context_add_import(ModuleContext *ctx, ImportDecl *import);
 void module_context_add_prelude_imports(ModuleContext *ctx);
 ImportDecl *module_context_find_import(ModuleContext *ctx, const char *prefix);
 
-/// §6  Module registry (global, content-addressed)
+/// §6 Module registry (global, content-addressed)
 
 //// Module registry entry
  //
@@ -237,7 +237,7 @@ void module_registry_remove(ModuleRegistry *registry, const char *name);
 // FNV-1a 64-bit hash of a buffer, hex-encoded into `out` (>= 17 bytes).
 void module_hash_buffer(const char *data, size_t len, char *out);
 
-/// §7  Dependency graph
+/// §7 Dependency graph
 
 //// Dependency graph
  //
@@ -263,7 +263,7 @@ void module_dep_order_free(ModuleDepOrder *order);
 char **module_dep_list_from_context(ModuleContext *ctx, size_t *out_count);
 void module_dep_list_free(char **deps, size_t count);
 
-/// §8  Symbol resolution
+/// §8 Symbol resolution
 
 // Resolve `symbol` (qualified or unqualified) to its fully-qualified form
 // given the imports in `ctx`. Returns NULL if the symbol is qualified
@@ -277,7 +277,7 @@ char *module_resolve_symbol(ModuleContext *ctx, const char *symbol);
 bool module_resolve_export(ModuleRegistry *registry, ModuleDecl *decl,
                             const char *symbol);
 
-/// §9  Module file path resolution
+/// §9 Module file path resolution
 
 // Convert "Std.Math" to "Std/Math.mon" (or ".monad" fallback), searching:
 //   1. relative to the current directory
@@ -286,7 +286,7 @@ bool module_resolve_export(ModuleRegistry *registry, ModuleDecl *decl,
 // Returns a heap-allocated path; caller must free().
 char *module_name_to_path(const char *module_name);
 
-/// §10  Parsing module/import/export forms
+/// §10 Parsing module/import/export forms
 
 ModuleDecl *parse_module_decl(AST *ast);
 ImportDecl *parse_import_decl(AST *ast);

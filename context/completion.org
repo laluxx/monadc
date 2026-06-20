@@ -32,6 +32,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: REPL tab completion — completion.c/h, matching, filters
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -55,6 +56,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: Tab completion and usage printing functions
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -80,6 +82,7 @@
 :CONTEXT_OWNER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: Category contract for tab completion
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -114,6 +117,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active

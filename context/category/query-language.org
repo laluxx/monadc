@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Purpose
 :PROPERTIES:
 :ID: monadc.context.category.query-language.purpose
+:CONTEXT_DESCRIPTION: Purpose of the category query language
 :CUSTOM_ID: category-query-language-purpose
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -40,6 +41,7 @@
 * Prompt
 :PROPERTIES:
 :ID: monadc.context.category.query-language.prompt
+:CONTEXT_DESCRIPTION: Canonical prompt and projection notation
 :CUSTOM_ID: category-query-language-prompt
 :CONTEXT_KIND: convention
 :CONTEXT_STATUS: active
@@ -56,6 +58,7 @@
 * Core Syntax
 :PROPERTIES:
 :ID: monadc.context.category.query-language.syntax
+:CONTEXT_DESCRIPTION: Core query syntax and operations
 :CUSTOM_ID: category-query-language-syntax
 :CONTEXT_KIND: grammar
 :CONTEXT_STATUS: active
@@ -87,6 +90,7 @@
 * Denotational Semantics
 :PROPERTIES:
 :ID: monadc.context.category.query-language.semantics
+:CONTEXT_DESCRIPTION: Denotational semantics in Ctx
 :CUSTOM_ID: category-query-language-semantics
 :CONTEXT_KIND: semantics
 :CONTEXT_STATUS: active
@@ -110,6 +114,7 @@
 * Information-Theoretic Reading
 :PROPERTIES:
 :ID: monadc.context.category.query-language.information
+:CONTEXT_DESCRIPTION: Information-theoretic interpretation of queries
 :CUSTOM_ID: category-query-language-information
 :CONTEXT_KIND: information
 :CONTEXT_STATUS: active
@@ -127,6 +132,7 @@
 * Executable Interface
 :PROPERTIES:
 :ID: monadc.context.category.query-language.executable
+:CONTEXT_DESCRIPTION: Executable scripts for query evaluation
 :CUSTOM_ID: category-query-language-executable
 :CONTEXT_KIND: script-contract
 :CONTEXT_STATUS: active
@@ -148,6 +154,7 @@ python3 context/category/scripts/catq.py context '@category/scripts :Script' --j
 * Examples
 :PROPERTIES:
 :ID: monadc.context.category.query-language.examples
+:CONTEXT_DESCRIPTION: Query language usage examples
 :CUSTOM_ID: category-query-language-examples
 :CONTEXT_KIND: examples
 :CONTEXT_STATUS: active
@@ -168,6 +175,7 @@ python3 context/category/scripts/catq.py context '@category/scripts :Script' --j
 * Catface Query Language
 :PROPERTIES:
 :ID: monadc.context.category.query-language.catface-cql
+:CONTEXT_DESCRIPTION: Zig Catface query language implementation
 :CUSTOM_ID: category-query-language-catface-cql
 :CONTEXT_KIND: language-contract
 :CONTEXT_STATUS: active

@@ -21,6 +21,8 @@
 #include "wisp.h"
 #include "dep.h"
 #include "typst_emit.h"
+#include "optimizations.h"
+#include "bytecode.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
@@ -331,7 +333,13 @@ static char *mangle(const char *mod, const char *local) {
     return r;
 }
 
-static bool emit_object(LLVMModuleRef mod, const char *obj_path) {
+static LLVMCodeGenOptLevel codegen_opt_level(int level) {
+    if (level <= 0) return LLVMCodeGenLevelNone;
+    if (level == 1) return LLVMCodeGenLevelLess;
+    return LLVMCodeGenLevelAggressive;
+}
+
+static bool emit_object(LLVMModuleRef mod, const char *obj_path, int opt_level) {
     char *triple = LLVMGetDefaultTargetTriple();
     char *error  = NULL;
     LLVMTargetRef target;
@@ -341,7 +349,7 @@ static bool emit_object(LLVMModuleRef mod, const char *obj_path) {
     }
     LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
         target, triple, "generic", "",
-        LLVMCodeGenLevelDefault, LLVMRelocPIC, LLVMCodeModelDefault);
+        codegen_opt_level(opt_level), LLVMRelocPIC, LLVMCodeModelDefault);
     char buf[512]; strncpy(buf, obj_path, sizeof(buf)-1); buf[511] = '\0';
     bool ok = true;
     if (LLVMTargetMachineEmitToFile(tm, mod, buf, LLVMObjectFile, &error) != 0) {
@@ -550,6 +558,26 @@ static void compile_prelude_modules(const char *current_source,
         return;
 
     const char *env_core = getenv("MONAD_CORE");
+    const char *system_core = "/usr/local/lib/monad/core/";
+    bool is_core_library =
+        (env_core && strncmp(current_source, env_core, strlen(env_core)) == 0) ||
+        strncmp(current_source, system_core, strlen(system_core)) == 0;
+
+    if (is_core_library) {
+        const char *p = source;
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if ((strncmp(p, "import", 6) == 0 &&
+                 (p[6] == ' ' || p[6] == '\t')) ||
+                (*p == '(' && strncmp(p + 1, "import", 6) == 0 &&
+                 (p[7] == ' ' || p[7] == '\t'))) {
+                return;
+            }
+            while (*p && *p != '\n') p++;
+            if (*p == '\n') p++;
+        }
+    }
+
     if (env_core) {
         char path[1024];
         snprintf(path, sizeof(path), "%s/prelude", env_core);
@@ -571,11 +599,17 @@ static CompiledModule *compile_one(const char *source_path,
         clock_gettime(CLOCK_MONOTONIC, &_phase_t1); \
         double _ms = (_phase_t1.tv_sec - _phase_t0.tv_sec) * 1000.0 + \
                      (_phase_t1.tv_nsec - _phase_t0.tv_nsec) / 1e6; \
-        if (_ms > 50.0) printf("  [phase] %s: %.1f ms\n", name, _ms);   \
+        if ((flags->verbose_level > 0 || flags->trace_codegen) && _ms > 50.0) \
+            printf("  [phase] %s: %.1f ms\n", name, _ms);   \
     } while(0)
 
     // Defensively own the path — callers may free dep_src right after returning
     char *my_source_path = strdup(source_path);
+
+    if (flags->jit && !is_main_module) {
+        free(my_source_path);
+        return NULL;
+    }
 
     // Early-exit if this module is already compiled and registered.
     // This prevents duplicate .o entries from recursive pre-scan calls.
@@ -633,10 +667,12 @@ static CompiledModule *compile_one(const char *source_path,
     time_t obj_t = file_mtime(obj_path);
     bool skip_emit = !is_main_module && (obj_t > 0 && obj_t > src_t);
 
-    if (skip_emit)
-        printf("[skip]    %s (.o is up to date)\n", my_source_path);
-    else
-        printf("[compile] %s\n", my_source_path);
+    if (flags->verbose_level > 0 || flags->trace_codegen) {
+        if (skip_emit)
+            printf("[skip]    %s (.o is up to date)\n", my_source_path);
+        else
+            printf("[compile] %s\n", my_source_path);
+    }
 
     {
         char *_dbg_name = path_to_module_name(my_source_path);
@@ -764,6 +800,20 @@ static CompiledModule *compile_one(const char *source_path,
             }
         }
 
+        bool in_core_data_dir = false;
+        {
+            const char *env_core = getenv("MONAD_CORE");
+            char data_dir[1024];
+            if (env_core) {
+                snprintf(data_dir, sizeof(data_dir), "%s/Data", env_core);
+                in_core_data_dir = strcmp(src_dir, data_dir) == 0;
+            }
+            if (!in_core_data_dir)
+                in_core_data_dir = strcmp(src_dir, "/usr/local/lib/monad/core/Data") == 0;
+        }
+        if (in_core_data_dir)
+            goto skip_primitive_type_autoload;
+
         for (int _ti = 0; k_primitive_type_stems[_ti]; _ti++) {
             const char *stem = k_primitive_type_stems[_ti];
 
@@ -774,8 +824,10 @@ static CompiledModule *compile_one(const char *source_path,
             /* Only proceed if the file actually exists */
             if (!file_exists(type_path)) continue;
 
-            /* Do not auto-load ourselves */
-            if (strcmp(type_path, my_source_path) == 0) continue;
+            /* Do not auto-load ourselves.
+             * Use realpath-aware comparison so "Char.mon" and "./Char.mon"
+             * are treated as the same file. */
+            if (path_is_current_source(type_path, my_source_path)) continue;
 
             /* Skip if already in the registry under any path tail matching stem */
             bool already_done = false;
@@ -793,10 +845,13 @@ static CompiledModule *compile_one(const char *source_path,
             if (already_done) continue;
 
             /* Compile the type method file as a dependency */
-            printf("[type]    %s\n", type_path);
+            if (flags->verbose_level > 0 || flags->trace_codegen)
+                printf("[type]    %s\n", type_path);
             compile_one(type_path, flags, false);
             parser_set_context(my_source_path, source);
         }
+skip_primitive_type_autoload:
+        ;
     }
 
     /* Pre-scan imports and compile dependencies BEFORE wisp expansion
@@ -919,7 +974,20 @@ static CompiledModule *compile_one(const char *source_path,
     parser_set_context(my_source_path, source);
     AST *_feat_early = detect_features();
     ast_free(_feat_early);
+    wisp_set_trace(flags->trace_ast);
     ASTList exprs = wisp_parse_all(source, my_source_path);
+
+    if (flags->optimization_level > 0) {
+        OptimizationOptions opt_options = optimization_options_default();
+        opt_options.level = flags->optimization_level >= 2
+            ? OPT_LEVEL_AGGRESSIVE
+            : OPT_LEVEL_BASIC;
+        opt_options.print_stats = flags->verbose_level > 0 && !flags->trace_semantic;
+        opt_options.trace_semantic = flags->trace_semantic;
+        opt_options.source_name = my_source_path;
+        OptimizationStats opt_stats = {0};
+        optimize_ast_list(&exprs, &opt_options, &opt_stats);
+    }
 
     /* Surface AST for typst emission — parsed before wisp desugaring.
      * We re-parse from the original source so the emitter sees the
@@ -931,15 +999,41 @@ static CompiledModule *compile_one(const char *source_path,
         surface_exprs = parse_all(source);
     }
 
-    /* Show fully desugared AST after all reader transforms */
-    fprintf(stderr, "\n=== desugared AST (%s) ===\n", my_source_path);
-    for (size_t i = 0; i < exprs.count; i++) {
-        ast_print(exprs.exprs[i]);
-        printf("\n");
-        fflush(stdout);
+    if (flags->trace_ast) {
+        /* Show fully desugared AST after all reader transforms */
+        fprintf(stderr, "\n=== desugared AST (%s) ===\n", my_source_path);
+        for (size_t i = 0; i < exprs.count; i++) {
+            ast_print(exprs.exprs[i]);
+            printf("\n");
+            fflush(stdout);
+        }
+        fprintf(stderr, "=== end desugared AST ===\n\n");
+        fflush(stderr);
     }
-    fprintf(stderr, "=== end desugared AST ===\n\n");
-    fflush(stderr);
+
+    if (is_main_module &&
+        (flags->emit_bytecode || flags->bytecode_verify ||
+         flags->bytecode_disassemble || flags->bytecode_decompile ||
+         flags->bytecode_dump_sections || flags->bytecode_trace ||
+         flags->bytecode_baseline_jit)) {
+        fprintf(stderr,
+                "bytecode: register VM substrate v%u.%u is available; "
+                "AST-to-bytecode lowering is not wired into compile yet\n",
+                BC_VERSION_MAJOR, BC_VERSION_MINOR);
+        if (flags->bytecode_baseline_jit)
+            fprintf(stderr, "bytecode: baseline JIT flag accepted; backend lowering is pending\n");
+        if (flags->jit) {
+            fprintf(stderr, "bytecode: -jit requested; skipping LLVM compile because bytecode lowering is pending\n");
+            for (size_t i = 0; i < exprs.count; i++) ast_free(exprs.exprs[i]);
+            free(exprs.exprs);
+            for (size_t i = 0; i < surface_exprs.count; i++) ast_free(surface_exprs.exprs[i]);
+            free(surface_exprs.exprs);
+            free(my_source_path);
+            free(source);
+            type_alias_free_all();
+            return NULL;
+        }
+    }
 
     if (flags->emit_json) {
         char json_path[512];
@@ -963,7 +1057,8 @@ static CompiledModule *compile_one(const char *source_path,
             }
             fprintf(jf, "]\n");
             fclose(jf);
-            printf("  wrote json: %s\n", json_path);
+            if (flags->verbose_level > 0 || flags->trace_ast)
+                printf("  wrote json: %s\n", json_path);
         }
 
         /* JSON-only mode: clean up and stop — no codegen, no binary */
@@ -1072,7 +1167,8 @@ static CompiledModule *compile_one(const char *source_path,
     }
     module_context_add_prelude_imports(mod_ctx);
     const char *mod_name = module_decl->name;
-    printf("  module: %s\n", mod_name);
+    if (flags->verbose_level > 0 || flags->trace_codegen)
+        printf("  module: %s\n", mod_name);
 
 /// Phase 2: Verify dependencies are compiled
 
@@ -1258,7 +1354,9 @@ static CompiledModule *compile_one(const char *source_path,
 
 /// Phase 6.5: Dependent Type Checking (Shadow Pass)
 
-    printf("[dep] running bidirectional type checker...\n");
+    g_trace_enabled = flags->trace_dep;
+    if (flags->verbose_level > 0 || flags->trace_dep)
+        printf("[dep] running bidirectional type checker...\n");
     bool dep_failed = false;
 
     for (size_t i = first_code; i < exprs.count; i++) {
@@ -1395,12 +1493,12 @@ static CompiledModule *compile_one(const char *source_path,
             }
             char *ms = mangle(mod_name, _local_name);
 
-            if (ent->kind == ENV_FUNC) {
+            if (ent->kind == ENV_FUNC || ent->kind == ENV_ADT_CTOR) {
                 /* Never rename FFI functions — they must keep their original
                  * symbol names so the linker can find them in libraylib etc. */
                 if (ent->is_ffi) { free(ms); ent = ent->next; continue; }
                 registry_push_func(cm, ent->name, ms,
-                                   ent->return_type,
+                                   ent->return_type ? ent->return_type : ent->type,
                                    ent->params, ent->param_count,
                                    ent->func_ref);
                 if (ent->func_ref) {
@@ -1412,12 +1510,13 @@ static CompiledModule *compile_one(const char *source_path,
                 for (size_t bj = 0; bj < ctx.env->size; bj++) {
                     for (EnvEntry *other = ctx.env->buckets[bj]; other; other = other->next) {
                         if (other != ent &&
-                            other->kind == ENV_FUNC &&
+                            (other->kind == ENV_FUNC ||
+                             other->kind == ENV_ADT_CTOR) &&
                             other->module_name == NULL &&
                             other->func_ref == ent->func_ref &&
                             strcmp(other->name, ent->name) != 0) {
                             registry_push_func(cm, other->name, ms,
-                                               ent->return_type,
+                                               ent->return_type ? ent->return_type : ent->type,
                                                ent->params, ent->param_count,
                                                ent->func_ref);
                         }
@@ -1489,6 +1588,15 @@ static CompiledModule *compile_one(const char *source_path,
     if (LLVMVerifyModule(ctx.module, LLVMPrintMessageAction, &error) != 0) {
         fprintf(stderr, "IR verification failed for %s:\n%s\n",
                 my_source_path, error ? error : "");
+        if (base && *base) {
+            char bad_ir[512];
+            snprintf(bad_ir, sizeof(bad_ir), "%s.bad.ll", base);
+            char *dump_error = NULL;
+            if (LLVMPrintModuleToFile(ctx.module, bad_ir, &dump_error) == 0) {
+                fprintf(stderr, "wrote invalid IR: %s\n", bad_ir);
+            }
+            if (dump_error) LLVMDisposeMessage(dump_error);
+        }
         LLVMDisposeMessage(error); exit(1);
     }
     if (error) LLVMDisposeMessage(error);
@@ -1497,7 +1605,8 @@ static CompiledModule *compile_one(const char *source_path,
         char ir[512]; snprintf(ir, sizeof(ir), "%s.ll", base);
         error = NULL; LLVMPrintModuleToFile(ctx.module, ir, &error);
         if (error) LLVMDisposeMessage(error);
-        else printf("  wrote IR: %s\n", ir);
+        else if (flags->verbose_level > 0 || flags->trace_codegen)
+            printf("  wrote IR: %s\n", ir);
     }
     if (flags->emit_asm) {
         char as[512]; snprintf(as, sizeof(as), "%s.s", base);
@@ -1507,7 +1616,7 @@ static CompiledModule *compile_one(const char *source_path,
         if (error) LLVMDisposeMessage(error);
         LLVMTargetMachineRef mach = LLVMCreateTargetMachine(
             tgt, triple, "generic", "",
-            LLVMCodeGenLevelDefault, LLVMRelocPIC, LLVMCodeModelDefault);
+            codegen_opt_level(flags->optimization_level), LLVMRelocPIC, LLVMCodeModelDefault);
         char asbuf[512]; strncpy(asbuf, as, 511);
         error = NULL;
         LLVMTargetMachineEmitToFile(mach, ctx.module, asbuf,
@@ -1520,11 +1629,12 @@ static CompiledModule *compile_one(const char *source_path,
 
     PHASE_START();
     if (!skip_emit) {
-        if (!emit_object(ctx.module, obj_path)) {
+        if (!emit_object(ctx.module, obj_path, flags->optimization_level)) {
             fprintf(stderr, "failed to emit object for %s\n", my_source_path);
             exit(1);
         }
-        printf("  wrote object: %s\n", obj_path);
+        if (flags->verbose_level > 0 || flags->trace_codegen)
+            printf("  wrote object: %s\n", obj_path);
     }
 
     PHASE_END("emit object");
@@ -1549,19 +1659,54 @@ static CompiledModule *compile_one(const char *source_path,
 static void compile(CompilerFlags *flags) {
     g_ffi_link_libs[0]  = '\0';
     g_ffi_link_libs_len = 0;
+    codegen_set_trace(flags->trace_codegen || flags->verbose_level > 0);
+    infer_set_trace(flags->trace_dep || flags->verbose_level > 1);
 
     CompiledModule *main_mod = compile_one(flags->input_file, flags, true);
     if (!main_mod) return;  /* emit-json mode, no linking needed */
 
     // Collect .o files: registry is prepend (newest first), reverse to get
-    // deps first so linker resolves symbols correctly
-    size_t n = 0;
-    for (CompiledModule *m = g_compiled; m; m = m->next) n++;
+    // deps first so linker resolves symbols correctly. Deduplicate by realpath
+    // so aliases like "Char.o" and "./Char.o" are linked only once.
+    size_t raw_n = 0;
+    for (CompiledModule *m = g_compiled; m; m = m->next) raw_n++;
 
-    const char **objs = malloc(sizeof(char *) * n);
-    size_t idx = n;
-    for (CompiledModule *m = g_compiled; m; m = m->next)
-        objs[--idx] = m->obj_path;
+    const char **objs = malloc(sizeof(char *) * (raw_n ? raw_n : 1));
+    size_t n = 0;
+
+    for (CompiledModule *m = g_compiled; m; m = m->next) {
+        const char *candidate = m->obj_path;
+        bool seen = false;
+
+        char candidate_real[1024];
+        bool candidate_has_real = realpath(candidate, candidate_real) != NULL;
+
+        for (size_t i = 0; i < n; i++) {
+            if (strcmp(objs[i], candidate) == 0) {
+                seen = true;
+                break;
+            }
+
+            if (candidate_has_real) {
+                char existing_real[1024];
+                if (realpath(objs[i], existing_real) &&
+                    strcmp(candidate_real, existing_real) == 0) {
+                    seen = true;
+                    break;
+                }
+            }
+        }
+
+        if (!seen) {
+            objs[n++] = candidate;
+        }
+    }
+
+    for (size_t i = 0; i < n / 2; i++) {
+        const char *tmp = objs[i];
+        objs[i] = objs[n - 1 - i];
+        objs[n - 1 - i] = tmp;
+    }
 
 
     char *exec_base = flags->output_name
@@ -1597,17 +1742,20 @@ static void compile(CompilerFlags *flags) {
                   exec_name, g_ffi_link_libs);
 
 
-    printf("\n[link] %s\n", cmd);
+    if (flags->verbose_level > 0 || flags->trace_codegen)
+        printf("\n[link] %s\n", cmd);
     struct timespec _lt0, _lt1;
     clock_gettime(CLOCK_MONOTONIC, &_lt0);
     int rc = system(cmd);
     clock_gettime(CLOCK_MONOTONIC, &_lt1);
     double _lms = (_lt1.tv_sec - _lt0.tv_sec) * 1000.0 +
                   (_lt1.tv_nsec - _lt0.tv_nsec) / 1e6;
-    printf("[link] %.0f ms\n", _lms);
+    if (flags->verbose_level > 0 || flags->trace_codegen)
+        printf("[link] %.0f ms\n", _lms);
     if (rc == 0) {
         /* printf("[done] %s", exec_name); */
-        printf("[done] %s\n\n", exec_name);
+        if (flags->verbose_level > 0 || flags->trace_codegen)
+            printf("[done] %s\n\n", exec_name);
         if (!flags->emit_obj)
             for (size_t i = 0; i < n; i++) remove(objs[i]);
     } else {
@@ -1655,19 +1803,34 @@ bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {
     return true;
 }
 
+void cmd_eval(const char *code) {
+    if (!code || !*code) {
+        fprintf(stderr, "eval requires code\n");
+        exit(1);
+    }
+
+    REPLContext ctx;
+    repl_init(&ctx);
+    bool ok = repl_eval_line(&ctx, code);
+    repl_dispose(&ctx);
+    exit(ok ? 0 : 1);
+}
+
 
 int main(int argc, char **argv) {
     CompilerFlags flags = parse_flags(argc, argv);
     switch (flags.mode) {
     case CMD_REPL:    repl_run();                        return 0;
     case CMD_NEW:     cmd_new(flags.package_name);       return 0;
-    case CMD_BUILD:   cmd_build();                       return 0;
-    case CMD_RUN:     cmd_run();                         return 0;
+    case CMD_BUILD:   cmd_build(&flags);                 return 0;
+    case CMD_RUN:     cmd_run(&flags);                   return 0;
     case CMD_CLEAN:   cmd_clean();                       return 0;
     case CMD_INSTALL: cmd_install();                     return 0;
     case CMD_TEST:    cmd_test(flags.input_file);        return 0;
     case CMD_CHECK:   cmd_check(flags.input_file);       return 0;
     case CMD_LSP:     cmd_lsp();                         return 0;
+    case CMD_EVAL:    cmd_eval(flags.eval_code);         return 0;
+    case CMD_DEBUG:   cmd_debug(&flags);                 return 0;
     case CMD_COMPILE:
     default:
         compile(&flags);

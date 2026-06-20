@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -33,6 +33,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Codegen operation dispatch — 83+ strcmp handlers, 94 builtins
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -1183,6 +1184,7 @@
 * Category Contract
 :PROPERTIES:
 :ID: monadc.context.codegen-ops.category-contract
+:CONTEXT_DESCRIPTION: Category-theoretic contract for codegen operation dispatch
 :CUSTOM_ID: codegen-ops-category-contract
 :CONTEXT_KIND: contract
 :END:

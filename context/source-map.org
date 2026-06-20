@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-14
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Source file map — every .c/.h file purpose and connections
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -52,6 +53,8 @@
 :CONTEXT_DESCRIPTION: Maps the lexer, parser, AST construction, and Wisp syntax expander forming the compiler frontend entry points
 :END:
 
+Source mapping for the reader subsystem — reader.c, wisp.c.
+
 ** reader.c/h — Lexer, Parser, AST Construction
 :PROPERTIES:
 :ID: monadc.context.source-map.reader
@@ -60,6 +63,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: reader.c and reader.h — lexer, tokenizer, AST constructors
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -84,6 +88,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: wisp.c and wisp.h — indentation-based Wisp surface syntax parser
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -106,6 +111,8 @@
 :CONTEXT_DESCRIPTION: Maps type representation, HM inference, dependent type checking, constraint solving, and unification subsystems
 :END:
 
+Source mapping for the type system — types.c, infer.c.
+
 ** types.c/h — Type Representation
 :PROPERTIES:
 :ID: monadc.context.source-map.types
@@ -114,6 +121,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: types.c and types.h — type system representation and operations
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -138,6 +146,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: infer.c and infer.h — Hindley-Milner type inference engine
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -161,6 +170,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: dep.c and dep.h — dependent type checker (ITT kernel with NbE)
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -185,6 +195,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: typeclass.c and typeclass.h — type class declaration and resolution
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -206,6 +217,8 @@
 :CONTEXT_DESCRIPTION: Maps the LLVM IR code generator translating desugared AST to LLVM IR as the largest compiler file
 :END:
 
+Source mapping for the code generator — codegen.c.
+
 ** codegen.c/h — LLVM IR Code Generator
 :PROPERTIES:
 :ID: monadc.context.source-map.codegen
@@ -214,6 +227,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: codegen.c and codegen.h — LLVM IR code generator
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -240,6 +254,8 @@
 :CONTEXT_DESCRIPTION: Maps the runtime library, arena allocator, and inline assembly translator providing the execution substrate
 :END:
 
+Source mapping for the runtime layer — runtime.c, arena.c, asm.c.
+
 ** runtime.c/h — Runtime Library
 :PROPERTIES:
 :ID: monadc.context.source-map.runtime
@@ -248,6 +264,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: runtime.c and runtime.h — runtime library (libmonad.a)
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -271,6 +288,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: arena.c and arena.h — bump arena allocator
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -292,6 +310,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: asm.c and asm.h — inline assembly to LLVM IR translator
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -321,6 +340,8 @@
 :CONTEXT_DESCRIPTION: Maps the C foreign function interface using libclang for header parsing, type mapping, and arity registration
 :END:
 
+Source mapping for the FFI subsystem — ffi.c.
+
 ** ffi.c/h — C Foreign Function Interface
 :PROPERTIES:
 :ID: monadc.context.source-map.ffi
@@ -329,6 +350,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: ffi.c and ffi.h — C foreign function interface via libclang
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -350,6 +372,8 @@
 :CONTEXT_DESCRIPTION: Maps the symbol table, module system, export resolution, and package build system for modular compilation
 :END:
 
+Source mapping for the environment and module system — env.c, module.c.
+
 ** env.c/h — Symbol Table
 :PROPERTIES:
 :ID: monadc.context.source-map.env
@@ -358,6 +382,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: env.c and env.h — hash-map symbol table
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -380,6 +405,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: module.c and module.h — module system core
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -398,6 +424,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: module_export.c and module_export.h — module export resolution
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -416,6 +443,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: buildsystem.c and buildsystem.h — package build system
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -432,6 +460,8 @@
 :CONTEXT_DESCRIPTION: Maps the pattern match compiler and macro system for syntactic abstraction and clause compilation
 :END:
 
+Source mapping for pattern matching and macros — pmatch.c, macro.c.
+
 ** pmatch.c/h — Pattern Match Compiler
 :PROPERTIES:
 :ID: monadc.context.source-map.pmatch
@@ -440,6 +470,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: pmatch.c and pmatch.h — pattern match compiler
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -458,6 +489,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: macro.c and macro.h — macro expansion system
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -474,6 +506,8 @@
 :CONTEXT_DESCRIPTION: Maps the CLI argument parser and interactive JIT-compile REPL for user-facing compiler interaction
 :END:
 
+Source mapping for the CLI and REPL — cli.c, repl.c.
+
 ** cli.c/h — CLI Argument Parser
 :PROPERTIES:
 :ID: monadc.context.source-map.cli
@@ -482,6 +516,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: cli.c and cli.h — CLI argument parser
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -501,6 +536,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: completion.c and completion.h — tab completion and usage menus
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -520,6 +556,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: lsp.c and lsp.h — Language Server Protocol implementation
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -541,6 +578,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: repl.c and repl.h — interactive JIT-compile REPL
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -557,6 +595,8 @@
 :CONTEXT_DESCRIPTION: Maps supporting utilities including platform feature detection, Typst document emission, and the pipeline orchestrator
 :END:
 
+Source mapping for miscellaneous utilities — features.c, typst-emit.c, main.c.
+
 ** features.c/h — Conditional Compilation
 :PROPERTIES:
 :ID: monadc.context.source-map.features
@@ -565,6 +605,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: features.c and features.h — conditional compilation feature detection
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -583,6 +624,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: typst_emit.c and typst_emit.h — Typst document emission
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -601,6 +643,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: main.c — entry point and 12-phase pipeline orchestrator
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -618,6 +661,8 @@
 :CONTEXT_DESCRIPTION: Maps the standard library written in Monad source providing prelude collections, math, text, and test infrastructure
 :END:
 
+Source mapping for the core standard library — core/.
+
 ** core/ — Standard Library
 :PROPERTIES:
 :ID: monadc.context.source-map.core-libs
@@ -626,6 +671,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: core/ — standard library written in Monad source
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -645,6 +691,7 @@
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Research PDF reference library in etc/pdfs/
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active

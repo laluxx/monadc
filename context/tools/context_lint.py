@@ -288,8 +288,6 @@ def check_last_modified(text: str, rel: str, path: Path) -> list[tuple[str, int,
         found_date = candidate
         break
     if found_date and found_date != file_mtime:
-        issues.append((rel, line_of(text, m.start()), current_val, file_mdate))
-    if found_date and found_date != file_mtime:
         issues.append((rel, line_of(text, m.start()), current_val, file_mtime))
     return issues
 
@@ -307,6 +305,25 @@ def fix_last_modified(text: str, path: Path, rel: str, root: Path) -> str | None
     return new_text
 
 
+def check_context_updated(text: str, rel: str) -> list[tuple[str, int, str]]:
+    issues: list[tuple[str, int, str]] = []
+    for m in RE_CONTEXT_UPDATED.finditer(text):
+        val = m.group().strip()
+        parts = val.split()
+        if len(parts) < 2:
+            continue
+        date_str = parts[1]
+        try:
+            found = date.fromisoformat(date_str)
+        except ValueError:
+            issues.append((rel, line_of(text, m.start()), val))
+            continue
+        delta = date.today() - found
+        if delta.days > 7:
+            issues.append((rel, line_of(text, m.start()), val))
+    return issues
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="lint MonadC context org files")
     ap.add_argument("root", nargs="?", default="context", help="context directory")
@@ -320,9 +337,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check-src-refs", action="store_true", help="fail on src: references to non-existent files")
     ap.add_argument("--check-test-contexts", action="store_true", help="fail on TEST-CONTEXT references to unknown IDs")
     ap.add_argument("--fix-last-modified", action="store_true", help="update stale #+LAST_MODIFIED: values to today")
+    ap.add_argument("--validate", action="store_true", help="comprehensive validation: all checks, strict links, record refs, freshness")
+    ap.add_argument("--summary-only", action="store_true", help="print only the summary line (no detail blocks)")
     ap.add_argument("--all", action="store_true", help="enable all checks")
     args = ap.parse_args(argv)
 
+    if args.validate:
+        args.all = True
+        args.strict_links = True
     if args.all:
         args.check_record_refs = True
         args.check_empty_headings = True
@@ -352,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
     broken_test_contexts: list[tuple[str, int, str]] = []
     orphaned_files: list[str] = []
     stale_last_modified: list[tuple[str, int, str, str]] = []
+    stale_context_updated: list[tuple[str, int, str]] = []
     fixed_files: list[str] = []
     totals = {"lines": 0, "headings": 0, "records": 0, "ids": 0}
 
@@ -445,6 +468,10 @@ def main(argv: list[str] | None = None) -> int:
                 path.write_text(new_text)
                 fixed_files.append(rel)
 
+    if args.validate:
+        for path, rel, text in texts:
+            stale_context_updated.extend(check_context_updated(text, rel))
+
     dup_ids = {k: v for k, v in ids.items() if len(v) > 1}
     dup_records = {k: v for k, v in records.items() if len(v) > 1}
 
@@ -473,6 +500,8 @@ def main(argv: list[str] | None = None) -> int:
         summary["broken_src_refs"] = broken_src_refs
     if args.check_test_contexts:
         summary["broken_test_contexts"] = broken_test_contexts
+    if args.validate:
+        summary["stale_context_updated"] = stale_context_updated
     if args.fix_last_modified:
         summary["fixed_last_modified"] = fixed_files
 
@@ -511,55 +540,62 @@ def main(argv: list[str] | None = None) -> int:
             print(f"broken test contexts: {len(broken_test_contexts)}")
         if args.fix_last_modified:
             print(f"fixed last modified: {len(fixed_files)}")
+        if args.validate:
+            print(f"stale CONTEXT_UPDATED: {len(stale_context_updated)}")
 
-        if dup_ids:
-            print("\nDuplicate heading IDs:")
-            for key, locs in sorted(dup_ids.items()):
-                print(f"  {key}: {locs}")
-        if dup_records:
-            print("\nDuplicate record IDs:")
-            for key, locs in sorted(dup_records.items()):
-                print(f"  {key}: {locs}")
-        if header_gaps:
-            print("\nHeader gaps:")
-            for rel, missing in header_gaps:
-                print(f"  {rel}: {', '.join(missing)}")
-        if broken_links:
-            print("\nBroken local file links:")
-            for rel, line, target in broken_links:
-                print(f"  {rel}:{line}: {target}")
-        if broken_id_links:
-            print("\nBroken id links:")
-            for rel, line, target in broken_id_links:
-                print(f"  {rel}:{line}: {target}")
-        if args.check_record_refs and broken_record_refs:
-            print("\nBroken record references:")
-            for rel, line, ref in broken_record_refs:
-                print(f"  {rel}:{line}: {ref}")
-        if args.check_empty_headings and empty_headings:
-            print("\nEmpty headings (no body content):")
-            for rel, line, heading in empty_headings:
-                print(f"  {rel}:{line}: {heading}")
-        if args.check_description and missing_descriptions:
-            print("\nHeadings missing CONTEXT_DESCRIPTION:")
-            for rel, line, heading in missing_descriptions:
-                print(f"  {rel}:{line}: {heading}")
-        if args.check_orphaned and orphaned_files:
-            print("\nOrphaned files (not linked from index/connections):")
-            for f in orphaned_files:
-                print(f"  {f}")
-        if args.check_src_refs and broken_src_refs:
-            print("\nBroken src references:")
-            for rel, line, raw, reason in broken_src_refs:
-                print(f"  {rel}:{line}: src:{raw} - {reason}")
-        if args.check_test_contexts and broken_test_contexts:
-            print("\nBroken test context references:")
-            for file, line, cid in broken_test_contexts:
-                print(f"  {file}:{line}: TEST-CONTEXT {cid} - ID NOT FOUND")
-        if args.fix_last_modified and fixed_files:
-            print("\nFixed LAST_MODIFIED:")
-            for f in fixed_files:
-                print(f"  {f}")
+        if not args.summary_only:
+            if dup_ids:
+                print("\nDuplicate heading IDs:")
+                for key, locs in sorted(dup_ids.items()):
+                    print(f"  {key}: {locs}")
+            if dup_records:
+                print("\nDuplicate record IDs:")
+                for key, locs in sorted(dup_records.items()):
+                    print(f"  {key}: {locs}")
+            if header_gaps:
+                print("\nHeader gaps:")
+                for rel, missing in header_gaps:
+                    print(f"  {rel}: {', '.join(missing)}")
+            if broken_links:
+                print("\nBroken local file links:")
+                for rel, line, target in broken_links:
+                    print(f"  {rel}:{line}: {target}")
+            if broken_id_links:
+                print("\nBroken id links:")
+                for rel, line, target in broken_id_links:
+                    print(f"  {rel}:{line}: {target}")
+            if args.check_record_refs and broken_record_refs:
+                print("\nBroken record references:")
+                for rel, line, ref in broken_record_refs:
+                    print(f"  {rel}:{line}: {ref}")
+            if args.check_empty_headings and empty_headings:
+                print("\nEmpty headings (no body content):")
+                for rel, line, heading in empty_headings:
+                    print(f"  {rel}:{line}: {heading}")
+            if args.check_description and missing_descriptions:
+                print("\nHeadings missing CONTEXT_DESCRIPTION:")
+                for rel, line, heading in missing_descriptions:
+                    print(f"  {rel}:{line}: {heading}")
+            if args.check_orphaned and orphaned_files:
+                print("\nOrphaned files (not linked from index/connections):")
+                for f in orphaned_files:
+                    print(f"  {f}")
+            if args.check_src_refs and broken_src_refs:
+                print("\nBroken src references:")
+                for rel, line, raw, reason in broken_src_refs:
+                    print(f"  {rel}:{line}: src:{raw} - {reason}")
+            if args.check_test_contexts and broken_test_contexts:
+                print("\nBroken test context references:")
+                for file, line, cid in broken_test_contexts:
+                    print(f"  {file}:{line}: TEST-CONTEXT {cid} - ID NOT FOUND")
+            if args.fix_last_modified and fixed_files:
+                print("\nFixed LAST_MODIFIED:")
+                for f in fixed_files:
+                    print(f"  {f}")
+            if args.validate and stale_context_updated:
+                print("\nStale CONTEXT_UPDATED (>7 days old):")
+                for rel, line, val in stale_context_updated:
+                    print(f"  {rel}:{line}: {val}")
 
     fail = bool(
         dup_ids or dup_records or header_gaps or broken_id_links
@@ -570,6 +606,7 @@ def main(argv: list[str] | None = None) -> int:
         or (args.check_orphaned and orphaned_files)
         or (args.check_src_refs and broken_src_refs)
         or (args.check_test_contexts and broken_test_contexts)
+        or (args.validate and stale_context_updated)
     )
     return 1 if fail else 0
 

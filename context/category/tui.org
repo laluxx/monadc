@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Canonical Interface
 :PROPERTIES:
 :ID: monadc.context.category.tui.canonical-interface
+:CONTEXT_DESCRIPTION: Canonical terminal interface (Catface)
 :CUSTOM_ID: category-tui-canonical-interface
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -37,6 +38,7 @@
 * Screen Model
 :PROPERTIES:
 :ID: monadc.context.category.tui.screen-model
+:CONTEXT_DESCRIPTION: Screen layout and pane model
 :CUSTOM_ID: category-tui-screen-model
 :CONTEXT_KIND: ui-model
 :CONTEXT_STATUS: active
@@ -53,6 +55,7 @@
 * Category Operations
 :PROPERTIES:
 :ID: monadc.context.category.tui.category-operations
+:CONTEXT_DESCRIPTION: Category operation keybindings
 :CUSTOM_ID: category-tui-category-operations
 :CONTEXT_KIND: ui-contract
 :CONTEXT_STATUS: active
@@ -72,6 +75,7 @@
 * Implementation Link
 :PROPERTIES:
 :ID: monadc.context.category.tui.implementation-link
+:CONTEXT_DESCRIPTION: Link to Catface Zig implementation
 :CUSTOM_ID: category-tui-implementation-link
 :CONTEXT_KIND: source-map
 :CONTEXT_STATUS: active

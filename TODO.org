@@ -1,10 +1,163 @@
 #+title: TODO.org
 
+* TODO Tests Cookie [0/2]
+  - [ ] When we test count the number of tests and update the [/] heading
+  - [ ] Make the tests function accept and optional [/] as it's first argument just ignore it.
+
+#+begin_src monad
+tests [1/5]
+  assert-eq (upcase    'a') 'A'  "Ascii upcase"
+  assert-eq (downcase  'Z') 'z'  "Ascii downcase"
+  assert-eq (digit?    '7') True "Ascii digit?"
+  assert-eq (alpha?    'Q') True "Ascii alpha?"
+  assert-eq (hex-digit->int 'f') 15   "Ascii hex-digit->int"
+#+end_src
+
+
+* ByteCode
+
+** Tiered eval: bytecode VM + unoptimized/optimized LLVM [0/6]
+
+ eval is not a REPL nicety in a Lisp — it's a language primitive, and right
+ now repl_eval_line always pays the full LLVM path no matter how trivial the
+ form: fresh_module (new LLVMModuleRef, redeclare_env_symbols walks the
+ *entire* env hash table re-declaring every global/func as extern so the
+ verifier doesn't reject cross-module refs), codegen_expr, LLVMVerifyFunction
+ + LLVMVerifyModule, LLVMAddModule, map_runtime_in_module +
+ map_imported_in_module + map_ffi_in_module, LLVMGetFunctionAddress. (+ 1 2)
+ pays the same module-creation tax as a real function definition. That's not
+ a REPL latency annoyance, it's an asymptotic cost baked into the language's
+ own evaluation model — every macro-expanded form, every incremental define,
+ every future (eval form) call goes through this.
+
+ bytecode.c (register-based bytecode VM, structured control flow only,
+ single-pass verifier, visual tracer, sectioned binary format) already
+ exists and is unit-tested, but is not wired into repl.c at all yet.
+
+ The shape: three tiers, cost paid only when it buys something —
+
+   1. Bytecode interpreter (bc_vm_run)  — zero entry cost, default for eval
+      and any toplevel form. No module creation, no env-wide redeclare walk,
+      no LLVM verification, no dlsym address fetch.
+   2. Unoptimized LLVM (-O0, no pass pipeline) — reuses the EXISTING
+      fresh_module/close_and_run machinery verbatim, just fed IR lowered
+      from BcProgram instead of from codegen_expr's AST walk. Promoted to
+      once something is called enough to amortize module overhead.
+   3. Optimized LLVM (real pass pipeline) — genuinely hot code only.
+
+ Rejected: a third hand-rolled x64 JIT tier between 1 and 2. The existing
+ baseline JIT in bytecode.c (x64_emit_probed_stack_alloc, x64_mov_*,
+ x64_binop_slot) only lowers straight-line I64 arithmetic — no if, no loop,
+ no calls — and extending it to real control flow means hand-rolling
+ register allocation, branch lowering, and calling-convention handling that
+ LLVM already does correctly. Concretely this also means the JIT path
+ inherits LLVM's correct sdiv/srem lowering on x86 for the INT64_MIN / -1
+ case for free, instead of hand-rolling that guard in raw machine code.
+ Tier 2 = tier 3's existing pipeline, just -O0.
+
+ The dispatch boundary is a property checkable BEFORE codegen, not a fuzzy
+ heuristic: does this form touch anything boxed (RuntimeValue*, lists, maps,
+ closures, define) or not? Pure I64/F64/Bool arithmetic and control flow ->
+ eligible for the bytecode path. Anything boxed -> existing LLVM path,
+ completely untouched.
+
+** TODO Fix bytecode.c crash bugs before this VM sees real eval traffic [0/3]
+   eval calling into a VM that can SIGFPE on (/ x 0) is strictly worse than
+   the status quo of always-LLVM.
+   - [ ] INT64_MIN / -1 and INT64_MIN % -1 trap (SIGFPE from idiv itself,
+         not just C UB) in value_i64_binary (constant folder), bc_vm_run
+         (interpreter), and the baseline JIT's emitted idiv
+   - [ ] Runtime zero divisor in bc_vm_run's I64 fast path is completely
+         unguarded (the constant folder checks b.as.i64 == 0, the
+         interpreter does not)
+   - [ ] Both should become a recoverable BcError, not a crash — mirrors
+         repl.c's existing pattern of catching SIGSEGV/SIGBUS from JIT code
+         and longjmp'ing back to the eval loop; note repl_signal_handler
+         does NOT currently catch SIGFPE either, same gap exists on the
+         LLVM side
+
+** TODO Eligibility classifier: AST/inferred-type -> bytecode-eligible? [0/1]
+   - [ ] Pure function over post-inference AST, called before codegen_expr
+         in repl_eval_line. No boxing, no define, no closures, no runtime
+         value touching -> eligible. Must be mechanically checkable, not
+         heuristic, since a fuzzy boundary here is exactly what rots over
+         time into "sometimes the fast path silently doesn't fire"
+
+** TODO BcProgram <-> AST lowering for the eligible subset [0/1]
+   - [ ] Lower eligible forms to BcInstr sequences (arithmetic, comparison,
+         structured if/loop via BC_OP_IF/BC_OP_ELSE/BC_OP_END,
+         BC_OP_LOOP already exists in the verifier/format but bc_vm_run's
+         BC_OP_LOOP never decrements the count register today — only
+         zero-iterations or infinite unless the lowered bytecode itself
+         emits a SUB back into r[a]; needs to be either documented as the
+         contract or fixed before this lowering depends on it)
+
+** TODO repl_eval_line dispatch wiring [0/1]
+   - [ ] Eligible forms: lower to BcProgram, run via bc_vm_run. Track a
+         per-definition call counter (BcTierPlan.call_hot_threshold already
+         exists for this) to decide promotion.
+   - [ ] Ineligible forms: completely unchanged, fall straight to the
+         existing codegen_expr -> close_and_run path
+
+** TODO Promotion: bytecode -> unoptimized LLVM [0/2]
+   - [ ] BcProgram -> LLVM IR lowering pass: one LLVMBasicBlock per
+         structured region (block/if/else/loop/end map directly onto
+         LLVM's br/phi-node CFG, more naturally than the hand-rolled JIT's
+         straight-line-only restriction)
+   - [ ] Feed through the EXISTING fresh_module/close_and_run/MCJIT engine
+         that repl.c already has — do not build a second LLVM pipeline.
+         Skip whatever pass manager tier 3 would run; -O0 equivalent only
+
+** TODO Promotion: unoptimized -> optimized LLVM [0/1]
+   - [ ] Real pass pipeline on hot functions only, using
+         BcTierPlan.loop_hot_threshold / call_hot_threshold as the signal,
+         same engine, same module-accumulation model
+
+
 * TODO Program synthesis [0/1]
 - [ ] Full idris-like hole driven development
 - [ ] Holes in functions type signature, let the compiler fill them in
 - “A bidirectional type system is complete for synthesis if every type has at least one term.”
 
+
+* TODO Multiline wisp doesn't work in the REPL [0/1]
+- [ ] Fix it
+#+begin_src monad
+define last :: [a] -> a?
+  []     -> nil
+  [x]    -> x
+  [_|xs] -> kast xs
+#+end_src
+                  ↓
+#+begin_src txt
+<input>:1:47: error: function body cannot be empty
+    1 | define last :: [a] -> a
+      |                                               ^
+#+end_src
+
+
+
+* TODO Infer purity [0/1]
+- [ ] The compiler should understand that const is pure and being bound as a variable,
+      It should error and suggest the copy-paste change to pure form.
+#+begin_src monad
+const = λx.λy.x
+#+end_src
+           ↓
+#+begin_src monad
+define const :: λx.λy.x
+#+end_src
+
+
+
+* TODO Dependent types syntax [0/1]
+- [ ] Currently there is no way to write dependent types code
+- [ ] Think of one.
+#+begin_src monad
+data Vec (A : Type a) : ℕ -> Type a
+  []  : Vec A zero
+   .  : ∀ (x : A) (xs : Vec A n) → Vec A (suc n)
+#+end_src
 
 
 * TODO Drawers [0/1]
@@ -421,7 +574,7 @@ return dep_ground_of_value(codom, mctx);
     - Before emitting spine-length mismatch, attempt δ-unfolding both heads
     - Only error if unfolding does not resolve the mismatch
 
-
+      
 * TODO QTT (Quantitative Type Theory)
 
 QTT adds usage quantities to each binder. Quantities are typically 0, 1, and ω.
@@ -749,32 +902,6 @@ Btw, This is a 2x2x2 matrix:
 (gaussian-prime? 1+i)   ; #t
 #+END_SRC
 
-
-* TODO Thread operator |>
-#+begin_src monad
-(define (xorshift64 [s :: Int] -> Int)
-  "Advance xorshift64 state by one step.
-This is a full-period 64-bit PRNG with excellent statistical properties."
-  (|> s (s `^` (s `<<` 13))
-        (s `^` (s `>>>` 7))
-        (s `^` (s `<<` 17))))
-
-(define (xorshift64 [s :: Int] -> Int)
-  "Advance xorshift64 state by one step.
-This is a full-period 64-bit PRNG with excellent statistical properties."
-  (|> s (_ `^` (_ `<<` 13))
-        (_ `^` (_ `>>>` 7))
-        (_ `^` (_ `<<` 17))))
-
-(define (xorshift64 [s :: Int] -> Int)
-  "Advance xorshift64 state by one step.
-This is a full-period 64-bit PRNG with excellent statistical properties."
-  (|> (_ `^` (_ `<<` 13))
-      (_ `^` (_ `>>>` 7))
-      (_ `^` (_ `<<` 17))))
-#+end_src
-
-
 # TODO Align layouts properly when showing them
 #+begin_src monad
 Mesh
@@ -799,9 +926,8 @@ Mesh
 #+end_src
 
 
-* TODO Dependent types [0/2]
- - [ ]
-Point.x should return the Float type itself, once we can return types.
+* TODO Dependent types [0/1]
+ - [ ] Point.x should return the Float type itself, once we can return types.
 
 #+begin_src monad
 Point
@@ -812,4 +938,3 @@ Point
 Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
- - [ ] This notations is pretty cool

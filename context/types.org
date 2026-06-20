@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -32,6 +32,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Type system — 40 TypeKind enum, Type union, constructors, refinements
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -122,7 +123,11 @@ connects-to ->
 :CONFIDENCE: high
 :END:
 
+TypeKind enum — all 40 type constructors.
+
 ** Ground Types (13)
+
+Ground type constructors — Int, Float, Bool, Char, etc.
 
 *** TYPE_INT
 :PROPERTIES:
@@ -327,6 +332,8 @@ syntax. Distinct from =TYPE_STRING= to allow path-specific operations
 
 ** Numeric Subtypes (13)
 
+Numeric subtype constructors — F32, F64, I8, I16, I32, I64, U8, U16, U32, U64.
+
 *** TYPE_F32
 :PROPERTIES:
 :ID: monadc.context.types.kind.TYPE_F32
@@ -522,6 +529,8 @@ widths. Width validation occurs in =parse_int_type=.
 
 ** Compound Types (9)
 
+Compound type constructors — List, Vector, Tuple, Struct, Enum, etc.
+
 *** TYPE_LIST
 :PROPERTIES:
 :ID: monadc.context.types.kind.TYPE_LIST
@@ -688,6 +697,8 @@ monomorphisation time.
 
 ** Meta Types (5)
 
+Meta type constructors — Unknown, Var, Arrow, App, Generic.
+
 *** TYPE_UNKNOWN
 :PROPERTIES:
 :ID: monadc.context.types.kind.TYPE_UNKNOWN
@@ -798,6 +809,8 @@ connects-to ->
 :SOURCE: types.h:54-141
 :CONFIDENCE: high
 :END:
+
+Supporting data structures — FnParam, LayoutField, RefinementEntry, TypeAlias.
 
 ** FnParam
 :PROPERTIES:
@@ -1037,9 +1050,12 @@ All nullary constructors are thin wrappers around =make_type= except
 :CONFIDENCE: high
 :END:
 
+Compound type constructor functions with child type arguments.
+
 ** type_list
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_list
+:CONTEXT_DESCRIPTION: type_list — construct list type from element type
 :CUSTOM_ID: ctor-type_list
 :SOURCE: types.h:178,types.c:480-491
 :CONFIDENCE: high
@@ -1054,6 +1070,7 @@ The =list_types= array is owned by the returned Type.
 ** type_arr, type_arr_fat, type_arr_heap
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_arr
+:CONTEXT_DESCRIPTION: type_arr — construct array type with element type and size
 :CUSTOM_ID: ctor-type_arr
 :SOURCE: types.h:179-181,types.c:493-507,449-456
 :CONFIDENCE: high
@@ -1071,6 +1088,7 @@ All three share TYPE_ARR kind; the boolean flags disambiguate.
 ** type_fn, type_fn_builtin
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_fn
+:CONTEXT_DESCRIPTION: type_fn — construct function type from params to return
 :CUSTOM_ID: ctor-type_fn
 :SOURCE: types.h:183-184,types.c:541-547,590-617
 :CONFIDENCE: high
@@ -1089,6 +1107,7 @@ one variadic rest param. All params have NULL name and NULL type
 ** type_layout, type_layout_ref
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_layout
+:CONTEXT_DESCRIPTION: type_layout — construct named layout/struct type
 :CUSTOM_ID: ctor-type_layout
 :SOURCE: types.h:185-187,types.c:509-539
 :CONFIDENCE: high
@@ -1106,6 +1125,7 @@ one variadic rest param. All params have NULL name and NULL type
 ** type_ptr
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_ptr
+:CONTEXT_DESCRIPTION: type_ptr — construct pointer type to given base type
 :CUSTOM_ID: ctor-type_ptr
 :SOURCE: types.h:188,types.c:522-526
 :CONFIDENCE: high
@@ -1119,6 +1139,7 @@ Creates TYPE_PTR storing pointee in =element_type= field. Surface syntax:
 ** type_optional
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_optional
+:CONTEXT_DESCRIPTION: type_optional — construct optional type for nullable values
 :CUSTOM_ID: ctor-type_optional
 :SOURCE: types.h:189,types.c:474-478
 :CONFIDENCE: high
@@ -1132,6 +1153,7 @@ Creates TYPE_OPTIONAL storing inner type in =element_type=. Surface syntax:
 ** type_nil
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_nil
+:CONTEXT_DESCRIPTION: type_nil — construct the nil/unit type
 :CUSTOM_ID: ctor-type_nil
 :SOURCE: types.h:190,types.c:465
 :CONFIDENCE: high
@@ -1144,6 +1166,7 @@ Creates TYPE_NIL. Ground type for the nil/unit value.
 ** type_app
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_app
+:CONTEXT_DESCRIPTION: type_app — construct type application for higher-kinded types
 :CUSTOM_ID: ctor-type_app
 :SOURCE: types.h:191,types.c:467-472
 :CONFIDENCE: high
@@ -1164,9 +1187,12 @@ Creates TYPE_APP. Constructor name is strdup'd. Takes ownership of arg.
 :CONFIDENCE: high
 :END:
 
+Hindley-Milner type constructors — type_var, type_arrow.
+
 ** type_var
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_var
+:CONTEXT_DESCRIPTION: type_var — construct fresh or lookup type variable
 :CUSTOM_ID: ctor-type_var
 :SOURCE: types.h:196,types.c:549-553
 :CONFIDENCE: high
@@ -1181,6 +1207,7 @@ assigns fresh IDs. Variables with ids 2000–2025 map to single-letter names
 ** type_arrow
 :PROPERTIES:
 :ID: monadc.context.types.ctor.type_arrow
+:CONTEXT_DESCRIPTION: type_arrow — construct arrow/function type in type system
 :CUSTOM_ID: ctor-type_arrow
 :SOURCE: types.h:197,types.c:555-560
 :CONFIDENCE: high
@@ -1203,9 +1230,12 @@ by =type_parse_fn_arrow= which chains multiple arrows.
 :CONFIDENCE: high
 :END:
 
+Type operation functions — clone, free, to_string, equal, parse.
+
 ** type_clone
 :PROPERTIES:
 :ID: monadc.context.types.op.type_clone
+:CONTEXT_DESCRIPTION: type_clone — deep-clone a type structure
 :CUSTOM_ID: op-type_clone
 :SOURCE: types.h:204,types.c:652-723
 :CONFIDENCE: high
@@ -1227,6 +1257,7 @@ Deep-clones a Type struct. Key behaviours:
 ** type_free
 :PROPERTIES:
 :ID: monadc.context.types.op.type_free
+:CONTEXT_DESCRIPTION: type_free — free/clean up a type structure
 :CUSTOM_ID: op-type_free
 :SOURCE: types.h:205,types.c:725-763
 :CONFIDENCE: high
@@ -1249,6 +1280,7 @@ Frees a Type struct and its owned children. Important details:
 ** type_to_string
 :PROPERTIES:
 :ID: monadc.context.types.op.type_to_string
+:CONTEXT_DESCRIPTION: type_to_string — render type as human-readable string
 :CUSTOM_ID: op-type_to_string
 :SOURCE: types.h:206,types.c:766-892
 :CONFIDENCE: high
@@ -1279,6 +1311,7 @@ Caller must not free. Key outputs:
 ** types_equal
 :PROPERTIES:
 :ID: monadc.context.types.op.types_equal
+:CONTEXT_DESCRIPTION: types_equal — structural equality check for types
 :CUSTOM_ID: op-types_equal
 :SOURCE: types.h:207,types.c:562-588
 :CONFIDENCE: high
@@ -1306,6 +1339,7 @@ set. Consider adding an assertion or validation check.
 ** type_parse_fn_arrow
 :PROPERTIES:
 :ID: monadc.context.types.op.type_parse_fn_arrow
+:CONTEXT_DESCRIPTION: type_parse_fn_arrow — parse function arrow type annotation
 :CUSTOM_ID: op-type_parse_fn_arrow
 :SOURCE: types.h:200,types.c:622-650
 :CONFIDENCE: high
@@ -1341,6 +1375,7 @@ Caller owns the returned type.
 ** refinement_register
 :PROPERTIES:
 :ID: monadc.context.types.refinement.refinement_register
+:CONTEXT_DESCRIPTION: refinement_register — register a refinement type predicate
 :CUSTOM_ID: ref-refinement_register
 :SOURCE: types.h:218-219,types.c:45-56
 :CONFIDENCE: high
@@ -1354,6 +1389,7 @@ Caller owns the returned type.
 ** refinement_pred_name
 :PROPERTIES:
 :ID: monadc.context.types.refinement.refinement_pred_name
+:CONTEXT_DESCRIPTION: refinement_pred_name — get predicate name from refinement
 :CUSTOM_ID: ref-refinement_pred_name
 :SOURCE: types.h:222,types.c:58-62
 :CONFIDENCE: high
@@ -1367,6 +1403,7 @@ Caller owns the returned type.
 ** refinement_check_literal
 :PROPERTIES:
 :ID: monadc.context.types.refinement.refinement_check_literal
+:CONTEXT_DESCRIPTION: refinement_check_literal — check literal against refinement
 :CUSTOM_ID: ref-refinement_check_literal
 :SOURCE: types.h:223,types.c:196-224
 :CONFIDENCE: high
@@ -1393,6 +1430,7 @@ finds a =RefinementEntry= with a predicate AST, then invokes
 ** refinement_free_all
 :PROPERTIES:
 :ID: monadc.context.types.refinement.refinement_free_all
+:CONTEXT_DESCRIPTION: refinement_free_all — free all registered refinements
 :CUSTOM_ID: ref-refinement_free_all
 :SOURCE: types.h:225,types.c:64-75
 :CONFIDENCE: high
@@ -1414,9 +1452,12 @@ var, predicate_ast, and the entry structs. Sets =g_refinements= to NULL.
 :CONFIDENCE: high
 :END:
 
+Type alias registration, resolution, and cleanup functions.
+
 ** type_alias_register
 :PROPERTIES:
 :ID: monadc.context.types.alias.type_alias_register
+:CONTEXT_DESCRIPTION: type_alias_register — register a type alias in environment
 :CUSTOM_ID: alias-type_alias_register
 :SOURCE: types.h:226,types.c:13-27
 :CONFIDENCE: high
@@ -1431,6 +1472,7 @@ entry to =g_aliases=. Both strings are strdup'd.
 ** type_alias_free_all
 :PROPERTIES:
 :ID: monadc.context.types.alias.type_alias_free_all
+:CONTEXT_DESCRIPTION: type_alias_free_all — free all registered type aliases
 :CUSTOM_ID: alias-type_alias_free_all
 :SOURCE: types.h:227,types.c:29-39
 :CONFIDENCE: high
@@ -1451,9 +1493,12 @@ Frees the entire =g_aliases= linked list. Sets head to NULL.
 :CONFIDENCE: high
 :END:
 
+Type annotation parsing — parse_type_annotation converts AST to Type.
+
 ** parse_type_annotation
 :PROPERTIES:
 :ID: monadc.context.types.annotation.parse_type_annotation
+:CONTEXT_DESCRIPTION: parse_type_annotation — parse type annotation from reader
 :CUSTOM_ID: ann-parse_type_annotation
 :SOURCE: types.h:233,types.c:974-1061
 :CONFIDENCE: high
@@ -1487,9 +1532,12 @@ Helper =parse_type_node= recursively converts AST nodes to Type structs.
 :CONFIDENCE: high
 :END:
 
+Layout offset computation — layout_compute_offsets calculates struct field offsets.
+
 ** layout_compute_offsets
 :PROPERTIES:
 :ID: monadc.context.types.layout.layout_compute_offsets
+:CONTEXT_DESCRIPTION: layout_compute_offsets — compute struct field offsets
 :CUSTOM_ID: layout-layout_compute_offsets
 :SOURCE: types.h:238,types.c:1066-1087
 :CONFIDENCE: high
@@ -1518,9 +1566,12 @@ Computes byte offsets and sizes for =LayoutField= arrays. Algorithm:
 :CONFIDENCE: high
 :END:
 
+Utility functions — infer_literal_type, type_from_name.
+
 ** infer_literal_type
 :PROPERTIES:
 :ID: monadc.context.types.util.infer_literal_type
+:CONTEXT_DESCRIPTION: infer_literal_type — infer type of a literal value
 :CUSTOM_ID: util-infer_literal_type
 :SOURCE: types.h:212,types.c:894-945
 :CONFIDENCE: high
@@ -1547,6 +1598,7 @@ approach would pre-scan for the radix prefix before the slash check.
 ** type_from_name
 :PROPERTIES:
 :ID: monadc.context.types.util.type_from_name
+:CONTEXT_DESCRIPTION: type_from_name — resolve type by name from environment
 :CUSTOM_ID: util-type_from_name
 :SOURCE: types.h:213,types.c:229-409
 :CONFIDENCE: high
@@ -1709,6 +1761,7 @@ connects-to ->
 * File Statistics
 :PROPERTIES:
 :ID: monadc.context.types.file-stats
+:CONTEXT_DESCRIPTION: Root file metadata heading
 :CUSTOM_ID: types-file-stats
 :CONTEXT_KIND: metadata
 :CONTEXT_VERSION: 1

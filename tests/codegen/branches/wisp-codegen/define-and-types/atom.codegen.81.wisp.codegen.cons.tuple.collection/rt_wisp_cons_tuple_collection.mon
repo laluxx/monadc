@@ -1,0 +1,16 @@
+;;; TEST-ID: tests.codegen.rt-wisp-cons-tuple-collection
+;;; TITLE: Wisp cons preserves tuple elements in collection results
+;;; CATEGORY: codegen
+;;; TAGS: regression,wisp,hm,collection,tuple
+;;; EXPECT: compile
+;;; EXPECT: run
+;;; TIER: regression
+
+module Main
+
+define pairWith :: [Int] -> [Int] -> [(Int, Int)]
+  [] _ -> []
+  _ [] -> []
+  [x|xs] [y|ys] -> [(x, y) | pairWith xs ys]
+
+show (pairWith [1 2] [3 4])

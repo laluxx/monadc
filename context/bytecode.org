@@ -1,0 +1,233 @@
+#+TITLE: Bytecode VM Substrate
+#+AUTHOR: Codex
+#+DATE: 2026-06-19
+#+CREATED: 2026-06-19
+#+LAST_MODIFIED: 2026-06-19
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:context:bytecode:vm:eval:debug:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+
+* File Metadata
+:PROPERTIES:
+:ID: monadc.context.bytecode.file-metadata
+:CUSTOM_ID: bytecode-file-metadata
+:CONTEXT_KIND: metadata
+:CONTEXT_DESCRIPTION: Context for the bytecode VM substrate, its verifier-first execution model, and debug/decompile affordances.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-19
+:CONTEXT_UPDATED: 2026-06-19
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/bytecode.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.context.bytecode.file src:context/bytecode.org,bytecode.h,bytecode.c conf:high]
+  This file records the initial bytecode VM substrate: fixed-size register
+  instructions, structured control operators, constant/type/debug/deopt/inline
+  cache sections, source spans, a single-pass verifier, reference executor,
+  disassembler, and Monad-ish decompile view.
+
+* Core
+:PROPERTIES:
+:ID: monadc.context.bytecode.core
+:CUSTOM_ID: bytecode-core
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Bytecode module core contract: programs are built through bytecode.h, verified before execution, and can be rendered as stable debug text.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-19
+:CONTEXT_UPDATED: 2026-06-19
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: bytecode.h,bytecode.c,tests/test_bytecode.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.bytecode.verifier-first date:2026-06-19 by:codex]
+  Bytecode execution is verifier-first. =bc_vm_run= calls =bc_verify= before
+  reference execution so malformed instruction streams fail with =BcError=
+  rather than becoming VM control-flow or register-memory bugs.
+
+[DEC id:dec.bytecode.fixed-width-operands date:2026-06-19 by:codex]
+  The in-memory instruction form is fixed-size =BcInstr= for fast decode,
+  direct register operands, and simple validation. The serialized bytecode
+  format is sectioned and uses LEB128 counts/fields so unknown sections can be
+  skipped and the file format can evolve independently from the hot in-memory
+  representation.
+
+[DEC id:dec.bytecode.structured-control date:2026-06-19 by:codex]
+  Bytecode has no goto/jump opcode. Control is represented with =bc.block=,
+  =bc.if=, =bc.else=, =bc.loop=, and =bc.end=. Validation uses a bounded block
+  stack during one sequential pass rather than constructing a CFG.
+
+[DEC id:dec.bytecode.register-ir date:2026-06-19 by:codex]
+  Bytecode is register based rather than stack based. Arithmetic and call
+  instructions name destination/source registers directly, reducing instruction
+  count and making the IR friendlier to baseline/native lowering.
+
+[OBS id:obs.bytecode.debug-surfaces src:bytecode.c,tests/test_bytecode.py conf:high]
+  The module exposes two textual debug surfaces: =bc_disassemble= prints stable
+  =bc.*= mnemonics with operands, constants, native names, and source spans;
+  =bc_decompile_monad= renders register assignments and a preliminary
+  Monad-like expression view for simple programs.
+
+[OBS id:obs.bytecode.visual-verifier-tree src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  =bc_verify_trace= renders a dep-style verifier tree with Unicode branches,
+  structured-control nesting, instruction rows, register type transitions, and
+  a final =OK= or =FAIL= result while preserving the normal lightweight
+  =bc_verify= path for non-visual validation.
+
+[OBS id:obs.bytecode.memory-controls src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  Bytecode programs expose explicit memory controls: =bc_program_reserve= for
+  pre-sizing code/constants/register metadata, =bc_program_shrink_to_fit= for
+  trimming over-reserved arrays, =bc_program_memory_stats= for accounting, and
+  =bc_program_set_debug_mode= for selecting no debug, compact line-only debug,
+  or full source-span debug storage.
+
+[OBS id:obs.bytecode.forward-compat-sections src:bytecode.h,bytecode.c conf:high]
+  The binary writer emits independent sections for code, constants, register
+  types, debug spans, deopt points, and inline-cache metadata. The section
+  envelope stores id and size so future readers can skip unknown sections.
+
+[OBS id:obs.bytecode.binary-visualizer src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  =bc_read_binary_info= scans bytecode section envelopes and skips payloads in
+  bounded chunks. =bc_dump_binary_sections= prints a stable visual section
+  summary and marks unknown sections as skipped, preserving forward
+  compatibility for future section IDs.
+
+[OBS id:obs.bytecode.optimization-hooks src:bytecode.h conf:high]
+  =BcInlineCache= and =BcDeoptPoint= are first-class bytecode metadata records.
+  They are hooks for dynamic dispatch specialization and future baseline/JIT
+  deoptimization; they are serialized even before the optimizing backend exists.
+
+[OBS id:obs.bytecode.typed-natives src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  Native calls can be registered with verifier-visible result types through
+  =bc_program_add_native_typed=. This keeps native dispatch compatible with
+  linear register type verification instead of weakening =bc.return= checks for
+  unknown native results.
+
+[OBS id:obs.bytecode.baseline-jit-boundary src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  The public baseline-JIT boundary is present as =BcJitOptions=,
+  =BcJitArtifact=, =bc_jit_options_default=, =bc_jit_compile_baseline=, and
+  =bc_jit_artifact_free=. On x86-64 Unix hosts, =bc_jit_compile_baseline=
+  emits executable native code for straight-line =I64=/Bool/Nil register
+  bytecode. Unsupported bytecode such as loops, branches, and native calls
+  fails with a structured diagnostic rather than silently falling back.
+
+[OBS id:obs.bytecode.tier-osr-plan src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  =BcTierPlan=, =bc_tier_plan_default=, and =bc_tier_plan_trace= model the
+  multi-tier compilation policy: baseline template JIT, optimizing JIT,
+  call/loop hotness thresholds, and OSR safepoints derived from =bc.loop= plus
+  =BcDeoptPoint= metadata. This is currently a visual/planning surface, not yet
+  a live OSR patching backend.
+
+[OBS id:obs.bytecode.test-contract src:tests/test_bytecode.py conf:high]
+  =tests.bytecode.register-core-contract= compiles a C harness against
+  =bytecode.h= and =bytecode.c=, builds a register program for =(+ 2 40)=
+  through structured =if/else/end=, verifies it, executes it to =42=, writes
+  sectioned binary bytecode, and checks disassembly/decompile output.
+
+[OBS id:obs.bytecode.negative-test-contract src:tests/test_bytecode.py conf:high]
+  =tests.bytecode.verifier-and-jit-boundary= verifies that bad register types
+  and bad structured-control conditions are rejected, and that baseline JIT
+  compilation fails explicitly with an unsupported-backend diagnostic.
+
+[OBS id:obs.bytecode.memory-visual-test-contract src:tests/test_bytecode.py conf:high]
+  =tests.bytecode.memory-and-visual-tooling= emits 100000 bytecode instructions
+  using explicit reserve and compact line debug mode, checks bounded memory
+  accounting and shrink-to-fit behavior, then validates that the binary section
+  visualizer reports and skips an unknown section.
+
+[OBS id:obs.bytecode.visual-tree-test-contract src:tests/test_bytecode.py conf:high]
+  =tests.bytecode.visual-verifier-tree= checks that bytecode verification can
+  emit a stable tree containing nested branch glyphs, structured =bc.if=
+  control, register IDs, and inferred register types such as =r2 : I64=.
+
+[OBS id:obs.bytecode.expanded-test-contract src:tests/test_bytecode.py conf:high]
+  The bytecode suite also covers numeric/comparison/boolean VM operations,
+  native calls with inline-cache metadata and VM tracing, debug mode memory
+  accounting and span granularity, malformed binary reader diagnostics, and
+  visual verifier failure output for unreachable code.
+
+[OBS id:obs.bytecode.jit-test-contract src:tests/test_bytecode.py conf:high]
+  =tests.bytecode.baseline-jit-i64= verifies real native execution of a
+  straight-line =I64= bytecode program through the baseline template JIT.
+  =tests.bytecode.tier-osr-visual-plan= verifies the dep-style visual tree for
+  tiering thresholds, OSR safepoints, and deopt register maps.
+
+[OBS id:obs.bytecode.visual-make-target src:Makefile,tests/test_bytecode.py conf:high]
+  =make test bytecode= and =make test-bytecode= run the bytecode suite with
+  =BYTECODE_VISUAL=1=. Passing runs intentionally print a dep-style bytecode
+  report containing verifier trace, optimizer trace, tier plan, and final
+  disassembly instead of only unittest progress dots.
+
+[DEC id:dec.bytecode.verifier-backed-optimizer date:2026-06-19 by:codex]
+  Bytecode optimization is verifier-backed. =bc_optimize_program= first
+  verifies the input program, applies conservative local rewrites, and verifies
+  the optimized program before reporting success. This keeps optimization bugs
+  from silently becoming execution-tier bugs.
+
+[OBS id:obs.bytecode.optimizer-pass src:bytecode.h,bytecode.c,tests/test_bytecode.py conf:high]
+  =BcOptimizeOptions=, =BcOptimizeReport=, =bc_optimize_program=, and
+  =bc_optimize_trace= provide an early bytecode optimization tier. The current
+  pass folds known =I64= constants, folds simple boolean comparisons, removes
+  self moves, compacts =bc.nop= instructions, and prints a visual before/after
+  tree with instruction-count and constant-pool deltas.
+
+* Future Integration
+:PROPERTIES:
+:ID: monadc.context.bytecode.future-integration
+:CUSTOM_ID: bytecode-future-integration
+:CONTEXT_KIND: task
+:CONTEXT_DESCRIPTION: Next integration points for eval, AST lowering, and richer bytecode-to-Monad reconstruction.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-19
+:CONTEXT_UPDATED: 2026-06-19
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: bytecode.h,bytecode.c
+:CONFIDENCE: medium
+:END:
+
+[TODO id:todo.bytecode.ast-lowering owner:codex status:open]
+  Add an AST-to-bytecode lowering pass once eval semantics are selected. The
+  lowering should preserve =BcSourceSpan= on every emitted instruction.
+
+[TODO id:todo.bytecode.baseline-jit owner:codex status:open]
+  Add a real baseline JIT/lowering backend for the register bytecode. The
+  current =bc_vm_run= path is a reference executor used for verification and
+  tests, not the final execution tier.
+
+[TODO id:todo.bytecode.generational-gc owner:codex status:open]
+  Add a generational bump-pointer object heap for bytecode-managed allocations
+  once object/value allocation semantics are connected to eval/runtime values.
+
+[TODO id:todo.bytecode.decompile-symbols owner:codex status:open]
+  Teach =bc_decompile_monad= about symbol names, locals, closures, and typed
+  forms so bytecode-to-Monad output can become a debugging and visualization
+  surface rather than only a stack-expression sketch.

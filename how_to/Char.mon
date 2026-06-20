@@ -1,0 +1,180 @@
+;;; Char.mon --- Everything that lives inside the Char type
+
+;; Author: Me :)
+;; Version: 0.5.0
+;; Keywords: ascii char character text
+
+;;; Commentary:
+
+;; These intentionally use Monad's guard shorthand: when
+;; a guarded clause has one left-hand binder, bare predicate/operator sections
+;; are applied to that binder.
+
+;;; Code:
+
+module Data.Char where
+
+  :ascii       nul tab lf cr space del delta
+  :predicates  lower? upper? alpha? digit? alnum?
+               space? whitespace? control? printable?
+               hex? oct? binary?
+  :case        upcase downcase toggle-case
+  :morphimsm   digit->int int->digit hex-digit->int int->hex-digit
+
+
+;; Since we are inside a Type all the definitions will be inside the type
+;; You'll be able to access it only through Char.delta or c | delta in a guard
+
+
+define [delta :: Int] 'a' - 'A'
+ :doc "Distance between lowercase and uppercase letters."
+
+define [nul :: Char] '\0'
+  :doc "ASCII NUL."
+
+define [tab :: Char] '\t'
+  :doc "ASCII horizontal tab."
+
+define [lf :: Char] '\n'
+  :doc "ASCII line feed."
+
+define [cr :: Char] '\r'
+  :doc "ASCII carriage return."
+
+define [space :: Char] ' '
+  :doc "ASCII space."
+
+define [del :: Char] '\x7f'
+  :doc "ASCII DEL."
+
+
+method lower? :: Char -> Bool
+  c | >= 'a' and <= 'z' -> True
+    | otherwise         -> False
+  :doc "Return True if C is an ASCII lowercase letter."
+
+
+method upper? :: Char -> Bool
+  c | >= 'A' and <= 'Z' -> True
+    | otherwise         -> False
+  :doc "Return True if C is an ASCII uppercase letter."
+
+
+method alpha? :: Char -> Bool
+  c | lower?    -> True
+    | upper?    -> True
+    | otherwise -> False
+  :doc "Return True if C is an ASCII letter."
+
+
+method digit? :: Char -> Bool
+  c | >= '0' and <= '9' -> True
+    | otherwise         -> False
+  :doc "Return True if C is an ASCII decimal digit."
+
+
+method alnum? :: Char -> Bool
+  c | alpha?    -> True
+    | digit?    -> True
+    | otherwise -> False
+  :doc "Return True if C is an ASCII letter or digit."
+
+
+method space? :: Char -> Bool
+  c | = ' '      -> True
+    | = '\t'     -> True
+    | = '\n'     -> True
+    | = '\r'     -> True
+    | = '\v'     -> True
+    | = '\f'     -> True
+    | otherwise -> False
+  :alias whitespace?
+  :doc "Return True if C is ASCII whitespace."
+
+
+method control? :: Char -> Bool
+  c | < ' '      -> True
+    | = '\x7f'   -> True
+    | otherwise -> False
+  :doc "Return True if C is an ASCII control character."
+
+
+method printable? :: Char -> Bool
+  c | >= ' ' and < '\x7f' -> True
+    | otherwise           -> False
+  :doc "Return True if C is printable ASCII."
+
+
+method hex? :: Char -> Bool
+  c | digit? c          -> True
+    | >= 'a' and <= 'f' -> True
+    | >= 'A' and <= 'F' -> True
+    | otherwise         -> False
+  :doc "Return True if C is an ASCII hexadecimal digit."
+
+
+method oct? :: Char -> Bool
+  c | >= '0' and <= '7' -> True
+    | otherwise         -> False
+  :doc "Return True if C is an ASCII octal digit."
+
+
+method binary? :: Char -> Bool
+  c | = '0'      -> True
+    | = '1'      -> True
+    | otherwise  -> False
+  :doc "Return True if C is an ASCII binary digit."
+
+
+method upcase :: Char -> Char
+  c | >= 'a' and <= 'z' -> c - delta
+    | otherwise         -> c
+  :doc "Convert C to uppercase if it is ASCII lowercase."
+
+
+method downcase :: Char -> Char
+  c | >= 'A' and <= 'Z' -> c + delta
+    | otherwise         -> c
+  :doc "Convert C to lowercase if it is ASCII uppercase."
+
+
+method toggle-case :: Char -> Char
+  c | lower? -> upcase   c
+    | upper? -> downcase c
+    | otherwise       -> c
+  :doc "Toggle ASCII letter case; leave non-letters unchanged."
+
+
+method digit->int :: Char -> Int
+  c | digit?    -> c - '0'
+    | otherwise -> error "digit->int: not a decimal digit"
+  :doc "Convert an ASCII decimal digit to Int."
+
+
+method int->digit :: Int -> Char
+  n | >= 0 and <= 9 -> '0' + n
+    | otherwise     -> error "int->digit: outside 0..9"
+  :doc "Convert an integer 0..9 to an ASCII decimal digit."
+
+
+method hex-digit->int :: Char -> Int
+  c | >= '0' and <= '9' -> c - '0'
+    | >= 'a' and <= 'f' -> 10 + c - 'a'
+    | >= 'A' and <= 'F' -> 10 + c - 'A'
+    | otherwise         -> error "hex-digit->int: not a hexadecimal digit"
+  :doc "Convert an ASCII hexadecimal digit to Int."
+
+
+method int->hex-digit :: Int -> Char
+  n | >= 0  and <= 9  -> '0' + n
+    | >= 10 and <= 15 -> 'a' + (n - 10)
+    | otherwise       -> error "int->hex-digit: outside 0..15"
+  :doc "Convert an integer 0..15 to a lowercase ASCII hexadecimal digit."
+
+
+tests [1/5]
+  assert-eq (upcase    'a') 'A'  "Ascii upcase"
+  assert-eq (downcase  'Z') 'z'  "Ascii downcase"
+  assert-eq (digit?    '7') True "Ascii digit?"
+  assert-eq (alpha?    'Q') True "Ascii alpha?"
+  assert-eq (hex-digit->int 'f') 15   "Ascii hex-digit->int"

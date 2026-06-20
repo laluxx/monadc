@@ -32,6 +32,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: LSP server protocol — initialization, diagnostics, completions, references
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -56,6 +57,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: High-level LSP architecture
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -89,6 +91,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: LSP core data structures
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -150,6 +153,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: LSP language feature support
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -185,6 +189,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: LSP REPL adapter for interactive testing
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -209,6 +214,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-18
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -229,6 +235,7 @@
 * Category Contract
 :PROPERTIES:
 :ID: monadc.context.lsp.category-contract
+:CONTEXT_DESCRIPTION: Category contract for LSP server
 :CUSTOM_ID: lsp-category-contract
 :CONTEXT_KIND: contract
 :END:

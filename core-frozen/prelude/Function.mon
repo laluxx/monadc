@@ -1,0 +1,140 @@
+;;; Function.mon --- Always-available function combinators
+
+;; Author: Laluxx
+;; Version: 0.5.0
+;; Keywords: prelude function combinator haskell
+
+;;; Commentary:
+
+;; Law-obvious function combinators for the Monad prelude.
+;; Keep this module tiny, total where possible, and free of domain-specific code.
+
+;;; Code:
+
+module Function
+  [id identity const always flip compose pipe apply applyTo
+   before after on argument result
+   until while
+   twice thrice times iterateN repeatApply]
+
+
+define id :: a -> a
+  :alias identity
+  :doc "Return X unchanged."
+  x -> x
+
+define const :: Int -> Int -> Int
+  :alias always
+  :doc "Return X and ignore the second argument."
+  x _ -> x
+
+
+define flip :: (Int -> Int -> Int) -> Int -> Int -> Int
+  :doc "Reverse the first two arguments of F."
+  f y x -> f x y
+
+
+define compose :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+  :doc "Right-to-left function composition."
+  f g x -> f (g x)
+
+
+define pipe :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+  :alias over
+  :doc "Left-to-right function composition."
+  f g x -> g (f x)
+
+
+define apply :: (Int -> Int) -> Int -> Int
+  :doc "Apply F to X."
+  f x -> f x
+
+
+define applyTo :: Int -> (Int -> Int) -> Int
+  :doc "Apply X to F. Useful for left-to-right pipelines."
+  x f -> f x
+
+
+define before :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+  :doc "Run F before G. Equivalent to pipe."
+  f g x -> pipe f g x
+
+
+define after :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+  :doc "Run F after G. Equivalent to compose."
+  f g x -> compose f g x
+
+
+define on :: (Int -> Int -> Int) -> (Int -> Int) -> Int -> Int -> Int
+  :doc "Transform both inputs with F, then combine with OP."
+  op f x y -> op (f x) (f y)
+
+
+define argument :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+  :doc "Transform a function argument before applying the function."
+  f g x -> f (g x)
+
+
+define result :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+  :doc "Transform the result of a function. Equivalent to compose."
+  f g x -> f (g x)
+
+
+define until :: (Int -> Bool) -> (Int -> Int) -> Int -> Int
+  done step x
+    | done x    -> x
+    | otherwise -> until done step (step x)
+  :doc "Repeatedly apply STEP until DONE returns True."
+
+
+define while :: (Int -> Bool) -> (Int -> Int) -> Int -> Int
+  keep step x
+    | keep x    -> while keep step (step x)
+    | otherwise -> x
+  :doc "Repeatedly apply STEP while KEEP returns True."
+
+
+define twice :: (Int -> Int) -> Int -> Int
+  :doc "Apply F twice."
+  f x -> f (f x)
+
+
+define thrice :: (Int -> Int) -> Int -> Int
+  :doc "Apply F three times."
+  f x -> f (f (f x))
+
+
+define times :: Int -> (Int -> Int) -> Int -> Int
+  n _ x | n <= 0    -> x
+  n f x | otherwise -> times (n - 1) f (f x)
+  :doc "Apply F exactly N times. For N <= 0, return X."
+
+
+define repeatApply :: Int -> (Int -> Int) -> Int -> Int
+  n f x -> times n f x
+
+
+define iterateN :: Int -> (Int -> Int) -> Int -> [Int]
+  n _ _ | <= 0      -> []
+  n f x | otherwise -> [x | iterateN (n - 1) f (f x)]
+  :doc "Return the first N values of iterating F from X."
+
+
+
+
+tests
+  assert-eq (id 42) 42 "Function id"
+  assert-eq (const 7 99) 7 "Function const"
+  assert-eq (flip (lambda ([x : Int] [y : Int] -> Int) (- x y)) 10 3) -7 "Function flip"
+  assert-eq (compose (* 2) (+ 1) 3) 8 "Function compose"
+  assert-eq (pipe (+ 1) (* 2) 3) 8 "Function pipe"
+  assert-eq (apply (+ 1) 4) 5 "Function apply"
+  assert-eq (applyTo 4 (+ 1)) 5 "Function applyTo"
+  assert-eq (before (+ 1) (* 2) 3) 8 "Function before"
+  assert-eq (after (* 2) (+ 1) 3) 8 "Function after"
+  assert-eq (twice (+ 2) 10) 14 "Function twice"
+  assert-eq (thrice (+ 2) 10) 16 "Function thrice"
+  assert-eq (times 4 (+ 1) 0) 4 "Function times"
+  assert-eq (times 0 (+ 1) 9) 9 "Function times zero"
+  assert-eq (iterateN 4 (+ 1) 0) [0 1 2 3] "Function iterateN"
+  assert-eq (iterateN 0 (+ 1) 0) [] "Function iterateN zero"

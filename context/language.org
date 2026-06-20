@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -30,6 +30,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Language formalization — reader, types, codegen, wisp, heap, features
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -92,6 +93,7 @@
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Path literal as first-class value
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -115,6 +117,7 @@
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Runtime-sized heap array support
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -144,6 +147,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Adjacent string literal rejection
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -217,6 +221,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Working codegen dispatch observations
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -630,6 +635,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Cross-feature syntax interaction coverage
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -655,6 +661,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Atom superset parser test coverage
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -700,6 +707,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Wisp sugar effects on language semantics
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -739,6 +747,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Reader-header-driven coverage expansion
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -794,6 +803,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Heap array codegen regression tests
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -822,6 +832,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Path literal codegen value tests
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -859,6 +870,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Codegen review cleanup and regression notes
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -909,6 +921,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Wisp typed define pattern parameter syntax
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -933,6 +946,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Wisp bare parenthesized define headers
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -2900,9 +2914,12 @@
 
 * Test Coverage Anchors
 
+Test-driven observations and failure records for the corresponding subsystem.
+
 * Language Codegen
 :PROPERTIES:
 :ID: monadc.context.language.codegen
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Codegen coverage
 :CUSTOM_ID: test-anchor-language-codegen
 :END:
 [OBS id:obs.language.codegen.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2913,6 +2930,7 @@
 * Language Codegen Atom Web
 :PROPERTIES:
 :ID: monadc.context.language.codegen-atom-web
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Codegen Atom Web coverage
 :CUSTOM_ID: test-anchor-language-codegen-atom-web
 :END:
 [OBS id:obs.language.codegen-atom-web.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2923,6 +2941,7 @@
 * Language Codegen Branch Coverage
 :PROPERTIES:
 :ID: monadc.context.language.codegen-branch-coverage
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Codegen Branch Coverage
 :CUSTOM_ID: test-anchor-language-codegen-branch-coverage
 :END:
 [OBS id:obs.language.codegen-branch-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2933,6 +2952,7 @@
 * Language Codegen Type System Corpus
 :PROPERTIES:
 :ID: monadc.context.language.codegen-type-system-corpus
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Codegen Type System Corpus
 :CUSTOM_ID: test-anchor-language-codegen-type-system-corpus
 :END:
 [OBS id:obs.language.codegen-type-system-corpus.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2943,6 +2963,7 @@
 * Language Env Error Coverage
 :PROPERTIES:
 :ID: monadc.context.language.env-error-coverage
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Env Error Coverage
 :CUSTOM_ID: test-anchor-language-env-error-coverage
 :END:
 [OBS id:obs.language.env-error-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2953,6 +2974,7 @@
 * Language Error Menu
 :PROPERTIES:
 :ID: monadc.context.language.error-menu
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Error Menu
 :CUSTOM_ID: test-anchor-language-error-menu
 :END:
 [OBS id:obs.language.error-menu.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2963,6 +2985,7 @@
 * Language Hm Dependent Type Coverage
 :PROPERTIES:
 :ID: monadc.context.language.hm-dependent-type-coverage
+:CONTEXT_DESCRIPTION: Test-context anchor for Language HM Dependent Type Coverage
 :CUSTOM_ID: test-anchor-language-hm-dependent-type-coverage
 :END:
 [OBS id:obs.language.hm-dependent-type-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2973,6 +2996,7 @@
 * Language Layout Records
 :PROPERTIES:
 :ID: monadc.context.language.layout-records
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Layout Records
 :CUSTOM_ID: test-anchor-language-layout-records
 :END:
 [OBS id:obs.language.layout-records.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2983,6 +3007,7 @@
 * Language Path Literal Values
 :PROPERTIES:
 :ID: monadc.context.language.path-literal-values
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Path Literal Values
 :CUSTOM_ID: test-anchor-language-path-literal-values
 :END:
 [OBS id:obs.language.path-literal-values.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -2993,6 +3018,7 @@
 * Language Reader Error Coverage
 :PROPERTIES:
 :ID: monadc.context.language.reader-error-coverage
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Reader Error Coverage
 :CUSTOM_ID: test-anchor-language-reader-error-coverage
 :END:
 [OBS id:obs.language.reader-error-coverage.test-anchor src:tests/codegen/MANIFEST.md conf:high]
@@ -3003,6 +3029,7 @@
 * Language Runtime Codegen Corpus
 :PROPERTIES:
 :ID: monadc.context.language.runtime-codegen-corpus
+:CONTEXT_DESCRIPTION: Test-context anchor for Language Runtime Codegen Corpus
 :CUSTOM_ID: test-anchor-language-runtime-codegen-corpus
 :END:
 [OBS id:obs.language.runtime-codegen-corpus.test-anchor src:tests/codegen/MANIFEST.md conf:high]

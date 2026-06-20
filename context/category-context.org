@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -183,6 +183,7 @@ Use this template when a context file owns a real compiler category:
 * Category Contract
 :PROPERTIES:
 :ID: monadc.context.<topic>.category-contract
+:CONTEXT_DESCRIPTION: Template for category contract sections
 :CUSTOM_ID: <topic>-category-contract
 :CONTEXT_KIND: contract
 :END:
@@ -269,6 +270,7 @@ snapshot. Prefer regenerating them for analysis.
 * Round 3: Promoted Category Directory
 :PROPERTIES:
 :ID: monadc.context.category.round3-directory
+:CONTEXT_DESCRIPTION: Round 3: category directory structure and contracts
 :CUSTOM_ID: category-round3-directory
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active

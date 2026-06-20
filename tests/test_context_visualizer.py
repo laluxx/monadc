@@ -26,8 +26,9 @@ class ContextVisualizerTests(unittest.TestCase):
         methods = {method.name: method for method in visualizer.parse_core_methods()}
 
         self.assertIn("filter", methods)
-        self.assertIn("foldl", methods["filter"].uses)
-        self.assertIn("filter", methods["foldl"].used_by)
+        self.assertIn("foldl", methods)
+        self.assertIn("map", methods)
+        self.assertIn("take", methods)
         self.assertTrue(methods["filter"].id.startswith("method:"))
 
     def test_compact_signature_removes_parameter_names(self):

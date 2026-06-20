@@ -1,6 +1,8 @@
 #include "cli.h"
+#include "config.h"
 #include "completion.h"
 #include "lsp_repl.h"
+#include "debugger.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -194,8 +196,227 @@ static int levenshtein(const char *a, const char *b)
 
 static const char *SUBCOMMANDS[] = {
     "new", "build", "run", "clean", "install",
-    "test", "check", "lsp", "help", NULL
+    "test", "check", "trace", "debug", "lsp", "eval", "repl", "jit", "help", NULL
 };
+
+static bool parse_optimization_flag(const char *arg, int *level)
+{
+    if (strcmp(arg, "-O") == 0 || strcmp(arg, "optimize") == 0 ||
+        strcmp(arg, "--optimize") == 0) {
+        *level = 1;
+        return true;
+    }
+    if (arg[0] == '-' && arg[1] == 'O' &&
+        arg[2] >= '0' && arg[2] <= '2' && arg[3] == '\0') {
+        *level = arg[2] - '0';
+        return true;
+    }
+    if (strncmp(arg, "optimize=", 9) == 0 &&
+        arg[9] >= '0' && arg[9] <= '2' && arg[10] == '\0') {
+        *level = arg[9] - '0';
+        return true;
+    }
+    if (strncmp(arg, "--optimize=", 11) == 0 &&
+        arg[11] >= '0' && arg[11] <= '2' && arg[12] == '\0') {
+        *level = arg[11] - '0';
+        return true;
+    }
+    return false;
+}
+
+static bool parse_trace_flag(const char *arg, CompilerFlags *flags)
+{
+    if (strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0 ||
+        strcmp(arg, "verbose") == 0) {
+        flags->verbose_level++;
+        return true;
+    }
+    if (strcmp(arg, "-vv") == 0) {
+        flags->verbose_level += 2;
+        return true;
+    }
+    if (strcmp(arg, "--quiet") == 0 || strcmp(arg, "quiet") == 0) {
+        flags->verbose_level = 0;
+        flags->trace_ast = false;
+        flags->trace_semantic = false;
+        flags->trace_dep = false;
+        flags->trace_codegen = false;
+        return true;
+    }
+    if (strncmp(arg, "--trace=", 8) != 0) return false;
+
+    const char *p = arg + 8;
+    char item[32];
+    while (*p) {
+        size_t n = 0;
+        while (p[n] && p[n] != ',') n++;
+        size_t copy_n = n < sizeof(item) - 1 ? n : sizeof(item) - 1;
+        memcpy(item, p, copy_n);
+        item[copy_n] = '\0';
+
+        if (strcmp(item, "all") == 0) {
+            flags->trace_ast = true;
+            flags->trace_semantic = true;
+            flags->trace_dep = true;
+            flags->trace_codegen = true;
+        } else if (strcmp(item, "ast") == 0 || strcmp(item, "reader") == 0) {
+            flags->trace_ast = true;
+        } else if (strcmp(item, "semantic") == 0 || strcmp(item, "opt") == 0) {
+            flags->trace_semantic = true;
+        } else if (strcmp(item, "dep") == 0 || strcmp(item, "type") == 0) {
+            flags->trace_dep = true;
+        } else if (strcmp(item, "codegen") == 0 || strcmp(item, "ir") == 0) {
+            flags->trace_codegen = true;
+        } else if (strcmp(item, "none") == 0 || strcmp(item, "off") == 0) {
+            flags->trace_ast = false;
+            flags->trace_semantic = false;
+            flags->trace_dep = false;
+            flags->trace_codegen = false;
+        } else {
+            fprintf(stderr, "Unknown trace pass: %s\n", item);
+            exit(1);
+        }
+
+        p += n;
+        if (*p == ',') p++;
+    }
+    return true;
+}
+
+static bool parse_trace_value(const char *value, CompilerFlags *flags)
+{
+    char arg[96];
+    snprintf(arg, sizeof(arg), "--trace=%s", value);
+    return parse_trace_flag(arg, flags);
+}
+
+static bool parse_bytecode_flag(const char *arg, CompilerFlags *flags)
+{
+    if (!strcmp(arg, "--emit-bytecode") || !strcmp(arg, "emit-bytecode") ||
+        !strcmp(arg, "--bytecode") || !strcmp(arg, "bytecode")) {
+        flags->emit_bytecode = true;
+        return true;
+    }
+    if (!strcmp(arg, "--bytecode-verify") || !strcmp(arg, "bytecode-verify")) {
+        flags->bytecode_verify = true;
+        return true;
+    }
+    if (!strcmp(arg, "--bytecode-disassemble") || !strcmp(arg, "bytecode-disassemble") ||
+        !strcmp(arg, "--bytecode-dump") || !strcmp(arg, "bytecode-dump")) {
+        flags->bytecode_disassemble = true;
+        return true;
+    }
+    if (!strcmp(arg, "--bytecode-decompile") || !strcmp(arg, "bytecode-decompile")) {
+        flags->bytecode_decompile = true;
+        return true;
+    }
+    if (!strcmp(arg, "--bytecode-sections") || !strcmp(arg, "bytecode-sections")) {
+        flags->bytecode_dump_sections = true;
+        return true;
+    }
+    if (!strcmp(arg, "--bytecode-trace") || !strcmp(arg, "bytecode-trace")) {
+        flags->bytecode_trace = true;
+        return true;
+    }
+    if (!strcmp(arg, "--bytecode-baseline-jit") || !strcmp(arg, "bytecode-baseline-jit")) {
+        flags->bytecode_baseline_jit = true;
+        return true;
+    }
+    if (!strcmp(arg, "-jit") || !strcmp(arg, "jit") || !strcmp(arg, "--jit")) {
+        flags->jit = true;
+        flags->emit_bytecode = true;
+        flags->bytecode_baseline_jit = true;
+        return true;
+    }
+    return false;
+}
+
+static bool parse_positive_int(const char *value, int *out)
+{
+    if (!value || !*value) return false;
+    char *end = NULL;
+    long parsed = strtol(value, &end, 10);
+    if (*end != '\0' || parsed <= 0 || parsed > 1000000) return false;
+    *out = (int)parsed;
+    return true;
+}
+
+static bool parse_debug_flag(int argc, char **argv, int *index, CompilerFlags *flags)
+{
+    const char *arg = argv[*index];
+
+    if (!strcmp(arg, "--debug-no-mouse")) {
+        flags->debug_no_mouse = true;
+        return true;
+    }
+    if (!strcmp(arg, "--debug-truecolor")) {
+        flags->debug_truecolor = true;
+        return true;
+    }
+    if (!strcmp(arg, "--debug-fps")) {
+        if (*index + 1 >= argc || !parse_positive_int(argv[*index + 1], &flags->debug_target_fps)) {
+            fprintf(stderr, "%s requires a positive integer\n", arg);
+            exit(1);
+        }
+        (*index)++;
+        return true;
+    }
+    if (!strcmp(arg, "--debug-blink-ms")) {
+        if (*index + 1 >= argc || !parse_positive_int(argv[*index + 1], &flags->debug_blink_ms)) {
+            fprintf(stderr, "%s requires a positive integer\n", arg);
+            exit(1);
+        }
+        (*index)++;
+        return true;
+    }
+    if (!strcmp(arg, "--debug-blinks")) {
+        if (*index + 1 >= argc || !parse_positive_int(argv[*index + 1], &flags->debug_blink_count)) {
+            fprintf(stderr, "%s requires a positive integer\n", arg);
+            exit(1);
+        }
+        (*index)++;
+        return true;
+    }
+    return false;
+}
+
+static bool parse_common_flag(int argc, char **argv, int *index, CompilerFlags *flags)
+{
+    const char *arg = argv[*index];
+
+    if      (!strcmp(arg, "--emit-ir"   ) || !strcmp(arg, "emit-ir"   ) ||
+             !strcmp(arg, "--emit-llvm" ) || !strcmp(arg, "emit-llvm" )) flags->emit_ir    = true;
+    else if (!strcmp(arg, "--emit-bc"   ) || !strcmp(arg, "emit-bc"   ) ||
+             !strcmp(arg, "--bitcode"   ) || !strcmp(arg, "bitcode"   )) flags->emit_bc    = true;
+    else if (!strcmp(arg, "--emit-asm"  ) || !strcmp(arg, "emit-asm"  ) ||
+             !strcmp(arg, "-S"          ) || !strcmp(arg, "asm"       )) flags->emit_asm   = true;
+    else if (!strcmp(arg, "--emit-obj"  ) || !strcmp(arg, "emit-obj"  ) ||
+             !strcmp(arg, "-c"          ) || !strcmp(arg, "obj"       )) flags->emit_obj   = true;
+    else if (!strcmp(arg, "--emit-json" ) || !strcmp(arg, "emit-json" )) flags->emit_json  = true;
+    else if (!strcmp(arg, "--emit-typst") || !strcmp(arg, "emit-typst")) flags->emit_typst = true;
+    else if (parse_bytecode_flag(arg, flags)) {}
+    else if (parse_debug_flag(argc, argv, index, flags)) {}
+    else if (!strcmp(arg, "--test"      ) || !strcmp(arg, "test"      )) flags->test_mode  = true;
+    else if (!strcmp(arg, "-i"          ) || !strcmp(arg, "repl"      ) ||
+             !strcmp(arg, "--repl"      ) || !strcmp(arg, "--interactive") ||
+             !strcmp(arg, "interactive" )) flags->start_repl = true;
+    else if (!strcmp(arg, "-Wall"       ) || !strcmp(arg, "Wall"      ) ||
+             !strcmp(arg, "warnings"    )) {}
+    else if (!strcmp(arg, "-Wextra"     ) || !strcmp(arg, "Wextra"    ) ||
+             !strcmp(arg, "extra-warnings")) {}
+    else if (parse_optimization_flag(arg, &flags->optimization_level)) {}
+    else if (parse_trace_flag(arg, flags)) {}
+    else if (!strcmp(arg, "trace")) {
+        if (*index + 1 >= argc) { fprintf(stderr, "trace requires an argument\n"); exit(1); }
+        parse_trace_value(argv[++(*index)], flags);
+    } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output") || !strcmp(arg, "output")) {
+        if (*index + 1 >= argc) { fprintf(stderr, "%s requires an argument\n", arg); exit(1); }
+        flags->output_name = argv[++(*index)];
+    } else {
+        return false;
+    }
+    return true;
+}
 
 static void suggest_subcommand(const char *unknown)
 {
@@ -212,8 +433,35 @@ static void suggest_subcommand(const char *unknown)
 CompilerFlags parse_flags(int argc, char **argv) {
     CompilerFlags flags = {0};
     flags.mode = CMD_COMPILE;
+    flags.verbose_level = 2;     /* TEMP: force full debug while fixing core */
+    flags.trace_ast = true;      /* TEMP: force full debug while fixing core */
+    flags.trace_semantic = true; /* TEMP: force full debug while fixing core */
+    flags.trace_dep = true;      /* TEMP: force full debug while fixing core */
+    flags.trace_codegen = true;  /* TEMP: force full debug while fixing core */
+    config_apply_default_flags(&flags);
 
     if (argc < 2) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
+
+    if (strcmp(argv[1], "trace") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: %s trace <pass> [file.mon] [options]\n", argv[0]);
+            exit(1);
+        }
+        parse_trace_value(argv[2], &flags);
+        if (argc == 3) {
+            flags.mode = CMD_REPL;
+            flags.start_repl = true;
+            return flags;
+        }
+        flags.input_file = argv[3];
+        for (int i = 4; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
 
     // Help
     if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
@@ -227,6 +475,36 @@ CompilerFlags parse_flags(int argc, char **argv) {
         exit(0);
     }
 
+    if (strcmp(argv[1], "-d") == 0 || strcmp(argv[1], "--debug") == 0 ||
+        strcmp(argv[1], "debug") == 0) {
+        if (argc < 3) { fprintf(stderr, "Usage: %s debug <file.mon> [options]\n", argv[0]); exit(1); }
+        flags.mode = CMD_DEBUG;
+        flags.input_file = argv[2];
+        for (int i = 3; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown debug flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
+
+    if (strcmp(argv[1], "-jit") == 0 || strcmp(argv[1], "--jit") == 0 ||
+        strcmp(argv[1], "jit") == 0) {
+        if (argc < 3) { fprintf(stderr, "Usage: %s jit <file.mon> [options]\n", argv[0]); exit(1); }
+        flags.jit = true;
+        flags.emit_bytecode = true;
+        flags.bytecode_baseline_jit = true;
+        flags.input_file = argv[2];
+        for (int i = 3; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
+
     // Subcommands
     if (strcmp(argv[1], "new") == 0) {
         if (argc < 3) { fprintf(stderr, "Usage: %s new <name>\n", argv[0]); exit(1); }
@@ -234,8 +512,16 @@ CompilerFlags parse_flags(int argc, char **argv) {
         flags.package_name = argv[2];
         return flags;
     }
-    if (strcmp(argv[1], "run")     == 0) { flags.mode = CMD_RUN;     return flags; }
-    if (strcmp(argv[1], "build")   == 0) { flags.mode = CMD_BUILD;   return flags; }
+    if (strcmp(argv[1], "run") == 0 || strcmp(argv[1], "build") == 0) {
+        flags.mode = strcmp(argv[1], "run") == 0 ? CMD_RUN : CMD_BUILD;
+        for (int i = 2; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
     if (strcmp(argv[1], "clean")   == 0) { flags.mode = CMD_CLEAN;   return flags; }
     if (strcmp(argv[1], "install") == 0) { flags.mode = CMD_INSTALL; return flags; }
     if (strcmp(argv[1], "check")   == 0) {
@@ -243,8 +529,17 @@ CompilerFlags parse_flags(int argc, char **argv) {
         if (argc >= 3) flags.input_file = argv[2];
         return flags;
     }
-    if (strcmp(argv[1], "-i")      == 0) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
+    if (strcmp(argv[1], "-i") == 0 || strcmp(argv[1], "repl") == 0) {
+        flags.mode = CMD_REPL; flags.start_repl = true; return flags;
+    }
     if (strcmp(argv[1], "lsp")     == 0) { flags.mode = CMD_LSP;  return flags; }
+    if (strcmp(argv[1], "-e") == 0 || strcmp(argv[1], "--eval") == 0 ||
+        strcmp(argv[1], "eval") == 0) {
+        if (argc < 3) { fprintf(stderr, "Usage: %s eval <code>\n", argv[0]); exit(1); }
+        flags.mode = CMD_EVAL;
+        flags.eval_code = argv[2];
+        return flags;
+    }
 
     // monad test <file.mon>  ->  compile with tests, run _test binary, delete it
     if (strcmp(argv[1], "test") == 0) {
@@ -263,18 +558,7 @@ CompilerFlags parse_flags(int argc, char **argv) {
         flags.input_file = argv[2];
         int start = 3;
         for (int i = start; i < argc; i++) {
-            if      (!strcmp(argv[i], "--emit-ir"))   flags.emit_ir   = true;
-            else if (!strcmp(argv[i], "--emit-bc"))   flags.emit_bc   = true;
-            else if (!strcmp(argv[i], "--emit-asm"))  flags.emit_asm  = true;
-            else if (!strcmp(argv[i], "--emit-obj"))  flags.emit_obj  = true;
-            else if (!strcmp(argv[i], "--emit-json"))  flags.emit_json  = true;
-            else if (!strcmp(argv[i], "--emit-typst")) flags.emit_typst = true;
-            else if (!strcmp(argv[i], "-Wall"))   {}
-            else if (!strcmp(argv[i], "-Wextra")) {}
-            else if (!strcmp(argv[i], "-o")) {
-                if (i + 1 >= argc) { fprintf(stderr, "-o requires an argument\n"); exit(1); }
-                flags.output_name = argv[++i];
-            } else {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
                 fprintf(stderr, "Unknown flag: %s\n", argv[i]);
                 print_usage(argv[0]); exit(1);
             }
@@ -315,18 +599,7 @@ CompilerFlags parse_flags(int argc, char **argv) {
     /* monad <file.mon> [flags...]  ->  normal compile */
     flags.input_file = argv[1];
     for (int i = 2; i < argc; i++) {
-        if      (!strcmp(argv[i], "--emit-ir"   )) flags.emit_ir    = true;
-        else if (!strcmp(argv[i], "--emit-bc"   )) flags.emit_bc    = true;
-        else if (!strcmp(argv[i], "--emit-asm"  )) flags.emit_asm   = true;
-        else if (!strcmp(argv[i], "--emit-obj"  )) flags.emit_obj   = true;
-        else if (!strcmp(argv[i], "--emit-json" )) flags.emit_json  = true;
-        else if (!strcmp(argv[i], "--emit-typst")) flags.emit_typst = true;
-        else if (!strcmp(argv[i], "-Wall"       )) {}
-        else if (!strcmp(argv[i], "-Wextra"     )) {}
-        else if (!strcmp(argv[i], "-o"          )) {
-            if (i + 1 >= argc) { fprintf(stderr, "-o requires an argument\n"); exit(1); }
-            flags.output_name = argv[++i];
-        } else {
+        if (!parse_common_flag(argc, argv, &i, &flags)) {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
             print_usage(argv[0]); exit(1);
         }
@@ -555,7 +828,7 @@ static void build_info_free(BuildInfo *bi) {
     free(bi->src_dirs);  free(bi->monad_options);
 }
 
-static int do_build(const BuildInfo *bi) {
+static int do_build(const BuildInfo *bi, const CompilerFlags *flags) {
     char self[1024] = "monad";
     {
         char buf[1024] = {0};
@@ -563,19 +836,68 @@ static int do_build(const BuildInfo *bi) {
         if (n > 0) strncpy(self, buf, sizeof(self) - 1);
     }
     char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "%s %s -o %s%s%s",
+    char opt_flag[8] = "";
+    char emit_flags[512] = "";
+    char trace_flags[128] = "";
+    if (flags && flags->optimization_level > 0)
+        snprintf(opt_flag, sizeof(opt_flag), " -O%d", flags->optimization_level);
+    if (flags) {
+        if (flags->emit_ir)
+            strncat(emit_flags, " --emit-ir", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->emit_bc)
+            strncat(emit_flags, " --emit-bc", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->emit_asm)
+            strncat(emit_flags, " --emit-asm", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->emit_obj)
+            strncat(emit_flags, " --emit-obj", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->emit_json)
+            strncat(emit_flags, " --emit-json", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->emit_typst)
+            strncat(emit_flags, " --emit-typst", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->emit_bytecode)
+            strncat(emit_flags, " --emit-bytecode", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->bytecode_verify)
+            strncat(emit_flags, " --bytecode-verify", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->bytecode_disassemble)
+            strncat(emit_flags, " --bytecode-disassemble", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->bytecode_decompile)
+            strncat(emit_flags, " --bytecode-decompile", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->bytecode_dump_sections)
+            strncat(emit_flags, " --bytecode-sections", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->bytecode_trace)
+            strncat(emit_flags, " --bytecode-trace", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->bytecode_baseline_jit)
+            strncat(emit_flags, " --bytecode-baseline-jit", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->jit)
+            strncat(emit_flags, " -jit", sizeof(emit_flags) - strlen(emit_flags) - 1);
+        if (flags->trace_ast)
+            strncat(trace_flags, " --trace=ast", sizeof(trace_flags) - strlen(trace_flags) - 1);
+        if (flags->trace_semantic)
+            strncat(trace_flags, " --trace=semantic", sizeof(trace_flags) - strlen(trace_flags) - 1);
+        if (flags->trace_dep)
+            strncat(trace_flags, " --trace=dep", sizeof(trace_flags) - strlen(trace_flags) - 1);
+        if (flags->trace_codegen)
+            strncat(trace_flags, " --trace=codegen", sizeof(trace_flags) - strlen(trace_flags) - 1);
+        for (int i = 0; i < flags->verbose_level && strlen(trace_flags) + 3 < sizeof(trace_flags); i++)
+            strncat(trace_flags, " -v", sizeof(trace_flags) - strlen(trace_flags) - 1);
+    }
+
+    snprintf(cmd, sizeof(cmd), "%s %s -o %s%s%s%s%s%s",
              self, bi->main_file, bi->out_path,
              bi->monad_options[0] ? " " : "",
-             bi->monad_options[0] ? bi->monad_options : "");
+             bi->monad_options[0] ? bi->monad_options : "",
+             opt_flag,
+             emit_flags,
+             trace_flags);
     return system(cmd);
 }
 
-void cmd_build(void) {
+void cmd_build(const CompilerFlags *flags) {
     BuildInfo bi = resolve_build_info();
     printf("╭─ Build %s\n╰", bi.pkg_name);
     fflush(stdout);
 
-    int rc = do_build(&bi);
+    int rc = do_build(&bi, flags);
 
     if (rc == 0)
         printf("─ \x1b[32m✓\x1b[0m build/%s\n", bi.exe_name);
@@ -586,12 +908,12 @@ void cmd_build(void) {
     exit(rc == 0 ? 0 : 1);
 }
 
-void cmd_run(void) {
+void cmd_run(const CompilerFlags *flags) {
     BuildInfo bi = resolve_build_info();
     printf("╭─ Run %s\n╰", bi.pkg_name);
     fflush(stdout);
 
-    int rc = do_build(&bi);
+    int rc = do_build(&bi, flags);
     if (rc != 0) {
         printf("─ failed\n");
         build_info_free(&bi); exit(1);
@@ -677,7 +999,7 @@ void cmd_install(void) {
     if (access(bi.out_path, F_OK) != 0) {
         printf("╭─ Install %s\n│  (building first...)\n╰", bi.pkg_name);
         fflush(stdout);
-        int rc = do_build(&bi);
+        int rc = do_build(&bi, NULL);
         if (rc != 0) {
             printf("─ build failed\n");
             build_info_free(&bi); exit(1);
@@ -766,6 +1088,37 @@ void cmd_check(const char *input_file) {
     exit(WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : 1);
 }
 
+void cmd_debug(const CompilerFlags *flags) {
+    if (!flags || !flags->input_file) {
+        fprintf(stderr, "Usage: monad debug <file.mon> [options]\n");
+        exit(1);
+    }
+
+    DbgConfig cfg = dbg_default_config();
+    if (flags->debug_no_mouse)
+        cfg.mouse_enabled = false;
+    if (flags->debug_truecolor)
+        cfg.truecolor_force = true;
+    if (flags->debug_target_fps > 0)
+        cfg.target_fps = (uint32_t)flags->debug_target_fps;
+    if (flags->debug_blink_ms > 0)
+        cfg.blink_period_ms = (uint32_t)flags->debug_blink_ms;
+    if (flags->debug_blink_count > 0)
+        cfg.blink_max_count = (uint32_t)flags->debug_blink_count;
+
+    char emit_ir_command[256] = "monad --emit-ir";
+    if (flags->optimization_level > 0) {
+        char opt[16];
+        snprintf(opt, sizeof(opt), " -O%d", flags->optimization_level);
+        strncat(emit_ir_command, opt, sizeof(emit_ir_command) - strlen(emit_ir_command) - 1);
+    }
+    cfg.emit_ir_command = emit_ir_command;
+
+    char *dbg_argv[] = { "monad debug", flags->input_file, NULL };
+    int rc = dbg_main_with_config(2, dbg_argv, cfg);
+    exit(rc);
+}
+
 void cmd_lsp(void) {
     extern int lsp_server_main(void);   /* defined in lsp.c */
 
@@ -819,4 +1172,3 @@ void cmd_test(const char *input_file) {
     }
     exit(0);
 }
-

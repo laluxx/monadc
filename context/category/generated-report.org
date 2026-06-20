@@ -2,13 +2,14 @@
 #+AUTHOR: context/category/scripts/render_docs.py
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+FILETAGS: :monadc:compiler:context:category:generated:report:
 #+PROPERTY: CONTEXT_VERSION 5
 
 * Summary
 :PROPERTIES:
 :ID: monadc.context.category.generated.summary
+:CONTEXT_DESCRIPTION: Generated report summary and statistics
 :CONTEXT_KIND: generated-report
 :CONTEXT_STATUS: generated
 :SOURCE: context/category/scripts/render_docs.py
@@ -25,6 +26,7 @@
 * Entropy
 :PROPERTIES:
 :ID: monadc.context.category.generated.entropy
+:CONTEXT_DESCRIPTION: Entropy metrics for the category graph
 :CONTEXT_KIND: generated-report
 :CONTEXT_STATUS: generated
 :SOURCE: context/category/scripts/info_metrics.py
@@ -41,6 +43,7 @@
 * Top Record Types
 :PROPERTIES:
 :ID: monadc.context.category.generated.record-types
+:CONTEXT_DESCRIPTION: Top record type distribution
 :CONTEXT_KIND: generated-report
 :CONTEXT_STATUS: generated
 :SOURCE: context/category/scripts/info_metrics.py

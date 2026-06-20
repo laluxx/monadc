@@ -144,12 +144,12 @@ Key Points:
 
 * 5. Pair vs Layout vs Data
 
-| Aspect    | Pair                       | data                    | layout          |
-|-----------+----------------------------+-------------------------+-----------------|
-| Fields    | 2, named by position        | 0..N named by position  | Named           |
-| Tag       | None (no sum type)          | Automatic i32 tag       | None (untagged) |
-| C compat  | No                          | No                      | Yes             |
-| Pattern   | =(Pair x y)=                | =(Ctor x y)=            | =(=struct= f v)= |
+| Aspect   | Pair                 | data                   | layout          |
+|----------+----------------------+------------------------+-----------------|
+| Fields   | 2, named by position | 0..N named by position | Named           |
+| Tag      | None (no sum type)   | Automatic i32 tag      | None (untagged) |
+| C compat | No                   | No                     | Yes             |
+| Pattern  | =(Pair x y)=           | =(Ctor x y)=             | =(=struct= f v)=   |
 
 See [[file:data.org][Data Types]] for ADTs,
 [[file:layouts.org][Layout Types]] for C-interop types, and
@@ -259,14 +259,14 @@ Common mistakes and surprising behaviours with pairs:
 
 * 9. Implementation Notes
 
-| Component   | Context File        | Topic                                       |
-|-------------+---------------------+---------------------------------------------|
-| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_APP][TYPE_APP for Pair type representation]] |
-| Codegen     | codegen.org         | [[file:../context/codegen.org::#codegen-adt-tag][Pair constructor lowering]] |
-| Language    | language.org        | [[file:../context/language.org::#primitive-list][Pair dispatch and cons-cell representation]] |
-| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-collection][fst/snd operation codegen]] |
-| Inference   | infer.org           | [[file:../context/infer.org::#constraint-generation][Type inference for Pair construction]] |
-| Source      | codegen.c           | =fst=, =snd= builtin implementation |
+| Component | Context File    | Topic                                      |
+|-----------+-----------------+--------------------------------------------|
+| Types     | types.org       | [[file:../context/types.org::#kind-TYPE_APP][TYPE_APP for Pair type representation]]      |
+| Codegen   | codegen.org     | [[file:../context/codegen.org::#codegen-adt-tag][Pair constructor lowering]]                  |
+| Language  | language.org    | [[file:../context/language.org::#primitive-list][Pair dispatch and cons-cell representation]] |
+| Codegen   | codegen-ops.org | [[file:../context/codegen-ops.org::#ops-collection][fst/snd operation codegen]]                  |
+| Inference | infer.org       | [[file:../context/infer.org::#constraint-generation][Type inference for Pair construction]]       |
+| Source    | codegen.c       | =fst=, =snd= builtin implementation            |
 
 Related Pages
 

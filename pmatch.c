@@ -43,6 +43,12 @@ ASTPattern parse_single_pattern(Parser *p) {
         return pat;
     }
 
+    if (parser_at(p, TOK_SYMBOL) && strcmp(p->current.value, ",") == 0) {
+        parser_advance(p);
+        pat.kind = PAT_WILDCARD;
+        return pat;
+    }
+
     // Numeric literal (positive)
     if (parser_at(p, TOK_NUMBER)) {
         const char *val = p->current.value;
@@ -144,13 +150,18 @@ ASTPattern parse_single_pattern(Parser *p) {
         int count = 0, cap = 0;
         ASTPattern *tail = NULL;
 
-        while (!parser_at(p, close_tok) &&
-               !parser_at(p, TOK_PIPE)     &&
-               !(parser_at(p, TOK_SYMBOL) && p->current.value &&
-                 strcmp(p->current.value, "|") == 0) &&
-               !parser_at(p, TOK_EOF)) {
-            /* Detect fused token like "_|xs" or "x|xs" — symbol containing '|' */
-            if (p->current.type == TOK_SYMBOL && p->current.value) {
+	        while (!parser_at(p, close_tok) &&
+	               !parser_at(p, TOK_PIPE)     &&
+	               !(parser_at(p, TOK_SYMBOL) && p->current.value &&
+	                 strcmp(p->current.value, "|") == 0) &&
+	               !parser_at(p, TOK_EOF)) {
+	            if (parser_at(p, TOK_SYMBOL) && p->current.value &&
+	                strcmp(p->current.value, ",") == 0) {
+	                parser_advance(p);
+	                continue;
+	            }
+	            /* Detect fused token like "_|xs" or "x|xs" — symbol containing '|' */
+	            if (p->current.type == TOK_SYMBOL && p->current.value) {
                 const char *pipe = strchr(p->current.value, '|');
                 if (pipe) {
                     /* Split: part before '|' is an element pattern */
@@ -280,6 +291,68 @@ static bool is_at_pmatch_clause(Parser *p) {
     return has_arrow || has_pipe;
 }
 
+static AST *finish_expr_sequence(AST **exprs, int count, bool body_context) {
+    AST *result;
+
+    if (count == 0) {
+        return body_context ? ast_new_symbol("undefined") : ast_new_symbol("True");
+    }
+
+    if (count == 1) {
+        result = exprs[0];
+        free(exprs);
+        return result;
+    }
+
+    bool same_line = true;
+    int first_line = exprs[0]->line;
+    for (int i = 1; i < count; i++) {
+        if (exprs[i]->line != first_line) {
+            same_line = false;
+            break;
+        }
+    }
+
+    if (same_line) {
+        result = ast_new_list();
+        for (int i = 0; i < count; i++)
+            ast_list_append(result, exprs[i]);
+    } else if (body_context) {
+        result = ast_new_list();
+        ast_list_append(result, ast_new_symbol("begin"));
+        for (int i = 0; i < count; i++)
+            ast_list_append(result, exprs[i]);
+    } else {
+        result = ast_new_list();
+        ast_list_append(result, ast_new_symbol("and"));
+        for (int i = 0; i < count; i++)
+            ast_list_append(result, exprs[i]);
+    }
+
+    free(exprs);
+    return result;
+}
+
+static AST *parse_guard_expr(Parser *p) {
+    AST **exprs = NULL;
+    int count = 0;
+    int cap = 0;
+
+    while (!parser_at(p, TOK_ARROW) &&
+           !parser_at(p, TOK_RPAREN) &&
+           !parser_at(p, TOK_EOF) &&
+           !parser_at(p, TOK_KEYWORD)) {
+        AST *expr = parse_expr(p);
+        if (count >= cap) {
+            cap = cap == 0 ? 4 : cap * 2;
+            exprs = realloc(exprs, sizeof(AST*) * cap);
+        }
+        exprs[count++] = expr;
+    }
+
+    return finish_expr_sequence(exprs, count, false);
+}
+
 static AST *parse_clause_body(Parser *p) {
     AST **body_exprs = NULL;
     int body_count = 0;
@@ -319,47 +392,14 @@ static AST *parse_clause_body(Parser *p) {
         body_exprs[body_count++] = expr;
     }
 
-    AST *body;
-    if (body_count == 0) {
-        body = ast_new_symbol("undefined");
-    } else if (body_count == 1) {
-        body = body_exprs[0];
-        free(body_exprs);
-    } else {
-        /* Heuristic: if all expressions are on the SAME LINE, they must be a
-         * function call (e.g. `f x y`) because a begin-sequence requires multiple lines.
-         * This elegantly fixes Wisp preprocessing bugs where Wisp incorrectly
-         * splits single-line function calls due to flawed infix heuristics. */
-        bool looks_like_call = false;
-        if (body_count > 1) {
-            looks_like_call = true;
-            int first_line = body_exprs[0]->line;
-            for (int _i = 1; _i < body_count; _i++) {
-                if (body_exprs[_i]->line != first_line) {
-                    looks_like_call = false;
-                    break;
-                }
-            }
-        }
-        if (looks_like_call) {
-            body = ast_new_list();
-            for (int _i = 0; _i < body_count; _i++)
-                ast_list_append(body, body_exprs[_i]);
-        } else {
-            body = ast_new_list();
-            ast_list_append(body, ast_new_symbol("begin"));
-            for (int _i = 0; _i < body_count; _i++)
-                ast_list_append(body, body_exprs[_i]);
-        }
-        free(body_exprs);
-    }
-    return body;
+    return finish_expr_sequence(body_exprs, body_count, true);
 }
 
 // Parse one full clause: pattern... -> expr
 // Reads patterns dynamically until it hits an arrow or guard
 static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
     ASTPMatchClause clause = {0};
+    (void)param_count;
 
     ASTPattern *patterns = NULL;
     int act_count = 0;
@@ -395,7 +435,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
                 strcmp(p->current.value, "|") == 0)) {
             parser_advance(p); // consume '|'
 
-            AST *cond = parse_expr(p);
+            AST *cond = parse_guard_expr(p);
 
             if (!parser_at(p, TOK_ARROW)) {
                 fprintf(stderr, "pmatch: expected '->' after guard condition, got type=%d value='%s'\n",
@@ -530,14 +570,115 @@ static AST *make_coll_wrap(const char *coll_param, AST *elem) {
     return make_list(items, 3);
 }
 
-// Helper: (rt_coll_is_empty param) — O(1), safe for lazy/infinite lists
+// Helper: (rt_coll_is_empty param) -- O(1), safe for lazy/infinite lists
 static AST *make_coll_is_empty(const char *param_name) {
     AST *items[] = {sym("rt_coll_is_empty"), sym(param_name)};
     AST *call = make_list(items, 2);
-    /* wrap in (not ...) — rt_coll_is_empty returns 1 when empty,
+    /* wrap in (not ...) -- rt_coll_is_empty returns 1 when empty,
      * but PAT_LIST_EMPTY guard needs truthy-when-empty */
-    /* Actually return directly — caller uses it as a truthy guard */
+    /* Actually return directly -- caller uses it as a truthy guard */
     return call;
+}
+
+// Helper: collection has at least n elements.
+// This avoids generating user-level overloaded >= in compiler-created
+// pattern guards. For n == 1, this is just not empty. For n > 1,
+// drop n - 1 elements and test whether the result is non-empty.
+static AST *make_coll_has_at_least(const char *param_name, int n) {
+    if (n <= 0) {
+        return make_true();
+    }
+
+    AST *probe;
+    if (n == 1) {
+        probe = sym(param_name);
+    } else {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d", n - 1);
+        AST *items[] = {
+            sym("rt_coll_drop"),
+            sym(param_name),
+            ast_new_number((double)(n - 1), buf)
+        };
+        probe = make_list(items, 3);
+    }
+
+    AST *empty_items[] = {
+        sym("rt_coll_is_empty"),
+        probe
+    };
+    AST *is_empty = make_list(empty_items, 2);
+
+    AST *if_items[] = {
+        sym("if"),
+        is_empty,
+        sym("False"),
+        sym("True")
+    };
+    return make_list(if_items, 4);
+}
+
+static bool pmatch_type_name_is_collection(const char *tn) {
+    if (!tn) return false;
+
+    while (*tn == ' ' || *tn == '\t' || *tn == '\n' || *tn == '\r') {
+        tn++;
+    }
+
+    while (*tn == '(') {
+        tn++;
+        while (*tn == ' ' || *tn == '\t' || *tn == '\n' || *tn == '\r') {
+            tn++;
+        }
+    }
+
+    if (*tn == '[') return true;
+
+    if (strncmp(tn, "Coll", 4) == 0 &&
+        (tn[4] == '\0' || tn[4] == ' ' || tn[4] == '\t' ||
+         tn[4] == ':'  || tn[4] == ')')) {
+        return true;
+    }
+
+    if (strncmp(tn, "Arr", 3) == 0 &&
+        (tn[3] == '\0' || tn[3] == ' ' || tn[3] == '\t' ||
+         tn[3] == ':'  || tn[3] == ')')) {
+        return true;
+    }
+
+    if (strncmp(tn, "List", 4) == 0 &&
+        (tn[4] == '\0' || tn[4] == ' ' || tn[4] == '\t' ||
+         tn[4] == ':'  || tn[4] == ')')) {
+        return true;
+    }
+
+    return false;
+}
+
+static const char *pmatch_pick_collection_param(ASTPMatchClause *cl,
+                                                ASTParam *params,
+                                                int param_count) {
+    if (cl && params) {
+        int n = cl->pattern_count < param_count ? cl->pattern_count : param_count;
+        for (int i = 0; i < n; i++) {
+            if ((cl->patterns[i].kind == PAT_LIST ||
+                 cl->patterns[i].kind == PAT_LIST_EMPTY) &&
+                params[i].name) {
+                return params[i].name;
+            }
+        }
+    }
+
+    if (params) {
+        for (int i = 0; i < param_count; i++) {
+            if (params[i].name &&
+                pmatch_type_name_is_collection(params[i].type_name)) {
+                return params[i].name;
+            }
+        }
+    }
+
+    return NULL;
 }
 
 
@@ -931,24 +1072,10 @@ static void build_pattern_conditions(
 
         if (has_tail) {
             if (n > 0) {
-                bool all_irrefutable = true;
-                for (int i = 0; i < n; i++) {
-                    PatternKind k = pat->elements[i].kind;
-                    if (k != PAT_WILDCARD && k != PAT_VAR) {
-                        all_irrefutable = false;
-                        break;
-                    }
-                }
-                if (!all_irrefutable) {
-                    char buf[32];
-                    snprintf(buf, sizeof(buf), "%d", n);
-                    AST *cnt     = make_count(param_name); // Unified
-                    AST *items[] = {sym(">="), cnt, ast_new_number((double)n, buf)};
-                    PUSH_GUARD(make_list(items, 3));
-                }
+                PUSH_GUARD(make_coll_has_at_least(param_name, n));
             }
         } else {
-            PUSH_GUARD(make_count_eq(param_name, n)); // Unified
+            PUSH_GUARD(make_count_eq(param_name, n));
         }
 
         // Per-element conditions and bindings
@@ -975,7 +1102,65 @@ static void build_pattern_conditions(
                 PUSH_GUARD(make_list(items, 3));
                 break;
             }
+            case PAT_LIST: {
+                int nn = ep->element_count;
+                if (!ep->tail) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%d", nn);
+                    AST *cnt_items[] = {sym("count"), ast_clone(elem_expr)};
+                    AST *cnt = make_list(cnt_items, 2);
+                    AST *eq_items[] = {sym("="), cnt,
+                                       ast_new_number((double)nn, buf)};
+                    PUSH_GUARD(make_list(eq_items, 3));
+                }
+
+                for (int ni = 0; ni < nn; ni++) {
+                    ASTPattern *np = &ep->elements[ni];
+                    char idx_buf[32];
+                    snprintf(idx_buf, sizeof(idx_buf), "%d", ni);
+                    AST *idx_items[] = {ast_clone(elem_expr),
+                                        ast_new_number((double)ni, idx_buf)};
+                    AST *sub_expr = make_list(idx_items, 2);
+
+                    switch (np->kind) {
+                    case PAT_WILDCARD:
+                        ast_free(sub_expr);
+                        break;
+                    case PAT_VAR:
+                        PUSH_BIND(np->var_name, sub_expr);
+                        break;
+                    case PAT_LITERAL_INT:
+                        PUSH_GUARD(make_eq_int(sub_expr, (long long)np->lit_value));
+                        break;
+                    case PAT_LITERAL_FLOAT:
+                        PUSH_GUARD(make_eq_float(sub_expr, np->lit_value));
+                        break;
+                    case PAT_LITERAL_STRING: {
+                        AST *items[] = {sym("="), sub_expr,
+                                        ast_new_string(np->var_name)};
+                        PUSH_GUARD(make_list(items, 3));
+                        break;
+                    }
+                    default:
+                        ast_free(sub_expr);
+                        break;
+                    }
+                }
+
+                if (ep->tail && ep->tail->kind == PAT_VAR) {
+                    int drop_n = nn;
+                    char drop_buf[32];
+                    snprintf(drop_buf, sizeof(drop_buf), "%d", drop_n);
+                    AST *drop_items[] = {sym("rt_coll_drop"),
+                                         ast_clone(elem_expr),
+                                         ast_new_number((double)drop_n, drop_buf)};
+                    PUSH_BIND(ep->tail->var_name, make_list(drop_items, 3));
+                }
+                ast_free(elem_expr);
+                break;
+            }
             default:
+                ast_free(elem_expr);
                 break;
             }
         }
@@ -986,7 +1171,7 @@ static void build_pattern_conditions(
         // rt_coll_drop signature: (RuntimeValue* coll, int64_t n)
         // n is the number of elements before the tail — drop exactly n.
         if (has_tail && pat->tail->kind == PAT_VAR) {
-            int drop_n = n > 0 ? n : 1;
+            int drop_n = n;
             char buf[32];
             snprintf(buf, sizeof(buf), "%d", drop_n);
             AST *drop_args[] = {sym("rt_coll_drop"),
@@ -1114,24 +1299,15 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
                 if ((gbody->type == AST_LIST  && gbody->list.count == 0) ||
                     (gbody->type == AST_ARRAY && gbody->array.element_count == 0)) {
                     ast_free(gbody);
-                    const char *coll_param = (param_count > 0) ? params[0].name : "a";
-                    for (int _pi = 0; _pi < param_count; _pi++) {
-                        const char *tn = params[_pi].type_name;
-                        if (tn && (strcmp(tn, "Arr") == 0  ||
-                                   strcmp(tn, "Coll") == 0 ||
-                                   strcmp(tn, "List") == 0 ||
-                                   strcmp(tn, "[a]") == 0  ||
-                                   tn[0] == '[')) {
-                            coll_param = params[_pi].name;
-                            break;
-                        }
-                        if (!tn && params[_pi].name) {
-                            coll_param = params[_pi].name;
-                        }
+                    const char *coll_param =
+                        pmatch_pick_collection_param(cl, params, param_count);
+                    if (coll_param) {
+                        gbody = ast_new_list();
+                        ast_list_append(gbody, sym("rt_coll_empty"));
+                        ast_list_append(gbody, sym(coll_param));
+                    } else {
+                        gbody = ast_new_array();
                     }
-                    gbody = ast_new_list();
-                    ast_list_append(gbody, sym("rt_coll_empty"));
-                    ast_list_append(gbody, sym(coll_param));
                 }
 
                 if (cl->pattern_count < param_count) {
@@ -1161,47 +1337,26 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
             if ((body->type == AST_LIST  && body->list.count == 0) ||
                 (body->type == AST_ARRAY && body->array.element_count == 0)) {
                 ast_free(body);
-                /* Find the first parameter that is a collection type */
-                const char *coll_param = (param_count > 0) ? params[0].name : "a";
-                for (int _pi = 0; _pi < param_count; _pi++) {
-                    const char *tn = params[_pi].type_name;
-                    if (tn && (strcmp(tn, "Arr") == 0  ||
-                               strcmp(tn, "Coll") == 0 ||
-                               strcmp(tn, "List") == 0 ||
-                               strcmp(tn, "[a]") == 0  ||
-                               tn[0] == '[')) {
-                        coll_param = params[_pi].name;
-                        break;
-                    }
-                    if (!tn && params[_pi].name) {
-                        coll_param = params[_pi].name;
-                    }
+                const char *coll_param =
+                    pmatch_pick_collection_param(cl, params, param_count);
+                if (coll_param) {
+                    body = ast_new_list();
+                    ast_list_append(body, sym("rt_coll_empty"));
+                    ast_list_append(body, sym(coll_param));
+                } else {
+                    body = ast_new_array();
                 }
-                body = ast_new_list();
-                ast_list_append(body, sym("rt_coll_empty"));
-                ast_list_append(body, sym(coll_param));
             }
 
             if (bind_count > 0)
                 body = make_let(bind_names, bind_exprs, bind_count, body);
 
             {
-                const char *coll_param = (param_count > 0) ? params[0].name : "a";
-                for (int _pi = 0; _pi < param_count; _pi++) {
-                    const char *tn = params[_pi].type_name;
-                    if (tn && (strcmp(tn, "Arr") == 0  ||
-                               strcmp(tn, "Coll") == 0 ||
-                               strcmp(tn, "List") == 0 ||
-                               strcmp(tn, "[a]") == 0  ||
-                               tn[0] == '[')) {
-                        coll_param = params[_pi].name;
-                        break;
-                    }
-                    if (!tn && params[_pi].name) {
-                        coll_param = params[_pi].name;
-                    }
+                const char *coll_param =
+                    pmatch_pick_collection_param(cl, params, param_count);
+                if (coll_param) {
+                    body = rewrite_array_literals(body, coll_param);
                 }
-                body = rewrite_array_literals(body, coll_param);
             }
 
             if (cl->pattern_count < param_count) {

@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-17
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -21,6 +21,7 @@
 :CONTEXT_STATUS: active
 :SOURCE: context/category/catface-static-report.org
 :CONFIDENCE: high
+:CONTEXT_DESCRIPTION: Generated static report summary for Catface Zig package
 :END:
 
 [DOC id:doc.category.catface.static-report.summary src:context/category/catface-static-report.org conf:high]

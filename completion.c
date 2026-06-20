@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ANSI */
+/// ANSI
 #define RESET   "\x1b[0m"
 #define BOLD    "\x1b[1m"
 #define DIM     "\x1b[2m"
@@ -12,20 +12,15 @@
 #define GREEN   "\x1b[32m"
 #define WHITE   "\x1b[97m"
 
-/* ------------------------------------------------------------------ */
-/*  Layout constants                                                   */
-/* ------------------------------------------------------------------ */
+/// Layout constants
 
-/* Width of the left name column (padded with spaces). */
-#define COL_NAME  20
-/* Width of the args/hint column between name and description. */
-#define COL_ARGS  16
 
-/* ------------------------------------------------------------------ */
-/*  Primitive renderers                                                */
-/* ------------------------------------------------------------------ */
+#define COL_NAME  20 // Width of the left name column (padded with spaces).
+#define COL_ARGS  16 // Width of the args/hint column between name and description.
 
-/* One completion row:  COLOR  name  DIM  desc */
+/// Primitive renderers
+
+// One completion row:  COLOR  name  DIM  desc
 static void row(const char *color, const char *name, const char *desc)
 {
     fprintf(stderr, "    %s%-*s" RESET "  " DIM "%s" RESET "\n",
@@ -47,18 +42,16 @@ static void row3(const char *color, const char *name,
             color, COL_NAME + COL_ARGS, namebuf, desc);
 }
 
-/* Section header — uppercase, dim, with a rule underneath. */
+// Section header — uppercase, dim, with a rule underneath.
 static void section(const char *title)
 {
     fprintf(stderr, "\n  " DIM "%s" RESET "\n", title);
 }
 
-/* Blank line inside the menu. */
+// Blank line inside the menu.
 static void gap(void) { fprintf(stderr, "\n"); }
 
-/* ------------------------------------------------------------------ */
-/*  Top-level usage menu                                               */
-/* ------------------------------------------------------------------ */
+/// Top-level usage menu
 
 void print_usage(const char *prog)
 {
@@ -78,19 +71,38 @@ void print_usage(const char *prog)
     row3(CYAN, "install", "",           "Install binary to ~/.local/bin");
     row3(CYAN, "test",    "<file.mon>", "Run tests (build, run, delete binary)");
     row3(CYAN, "check",   "[file.mon]", "Type-check without producing a binary");
+    row3(CYAN, "eval",    "<code>",     "Evaluate one expression and exit");
+    row3(CYAN, "jit",     "<file.mon>", "Run through bytecode JIT path");
+    row3(CYAN, "trace",   "<pass> [file]", "Whitespace form of --trace=<pass>");
+    row3(CYAN, "debug",   "<file.mon>", "Open the compiler debugger TUI");
     row3(CYAN, "lsp",     "",           "Start the Language Server (LSP 3.17)");
 
     /* Flags */
     section("options");
-    row(YELLOW, "-i",            "Start interactive REPL");
-    row(YELLOW, "-o <file>",     "Output file name");
-    row(YELLOW, "--emit-ir",     "Emit LLVM IR (.ll)");
-    row(YELLOW, "--emit-bc",     "Emit LLVM bitcode (.bc)");
-    row(YELLOW, "--emit-asm",    "Emit assembly (.s)");
-    row(YELLOW, "--emit-obj",    "Emit object file (.o)");
-    row(YELLOW, "--emit-json",   "Emit AST as JSON (.json)");
-    row(YELLOW, "--emit-typst",  "Emit Typst document (.typ) and compile to PDF");
-    row(YELLOW, "--test",        "Embed tests in binary (keep binary)");
+    row(YELLOW, "-i, repl",             "Start interactive REPL");
+    row(YELLOW, "-e <code>, eval <code>", "Evaluate one expression and exit");
+    row(YELLOW, "-d <file>, debug <file>", "Open the compiler debugger TUI");
+    row(YELLOW, "-o <file>, output <file>", "Output file name");
+    row(YELLOW, "--emit-ir, emit-ir",   "Emit LLVM IR (.ll)");
+    row(YELLOW, "--emit-bc, emit-bc",   "Emit LLVM bitcode (.bc)");
+    row(YELLOW, "--emit-asm, emit-asm", "Emit assembly (.s)");
+    row(YELLOW, "--emit-obj, emit-obj", "Emit object file (.o)");
+    row(YELLOW, "--emit-json, emit-json", "Emit AST as JSON (.json)");
+    row(YELLOW, "--emit-typst, emit-typst", "Emit Typst document (.typ) and compile to PDF");
+    row(YELLOW, "--emit-bytecode, emit-bytecode", "Emit Monad register bytecode");
+    row(YELLOW, "--bytecode-verify, bytecode-verify", "Run bytecode linear verifier");
+    row(YELLOW, "--bytecode-disassemble, bytecode-disassemble", "Print bytecode instruction listing");
+    row(YELLOW, "--bytecode-decompile, bytecode-decompile", "Print Monad-like bytecode view");
+    row(YELLOW, "--bytecode-sections, bytecode-sections", "Print bytecode binary sections");
+    row(YELLOW, "--bytecode-trace, bytecode-trace", "Trace bytecode execution/tooling");
+    row(YELLOW, "--bytecode-baseline-jit", "Request baseline JIT bytecode tier");
+    row(YELLOW, "-jit, jit",             "Use the bytecode JIT path instead of LLVM compile");
+    row(YELLOW, "-S, asm",              "LLVM-style shortcut for assembly output");
+    row(YELLOW, "-c, obj",              "LLVM-style shortcut for object output");
+    row(YELLOW, "-O, optimize",         "Enable compiler optimization passes");
+    row(YELLOW, "-v, verbose",          "Increase compile progress verbosity");
+    row(YELLOW, "--trace=<pass>, trace <pass>", "Show pass tree: ast, semantic, dep, codegen, all");
+    row(YELLOW, "--test, test",         "Embed tests in binary (keep binary)");
     row(YELLOW, "-Wall",         "Enable all warnings");
     row(YELLOW, "-Wextra",       "Enable extra warnings");
     row(YELLOW, "-h, --help",    "Show this help");
@@ -102,9 +114,7 @@ void print_usage(const char *prog)
         DIM " for detailed options per command." RESET "\n\n");
 }
 
-/* ------------------------------------------------------------------ */
-/*  Per-subcommand menus                                               */
-/* ------------------------------------------------------------------ */
+/// Per-subcommand menus
 
 static void menu_lsp(void)
 {
@@ -171,13 +181,18 @@ static void menu_build(void)
         "  " DIM "Reads package.yaml, compiles to build/<exe>." RESET "\n");
 
     section("emit flags");
-    row(YELLOW, "--emit-ir",    "LLVM IR (.ll)");
-    row(YELLOW, "--emit-bc",    "LLVM bitcode (.bc)");
-    row(YELLOW, "--emit-asm",   "assembly (.s)");
-    row(YELLOW, "--emit-obj",   "object file (.o)");
-    row(YELLOW, "--emit-json",  "AST as JSON (.json)");
-    row(YELLOW, "--emit-typst", "Typst document + PDF");
-    row(YELLOW, "-o <file>",    "output file name");
+    row(YELLOW, "--emit-ir, emit-ir",       "LLVM IR (.ll)");
+    row(YELLOW, "--emit-bc, emit-bc",       "LLVM bitcode (.bc)");
+    row(YELLOW, "--emit-asm, emit-asm, -S", "assembly (.s)");
+    row(YELLOW, "--emit-obj, emit-obj, -c", "object file (.o)");
+    row(YELLOW, "--emit-json, emit-json",   "AST as JSON (.json)");
+    row(YELLOW, "--emit-typst, emit-typst", "Typst document + PDF");
+    row(YELLOW, "--emit-bytecode, emit-bytecode", "Monad register bytecode");
+    row(YELLOW, "--bytecode-disassemble",   "bytecode instruction listing");
+    row(YELLOW, "--bytecode-decompile",     "Monad-like bytecode view");
+    row(YELLOW, "--bytecode-sections",      "bytecode section table");
+    row(YELLOW, "-jit, jit",                "use bytecode JIT path instead of LLVM compile");
+    row(YELLOW, "-o <file>, output <file>", "output file name");
     row(YELLOW, "-Wall",        "enable all warnings");
     row(YELLOW, "-Wextra",      "enable extra warnings");
 
@@ -200,11 +215,14 @@ static void menu_run(void)
         "  " DIM "Build and immediately run the project binary." RESET "\n");
 
     section("same flags as build");
-    row(YELLOW, "--emit-ir",    "LLVM IR (.ll)");
-    row(YELLOW, "--emit-bc",    "LLVM bitcode (.bc)");
-    row(YELLOW, "--emit-asm",   "assembly (.s)");
-    row(YELLOW, "--emit-obj",   "object file (.o)");
-    row(YELLOW, "-o <file>",    "output file name");
+    row(YELLOW, "--emit-ir, emit-ir",       "LLVM IR (.ll)");
+    row(YELLOW, "--emit-bc, emit-bc",       "LLVM bitcode (.bc)");
+    row(YELLOW, "--emit-asm, emit-asm, -S", "assembly (.s)");
+    row(YELLOW, "--emit-obj, emit-obj, -c", "object file (.o)");
+    row(YELLOW, "--emit-bytecode, emit-bytecode", "Monad register bytecode");
+    row(YELLOW, "--bytecode-trace",         "trace bytecode tooling");
+    row(YELLOW, "-jit, jit",                "use bytecode JIT path instead of LLVM compile");
+    row(YELLOW, "-o <file>, output <file>", "output file name");
 
     section("sequence");
     row(GREEN, "1. build", "compiles via package.yaml");
@@ -288,6 +306,61 @@ static void menu_check(void)
     gap();
 }
 
+static void menu_eval(void)
+{
+    fprintf(stderr,
+        "\n" BOLD "  monad eval" RESET "  " MAGENTA "<code>" RESET "\n"
+        "  " DIM "Evaluate one expression with the REPL evaluator and exit." RESET "\n");
+
+    section("forms");
+    row(CYAN, "monad eval \"3 + 3\"", "word form");
+    row(CYAN, "monad -e \"3 + 3\"",   "short flag form");
+    row(CYAN, "monad --eval \"3 + 3\"", "long flag form");
+
+    gap();
+}
+
+static void menu_jit(void)
+{
+    fprintf(stderr,
+        "\n" BOLD "  monad jit" RESET "  " MAGENTA "<file.mon>" RESET "\n"
+        "  " DIM "Use the bytecode JIT path instead of LLVM compilation." RESET "\n");
+
+    section("forms");
+    row(CYAN, "monad jit file.mon", "word form before input file");
+    row(CYAN, "monad -jit file.mon", "short flag before input file");
+    row(CYAN, "monad file.mon -jit", "short flag after input file");
+
+    section("bytecode tooling");
+    row(YELLOW, "--bytecode-disassemble", "print bytecode instruction listing");
+    row(YELLOW, "--bytecode-decompile", "print Monad-like bytecode view");
+    row(YELLOW, "--bytecode-trace", "trace bytecode tooling");
+
+    gap();
+}
+
+static void menu_debug(void)
+{
+    fprintf(stderr,
+        "\n" BOLD "  monad debug" RESET "  " MAGENTA "<file.mon>" RESET "\n"
+        "  " DIM "Open the compiler debugger TUI for one source file." RESET "\n");
+
+    section("forms");
+    row(CYAN, "monad debug file.mon", "word form before input file");
+    row(CYAN, "monad -d file.mon", "short flag form");
+    row(CYAN, "monad --debug file.mon", "long flag form");
+
+    section("debugger options");
+    row(YELLOW, "--debug-no-mouse", "disable mouse reporting");
+    row(YELLOW, "--debug-truecolor", "force truecolor output");
+    row(YELLOW, "--debug-fps N", "set debugger render tick rate");
+    row(YELLOW, "--debug-blink-ms N", "set cursor blink period");
+    row(YELLOW, "--debug-blinks N", "set idle blink count");
+    row(YELLOW, "-O, -O1, -O2", "emit optimized IR in the IR panel");
+
+    gap();
+}
+
 static void menu_help(const char *subcmd)
 {
     /* monad help <subcmd> — recurse into the right menu */
@@ -299,9 +372,7 @@ static void menu_help(const char *subcmd)
     print_usage("monad");
 }
 
-/* ------------------------------------------------------------------ */
-/*  Dispatch                                                           */
-/* ------------------------------------------------------------------ */
+/// Dispatch
 
 void print_subcommand_menu(const char *subcmd)
 {
@@ -314,6 +385,9 @@ void print_subcommand_menu(const char *subcmd)
     else if (strcmp(subcmd, "install") == 0) menu_install();
     else if (strcmp(subcmd, "test")    == 0) menu_test();
     else if (strcmp(subcmd, "check")   == 0) menu_check();
+    else if (strcmp(subcmd, "eval")    == 0) menu_eval();
+    else if (strcmp(subcmd, "jit")     == 0) menu_jit();
+    else if (strcmp(subcmd, "debug")   == 0) menu_debug();
     else if (strcmp(subcmd, "help")    == 0) menu_help(NULL);
     else {
         /* Unknown subcommand passed to help */

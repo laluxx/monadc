@@ -1,0 +1,70 @@
+;;; Bool.mon --- Boolean eliminators and combinators
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Data.Bool bool boolean predicate
+
+;;; Commentary:
+
+;; Small boolean helpers. Prefer explicit names in the core over cleverness.
+
+;;; Code:
+
+import Data.Maybe
+
+module Data.Bool
+  [bool not and or xor implies iff whenBool unlessBool]
+
+
+define bool :: a -> a -> Bool -> a
+  :doc "Choose the first value for False and the second value for True."
+  false _ False -> false
+  _ true True   -> true
+
+
+define not :: Bool -> Bool
+  :doc "Boolean negation."
+  True  -> False
+  False -> True
+
+
+define and :: Bool -> Bool -> Bool
+  :doc "Boolean conjunction."
+  True True -> True
+  _ _       -> False
+
+
+define or :: Bool -> Bool -> Bool
+  :doc "Boolean disjunction."
+  False False -> False
+  _ _         -> True
+
+
+define xor :: Bool -> Bool -> Bool
+  :doc "Exclusive or."
+  True False -> True
+  False True -> True
+  _ _        -> False
+
+
+define implies :: Bool -> Bool -> Bool
+  :doc "Logical implication."
+  True False -> False
+  _ _        -> True
+
+
+define iff :: Bool -> Bool -> Bool
+  :doc "Logical equivalence."
+  a b -> a = b
+
+
+define whenBool :: Bool -> a -> Maybe a
+  :doc "Return Just X when COND is True, otherwise Nothing."
+  True x  -> Just x
+  False _ -> Nothing
+
+
+define unlessBool :: Bool -> a -> Maybe a
+  :doc "Return Just X when COND is False, otherwise Nothing."
+  False x -> Just x
+  True _  -> Nothing

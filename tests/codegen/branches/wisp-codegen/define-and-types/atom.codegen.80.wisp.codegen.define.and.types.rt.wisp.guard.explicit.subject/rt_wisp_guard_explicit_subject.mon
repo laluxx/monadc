@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.rt-wisp-guard-explicit-subject
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.guard.explicit.subject
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.old-core-prelude-compat, monadc.context.tests.core-prelude-module-tests
+;; TEST-PURPOSE: Guard expressions that explicitly mention a pattern variable must not reapply all pattern subjects to that variable.
+;; TEST-ATOM: n _ x | n <= 0 lowers the guard as (<= n 0), not (<= (n n x) 0).
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c guarded pattern implicit-subject rewriting
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.guard.explicit.subject
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.guard.explicit.subject
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.guard.explicit.subject
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+
+module Main
+
+define times :: Int -> (Int -> Int) -> Int -> Int
+  n _ x | n <= 0    -> x
+  n f x | otherwise -> times (n - 1) f (f x)
+
+show (times 4 (+ 1) 0)
+show (times 0 (+ 1) 9)

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-20
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -71,6 +71,8 @@ context.
 :CONFIDENCE: high
 :END:
 
+Format specification, schema, and structural conventions.
+
 ** Purpose
 :PROPERTIES:
 :ID: monadc.context.format.purpose
@@ -78,6 +80,7 @@ context.
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Index file purpose and navigation
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/index.org
 :CONFIDENCE: high
@@ -98,6 +101,7 @@ point to a source location, a command result, or a clearly marked inference.
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: File system navigation map
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/index.org
 :CONFIDENCE: high
@@ -123,6 +127,7 @@ point to a source location, a command result, or a clearly marked inference.
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Context node graph visualization
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/index.org
 :CONFIDENCE: high
@@ -166,6 +171,7 @@ contains inference rather than direct facts.
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: File coverage visualization
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -213,6 +219,7 @@ Every context file should include these file-level Org keywords when applicable:
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Visual index of context files
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -245,6 +252,7 @@ Every context file should include these file-level Org keywords when applicable:
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: LLM-readable context summary
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/index.org
 :CONFIDENCE: high
@@ -280,16 +288,15 @@ Rules:
 :ID: monadc.context.files
 :CUSTOM_ID: current-topic-files
 :CONTEXT_KIND: index
-:CONTEXT_DESCRIPTION: Navigation index of all context topic files: reader, language, build, tests, workflow, guidelines, todo, visualizer, opinions, philosophy, wisp, source-map, style, navigation, references, commit-format, dep, infer, runtime, codegen-ops, arena, asm, buildsystem, cli, codegen, env, features, ffi, macro, main, module, pmatch, repl, typeclass, typst-emit, ideas, types, module-export, makefile, main-mon, core-libs, how-to, tests-arch, etc-assets, todo-markers, scripts.
+:CONTEXT_DESCRIPTION: Navigation index of all context topic files: reader, language, build, tests, workflow, guidelines, todo, visualizer, opinions, philosophy, wisp, source-map, style, navigation, references, commit-format, dep, infer, runtime, codegen-ops, arena, asm, buildsystem, cli, codegen, env, features, ffi, macro, main, module, pmatch, repl, typeclass, typst-emit, ideas, types, module-export, makefile, main-mon, core-libs, how-to, tests-arch, etc-assets, todo-markers, scripts, completion, lsp.
 :CONTEXT_VERSION: 2
 :CONTEXT_CREATED: 2026-06-11
-:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-18
 :SOURCE: context/index.org
 :CONFIDENCE: high
 :END:
 
 - [[file:reader.org][Reader and parser context]]
-- [[file:language.org][Language formalization context]]
 - [[file:language.org][Language formalization context]]
 - [[file:build.org][Build and installation context]]
 - [[file:tests.org][Test system context]]
@@ -308,6 +315,7 @@ Rules:
 - [[file:source-map.org::* Research PDFs][PDF library index (etc/pdfs/) — each paper linked to source decisions]]
 - [[file:commit-format.org][Commit message format and conventions]]
 - [[file:dep.org][Dependent type checker — ITT kernel with NbE]]
+- [[file:bytecode.org][Bytecode VM substrate — verifier, register VM, disassembler]]
 - [[file:infer.org][HM type inference engine — constraint gen, unification, zonking]]
 - [[file:runtime.org][Runtime library — values, collections, printing, bignum]]
 - [[file:codegen-ops.org][Codegen operation dispatch — 83+ strcmp handlers, 94 builtins]]
@@ -337,6 +345,8 @@ Rules:
 - [[file:etc-assets.org][etc/ assets — logo, screenshots, font, docs.html]]
 - [[file:todo-markers.org][Source-level TODO/FIXME/HACK tracker — 60+ technical debt entries]]
 - [[file:scripts.org][Python helper scripts — test runners, ASM generators, fuzz runner, visualizer]]
+- [[file:completion.org][REPL tab-completion — completion.c/h data structures, matching, filters]]
+- [[file:lsp.org][LSP server protocol — initialization, diagnostics, completions, goto-definition]]
 
 * Current Task Notes
 :PROPERTIES:
@@ -349,6 +359,7 @@ Rules:
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Current context loading instructions
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STATUS: active
 :SOURCE: user-request
@@ -382,6 +393,7 @@ Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Coverage map of context sections
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STATUS: active
 :SOURCE: user-request
@@ -446,6 +458,7 @@ Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Context garden philosophy
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STATUS: active
 :SOURCE: user-request
@@ -551,6 +564,7 @@ Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
 * Formal Category Layer
 :PROPERTIES:
 :ID: monadc.context.index.round3-category-directory
+:CONTEXT_DESCRIPTION: Formal topology of the context garden
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active
 :SOURCE: context/index.org

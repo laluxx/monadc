@@ -58,6 +58,7 @@ typedef struct TypeSubst {
 // Caller must free ts->from and ts->to (but not the Type* they point to).
 Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
                                     TypeSubst *ts);
+void infer_set_trace(bool enabled);
 
 
 /// Type Inference Environment
@@ -157,6 +158,8 @@ void      infer_ctx_free(InferCtx *ctx);
 
 Type *infer_fresh(InferCtx *ctx);          // allocate a fresh TYPE_VAR
 Type *infer_fresh_named(InferCtx *ctx, const char *hint); // same, with debug name
+Type *infer_freshen_annotation_vars(InferCtx *ctx, Type *t,
+                                    int *from, Type **to, int *count);
 
 
 /// Constraint Generation

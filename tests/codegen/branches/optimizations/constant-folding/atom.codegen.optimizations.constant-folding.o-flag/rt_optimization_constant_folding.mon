@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.optimizations.constant-folding.o-flag
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: optimizations
+;; TEST-SUBSET: constant-folding
+;; TEST-QUALITY: regression
+;; TEST-CODEGEN-ATOM: atom.codegen.optimizations.constant-folding.o-flag
+;; TEST-CONTEXT: monadc.context.codegen
+;; TEST-PURPOSE: -O enables AST constant propagation from :: bindings and folds arithmetic/if expressions before codegen.
+;; TEST-ATOM: x :: Int = 30 propagates as a constant while arithmetic and branch literals fold.
+;; TEST-EXPECT: parse-json
+;; TEST-COMPILE-FLAGS: -O
+;; TEST-MENU: branches/optimizations/constant-folding/atom.codegen.optimizations.constant-folding.o-flag
+;; TEST-MENU-PATH: codegen/branches/optimizations/constant-folding/atom.codegen.optimizations.constant-folding.o-flag
+;; TEST-ATOM-LEAF: atom.codegen.optimizations.constant-folding.o-flag
+;; TEST-CLI-TARGET: codegen branches optimizations constant-folding
+
+(module Main)
+x :: Int = 30
+(define y 12)
+(show (+ x y (* 2 5)))
+(show (if (> (+ x 1) 20) (+ 1 2 3) 999))

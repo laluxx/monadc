@@ -1,0 +1,94 @@
+;;; Numeric.mon --- Numeric typeclasses for the prelude
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: prelude numeric num fractional floating integral
+
+;;; Commentary:
+
+;; Numeric classes are separated from Class.mon to avoid import cycles.
+;; Math.mon imports this module and supplies concrete algorithms/constants.
+
+;;; Code:
+
+import Class
+
+module Numeric
+  [Num (+) (-) (*) negate abs signum fromInt
+   Integral quot rem div mod quotRem divMod even? odd? gcd lcm
+   Fractional (/) recip fromRatio
+   Floating pi exp log sqrt sin cos tan asin acos atan sinh cosh tanh
+   Real toRational
+   RealFrac properFraction truncate round ceiling floor]
+
+
+class Num a where
+  (+)     :: a -> a -> a
+  (-)     :: a -> a -> a
+  (*)     :: a -> a -> a
+  negate  :: a -> a
+  abs     :: a -> a
+  signum  :: a -> a
+  fromInt :: Int -> a
+
+  ;; default: (x - y) => x + negate y
+
+
+class Integral a where
+  quot    :: a -> a -> a
+  rem     :: a -> a -> a
+  div     :: a -> a -> a
+  mod     :: a -> a -> a
+  quotRem :: a -> a -> (a, a)
+  divMod  :: a -> a -> (a, a)
+  even?   :: a -> Bool
+  odd?    :: a -> Bool
+  gcd     :: a -> a -> a
+  lcm     :: a -> a -> a
+
+  ;; default: (quotRem x y) => (quot x y, rem x y)
+  ;; default: (divMod x y)  => (div x y, mod x y)
+  ;; default: (even? x)     => mod x (fromInt 2) = fromInt 0
+  ;; default: (odd? x)      => not (even? x)
+
+
+class Fractional a where
+  (/)       :: a -> a -> a
+  recip     :: a -> a
+  fromRatio :: Int -> Int -> a
+
+  ;; default: (recip x) => fromInt 1 / x
+  ;; default: (fromRatio n d) => fromInt n / fromInt d
+
+
+class Floating a where
+  pi   :: a
+  exp  :: a -> a
+  log  :: a -> a
+  sqrt :: a -> a
+  sin  :: a -> a
+  cos  :: a -> a
+  tan  :: a -> a
+  asin :: a -> a
+  acos :: a -> a
+  atan :: a -> a
+  sinh :: a -> a
+  cosh :: a -> a
+  tanh :: a -> a
+
+  ;; default: (tan x)  => sin x / cos x
+  ;; default: (sinh x) => (exp x - exp (negate x)) / fromInt 2
+  ;; default: (cosh x) => (exp x + exp (negate x)) / fromInt 2
+  ;; default: (tanh x) => sinh x / cosh x
+
+
+class Real a where
+  toRational :: a -> (Int, Int)
+
+
+class RealFrac a where
+  properFraction :: a -> (Int, a)
+  truncate       :: a -> Int
+  round          :: a -> Int
+  ceiling        :: a -> Int
+  floor          :: a -> Int

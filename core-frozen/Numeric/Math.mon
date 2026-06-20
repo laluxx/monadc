@@ -1,0 +1,580 @@
+;;; Math.mon --- Numeric constants, algorithms, and vector helpers
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: math numeric floating pow vec3 number-theory
+
+;;; Commentary:
+
+;; Canonical home: Numeric.Math. Concrete mathematical functions for Monad's core. Numeric class hierarchy
+;; lives in prelude/Numeric.mon; Math provides algorithms, constants, and
+;; domain-specific instances such as Pow Float and Pow Vec3.
+
+;;; Code:
+
+import Class
+import Numeric
+import Function
+import Coll
+import Data.Maybe
+
+module Numeric.Math
+  [pi tau pi/2 e phi epsilon
+   Pow Result (^)
+   Vec3 vec3 zero3 one3 unit-x unit-y unit-z
+   vx vy vz add3 sub3 scale3 dot cross magnitude normalize distance
+   inc dec double halve square cube
+   square-float cube-float abs-int abs-float sign sign-float
+   zero? positive? negative? even? odd?
+   min-int max-int clamp-int clamp-float
+   gcd-int lcm-int factorial fib
+   pow-int pow-float
+   prime? composite? divides? divisor-count divisors
+   sum-range product-range triangular choose
+   sqrt exp ln log sin cos tan asin acos atan
+   deg->rad rad->deg
+   lerp inverse-lerp smoothstep]
+
+
+;;; Constants
+
+
+define [pi   :: Float] 3.141592653589793
+  :alias π
+  :doc "The circle constant pi."
+
+
+define [tau  :: Float] 6.283185307179586
+  :alias τ
+  :doc "The circle constant tau, equal to 2*pi."
+
+
+define [pi/2 :: Float] 1.5707963267948966
+  :alias π/2
+  :doc "Half pi."
+
+
+define [e    :: Float] 2.718281828459045
+  :alias ℯ
+  :doc "Euler's number."
+
+
+define [phi  :: Float] 1.6180339887498949
+  :alias ϕ
+  :doc "The golden ratio."
+
+
+define [epsilon :: Float] 1e-12
+  :alias ε
+  :doc "Default floating tolerance used by iterative approximations."
+
+
+;;; Power class requested by the language core.
+
+
+class Pow a where
+  type Result a
+  (^) :: a -> Int -> Result a
+
+
+instance Pow Int where
+  type Result Int = Int
+
+  (base ^ exp) => pow-int base exp
+
+
+instance Pow Float where
+  type Result Float = Float
+
+  (base ^ exp) =>
+    if (= exp 0) then 1.0
+    else if (> exp 0) then base * (base ^ (exp - 1))
+    else 1.0 / (base ^ (0 - exp))
+
+
+;;; Vectors
+
+
+data Vec3 = Vec3 { x :: Float, y :: Float, z :: Float }
+
+
+define [zero3 :: Vec3] Vec3 { x = 0.0, y = 0.0, z = 0.0 }
+  :doc "The zero 3D vector."
+
+
+define [one3  :: Vec3] Vec3 { x = 1.0, y = 1.0, z = 1.0 }
+  :doc "The all-ones 3D vector."
+
+
+define [unit-x :: Vec3] Vec3 { x = 1.0, y = 0.0, z = 0.0 }
+  :doc "The unit vector on the X axis."
+
+
+define [unit-y :: Vec3] Vec3 { x = 0.0, y = 1.0, z = 0.0 }
+  :doc "The unit vector on the Y axis."
+
+
+define [unit-z :: Vec3] Vec3 { x = 0.0, y = 0.0, z = 1.0 }
+  :doc "The unit vector on the Z axis."
+
+
+instance Eq Vec3 where
+  (a = b) => (= a.x b.x) and (= a.y b.y) and (= a.z b.z)
+
+
+instance Show Vec3 where
+  (show v) => "Vec3 " ++ show v.x ++ " " ++ show v.y ++ " " ++ show v.z
+
+
+instance Pow Vec3 where
+  type Result Vec3 = Float
+
+  (v ^ exp) =>
+    ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
+
+
+define vec3 :: Float -> Float -> Float -> Vec3
+  :doc "Construct a Vec3."
+  x y z -> Vec3 { x = x, y = y, z = z }
+
+
+define vx :: Vec3 -> Float
+  :doc "Return the X component."
+  v -> v.x
+
+
+define vy :: Vec3 -> Float
+  :doc "Return the Y component."
+  v -> v.y
+
+
+define vz :: Vec3 -> Float
+  :doc "Return the Z component."
+  v -> v.z
+
+
+define add3 :: Vec3 -> Vec3 -> Vec3
+  :doc "Add two vectors component-wise."
+  a b -> Vec3 { x = a.x + b.x, y = a.y + b.y, z = a.z + b.z }
+
+
+define sub3 :: Vec3 -> Vec3 -> Vec3
+  :doc "Subtract B from A component-wise."
+  a b -> Vec3 { x = a.x - b.x, y = a.y - b.y, z = a.z - b.z }
+
+
+define scale3 :: Float -> Vec3 -> Vec3
+  :doc "Scale V by K."
+  k v -> Vec3 { x = k * v.x, y = k * v.y, z = k * v.z }
+
+
+define dot :: Vec3 -> Vec3 -> Float
+  :doc "Return the dot product of A and B."
+  a b -> a.x * b.x + a.y * b.y + a.z * b.z
+
+
+define cross :: Vec3 -> Vec3 -> Vec3
+  :doc "Return the cross product of A and B."
+  a b -> Vec3
+    { x = a.y * b.z - a.z * b.y
+    , y = a.z * b.x - a.x * b.z
+    , z = a.x * b.y - a.y * b.x }
+
+
+define magnitude :: Vec3 -> Float
+  :doc "Return the Euclidean magnitude of V."
+  v -> sqrt (dot v v)
+
+
+define normalize :: Vec3 -> Vec3
+  v | m <= epsilon -> zero3
+    | otherwise    -> scale3 (1.0 / m) v
+    where
+      m = magnitude v
+  :doc "Return V scaled to unit length, or zero3 for near-zero length."
+
+
+define distance :: Vec3 -> Vec3 -> Float
+  :doc "Return the Euclidean distance between A and B."
+  a b -> magnitude (sub3 a b)
+
+
+;;; Small arithmetic helpers
+
+
+define inc :: Int -> Int
+  :doc "Return X + 1."
+  x -> x + 1
+
+
+define dec :: Int -> Int
+  :doc "Return X - 1."
+  x -> x - 1
+
+
+define double :: Int -> Int
+  :doc "Return 2 * X."
+  x -> x * 2
+
+
+define halve :: Int -> Int
+  :doc "Integer halve X."
+  x -> x / 2
+
+
+define square :: Int -> Int
+  :doc "Return X squared."
+  x -> x * x
+
+
+define cube :: Int -> Int
+  :doc "Return X cubed."
+  x -> x * x * x
+
+
+define square-float :: Float -> Float
+  :doc "Return X squared."
+  x -> x * x
+
+
+define cube-float :: Float -> Float
+  :doc "Return X cubed."
+  x -> x * x * x
+
+
+define abs-int :: Int -> Int
+  x | < 0       -> 0 - x
+    | otherwise -> x
+  :alias abs
+  :doc "Return the absolute value of integer X."
+
+
+define abs-float :: Float -> Float
+  x | < 0.0     -> 0.0 - x
+    | otherwise -> x
+  :alias fabs
+  :doc "Return the absolute value of floating-point X."
+
+
+define sign :: Int -> Int
+  x | < 0       -> -1
+    | > 0       -> 1
+    | otherwise -> 0
+  :alias signum-int
+  :doc "Return -1, 0, or 1 depending on the sign of X."
+
+
+define sign-float :: Float -> Float
+  x | < 0.0     -> -1.0
+    | > 0.0     -> 1.0
+    | otherwise -> 0.0
+  :alias signum-float
+  :doc "Return -1.0, 0.0, or 1.0 depending on the sign of X."
+
+
+define zero? :: Int -> Bool
+  :doc "Return True if X is zero."
+  x -> x = 0
+
+
+define positive? :: Int -> Bool
+  :doc "Return True if X is strictly positive."
+  x -> x > 0
+
+
+define negative? :: Int -> Bool
+  :doc "Return True if X is strictly negative."
+  x -> x < 0
+
+
+define even? :: Int -> Bool
+  :doc "Return True if X is even."
+  x -> mod x 2 = 0
+
+
+define odd? :: Int -> Bool
+  :doc "Return True if X is odd."
+  x -> not (even? x)
+
+
+define min-int :: Int -> Int -> Int
+  a b | a <= b    -> a
+      | otherwise -> b
+  :doc "Return the smaller integer."
+
+
+define max-int :: Int -> Int -> Int
+  a b | a >= b    -> a
+      | otherwise -> b
+  :doc "Return the larger integer."
+
+
+define clamp-int :: Int -> Int -> Int -> Int
+  x lo hi | x < lo    -> lo
+          | x > hi    -> hi
+          | otherwise -> x
+  :doc "Clamp X into the inclusive integer range LO..HI."
+
+
+define clamp-float :: Float -> Float -> Float -> Float
+  x lo hi | x < lo    -> lo
+          | x > hi    -> hi
+          | otherwise -> x
+  :doc "Clamp X into the inclusive floating range LO..HI."
+
+
+;;; Integer algorithms
+
+
+define gcd-int :: Int -> Int -> Int
+  :alias gcd
+  :doc "Return the greatest common divisor of A and B."
+  a b -> go (abs-int a) (abs-int b)
+  where
+    go x 0 -> x
+    go x y -> go y (mod x y)
+
+
+define lcm-int :: Int -> Int -> Int
+  a b | a = 0 or b = 0 -> 0
+      | otherwise      -> abs-int ((a / gcd-int a b) * b)
+  :alias lcm
+  :doc "Return the least common multiple of A and B."
+
+
+define factorial :: Int -> Int
+  n | n < 0     -> error "factorial: negative input"
+    | otherwise -> go 1 n
+    where
+      go acc k | k <= 1    -> acc
+               | otherwise -> go (acc * k) (k - 1)
+  :doc "Return N factorial."
+
+
+define fib :: Int -> Int
+  n | n < 0     -> error "fib: negative input"
+    | otherwise -> go n 0 1
+    where
+      go 0 a _ -> a
+      go k a b -> go (k - 1) b (a + b)
+  :doc "Return the Nth Fibonacci number."
+
+
+define pow-int :: Int -> Int -> Int
+  base exp | exp < 0     -> error "pow-int: negative exponent"
+           | otherwise   -> go base exp 1
+    where
+      go _ 0 acc -> acc
+      go b n acc
+        | odd? n     -> go (b * b) (n / 2) (acc * b)
+        | otherwise  -> go (b * b) (n / 2) acc
+  :doc "Raise BASE to non-negative integer EXP using exponentiation by squaring."
+
+
+define pow-float :: Float -> Int -> Float
+  :doc "Raise BASE to integer EXP."
+  base exp -> base ^ exp
+
+
+define divides? :: Int -> Int -> Bool
+  :doc "Return True if D divides N evenly."
+  d n -> mod n d = 0
+
+
+define prime? :: Int -> Bool
+  n | < 2       -> False
+    | = 2       -> True
+    | even?     -> False
+    | otherwise -> noDivisor 3
+    where
+      noDivisor d | d² > n       -> True
+                  | d divides? n -> False
+                  | otherwise    -> noDivisor (d + 2)
+  :doc "Return True if N is prime."
+
+
+
+define composite? :: Int -> Bool
+  :doc "Return True if N is composite."
+  n -> n > 1 and not (prime? n)
+
+
+define divisors :: Int -> [Int]
+  n | = 0       -> []
+    | otherwise -> filter (lambda (d) (divides? d (abs-int n))) (range 1 (abs-int n))
+  :doc "Return all positive divisors of N."
+
+
+define divisor-count :: Int -> Int
+  :doc "Return the number of positive divisors of N."
+  n -> length (divisors n)
+
+
+define sum-range :: Int -> Int -> Int
+  lo hi | lo > hi   -> 0
+        | otherwise -> lo + sum-range (lo + 1) hi
+  :doc "Return the sum of all integers from LO to HI inclusive."
+
+
+define product-range :: Int -> Int -> Int
+  lo hi | lo > hi   -> 1
+        | otherwise -> lo * product-range (lo + 1) hi
+  :doc "Return the product of all integers from LO to HI inclusive."
+
+
+define triangular :: Int -> Int
+  n | < 0       -> error "triangular: negative input"
+    | otherwise -> (n * (n + 1)) / 2
+  :doc "Return the Nth triangular number."
+
+
+define choose :: Int -> Int -> Int
+  n k | k < 0 or k > n -> 0
+      | k = 0          -> 1
+      | k = n          -> 1
+      | otherwise      -> choose (n - 1) (k - 1) + choose (n - 1) k
+  :doc "Return the binomial coefficient N choose K."
+
+
+;;; Floating approximations
+
+
+define sqrt :: Float -> Float
+  x | <= 0.0    -> 0.0
+    | otherwise -> until goodEnough? improve (x / 2.0)
+    where
+      improve    g -> (g + x / g) / 2.0
+      goodEnough g -> (< (abs-float ((improve g) - g)) (epsilon * (maxFloat 1.0 g)))
+      maxFloat a b | a > b     -> a
+                   | otherwise -> b
+  :doc "Approximate the square root of X with Newton iteration."
+
+
+define exp :: Float -> Float
+  :doc "Approximate e^X with a Taylor series after simple range reduction."
+  x -> powHalf reductions (series reduced)
+  where
+    reductions -> 8
+    reduced -> x / 256.0
+
+    powHalf 0 y -> y
+    powHalf n y -> powHalf (n - 1) (y * y)
+
+    series y -> go 1 1.0 1.0 1.0
+      where
+        go k term acc fact
+          | k > 24    -> acc
+          | otherwise -> go (k + 1) next (acc + next) (fact * (k + 1))
+          where
+            next -> term * y / k
+
+
+define ln :: Float -> Float
+  x | <= 0.0    -> error "ln: non-positive input"
+    | otherwise -> 2.0 * atanhSeries z
+    where
+      z -> (x - 1.0) / (x + 1.0)
+      atanhSeries t -> go 1 t 0.0
+        where
+          go n term acc
+            | n > 99    -> acc
+            | otherwise -> go (n + 2) (term * t * t) (acc + term / n)
+  :alias log
+  :doc "Approximate the natural logarithm of X."
+
+
+define sin :: Float -> Float
+  :doc "Approximate sin X with range reduction and a Taylor polynomial."
+  x -> series (wrap x)
+  where
+    wrap y | y > pi    -> wrap (y - tau)
+           | y < 0.0 - pi -> wrap (y + tau)
+           | otherwise -> y
+
+    series y -> y - (y^3) / 6.0 + (y^5) / 120.0 - (y^7) / 5040.0 + (y^9) / 362880.0
+
+
+define cos :: Float -> Float
+  :doc "Approximate cos X with range reduction and a Taylor polynomial."
+  x -> series (wrap x)
+  where
+    wrap y | y > pi    -> wrap (y - tau)
+           | y < 0.0 - pi -> wrap (y + tau)
+           | otherwise -> y
+
+    series y -> 1.0 - (y^2) / 2.0 + (y^4) / 24.0 - (y^6) / 720.0 + (y^8) / 40320.0
+
+
+define tan :: Float -> Float
+  :doc "Approximate tan X as sin X / cos X."
+  x -> sin x / cos x
+
+
+define atan :: Float -> Float
+  :doc "Approximate atan X."
+  x | abs-float x <= 1.0 -> series x
+    | x > 1.0            -> pi/2 - atan (1.0 / x)
+    | otherwise          -> (0.0 - pi/2) - atan (1.0 / x)
+    where
+      series y -> go 1 y 0.0 1.0
+        where
+          go n term acc sign
+            | n > 25    -> acc
+            | otherwise -> go (n + 2) (term * y * y) (acc + sign * term / n) (0.0 - sign)
+  :doc "Approximate atan X with series and reciprocal reduction."
+
+
+define asin :: Float -> Float
+  x | x < -1.0 or x > 1.0 -> error "asin: input outside [-1, 1]"
+    | otherwise           -> atan (x / sqrt (1.0 - x * x))
+  :doc "Approximate arcsine."
+
+
+define acos :: Float -> Float
+  x | x < -1.0 or x > 1.0 -> error "acos: input outside [-1, 1]"
+    | otherwise           -> pi/2 - asin x
+  :doc "Approximate arccosine."
+
+
+define deg->rad :: Float -> Float
+  :doc "Convert degrees to radians."
+  degrees -> degrees * pi / 180.0
+
+
+define rad->deg :: Float -> Float
+  :doc "Convert radians to degrees."
+  radians -> radians * 180.0 / pi
+
+
+;;; Interpolation
+
+
+define lerp :: Float -> Float -> Float -> Float
+  :doc "Linearly interpolate from A to B by T."
+  a b t -> a + (b - a) * t
+
+
+define inverse-lerp :: Float -> Float -> Float -> Float
+  a b x | a = b     -> 0.0
+        | otherwise -> (x - a) / (b - a)
+  :doc "Return the interpolation factor of X between A and B."
+
+
+define smoothstep :: Float -> Float -> Float -> Float
+  :doc "Smoothly interpolate from 0 to 1 as X moves from EDGE0 to EDGE1."
+  edge0 edge1 x -> t * t * (3.0 - 2.0 * t)
+  where
+    t -> clamp-float (inverse-lerp edge0 edge1 x) 0.0 1.0
+
+
+tests
+  assert-eq (square 5) 25 "Math square"
+  assert-eq (cube 3) 27 "Math cube"
+  assert-eq (abs-int -7) 7 "Math abs-int"
+  assert-eq (gcd-int 54 24) 6 "Math gcd-int"
+  assert-eq (lcm-int 6 8) 24 "Math lcm-int"
+  assert-eq (factorial 5) 120 "Math factorial"
+  assert-eq (fib 10) 55 "Math fib"
+  assert-eq (prime? 29) True "Math prime?"
+  assert-eq (pow-int 2 10) 1024 "Math pow-int"
+  assert-eq (triangular 10) 55 "Math triangular"

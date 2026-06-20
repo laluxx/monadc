@@ -437,6 +437,7 @@ function focusCandidate(node) {
   camera.targetZoom = 1.65;
   offscreenDirty = true;
   updateInspector(node);
+  scheduleFrame();
 }
 
 // ─── Stats / lists ────────────────────────────────────────────────────────────
@@ -1197,9 +1198,7 @@ function getRenderCache() {
 function updateInspector(node) {
   inspectorEl.classList.toggle("todo-selected", node.kind === "todo");
   inspectorEl.classList.toggle("doc-selected",  node.kind === "documentation");
-  overlineEl.textContent = node.kind === "todo" ? "TODO"
-    : node.kind === "documentation" ? "Documentation"
-    : "Selected Object";
+  overlineEl.textContent = overlineLabel(node.kind, node.record_type);
   titleEl.textContent = node.label;
   kindEl.textContent  = `${node.record_type || (node.kind === "todo" ? "TODO" : node.kind)} · ${node.file}`;
   detailEl.innerHTML  = [
@@ -1519,6 +1518,19 @@ function updatePointer(e) {
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
+function overlineLabel(kind, recordType) {
+  return {
+    todo:           "TODO",
+    documentation:  "Documentation",
+    think:          "Thought",
+    idea:           "Idea",
+    fix:            "Fix",
+    decision:       "Decision",
+    observation:    "Observation",
+    inference:      "Inference",
+    test:           "Test",
+  }[recordType || kind] || "Selected Object";
+}
 function clamp(v, lo, hi)   { return Math.max(lo, Math.min(hi, v)); }
 function trunc(v, max)      { const s = String(v); return s.length > max ? s.slice(0, max-3)+"..." : s; }
 function statusLabel(node)  { return node.status === "done" ? "DONE" : node.status === "blocked" ? "BLOCKED" : "TODO"; }

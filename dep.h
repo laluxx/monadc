@@ -35,6 +35,8 @@ typedef struct Value       Value;
 typedef struct Closure     Closure;
 typedef struct DepError    DepError;
 
+extern bool g_trace_enabled;
+
 
 /// Universe levels
 //

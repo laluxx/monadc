@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Reader and parser — lexer, tokenizer, AST, source locations
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -576,11 +577,14 @@ Expected Wisp shape:
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+Cross-reference links to related context nodes. See [[file:connections.org][connections.org]] for the canonical routing table.
 
 * LLM Analysis
 :PROPERTIES:
@@ -683,9 +687,12 @@ Expected Wisp shape:
 
 * Test Coverage Anchors
 
+Test-driven observations and failure records for the corresponding subsystem.
+
 * Reader Sugar Address Of
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.address-of
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar address-of
 :CUSTOM_ID: test-anchor-reader-sugar-address-of
 :END:
 [OBS id:obs.reader.sugar.address-of.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -696,6 +703,7 @@ Expected Wisp shape:
 * Reader Sugar Assign Arrow
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.assign-arrow
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar assign-arrow
 :CUSTOM_ID: test-anchor-reader-sugar-assign-arrow
 :END:
 [OBS id:obs.reader.sugar.assign-arrow.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -706,6 +714,7 @@ Expected Wisp shape:
 * Reader Sugar Cond To If
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.cond-to-if
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar cond-to-if
 :CUSTOM_ID: test-anchor-reader-sugar-cond-to-if
 :END:
 [OBS id:obs.reader.sugar.cond-to-if.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -716,6 +725,7 @@ Expected Wisp shape:
 * Reader Sugar Dot Access
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.dot-access
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar dot-access
 :CUSTOM_ID: test-anchor-reader-sugar-dot-access
 :END:
 [OBS id:obs.reader.sugar.dot-access.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -726,6 +736,7 @@ Expected Wisp shape:
 * Reader Sugar Feature Cond
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.feature-cond
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar feature-cond
 :CUSTOM_ID: test-anchor-reader-sugar-feature-cond
 :END:
 [OBS id:obs.reader.sugar.feature-cond.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -736,6 +747,7 @@ Expected Wisp shape:
 * Reader Sugar Heap Array
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.heap-array
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar heap-array
 :CUSTOM_ID: test-anchor-reader-sugar-heap-array
 :END:
 [OBS id:obs.reader.sugar.heap-array.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -746,6 +758,7 @@ Expected Wisp shape:
 * Reader Sugar Implicit Mul
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.implicit-mul
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar implicit-mul
 :CUSTOM_ID: test-anchor-reader-sugar-implicit-mul
 :END:
 [OBS id:obs.reader.sugar.implicit-mul.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -756,6 +769,7 @@ Expected Wisp shape:
 * Reader Sugar Infix
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.infix
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar infix
 :CUSTOM_ID: test-anchor-reader-sugar-infix
 :END:
 [OBS id:obs.reader.sugar.infix.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -766,6 +780,7 @@ Expected Wisp shape:
 * Reader Sugar Lambda Lit
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.lambda-lit
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar lambda-lit
 :CUSTOM_ID: test-anchor-reader-sugar-lambda-lit
 :END:
 [OBS id:obs.reader.sugar.lambda-lit.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -776,6 +791,7 @@ Expected Wisp shape:
 * Reader Sugar Let Desugar
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.let-desugar
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar let-desugar
 :CUSTOM_ID: test-anchor-reader-sugar-let-desugar
 :END:
 [OBS id:obs.reader.sugar.let-desugar.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -786,6 +802,7 @@ Expected Wisp shape:
 * Reader Sugar Path Literal
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.path-literal
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar path-literal
 :CUSTOM_ID: test-anchor-reader-sugar-path-literal
 :END:
 [OBS id:obs.reader.sugar.path-literal.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -796,6 +813,7 @@ Expected Wisp shape:
 * Reader Sugar Percent
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.percent
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar percent
 :CUSTOM_ID: test-anchor-reader-sugar-percent
 :END:
 [OBS id:obs.reader.sugar.percent.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -806,6 +824,7 @@ Expected Wisp shape:
 * Reader Sugar Periodic
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.periodic
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar periodic
 :CUSTOM_ID: test-anchor-reader-sugar-periodic
 :END:
 [OBS id:obs.reader.sugar.periodic.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -816,6 +835,7 @@ Expected Wisp shape:
 * Reader Sugar Pipe
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.pipe
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar pipe
 :CUSTOM_ID: test-anchor-reader-sugar-pipe
 :END:
 [OBS id:obs.reader.sugar.pipe.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -826,6 +846,7 @@ Expected Wisp shape:
 * Reader Sugar Postfix Call
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.postfix-call
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar postfix-call
 :CUSTOM_ID: test-anchor-reader-sugar-postfix-call
 :END:
 [OBS id:obs.reader.sugar.postfix-call.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -836,6 +857,7 @@ Expected Wisp shape:
 * Reader Sugar Postfix Index
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.postfix-index
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar postfix-index
 :CUSTOM_ID: test-anchor-reader-sugar-postfix-index
 :END:
 [OBS id:obs.reader.sugar.postfix-index.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -846,6 +868,7 @@ Expected Wisp shape:
 * Reader Sugar Ptr Type
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.ptr-type
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar ptr-type
 :CUSTOM_ID: test-anchor-reader-sugar-ptr-type
 :END:
 [OBS id:obs.reader.sugar.ptr-type.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -856,6 +879,7 @@ Expected Wisp shape:
 * Reader Sugar Quasiquote Corner
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.quasiquote-corner
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar quasiquote-corner
 :CUSTOM_ID: test-anchor-reader-sugar-quasiquote-corner
 :END:
 [OBS id:obs.reader.sugar.quasiquote-corner.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -866,6 +890,7 @@ Expected Wisp shape:
 * Reader Sugar Quote
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.quote
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar quote
 :CUSTOM_ID: test-anchor-reader-sugar-quote
 :END:
 [OBS id:obs.reader.sugar.quote.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -876,6 +901,7 @@ Expected Wisp shape:
 * Reader Sugar Range Sugar
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.range-sugar
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar range-sugar
 :CUSTOM_ID: test-anchor-reader-sugar-range-sugar
 :END:
 [OBS id:obs.reader.sugar.range-sugar.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -886,6 +912,7 @@ Expected Wisp shape:
 * Reader Sugar Size Array
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.size-array
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar size-array
 :CUSTOM_ID: test-anchor-reader-sugar-size-array
 :END:
 [OBS id:obs.reader.sugar.size-array.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -896,6 +923,7 @@ Expected Wisp shape:
 * Reader Sugar Superscript
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.superscript
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar superscript
 :CUSTOM_ID: test-anchor-reader-sugar-superscript
 :END:
 [OBS id:obs.reader.sugar.superscript.test-anchor src:tests/reader-sugars.tsv conf:high]
@@ -906,6 +934,7 @@ Expected Wisp shape:
 * Reader Sugar Unicode Prefix
 :PROPERTIES:
 :ID: monadc.context.reader.sugar.unicode-prefix
+:CONTEXT_DESCRIPTION: Test-context anchor for reader sugar unicode-prefix
 :CUSTOM_ID: test-anchor-reader-sugar-unicode-prefix
 :END:
 [OBS id:obs.reader.sugar.unicode-prefix.test-anchor src:tests/reader-sugars.tsv conf:high]

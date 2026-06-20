@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-06-20
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -41,9 +41,9 @@
 :END:
 
 [OBS id:obs.quality.snapshot src:context/*.org conf:high]
-  Generated on 2026-06-18. The garden contains 73 org files (excluding info/),
+  Generated on 2026-06-20. The garden contains 73 org files (excluding info/),
   35350 lines, 932 heading IDs, and
-  2673 bracket records.
+  2673 bracket records. Contains 25 category contracts (features.org added).
 
 #+CAPTION: Health checks
 | Check | Result | Notes |
@@ -54,7 +54,7 @@
 | Broken local context file links | 0 | Default linter mode ignores repository-relative links. |
 | Broken id links | 0 | Org id-link targets must resolve. |
 | Broken record refs | 0 | Optional =--check-record-refs= now passes. |
-| Category contracts | 24 files | Full coverage: reader, wisp, infer, codegen, runtime, types, tests, dep, codegen-ops, module, ffi, macro, pmatch, arena, asm, env, repl, typeclass, lsp, completion + governance: category-context, garden, quality, catface. |
+| Category contracts | 25 files | Full coverage: reader, wisp, infer, codegen, runtime, types, tests, dep, codegen-ops, module, ffi, macro, pmatch, arena, asm, env, repl, typeclass, lsp, completion, features + governance: category-context, garden, quality, catface. |
 | Context source coverage | 100% | All 27 .h/.c source pairs have corresponding context/*.org files. |
 | Context graph export tool | present | =context/tools/context_graph.py=. |
 | Clean generated artifacts | enforced | Do not include caches or run leftovers. |
@@ -248,6 +248,7 @@ python3 context/category/scripts/search_context.py context "typed define wisp" -
 * Round 4 Live Tooling Validation
 :PROPERTIES:
 :ID: monadc.context.quality.live-tooling-validation
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: quality-live-tooling-validation
 :CONTEXT_KIND: quality-gate
 :CONTEXT_STATUS: active
@@ -271,6 +272,7 @@ cd context/category/catface && zig build run -- --check ../../
 * Round 4 TUI Portability Fix
 :PROPERTIES:
 :ID: monadc.context.quality.round4-tui-portability-fix
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: quality-round4-tui-portability-fix
 :CONTEXT_KIND: quality-snapshot
 :CONTEXT_STATUS: active
@@ -291,6 +293,7 @@ cd context/category/catface && zig build run -- --check ../../
 * Round 5 Catface Tooling Gate
 :PROPERTIES:
 :ID: monadc.context.quality.catface-round5
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: quality-catface-round5
 :CONTEXT_KIND: quality-gate
 :CONTEXT_STATUS: active
@@ -312,6 +315,7 @@ cd context/category/catface && zig build run -- --check ../../
 * Round 6: Language Reference Zone (info/)
 :PROPERTIES:
 :ID: monadc.context.quality.round6-info-zone
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: quality-round6-info-zone
 :CONTEXT_KIND: quality
 :CONTEXT_STATUS: active
@@ -352,6 +356,7 @@ cd context/category/catface && zig build run -- --check ../../
 * Round 7: Link & Date Maintenance
 :PROPERTIES:
 :ID: monadc.context.quality.round7-link-maintenance
+:CONTEXT_DESCRIPTION: Maintenance round summary and fixes
 :CUSTOM_ID: quality-round7-link-maintenance
 :CONTEXT_KIND: quality-snapshot
 :CONTEXT_STATUS: active
@@ -367,3 +372,28 @@ cd context/category/catface && zig build run -- --check ../../
   converted to Org heading links (::*Heading). Added category contract to
   completion.org and garden.org to close the 24-file contract target. Updated
   16 stale #+LAST_MODIFIED values that had drifted behind git commit dates.
+
+* Round 8: Duplicate Fix & Feature Contract
+:PROPERTIES:
+:ID: monadc.context.quality.round8-enhancements
+:CONTEXT_DESCRIPTION: Enhancement round — fixed duplicate in index.org, added category contract to features.org, tracked missing human opinion TODO.
+:CUSTOM_ID: quality-round8-enhancements
+:CONTEXT_KIND: quality-snapshot
+:CONTEXT_STATUS: active
+:SOURCE: context/quality.org
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.quality.round8.duplicate-index-line date:2026-06-20 by:llm]
+  Removed duplicate `[[file:language.org][Language formalization context]]` line
+  from index.org (appeared at both lines 300 and 301).
+
+[FIX id:fix.quality.round8.features-category-contract date:2026-06-20 by:llm]
+  Added category contract section to features.org with owned phase, inputs,
+  outputs, invariants, test hooks, failure symptoms, and context neighbors.
+  Updated the category contracts count from 24 to 25 in the health checks table.
+
+[FIX id:fix.quality.round8.todo-test-artifact-cleanup date:2026-06-20 by:llm]
+  Added tracking TODO block in todo.org for the human opinion
+  `todo.opinions.human.test-artifact-cleanup` (auto-delete test artifacts),
+  which was previously only recorded in opinions.org without a separate TODO entry.

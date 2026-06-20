@@ -1,0 +1,19 @@
+;; TEST-ID: tests.semantic.pmatch.constructor-switch
+;; TEST-CONTEXT: context/codegen.org
+;; TEST-PURPOSE: Constructor pattern matching lowers through pmatch desugaring into an LLVM switch.
+;; TEST-EXPECT: parse-json
+;; TEST-TIER: regression
+;; TEST-COMPILE-FLAGS: -O
+;; TEST-EXPECT-IR-CONTAINS: switch i64
+;; TEST-MENU-PATH: codegen/branches/semantic-analysis/pattern-match-jump-table
+
+(module Main)
+(data Choice A | B | C)
+
+(define pick
+  (lambda ([m : Choice] -> Int)
+    (match m with
+      | A -> 1
+      | B -> 2
+      | C -> 3
+      | _ -> 0)))

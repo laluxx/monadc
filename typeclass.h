@@ -6,7 +6,7 @@
 #include "reader.h"
 #include "types.h"
 
-/// Forward declarations
+///// Forward declarations
 typedef struct CodegenContext CodegenContext;
 
 /// Type Class Method Signature

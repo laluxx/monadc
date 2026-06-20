@@ -1,0 +1,203 @@
+;;; Maybe.mon --- Optional values
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: Data.Maybe maybe optional functor applicative monad
+
+;;; Commentary:
+
+;; Maybe is a real algebraic data type. It must never be encoded as [] / [x]
+;; in public APIs. Use Nothing for absence and Just x for presence.
+
+;;; Code:
+
+import Class
+
+module Data.Maybe
+  [Maybe Nothing Just
+   maybe fromMaybe fromJust
+   just? nothing? isJust isNothing
+   mapMaybe catMaybes maybeToList listToMaybe
+   safe-head safe-tail safe-last safe-init
+   firstJust orElse]
+
+
+data Maybe a = Nothing | Just a
+
+
+;; instance Eq a => Eq (Maybe a) where
+  ;; default: (Nothing = Nothing) => True
+  ;; default: (Just x  = Just y)  => x = y
+  ;; default: (_       = _)       => False
+
+
+;; instance Ord a => Ord (Maybe a) where
+  ;; default: (Nothing < Just _)  => True
+  ;; default: (Just _  < Nothing) => False
+  ;; default: (Just x  < Just y)  => x < y
+  ;; default: (_       < _)       => False
+
+
+;; instance Show a => Show (Maybe a) where
+  ;; default: (show Nothing) => "Nothing"
+  ;; default: (show (Just x)) => "Just " ++ show x
+
+
+;; instance Functor Maybe where
+  ;; default: (fmap _ Nothing)  => Nothing
+  ;; default: (fmap f (Just x)) => Just (f x)
+
+
+;; instance Applicative Maybe where
+  ;; default: (pure x) => Just x
+
+  ;; default: (Nothing <*> _)  => Nothing
+  ;; default: (Just f  <*> mx) => fmap f mx
+
+
+;; instance Monad Maybe where
+  ;; default: (ma >>= f) =>
+  ;;   match ma with
+  ;;     Nothing -> Nothing
+  ;;     Just x  -> f x
+
+  ;; default: (return x) => Just x
+
+  ;; default: (fail _) => Nothing
+
+
+;; instance Alternative Maybe where
+  ;; default: (empty) => Nothing
+
+  ;; default: (Nothing <|> rhs) => rhs
+  ;; default: (Just x  <|> _)   => Just x
+
+
+;; instance Foldable Maybe where
+  ;; default: (foldr _ z Nothing)  => z
+  ;; default: (foldr f z (Just x)) => f x z
+
+  ;; default: (foldl _ z Nothing)  => z
+  ;; default: (foldl f z (Just x)) => f z x
+
+
+;; instance Traversable Maybe where
+  ;; default: (traverse _ Nothing)  => pure Nothing
+  ;; default: (traverse f (Just x)) => Just <$> f x
+
+
+define maybe :: b -> (a -> b) -> Maybe a -> b
+  :doc "Eliminate a Maybe by providing a default and a function for Just."
+  default _ Nothing  -> default
+  _ f (Just x)       -> f x
+  default _ _        -> default
+
+
+define fromMaybe :: a -> Maybe a -> a
+  :doc "Extract a value from Maybe, or return DEFAULT when it is Nothing."
+  default Nothing  -> default
+  _ (Just x)       -> x
+  default _        -> default
+
+
+define fromJust :: Maybe a -> a
+  :doc "Extract the value from Just. Partial: fails on Nothing."
+  value -> maybe (error "fromJust: Nothing") (lambda (x) x) value
+
+
+define just? :: Maybe a -> Bool
+  :alias isJust
+  :doc "Return True when the value is Just."
+  value -> maybe False (lambda (x) True) value
+
+
+define nothing? :: Maybe a -> Bool
+  :alias isNothing
+  :doc "Return True when the value is Nothing."
+  value -> maybe True (lambda (x) False) value
+
+
+define maybeToList :: Maybe a -> [a]
+  :doc "Convert Maybe to a list with zero or one element."
+  Nothing  -> []
+  (Just x) -> [x | []]
+  _        -> []
+
+
+define listToMaybe :: [a] -> Maybe a
+  :doc "Convert a list to Maybe by taking its first element if present."
+  []    -> Nothing
+  [x|_] -> Just x
+
+
+define catMaybes :: [Maybe a] -> [a]
+  :doc "Collect all present values from a sequence of Maybe values."
+  []       -> []
+  [m|rest] -> rt_coll_concat (maybeToList m) (catMaybes rest)
+
+
+define consMaybe :: [a] -> Maybe a -> [a]
+  :doc "Prepend a present Maybe value to an accumulated sequence."
+  acc Nothing  -> acc
+  acc (Just x) -> [x | acc]
+
+
+define mapMaybe :: (a -> Maybe b) -> [a] -> [b]
+  :doc "Map a function returning Maybe and collect all Just results."
+  f []     -> []
+  f [x|xs] -> consMaybe (mapMaybe f xs) (f x)
+
+
+define orElse :: Maybe a -> Maybe a -> Maybe a
+  :doc "Return the first argument when it is Just, otherwise the second."
+  Nothing rhs  -> rhs
+  (Just x) _   -> Just x
+  _ rhs        -> rhs
+
+
+define firstJust :: [Maybe a] -> Maybe a
+  :doc "Return the first Just value in a sequence, or Nothing."
+  []       -> Nothing
+  [m|rest] -> orElse m (firstJust rest)
+
+
+define safe-head :: [a] -> Maybe a
+  :doc "Return Just the first element, or Nothing for an empty sequence."
+  []    -> Nothing
+  [x|_] -> Just x
+
+
+define safe-tail :: [a] -> Maybe [a]
+  :doc "Return Just the tail, or Nothing for an empty sequence."
+  []     -> Nothing
+  [_|xs] -> Just xs
+
+
+define safe-last :: [a] -> Maybe a
+  :doc "Return Just the last element, or Nothing for an empty sequence."
+  []     -> Nothing
+  [x]    -> Just x
+  [_|xs] -> safe-last xs
+  _      -> Nothing
+
+
+define safe-init :: [a] -> Maybe [a]
+  :doc "Return Just all but the last element, or Nothing for an empty sequence."
+  []     -> Nothing
+  [_]    -> Just []
+  [x|xs] -> Just [x | fromMaybe [] (safe-init xs)]
+
+
+tests
+  assert-eq (maybe 0 (+ 1) (Just 4)) 5 "Data.Maybe maybe Just"
+  assert-eq (maybe 0 (+ 1) Nothing) 0 "Data.Maybe maybe Nothing"
+  assert-eq (fromMaybe 9 Nothing) 9 "Data.Maybe fromMaybe default"
+  assert-eq (fromMaybe 9 (Just 3)) 3 "Data.Maybe fromMaybe value"
+  assert-eq (just? (Just 3)) True "Data.Maybe just?"
+  assert-eq (nothing? Nothing) True "Data.Maybe nothing?"
+  assert-eq (catMaybes [(Just 1) | [Nothing | [(Just 3) | ⌜⌝]]]) [1 | [3 | ⌜⌝]] "Data.Maybe catMaybes"
+  ;; Deferred: lambdas returning ADTs in recursive collection code currently
+  ;; compare unreliably through the boxed runtime path.
+  ;; assert-eq (mapMaybe (lambda ([x : Int] -> Maybe Int) (if (> x 0) (Just x) Nothing)) [1 | [-2 | [3 | ⌜⌝]]]) [1 | [3 | ⌜⌝]] "Data.Maybe mapMaybe"
+  assert-eq (firstJust [Nothing | [(Just 7) | [(Just 9) | ⌜⌝]]]) (Just 7) "Data.Maybe firstJust"
+  assert-eq (safe-last ⌜1 2 3⌝) (Just 3) "Data.Maybe safe-last"

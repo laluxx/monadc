@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -30,6 +30,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Python helper scripts — test runners, ASM generators, fuzz runner
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -52,6 +53,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Test runner — tests/run.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -75,6 +77,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Test runner — tests/run_core.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -97,6 +100,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Test runner — tests/test_run.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -119,6 +123,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Test runner — tests/test_context_visualizer.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -142,6 +147,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: ASM test generator — create_asm_tests.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -166,6 +172,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: ASM test generator — create_asm_tests_extra.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -189,6 +196,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Fuzz test runner — fuzz_codegen.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -215,6 +223,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Context visualizer — context-visualizer.py
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -247,11 +256,14 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+Cross-reference links to related context nodes. See [[file:connections.org][connections.org]] for the canonical routing table.
 
 * LLM Analysis
 :PROPERTIES:
@@ -341,6 +353,7 @@
 * Category Scripts
 :PROPERTIES:
 :ID: monadc.context.scripts.round3-category-scripts
+:CONTEXT_DESCRIPTION: Category contract for category analysis scripts
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active
 :SOURCE: context/scripts.org
@@ -363,6 +376,7 @@
 :CONTEXT_MAINTAINER: llm
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-16
+:CONTEXT_DESCRIPTION: Category contract for search scripts
 :CONTEXT_UPDATED: 2026-06-16
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -386,6 +400,7 @@
 * Catface Zig Tooling
 :PROPERTIES:
 :ID: monadc.context.scripts.catface-zig
+:CONTEXT_DESCRIPTION: Catface query script interface
 :CUSTOM_ID: scripts-catface-zig
 :CONTEXT_KIND: observation
 :CONTEXT_VERSION: 1

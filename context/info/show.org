@@ -57,26 +57,26 @@ See also: [[file:strings.org][Strings]]
 =show= dispatches through the =Show= typeclass, which every type
 satisfies. This covers every value in the language:
 
-| Type     | Example output            |
-|----------+---------------------------|
-| Int      | =42=, =-7=                |
-| Float    | =3.14=, =1e10=            |
-| Char     | =a=, =\n=                 |
-| String   | =hello world= (no quotes) |
-| Bool     | =True=, =False=           |
-| Symbol   | =foo=, =:keyword=         |
-| Keyword  | =:keyword=                |
-| List     | =(1 2 3)=                 |
-| Array    | =[1 2 3]=                 |
-| Set      | ={1 2 3}=                 |
-| Map      | =#{:a 1 :b 2}=            |
-| Ratio    | =1/3=, =50%=              |
-| Hex      | =0xFF=                    |
-| Oct      | =0o77=                    |
-| Bin      | =0b1010=                  |
+| Type     | Example output                      |
+|----------+-------------------------------------|
+| Int      | =42=, =-7=                              |
+| Float    | =3.14=, =1e10=                          |
+| Char     | =a=, =\n=                               |
+| String   | =hello world= (no quotes)             |
+| Bool     | =True=, =False=                         |
+| Symbol   | =foo=, =:keyword=                       |
+| Keyword  | =:keyword=                            |
+| List     | =(1 2 3)=                             |
+| Array    | =[1 2 3]=                             |
+| Set      | ={1 2 3}=                             |
+| Map      | =#{:a 1 :b 2}=                        |
+| Ratio    | =1/3=, =50%=                            |
+| Hex      | =0xFF=                                |
+| Oct      | =0o77=                                |
+| Bin      | =0b1010=                              |
 | Path     | File content *or* =ls -la= of directory |
-| Data/ADT | =(Just 42)=, =Nothing=    |
-| Layout   | =(Point 3.0 4.0)=         |
+| Data/ADT | =(Just 42)=, =Nothing=                  |
+| Layout   | =(Point 3.0 4.0)=                     |
 
 See [[file:types.org][Types]], [[file:collections.org][Collections]],
 [[file:numeric.org][Numeric Types]], and [[file:paths.org][Path Literals]].
@@ -195,15 +195,15 @@ See also: [[file:testing.org][Testing]]
 
 Key source locations for =show= and display:
 
-| Source | Key Symbols / Sections |
-|--------+-----------------------|
-| [[file:../codegen.c][codegen.c]] | =show= codegen — =AST_SHOW= dispatch at ~5876 |
-| [[file:../codegen.c:6431][codegen.c:6431]] | =assert-eq= codegen via =rt_equal_p= |
-| [[file:../runtime.c][runtime.c]] | Runtime value printing functions |
-| [[file:../codegen-ops.c][codegen-ops.c]] | =Show= typeclass codegen operations |
-| [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Show dispatch internals |
-| [[file:../context/language.org][context/language.org]] | Output semantics |
-| [[file:../context/runtime.org][context/runtime.org]] | Runtime value representation |
+| Source                  | Key Symbols / Sections                    |
+|-------------------------+-------------------------------------------|
+| [[file:../codegen.c][codegen.c]]               | =show= codegen — =AST_SHOW= dispatch at ~5876 |
+| [[file:../codegen.c:6431][codegen.c:6431]]          | =assert-eq= codegen via =rt_equal_p=          |
+| [[file:../runtime.c][runtime.c]]               | Runtime value printing functions          |
+| [[file:../codegen-ops.c][codegen-ops.c]]           | =Show= typeclass codegen operations         |
+| [[file:../context/codegen-ops.org][context/codegen-ops.org]] | Show dispatch internals                   |
+| [[file:../context/language.org][context/language.org]]    | Output semantics                          |
+| [[file:../context/runtime.org][context/runtime.org]]     | Runtime value representation              |
 
 Related context documents:
 

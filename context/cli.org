@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -33,6 +33,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: CLI argument parser — CommandMode enum, CompilerFlags, all subcommands
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -148,6 +149,15 @@
 [OBS id:obs.cli.flags-emit-typst src:cli.h:23 conf:high]
   =emit_typst= (bool) — Emit Typst-formatted output. Set by =--emit-typst=.
 
+[OBS id:obs.cli.flags-bytecode src:cli.h conf:high]
+  Bytecode tooling flags include =emit_bytecode=, =bytecode_verify=,
+  =bytecode_disassemble=, =bytecode_decompile=, =bytecode_dump_sections=,
+  =bytecode_trace=, =bytecode_baseline_jit=, and =jit=. They are set by
+  =--emit-bytecode=, =--bytecode-verify=, =--bytecode-disassemble=,
+  =--bytecode-decompile=, =--bytecode-sections=, =--bytecode-trace=, and
+  =--bytecode-baseline-jit=. The =jit= flag is also set by =-jit=,
+  =--jit=, or =jit= and requests the bytecode JIT path instead of LLVM compile.
+
 [OBS id:obs.cli.flags-start-repl src:cli.h:24 conf:high]
   =start_repl= (bool) — Start REPL after compiling input file. Set by
   =--repl= or =--interactive=.
@@ -202,6 +212,18 @@
   =-h=), and subcommands (=build=, =run=, =new=, =clean=, =install=,
   =test=, =repl=). Returns a fully populated =CompilerFlags= struct.
   Prints usage and calls =exit(0)= on =--help=.
+
+[DEC id:dec.cli.flag-word-duality date:2026-06-18 by:human src:cli.c,completion.c,config.c,tests/test_cli_duality.py conf:high]
+  User-facing CLI flags should have a matching bare word form when practical.
+  Examples: =--emit-ir= and =emit-ir=, =-S= and =asm=, =-c= and =obj=,
+  =-O= and =optimize=, =-v= and =verbose=, =-i= and =repl=. The default
+  config flag reader should accept the same non-positional forms as the CLI.
+
+[OBS id:obs.cli.eval-command src:cli.h,cli.c,main.c,completion.c conf:high]
+  =CMD_EVAL= supports one-shot REPL evaluation. =monad -e "code"=,
+  =monad --eval "code"=, and =monad eval "code"= all store the source string
+  in =CompilerFlags.eval_code= and dispatch through =cmd_eval=, which evaluates
+  it with =repl_eval_line= and exits with success/failure status.
 
 [OBS id:obs.cli.base-executable-name src:cli.c:284 conf:high]
   =char *get_base_executable_name(const char *path)= — Extracts the base

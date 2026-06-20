@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-20
 #+FILETAGS: :monadc:compiler:context:todos:visualizer:performance:
 #+LANGUAGE: en
 #+STARTUP: hideblocks
@@ -33,12 +33,15 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Migrated project TODO — outstanding tasks and roadmap
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: context/todo.org
 :CONFIDENCE: high
 :END:
+
+Outstanding tasks, bugs, and feature requests tracked against the project.
 
 * Confidence Verification
 :PROPERTIES:
@@ -278,3 +281,34 @@ context-visualizer.py that checks every context ID reference in TSV files and
   strings, lists, collections, closures, asm, data, layout, wisp, and errors.
   The goal is for the web interface and runner output to show codegen coverage
   divided by feature section.
+
+* TODO [#B] Test artifact cleanup
+:PROPERTIES:
+:ID: monadc.context.todo.test-artifact-cleanup
+:CUSTOM_ID: test-artifact-cleanup
+:CONTEXT_KIND: todo
+:CONTEXT_DESCRIPTION: High-priority work to ensure the test system deletes every artifact it creates.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-20
+:CONTEXT_UPDATED: 2026-06-20
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.todo.test-artifact-cleanup-opinion src:context/opinions.org conf:high]
+  The human opinion =todo.opinions.human.test-artifact-cleanup= states that the
+  test system should automatically delete every artifact it creates, including
+  compile outputs, object files, executables, temporary JSON/IR/assembly files,
+  and any partial artifacts left by interrupted or failing runs.
+
+[TODO id:todo.tests.artifact-cleanup date:2026-06-20 owner:human status:open priority:high]
+  Ensure =tests/run.py= deletes every artifact it creates: compile outputs,
+  object files, executables, temporary JSON/IR/assembly files, and partial
+  artifacts from interrupted or failing runs. Cleanup should be automatic,
+  not manual.

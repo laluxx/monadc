@@ -1,0 +1,114 @@
+;;; Monad.mon --- Monad combinators
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Control.Monad monad applicative combinators
+
+;;; Commentary:
+
+;; Common monadic control combinators. These lean on the real Monad and
+;; Applicative typeclasses rather than encoding effects ad hoc.
+
+;;; Code:
+
+import Class
+import Data.Maybe
+
+module Control.Monad
+  [join bind (>=>) (<=<)
+   when unless guard
+   mapM mapM_ forM forM_ sequence sequence_
+   replicateM replicateM_ forever void]
+
+
+define join :: Monad m => m (m a) -> m a
+  :doc "Flatten one monadic layer."
+  mma -> mma >>= id
+
+
+define bind :: Monad m => m a -> (a -> m b) -> m b
+  :alias >>=
+  :doc "Bind MA into F."
+  ma f -> ma >>= f
+
+
+define kleisli-pipe :: Monad m => (a -> m b) -> (b -> m c) -> a -> m c
+  :alias >=>
+  :doc "Left-to-right Kleisli composition."
+  f g x -> f x >>= g
+
+
+define kleisli-compose :: Monad m => (b -> m c) -> (a -> m b) -> a -> m c
+  :alias <=<
+  :doc "Right-to-left Kleisli composition."
+  f g x -> g x >>= f
+
+
+define when :: Applicative f => Bool -> f () -> f ()
+  :doc "Run ACTION when COND is True."
+  True action  -> action
+  False _      -> pure ()
+
+
+define unless :: Applicative f => Bool -> f () -> f ()
+  :doc "Run ACTION when COND is False."
+  False action -> action
+  True _       -> pure ()
+
+
+define guard :: Alternative f => Bool -> f ()
+  :doc "Succeed with unit when COND is True, otherwise empty."
+  True  -> pure ()
+  False -> empty
+
+
+define mapM :: Monad m => (a -> m b) -> [a] -> m [b]
+  :doc "Map a monadic function over XS and collect the results."
+  _ []     -> return []
+  f [x|xs] -> f x >>= (lambda (y) (mapM f xs >>= (lambda (ys) (return [y | ys]))))
+
+
+define mapM_ :: Monad m => (a -> m b) -> [a] -> m ()
+  :doc "Map a monadic function over XS, discarding results."
+  f xs -> mapM f xs >> return ()
+
+
+define forM :: Monad m => [a] -> (a -> m b) -> m [b]
+  :doc "Flipped mapM."
+  xs f -> mapM f xs
+
+
+define forM_ :: Monad m => [a] -> (a -> m b) -> m ()
+  :doc "Flipped mapM_."
+  xs f -> mapM_ f xs
+
+
+define sequence :: Monad m => [m a] -> m [a]
+  :doc "Evaluate a sequence of monadic actions and collect results."
+  xs -> mapM id xs
+
+
+define sequence_ :: Monad m => [m a] -> m ()
+  :doc "Evaluate a sequence of monadic actions and discard results."
+  xs -> sequence xs >> return ()
+
+
+define replicateM :: Monad m => Int -> m a -> m [a]
+  n _      | <= 0 -> return []
+  n action        -> action >>= (lambda (x) (replicateM (n - 1) action >>= (lambda (xs) (return [x | xs]))))
+  :doc "Run ACTION N times and collect results."
+
+
+define replicateM_ :: Monad m => Int -> m a -> m ()
+  :doc "Run ACTION N times and discard results."
+  n action -> replicateM n action >> return ()
+
+
+define forever :: Monad m => m a -> m b
+  :doc "Repeat ACTION forever."
+  action -> action >> forever action
+
+
+define void :: Functor f => f a -> f ()
+  :doc "Discard the value inside a functor."
+  fa -> () <$ fa

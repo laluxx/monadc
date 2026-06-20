@@ -312,6 +312,18 @@ static bool module_context_is_prelude_file(ModuleContext *ctx)
     return ctx->current_file && strstr(ctx->current_file, "/prelude/");
 }
 
+static bool module_context_is_core_library_file(ModuleContext *ctx)
+{
+    if (!ctx || !ctx->current_file) return false;
+
+    const char *env_core = getenv("MONAD_CORE");
+    if (env_core && strncmp(ctx->current_file, env_core, strlen(env_core)) == 0)
+        return true;
+
+    const char *system_core = "/usr/local/lib/monad/core/";
+    return strncmp(ctx->current_file, system_core, strlen(system_core)) == 0;
+}
+
 static bool mon_file_stem(const char *filename, char *out, size_t out_size)
 {
     size_t len = strlen(filename);
@@ -354,6 +366,12 @@ void module_context_add_prelude_imports(ModuleContext *ctx)
     /* Prelude modules define the always-available surface. Avoid injecting
        the whole prelude into itself while those files are being compiled. */
     if (module_context_is_prelude_file(ctx))
+        return;
+
+    /* Core library modules are bootstrapping the prelude itself. When they
+       already declare imports, keep that dependency set explicit so modules
+       such as Data.Maybe and Coll do not recursively force each other. */
+    if (module_context_is_core_library_file(ctx) && ctx->import_count > 0)
         return;
 
     const char *env_core = getenv("MONAD_CORE");

@@ -64,6 +64,7 @@ install: $(RUNTIME_LIB) $(TARGET)
 	install -d $(INCDIR)
 	install -m 644 runtime.h $(INCDIR)/runtime.h
 # Install core modules
+	rm -rf $(COREDIR)
 	find core -name "*.mon" | while read f; do \
 		dir=$$(dirname "$$f"); \
 		install -d $(COREDIR)/$${dir#core/}; \
@@ -76,7 +77,7 @@ uninstall:
 	rm -rf $(INCDIR)
 	rm -rf $(PREFIX)/lib/monad/core
 
-ifneq ($(filter core,$(MAKECMDGOALS)),)
+ifneq ($(filter core bytecode,$(MAKECMDGOALS)),)
 test: all
 else
 test: all
@@ -89,6 +90,12 @@ core: test
 test-core: all
 	$(PYTHON) tests/run_core.py
 
+bytecode: test
+	BYTECODE_VISUAL=1 $(PYTHON) tests/test_bytecode.py
+
+test-bytecode: all
+	BYTECODE_VISUAL=1 $(PYTHON) tests/test_bytecode.py
+
 generate-asm-tests:
 	$(PYTHON) create_asm_tests.py
 
@@ -97,6 +104,9 @@ generate-asm-tests-extra:
 
 test-runner:
 	$(PYTHON) tests/test_run.py
+	$(PYTHON) tests/test_cli_duality.py
+	$(PYTHON) tests/test_tuple_commas.py
+	$(PYTHON) tests/test_bytecode.py
 
 test-context-visualizer:
 	$(PYTHON) tests/test_context_visualizer.py
@@ -130,4 +140,4 @@ fuzzing: test-fuzzing
 context-visualizer:
 	$(PYTHON) context-visualizer.py
 
-.PHONY: all clean release install uninstall asan test core test-core generate-asm-tests generate-asm-tests-extra test-runner test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer
+.PHONY: all clean release install uninstall asan test core test-core bytecode test-bytecode generate-asm-tests generate-asm-tests-extra test-runner test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer

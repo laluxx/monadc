@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -31,8 +31,8 @@
 :CONTEXT_OWNER: codex
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
-:CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: C FFI — header parsing, type mapping, cache, env injection
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -394,6 +394,7 @@
 * Category Contract
 :PROPERTIES:
 :ID: monadc.context.ffi.category-contract
+:CONTEXT_DESCRIPTION: Category-theoretic contract for foreign function interface
 :CUSTOM_ID: ffi-category-contract
 :CONTEXT_KIND: contract
 :END:

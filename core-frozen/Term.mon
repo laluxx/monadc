@@ -1,0 +1,37 @@
+;;; Term.mon --- compatibility facade for System.Posix.Term
+
+;; Author: Laluxx
+;; Version: 0.6.0
+;; Keywords: terminal termios compatibility
+
+;;; Commentary:
+
+;; Deprecated compatibility module. New code should import System.Posix.Term.
+;; The POSIX terminal bindings are platform code, not pure core/prelude code.
+
+;;; Code:
+
+import System.Posix.Term
+
+module Term
+  [Termios WinSize TCGETS TCSETS TCSETSW TCSETSF TCGETA TCSETA TCSETAW
+   TCSETAF TCSBRK TCXONC TCFLSH TIOCEXCL TIOCNXCL TIOCSCTTY TIOCGPGRP
+   TIOCSPGRP TIOCOUTQ TIOCSTI TIOCGWINSZ TIOCSWINSZ TIOCMGET TIOCMBIS
+   TIOCMBIC TIOCMSET TIOCGSOFTCAR TIOCSSOFTCAR TIOCLINUX TIOCCONS
+   TIOCGSERIAL TIOCSSERIAL TIOCPKT TIOCNOTTY TIOCSETD TIOCGETD TCSBRKP
+   TIOCSBRK TIOCCBRK TIOCGSID IGNBRK BRKINT IGNPAR PARMRK INPCK ISTRIP
+   INLCR IGNCR ICRNL IXON IXOFF IXANY IMAXBEL IUTF8 OPOST ONLCR OCRNL ONOCR
+   ONLRET OFILL OFDEL NLDLY CRDLY TABDLY BSDLY VTDLY FFDLY CSIZE CS5 CS6
+   CS7 CS8 CSTOPB CREAD PARENB PARODD HUPCL CLOCAL B0 B50 B75 B110 B134
+   B150 B200 B300 B600 B1200 B1800 B2400 B4800 B9600 B19200 B38400 B57600
+   B115200 B230400 ISIG ICANON XCASE ECHO ECHOE ECHOK ECHONL NOFLSH TOSTOP
+   ECHOCTL ECHOPRT ECHOKE FLUSHO PENDIN IEXTEN VEOF VEOL VERASE VINTR VKILL
+   VMIN VQUIT VSTART VSTOP VSUSP VTIME TIOCM_LE TIOCM_DTR TIOCM_RTS
+   TIOCM_ST TIOCM_SR TIOCM_CTS TIOCM_CAR TIOCM_RNG TIOCM_DSR TIOCM_CD
+   TIOCM_RI STDIN STDOUT STDERR sys-read sys-write sys-ioctl tty-get-attr
+   tty-set-attr tty-set-attr-drain tty-set-attr-flush tty-raw-mode
+   tty-cbreak-mode get-winsize set-winsize tty-flush tty-flow
+   tty-send-break tty-get-modem tty-set-modem tty-set-modem-bits
+   tty-clear-modem-bits tty-get-pgrp tty-set-pgrp tty-get-sid
+   tty-make-controlling tty-release-controlling read-char write-char
+   write-str read-buf]

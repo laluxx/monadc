@@ -1,0 +1,10 @@
+;; TEST-ID: tests.semantic.constant-folding.arithmetic
+;; TEST-CONTEXT: context/codegen.org
+;; TEST-PURPOSE: Semantic analysis folds pure arithmetic before dependent checking and codegen.
+;; TEST-EXPECT: parse-json
+;; TEST-TIER: regression
+;; TEST-COMPILE-FLAGS: -O
+;; TEST-MENU-PATH: codegen/branches/semantic-analysis/constant-folding
+
+(module Main)
+(show (+ (* 2 5) (- 9 3) (/ 8 2)))

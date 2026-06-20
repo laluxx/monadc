@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Interface Principle
 :PROPERTIES:
 :ID: monadc.context.category.interfaces.principle
+:CONTEXT_DESCRIPTION: Multi-interface principle for the context category
 :CUSTOM_ID: category-interfaces-principle
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -32,6 +33,7 @@
 * Scripts
 :PROPERTIES:
 :ID: monadc.context.category.interfaces.scripts
+:CONTEXT_DESCRIPTION: Script interfaces for category operations
 :CUSTOM_ID: category-interfaces-scripts
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -51,6 +53,7 @@
 * JSON Interface
 :PROPERTIES:
 :ID: monadc.context.category.interfaces.json
+:CONTEXT_DESCRIPTION: JSON programmatic interface
 :CUSTOM_ID: category-interfaces-json
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -67,6 +70,7 @@
 * Org Interface
 :PROPERTIES:
 :ID: monadc.context.category.interfaces.org
+:CONTEXT_DESCRIPTION: Generated Org report interface
 :CUSTOM_ID: category-interfaces-org
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -82,6 +86,7 @@
 * Live Query and TUI Interfaces
 :PROPERTIES:
 :ID: monadc.context.category.interfaces.live-query-tui
+:CONTEXT_DESCRIPTION: Live query language and TUI interfaces
 :CUSTOM_ID: category-interfaces-live-query-tui
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active

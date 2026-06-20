@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-14
+#+LAST_MODIFIED: 2026-06-20
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Platform features — detect_features, has_feature, conditional compilation
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -243,3 +244,42 @@
 [INF id:inf.features.env from:obs.features.detect_features conf:high]
   =detect_features= is called during environment initialization (Phase 4 in
   =compile_one=) to populate =*features*= in the environment with keyword values.
+
+* Category Contract
+:PROPERTIES:
+:ID: monadc.context.features.category-contract
+:CUSTOM_ID: features-category-contract
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Category contract for platform feature detection ownership, invariants, tests, and failure routing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-20
+:CONTEXT_UPDATED: 2026-06-20
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: context/features.org
+:CONFIDENCE: high
+:END:
+
+[DOC id:doc.features.category-contract src:context/features.org conf:high]
+  This section declares the category contract for =features=. It is the
+  routing target for failures and future test/context links touching this area.
+
+#+CAPTION: Features Category Contract
+| Field | Contract |
+|-------+----------|
+| Owned phase | Platform feature detection, conditional compilation flag resolution, feature environment initialization. |
+| Inputs | Preprocessor defines (=__linux__=, =__x86_64__=, etc.), feature keyword symbols (=:LINUX=, =:X86-64=). |
+| Outputs | =AST_LIST= of detected feature keywords, =*features*= environment binding, boolean =has_feature= lookup. |
+| Invariants | Feature detection is a compile-time, one-shot pass. =detect_features= must be called before any conditional compilation. Feature names are case-sensitive keywords. =has_feature= is read-only after initialization. |
+| Test hooks | Platform-specific tests under =tests/features/=, reader conditional compilation tests exercising =#+LINUX= / =#+X86-64= blocks. |
+| Failure symptoms | Feature flag not recognized, wrong platform detected, =has_feature= returns 0 for a present feature, environment has no =*features*= binding. |
+| Context neighbors | reader, env, source-map, tests |
+
+[DEC id:dec.features.category-contract-owner date:2026-06-20 by:llm]
+  Failures matching the symptoms above should start triage in this category, then
+  follow the listed neighbors only when the local contract does not explain the
+  issue.

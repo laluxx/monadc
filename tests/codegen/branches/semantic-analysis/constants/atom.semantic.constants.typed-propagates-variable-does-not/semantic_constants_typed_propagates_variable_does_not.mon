@@ -1,0 +1,12 @@
+;; TEST-ID: tests.semantic.constants.typed-propagates-variable-does-not
+;; TEST-CONTEXT: context/codegen.org
+;; TEST-PURPOSE: Typed top-level constants propagate, plain define variables do not.
+;; TEST-EXPECT: parse-json
+;; TEST-TIER: regression
+;; TEST-COMPILE-FLAGS: -O
+;; TEST-MENU-PATH: codegen/branches/semantic-analysis/constants
+
+(module Main)
+x :: Int = 30
+(define y 12)
+(show (+ x y))

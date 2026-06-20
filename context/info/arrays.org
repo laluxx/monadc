@@ -19,11 +19,11 @@ Test architecture reference: [[file:../context/tests-arch.org][context/tests-arc
 Monad provides three array variants with different memory and performance
 characteristics ([[file:../types.c::493]][types.c]):
 
-| Variant | Syntax | Memory | Size | Use Case |
-|---------+--------+--------+------+----------|
-| Stack | =[1 2 3]= | Stack frame | Fixed at compile time | Small, short-lived arrays |
-| Fat pointer | =[16kb I32]= | Stack/heap | Runtime-sized, fixed cap | C-interop sized buffers |
-| Heap-growable | =~[1 2 3]= | Heap | Runtime-sized, mutable | Long-lived out-of-frame data |
+| Variant       | Syntax     | Memory      | Size                     | Use Case                     |
+|---------------+------------+-------------+--------------------------+------------------------------|
+| Stack         | =[1 2 3]=    | Stack frame | Fixed at compile time    | Small, short-lived arrays    |
+| Fat pointer   | =[16kb I32]= | Stack/heap  | Runtime-sized, fixed cap | C-interop sized buffers      |
+| Heap-growable | =~[1 2 3]=   | Heap        | Runtime-sized, mutable   | Long-lived out-of-frame data |
 
 See [[file:collections.org][Collections]] for an overview of all collection
 types and [[file:../context/codegen-ops.org][context/codegen-ops.org]] for
@@ -148,14 +148,14 @@ Key Points:
 
 * 5. Array Operations
 
-| Operation | Example | Returns |
-|-----------+---------+---------|
-| count | =(count [1 2 3])= | 3 |
-| head | =(head [1 2 3])= | 1 |
-| tail | =(tail [1 2 3])= | [2 3] |
-| ++ | =(++ [1 2] [3 4])= | [1 2 3 4] |
-| take | =(take 2 [1 2 3])= | [1 2] |
-| drop | =(drop 1 [1 2 3])= | [2 3] |
+| Operation | Example          | Returns   |
+|-----------+------------------+-----------|
+| count     | =(count [1 2 3])=  | 3         |
+| head      | =(head [1 2 3])=   | 1         |
+| tail      | =(tail [1 2 3])=   | [2 3]     |
+| ++        | =(++ [1 2] [3 4])= | [1 2 3 4] |
+| take      | =(take 2 [1 2 3])= | [1 2]     |
+| drop      | =(drop 1 [1 2 3])= | [2 3]     |
 
 Type conversion creates single-element arrays: =(Arr 20)= → =[20]=.
 
@@ -204,10 +204,10 @@ Key Points:
 All three array variants are lowered to a fat-pointer struct ={i8*, i64}=
 at the LLVM level:
 
-| Field | Type | Purpose |
-|-------+------+---------|
-| data | =i8*= | Pointer to element data |
-| length | =i64= | Element count |
+| Field  | Type | Purpose                 |
+|--------+------+-------------------------|
+| data   | =i8*=  | Pointer to element data |
+| length | =i64=  | Element count           |
 
 Heap arrays add a third field for capacity (=i64=) to support push/pop.
 
@@ -255,31 +255,25 @@ Key Points:
 * 9. Gotchas
 
 Common mistakes and surprising behaviours with arrays:
-
 - **Stack arrays are fixed-size** — no push/pop support. Use heap arrays =(~[])= if you need dynamic sizing.
-
 - **Heap arrays need the tilde prefix** — forgetting =~= creates a stack array instead. =(~[1 2 3])= not =[1 2 3]= for heap allocation.
-
 - **Fat pointer default element type is =U8=** — =[16kb]= creates 16384 U8 elements. Specify the type explicitly: =[16kb I32]=.
-
 - **Array =++= copies both arrays** — concatenation allocates a new array and copies all elements, O(n+m). Not a view or splice.
-
 - **Out-of-bounds returns =nil=, not error** — bounds checking prevents crashes but makes it easy to silently propagate =nil= through a computation.
-
 - **Array size annotation must match literal count** — declaring =[x :: Arr :: Int :: 5]= with a 3-element literal is a compile error.
 
 * 10. Implementation Notes
 
-| Component   | Context File        | Topic                                          |
-|-------------+---------------------+------------------------------------------------|
-| Types       | types.org           | [[file:../context/types.org::#kind-TYPE_ARR][TYPE_ARR type representation]] |
-| Codegen     | codegen-ops.org     | [[file:../context/codegen-ops.org::#ops-array][Array operation codegen]] |
-| Language    | language.org        | [[file:../context/language.org::#primitive-array][Array representation and dispatch]] |
-| Reader      | reader.org          | [[file:../context/reader.org::#heap-array-literals][Heap array literal parsing]] |
-| Codegen     | codegen.org         | [[file:../context/codegen.org::#codegen-fat-array][Fat pointer lowering]] |
-| Inference   | infer.org           | [[file:../context/infer.org::#expression-inference][Array size inference]] |
-| Source      | types.c             | [[file:../types.c::493][Array type variants]] |
-| Source      | reader.c            | [[file:../reader.c::5821][Stack array parsing]], [[file:../reader.c::5898][Heap array]], [[file:../reader.c::5933][Fat pointer]] |
+| Component | Context File    | Topic                                        |
+|-----------+-----------------+----------------------------------------------|
+| Types     | types.org       | [[file:../context/types.org::#kind-TYPE_ARR][TYPE_ARR type representation]]                 |
+| Codegen   | codegen-ops.org | [[file:../context/codegen-ops.org::#ops-array][Array operation codegen]]                      |
+| Language  | language.org    | [[file:../context/language.org::#primitive-array][Array representation and dispatch]]            |
+| Reader    | reader.org      | [[file:../context/reader.org::#heap-array-literals][Heap array literal parsing]]                   |
+| Codegen   | codegen.org     | [[file:../context/codegen.org::#codegen-fat-array][Fat pointer lowering]]                         |
+| Inference | infer.org       | [[file:../context/infer.org::#expression-inference][Array size inference]]                         |
+| Source    | types.c         | [[file:../types.c::493][Array type variants]]                          |
+| Source    | reader.c        | [[file:../reader.c::5821][Stack array parsing]], [[file:../reader.c::5898][Heap array]], [[file:../reader.c::5933][Fat pointer]] |
 
 Related Pages
 

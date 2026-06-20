@@ -31,6 +31,7 @@ def discover_modules() -> list[Path]:
         path
         for path in sorted(CORE_ROOT.rglob("*.mon"))
         if path.is_file()
+        if not any(part.startswith(".") for part in path.relative_to(CORE_ROOT).parts)
         if has_active_tests_block(path)
     ]
 
@@ -85,6 +86,8 @@ def run_module(path: Path) -> ModuleResult:
 def materialize_core_tree(destination: Path) -> None:
     for source in sorted(CORE_ROOT.rglob("*")):
         rel = source.relative_to(CORE_ROOT)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
         target = destination / rel
         if source.is_dir():
             target.mkdir(parents=True, exist_ok=True)
@@ -260,11 +263,24 @@ def print_result(result: ModuleResult) -> None:
 
 def print_failure(output: str) -> None:
     diagnostics = extract_diagnostics(output)
+    print("   primary diagnostics:")
     for line in diagnostics:
         if looks_like_file_diagnostic(line):
             print(line)
         else:
             print(f"   {line}")
+    tail = full_output_tail(output)
+    if tail:
+        print("   --- full output tail ---")
+        for line in tail:
+            print(f"   {line}")
+
+
+def full_output_tail(output: str, limit: int = 120) -> list[str]:
+    clean = strip_ansi(output)
+    lines = [line.rstrip() for line in clean.splitlines()]
+    lines = [line for line in lines if line.strip()]
+    return lines[-limit:]
 
 
 def looks_like_file_diagnostic(line: str) -> bool:

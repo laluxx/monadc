@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-14
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit message format and conventions
 :CONTEXT_UPDATED: 2026-06-11
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -152,6 +153,7 @@ of the relevant section, inline with context.
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit type prefix specification
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
@@ -188,6 +190,7 @@ of the relevant section, inline with context.
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit scope naming specification
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
@@ -220,6 +223,7 @@ of the relevant section, inline with context.
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit summary format specification
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
@@ -268,6 +272,7 @@ feat(reader): Path literals                                ✗ not imperative
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit section header format
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
@@ -294,6 +299,7 @@ AREA NAME: Short descriptor
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit section body prose format
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
@@ -322,6 +328,7 @@ AREA NAME: Short descriptor
 :CONTEXT_KIND: format
 :CONTEXT_VERSION: 1
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Commit section ordering specification
 :CONTEXT_UPDATED: 2026-06-11
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
@@ -427,6 +434,8 @@ AREA NAME: Short descriptor
 :SOURCE: context/commit-format.org
 :CONFIDENCE: high
 :END:
+
+Illustrative commit messages demonstrating the format conventions.
 
 ** Minimal Example
 :PROPERTIES:

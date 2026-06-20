@@ -1,5 +1,1462 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-18T01:58:32
+#+DATE: 2026-06-20T05:00:47
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
-  The latest test-suite run had no failing tests.
+  This generated record captures the first failing test from the latest
+  suite run. It is intentionally overwritten on each run so the next
+  debugging pass can start from the earliest observed failure.
+
+* Failure
+- Test: =sugar.wisp_arrow_pattern=
+- Status: =FAIL=
+- Menu: =sugar=
+- Duration: =[  32.85 ] ms=
+- Reason: =--emit-json failed=
+- Failure kind: =desugar-mismatch=
+- Artifacts: =tests/.last-failures/sugar.wisp_arrow_pattern=
+
+** Materialized Source
+#+BEGIN_SRC monad
+[] -> nil | [x] -> x
+#+END_SRC
+
+** Metadata
+- =TEST-CLI-TARGET=: sugar
+- =TEST-CONTEXT=: monadc.context.wisp.sugar.arrow-clause
+- =TEST-EXPECT=: parse-json
+- =TEST-ID=: tests.sugar.wisp_arrow_pattern
+- =TEST-MENU=: sugar
+- =TEST-MENU-PATH=: sugar
+- =TEST-PURPOSE=: Wisp arrow clause with pattern matching.
+- =TEST-STATUS=: passing-baseline-2026-06-15
+- =TEST-TIER=: regression
+
+** Context Links
+- =monadc.context.wisp.sugar.arrow-clause=
+
+** Output
+#+BEGIN_EXAMPLE
+
+=== wisp expanded (/usr/local/lib/monad/core/prelude/Class.mon) ===
+(#line 23 1) (module Class
+[Ordering LT EQ GT (#line 25 1) Eq (=) (!=) (#line 26 1) Ord (<) (<=) (>) (>=) compare min max comparing (#line 27 1) Enum succ pred toEnum fromEnum enumFrom enumFromThen enumFromTo enumFromThenTo (#line 28 1) Bounded minBound maxBound (#line 29 1) Show show showsPrec showList (#line 30 1) Read read readsPrec (#line 31 1) Semigroup (<>) sconcat (#line 32 1) Monoid mempty mappend mconcat (#line 33 1) Functor fmap (<$) (<$>) void (#line 34 1) Applicative pure (<*>) (*>) (<*) liftA liftA2 liftA3 (#line 35 1) Monad (>>=) (=<<) (>>) return fail join bind (#line 36 1) Alternative empty (<|>) some many optional (#line 37 1) Foldable foldr foldl foldl' foldr1 foldl1 foldMap null? length elem? notElem? toList (#line 38 1) Traversable traverse sequenceA mapM sequence (#line 39 1) Category idCategory (<<<) (>>>) (#line 40 1) Arrow arr first second (***) fanout])
+(#line 45 1) (data Ordering = LT | EQ | GT)
+(#line 48 1) (class Eq a where (#line 47 1) (=)  :: a -> a -> Bool
+ (#line 48 1) (!=) :: a -> a -> Bool
+)
+(#line 61 1) (class Ord a where (#line 54 1) (<)       :: a -> a -> Bool
+ (#line 55 1) (<=)      :: a -> a -> Bool
+ (#line 56 1) (>)       :: a -> a -> Bool
+ (#line 57 1) (>=)      :: a -> a -> Bool
+ (#line 58 1) compare   :: a -> a -> Ordering
+ (#line 59 1) min       :: a -> a -> a
+ (#line 60 1) max       :: a -> a -> a
+ (#line 61 1) comparing :: Ord b => (a -> b) -> a -> a -> Ordering
+)
+(#line 80 1) (class Enum a where (#line 73 1) succ           :: a -> a
+ (#line 74 1) pred           :: a -> a
+ (#line 75 1) toEnum         :: Int -> a
+ (#line 76 1) fromEnum       :: a -> Int
+ (#line 77 1) enumFrom       :: a -> [a]
+ (#line 78 1) enumFromThen   :: a -> a -> [a]
+ (#line 79 1) enumFromTo     :: a -> a -> [a]
+ (#line 80 1) enumFromThenTo :: a -> a -> a -> [a]
+)
+(#line 90 1) (class Bounded a where (#line 89 1) minBound :: a
+ (#line 90 1) maxBound :: a
+)
+(#line 96 1) (class Show a where (#line 94 1) show      :: a -> String
+ (#line 95 1) showsPrec :: Int -> a -> String -> String
+ (#line 96 1) showList  :: [a] -> String
+)
+(#line 104 1) (class Read a where (#line 103 1) read      :: String -> a
+ (#line 104 1) readsPrec :: Int -> String -> [(a, String)]
+)
+(#line 109 1) (class Semigroup a where (#line 108 1) (<>)    :: a -> a -> a
+ (#line 109 1) sconcat :: [a] -> a
+)
+(#line 115 1) (class Monoid a where (#line 113 1) mempty  :: a
+ (#line 114 1) mappend :: a -> a -> a
+ (#line 115 1) mconcat :: [a] -> a
+)
+(#line 125 1) (class Functor f where (#line 122 1) fmap  :: (a -> b) -> f a -> f b
+ (#line 123 1) (<$)  :: a -> f b -> f a
+ (#line 124 1) (<$>) :: (a -> b) -> f a -> f b
+ (#line 125 1) void  :: f a -> f ()
+)
+(#line 139 1) (class Applicative f where (#line 133 1) pure   :: a -> f a
+ (#line 134 1) (<*>)  :: f (a -> b) -> f a -> f b
+ (#line 135 1) (*>)   :: f a -> f b -> f b
+ (#line 136 1) (<*)   :: f a -> f b -> f a
+ (#line 137 1) liftA  :: (a -> b) -> f a -> f b
+ (#line 138 1) liftA2 :: (a -> b -> c) -> f a -> f b -> f c
+ (#line 139 1) liftA3 :: (a -> b -> c -> d) -> f a -> f b -> f c -> f d
+)
+(#line 155 1) (class Monad m where (#line 149 1) (>>=)  :: m a -> (a -> m b) -> m b
+ (#line 150 1) (=<<)  :: (a -> m b) -> m a -> m b
+ (#line 151 1) (>>)   :: m a -> m b -> m b
+ (#line 152 1) return :: a -> m a
+ (#line 153 1) fail   :: String -> m a
+ (#line 154 1) join   :: m (m a) -> m a
+ (#line 155 1) bind   :: m a -> (a -> m b) -> m b
+)
+(#line 169 1) (class Alternative f where (#line 165 1) empty    :: f a
+ (#line 166 1) (<|>)    :: f a -> f a -> f a
+ (#line 167 1) some     :: f a -> f [a]
+ (#line 168 1) many     :: f a -> f [a]
+ (#line 169 1) optional :: f a -> f (Maybe a)
+)
+(#line 187 1) (class Foldable t where (#line 177 1) foldr    :: (a -> b -> b) -> b -> t a -> b
+ (#line 178 1) foldl    :: (b -> a -> b) -> b -> t a -> b
+ (#line 179 1) foldl'   :: (b -> a -> b) -> b -> t a -> b
+ (#line 180 1) foldr1   :: (a -> a -> a) -> t a -> a
+ (#line 181 1) foldl1   :: (a -> a -> a) -> t a -> a
+ (#line 182 1) foldMap  :: Monoid m => (a -> m) -> t a -> m
+ (#line 183 1) null?    :: t a -> Bool
+ (#line 184 1) length   :: t a -> Int
+ (#line 185 1) elem?    :: Eq a => (a -> t a -> Bool
+) (#line 186 1) notElem? :: Eq a => (a -> t a -> Bool
+) (#line 187 1) toList   :: t a -> [a]
+)
+(#line 201 1) (class Traversable t where (#line 198 1) traverse  :: Applicative f => (a -> f b) -> t a -> f (t b) 
+ (#line 199 1) sequenceA :: Applicative f => (t (f a) -> f (t a) 
+) (#line 200 1) mapM      :: Monad m => (a -> m b) -> t a -> m (t b) 
+ (#line 201 1) sequence  :: Monad m => (t (m a) -> m (t a) 
+))
+(#line 211 1) (class Category cat where (#line 209 1) idCategory :: cat a a
+ (#line 210 1) (<<<)      :: cat b c -> cat a b -> cat a c
+ (#line 211 1) (>>>)      :: cat a b -> cat b c -> cat a c
+)
+(#line 221 1) (class Arrow arr where (#line 217 1) arr    :: (a -> b) -> arr a b
+ (#line 218 1) first  :: arr a b -> arr (a, c) (b, c)
+ (#line 219 1) second :: arr a b -> arr (c, a) (c, b)
+ (#line 220 1) (***)  :: arr a b -> arr c d -> arr (a, c) (b, d)
+ (#line 221 1) fanout :: arr a b -> arr a c -> arr a (b, c)
+)
+=== end ===
+
+
+=== desugared AST (/usr/local/lib/monad/core/prelude/Class.mon) ===
+[compile] /tmp/monadc-tests-zdohhl28/sugar.wisp_arrow_pattern/sugar.wisp_arrow_pattern.mon
+[skip]    /usr/local/lib/monad/core/prelude/Class.mon (.o is up to date)
+(module Class [Ordering LT EQ GT Eq (=) (!=) Ord (<) (<=) (>) (>=) compare min max comparing Enum succ pred toEnum fromEnum enumFrom enumFromThen enumFromTo enumFromThenTo Bounded minBound maxBound Show show showsPrec showList Read read readsPrec Semigroup (<>) sconcat Monoid mempty mappend mconcat Functor fmap (<$) (<$>) void Applicative pure (<*>) (*>) (<*) liftA liftA2 liftA3 Monad (>>=) (=<<) (>>) return fail join bind Alternative empty (<|>) some many optional Foldable foldr foldl foldl' foldr1 foldl1 foldMap null? length elem? notElem? toList Traversable traverse sequenceA mapM sequence Category idCategory (<<<) (>>>) Arrow arr first second (***) fanout])
+(data Ordering LT | EQ | GT)
+(class Eq a where (=) :: a -> a -> Bool (!=) :: a -> a -> Bool)
+(class Ord a where (<) :: a -> a -> Bool (<=) :: a -> a -> Bool (>) :: a -> a -> Bool (>=) :: a -> a -> Bool (compare) :: a -> a -> Ordering (min) :: a -> a -> a (max) :: a -> a -> a (comparing) :: Ord b => a -> b -> a -> a -> Ordering)
+(class Enum a where (succ) :: a -> a (pred) :: a -> a (toEnum) :: Int -> a (fromEnum) :: a -> Int (enumFrom) :: a -> a (enumFromThen) :: a -> a -> a (enumFromTo) :: a -> a -> a (enumFromThenTo) :: a -> a -> a -> a)
+(class Bounded a where (minBound) :: a (maxBound) :: a)
+(class Show a where (show) :: a -> String (showsPrec) :: Int -> a -> String -> String (showList) :: a -> String)
+(class Read a where (read) :: String -> a (readsPrec) :: Int -> String -> a , String)
+(class Semigroup a where (<>) :: a -> a -> a (sconcat) :: a -> a)
+(class Monoid a where (mempty) :: a (mappend) :: a -> a -> a (mconcat) :: a -> a)
+(class Functor f where (fmap) :: a -> b -> f a -> f b (<$) :: a -> f b -> f a (<$>) :: (a -> b) -> f a -> f b (void) :: f a -> f)
+(class Applicative f where (pure) :: a -> f a (<*>) :: f (a -> b) -> f a -> f b (*>) :: f a -> f b -> f b (<*) :: f a -> f b -> f a (liftA) :: a -> b -> f a -> f b (liftA2) :: a -> b -> c -> f a -> f b -> f c (liftA3) :: a -> b -> c -> d -> f a -> f b -> f c -> f d)
+(class Monad m where (>>=) :: m a -> (a -> m b) -> m b (=<<) :: (a -> m b) -> m a -> m b (>>) :: m a -> m b -> m b (return) :: a -> m a (fail) :: String -> m a (join) :: m m a -> m a (bind) :: m a -> a -> m b -> m b)
+(class Alternative f where (empty) :: f a (<|>) :: f a -> f a -> f a (some) :: f a -> f a (many) :: f a -> f a (optional) :: f a -> f Maybe a)
+(class Foldable t where (foldr) :: a -> b -> b -> b -> t a -> b (foldl) :: b -> a -> b -> b -> t a -> b (foldl') :: b -> a -> b -> b -> t a -> b (foldr1) :: a -> a -> a -> t a -> a (foldl1) :: a -> a -> a -> t a -> a (foldMap) :: Monoid m => a -> m -> t a -> m (null?) :: t a -> Bool (length) :: t a -> Int (elem?) :: Eq a => a -> t a -> Bool (notElem?) :: Eq a => a -> t a -> Bool (toList) :: t a -> a)
+(class Traversable t where (traverse) :: Applicative f => a -> f b -> t a -> f t b (sequenceA) :: Applicative f => t f a -> f t a (mapM) :: Monad m => a -> m b -> t a -> m t b (sequence) :: Monad m => t m a -> m t a)
+(class Category cat where (idCategory) :: cat a a (<<<) :: cat b c -> cat a b -> cat a c (>>>) :: cat a b -> cat b c -> cat a c)
+(class Arrow arr where (arr) :: a -> b -> arr a b (first) :: arr a b -> arr a , c b , c (second) :: arr a b -> arr c , a c , b (***) :: arr a b -> arr c d -> arr (a , c) (b , d) (fanout) :: arr a b -> arr a c -> arr a b , c)
+=== end desugared AST ===
+
+
+=== wisp expanded (/usr/local/lib/monad/core/prelude/Numeric.mon) ===
+(#line 14 1) (import Class)
+(#line 16 1) (module Numeric
+[Num (+) (-) (*) negate abs signum fromInt (#line 18 1) Integral quot rem div mod quotRem divMod even? odd? gcd lcm (#line 19 1) Fractional (/) recip fromRatio (#line 20 1) Floating pi exp log sqrt sin cos tan asin acos atan sinh cosh tanh (#line 21 1) Real toRational (#line 22 1) RealFrac properFraction truncate round ceiling floor])
+(#line 32 1) (class Num a where (#line 26 1) (+)     :: a -> a -> a
+ (#line 27 1) (-)     :: a -> a -> a
+ (#line 28 1) (*)     :: a -> a -> a
+ (#line 29 1) negate  :: a -> a
+ (#line 30 1) abs     :: a -> a
+ (#line 31 1) signum  :: a -> a
+ (#line 32 1) fromInt :: Int -> a
+)
+(#line 47 1) (class Integral a where (#line 38 1) quot    :: a -> a -> a
+ (#line 39 1) rem     :: a -> a -> a
+ (#line 40 1) div     :: a -> a -> a
+ (#line 41 1) mod     :: a -> a -> a
+ (#line 42 1) quotRem :: a -> a -> (a, a)
+ (#line 43 1) divMod  :: a -> a -> (a, a)
+ (#line 44 1) even?   :: a -> Bool
+ (#line 45 1) odd?    :: a -> Bool
+ (#line 46 1) gcd     :: a -> a -> a
+ (#line 47 1) lcm     :: a -> a -> a
+)
+(#line 58 1) (class Fractional a where (#line 56 1) (/)       :: a -> a -> a
+ (#line 57 1) recip     :: a -> a
+ (#line 58 1) fromRatio :: Int -> Int -> a
+)
+(#line 77 1) (class Floating a where (#line 65 1) pi   :: a
+ (#line 66 1) exp  :: a -> a
+ (#line 67 1) log  :: a -> a
+ (#line 68 1) sqrt :: a -> a
+ (#line 69 1) sin  :: a -> a
+ (#line 70 1) cos  :: a -> a
+ (#line 71 1) tan  :: a -> a
+ (#line 72 1) asin :: a -> a
+ (#line 73 1) acos :: a -> a
+ (#line 74 1) atan :: a -> a
+ (#line 75 1) sinh :: a -> a
+ (#line 76 1) cosh :: a -> a
+ (#line 77 1) tanh :: a -> a
+)
+(#line 86 1) (class Real a where (#line 86 1) toRational :: a -> (Int, Int)
+)
+(#line 94 1) (class RealFrac a where (#line 90 1) properFraction :: a -> (Int, a)
+ (#line 91 1) truncate       :: a -> Int
+ (#line 92 1) round          :: a -> Int
+ (#line 93 1) ceiling        :: a -> Int
+ (#line 94 1) floor          :: a -> Int)
+=== end ===
+
+
+=== desugared AST (/usr/local/lib/monad/core/prelude/Numeric.mon) ===
+  wrote json: /tmp/monadc-tests-zdohhl28/sugar.wisp_arrow_pattern/sugar.wisp_arrow_pattern.json
+[compile] /usr/local/lib/monad/core/prelude/Coll.mon
+[skip]    /usr/local/lib/monad/core/prelude/Numeric.mon (.o is up to date)
+(import Class)
+(module Numeric [Num (+) (-) (*) negate abs signum fromInt Integral quot rem div mod quotRem divMod even? odd? gcd lcm Fractional (/) recip fromRatio Floating pi exp log sqrt sin cos tan asin acos atan sinh cosh tanh Real toRational RealFrac properFraction truncate round ceiling floor])
+(class Num a where (+) :: a -> a -> a (-) :: a -> a -> a (*) :: a -> a -> a (negate) :: a -> a (abs) :: a -> a (signum) :: a -> a (fromInt) :: Int -> a)
+(class Integral a where (quot) :: a -> a -> a (rem) :: a -> a -> a (div) :: a -> a -> a (mod) :: a -> a -> a (quotRem) :: a -> a -> a , a (divMod) :: a -> a -> a , a (even?) :: a -> Bool (odd?) :: a -> Bool (gcd) :: a -> a -> a (lcm) :: a -> a -> a)
+(class Fractional a where (/) :: a -> a -> a (recip) :: a -> a (fromRatio) :: Int -> Int -> a)
+(class Floating a where (pi) :: a (exp) :: a -> a (log) :: a -> a (sqrt) :: a -> a (sin) :: a -> a (cos) :: a -> a (tan) :: a -> a (asin) :: a -> a (acos) :: a -> a (atan) :: a -> a (sinh) :: a -> a (cosh) :: a -> a (tanh) :: a -> a)
+(class Real a where (toRational) :: a -> Int , Int)
+(class RealFrac a where (properFraction) :: a -> Int , a (truncate) :: a -> Int (round) :: a -> Int (ceiling) :: a -> Int (floor) :: a -> Int)
+=== end desugared AST ===
+
+
+=== wisp expanded (/usr/local/lib/monad/core/Data/Maybe.mon) ===
+(#line 14 1) (import Class)
+(#line 16 1) (module Data.Maybe
+[Maybe Nothing Just (#line 18 1) maybe fromMaybe fromJust (#line 19 1) just? nothing? isJust isNothing (#line 20 1) mapMaybe catMaybes maybeToList listToMaybe (#line 21 1) safe-head safe-tail safe-last safe-init (#line 22 1) firstJust orElse])
+(#line 88 1) (data Maybe a = Nothing | Just a)
+(#line 89 1) (define (maybe [__p_0 : b] [__p_1 : Fn :: (a -> b)] [__p_2 : Maybe a] -> b) :doc
+(#line 90 1) "Eliminate a Maybe by providing a default and a function for Just."
+(#line 91 1) default _ Nothing 
+(#line 91 1) ->
+(#line 91 1) default
+(#line 92 1) _ f (Just x) 
+(#line 92 1) ->
+(#line 92 1) (f x)
+(#line 93 1) default _ _ 
+(#line 93 1) ->
+(#line 93 1) default)
+(#line 96 1) (define (fromMaybe [__p_0 : a] [__p_1 : Maybe a] -> a) :doc
+(#line 97 1) "Extract a value from Maybe, or return DEFAULT when it is Nothing."
+(#line 98 1) default Nothing 
+(#line 98 1) ->
+(#line 98 1) default
+(#line 99 1) _ (Just x) 
+(#line 99 1) ->
+(#line 99 1) x
+(#line 100 1) default _ 
+(#line 100 1) ->
+(#line 100 1) default)
+(#line 103 1) (define (fromJust [__p_0 : Maybe a] -> a) :doc
+(#line 104 1) "Extract the value from Just. Partial: fails on Nothing."
+(#line 105 1) value 
+(#line 105 1) ->
+(#line 105 1) (maybe (error "fromJust: Nothing") (lambda (x) x) value))
+(#line 108 1) (define (just? [__p_0 : Maybe a] -> Bool) :alias
+(#line 109 1) isJust
+(#line 110 1) :doc
+(#line 110 1) "Return True when the value is Just."
+(#line 111 1) value 
+(#line 111 1) ->
+(#line 111 1) (maybe False (lambda (x) True) value))
+(#line 114 1) (define (nothing? [__p_0 : Maybe a] -> Bool) :alias
+(#line 115 1) isNothing
+(#line 116 1) :doc
+(#line 116 1) "Return True when the value is Nothing."
+(#line 117 1) value 
+(#line 117 1) ->
+(#line 117 1) (maybe True (lambda (x) False) value))
+(#line 120 1) (define (maybeToList [__p_0 : Maybe a] -> [a]) :doc
+(#line 121 1) "Convert Maybe to a list with zero or one element."
+(#line 122 1) Nothing 
+(#line 122 1) ->
+(#line 122 1) []
+(#line 123 1) (Just x) 
+(#line 123 1) ->
+(#line 123 1) [x | []]
+(#line 124 1) _ 
+(#line 124 1) ->
+(#line 124 1) [])
+(#line 127 1) (define (listToMaybe [__p_0 : [a]] -> Maybe a) :doc
+(#line 128 1) "Convert a list to Maybe by taking its first element if present."
+(#line 129 1) [] 
+(#line 129 1) ->
+(#line 129 1) Nothing
+(#line 130 1) [x|_] 
+(#line 130 1) ->
+(#line 130 1) (Just x))
+(#line 133 1) (define (catMaybes [__p_0 : [Maybe a]] -> [a]) :doc
+(#line 134 1) "Collect all present values from a sequence of Maybe values."
+(#line 135 1) [] 
+(#line 135 1) ->
+(#line 135 1) []
+(#line 136 1) [m|rest] 
+(#line 136 1) ->
+(#line 136 1) (rt_coll_concat (maybeToList m) (catMaybes rest)))
+(#line 139 1) (define (consMaybe [__p_0 : [a]] [__p_1 : Maybe a] -> [a]) :doc
+(#line 140 1) "Prepend a present Maybe value to an accumulated sequence."
+(#line 141 1) acc Nothing 
+(#line 141 1) ->
+(#line 141 1) acc
+(#line 142 1) acc (Just x) 
+(#line 142 1) ->
+(#line 142 1) [x | acc])
+(#line 145 1) (define (mapMaybe [__p_0 : Fn :: (a -> Maybe b)] [__p_1 : [a]] -> [b]) :doc
+(#line 146 1) "Map a function returning Maybe and collect all Just results."
+(#line 147 1) f [] 
+(#line 147 1) ->
+(#line 147 1) []
+(#line 148 1) f [x|xs] 
+(#line 148 1) ->
+(#line 148 1) (consMaybe (mapMaybe f xs) (f x)))
+(#line 151 1) (define (orElse [__p_0 : Maybe a] [__p_1 : Maybe a] -> Maybe a) :doc
+(#line 152 1) "Return the first argument when it is Just, otherwise the second."
+(#line 153 1) Nothing rhs 
+(#line 153 1) ->
+(#line 153 1) rhs
+(#line 154 1) (Just x) _ 
+(#line 154 1) ->
+(#line 154 1) (Just x)
+(#line 155 1) _ rhs 
+(#line 155 1) ->
+(#line 155 1) rhs)
+(#line 158 1) (define (firstJust [__p_0 : [Maybe a]] -> Maybe a) :doc
+(#line 159 1) "Return the first Just value in a sequence, or Nothing."
+(#line 160 1) [] 
+(#line 160 1) ->
+(#line 160 1) Nothing
+(#line 161 1) [m|rest] 
+(#line 161 1) ->
+(#line 161 1) (orElse m (firstJust rest)))
+(#line 164 1) (define (safe-head [__p_0 : [a]] -> Maybe a) :doc
+(#line 165 1) "Return Just the first element, or Nothing for an empty sequence."
+(#line 166 1) [] 
+(#line 166 1) ->
+(#line 166 1) Nothing
+(#line 167 1) [x|_] 
+(#line 167 1) ->
+(#line 167 1) (Just x))
+(#line 170 1) (define (safe-tail [__p_0 : [a]] -> Maybe [a]) :doc
+(#line 171 1) "Return Just the tail, or Nothing for an empty sequence."
+(#line 172 1) [] 
+(#line 172 1) ->
+(#line 172 1) Nothing
+(#line 173 1) [_|xs] 
+(#line 173 1) ->
+(#line 173 1) (Just xs))
+(#line 176 1) (define (safe-last [__p_0 : [a]] -> Maybe a) :doc
+(#line 177 1) "Return Just the last element, or Nothing for an empty sequence."
+(#line 178 1) [] 
+(#line 178 1) ->
+(#line 178 1) Nothing
+(#line 179 1) [x] 
+(#line 179 1) ->
+(#line 179 1) (Just x)
+(#line 180 1) [_|xs] 
+(#line 180 1) ->
+(#line 180 1) (safe-last xs)
+(#line 181 1) _ 
+(#line 181 1) ->
+(#line 181 1) Nothing)
+(#line 184 1) (define (safe-init [__p_0 : [a]] -> Maybe [a]) :doc
+(#line 185 1) "Return Just all but the last element, or Nothing for an empty sequence."
+(#line 186 1) [] 
+(#line 186 1) ->
+(#line 186 1) Nothing
+(#line 187 1) [_] 
+(#line 187 1) ->
+(#line 187 1) (Just [])
+(#line 188 1) [x|xs] 
+(#line 188 1) ->
+(#line 188 1) (Just [x | fromMaybe [] (safe-init xs)]))
+(#line 191 1) (tests
+(assert-eq (maybe 0 (+ 1) (Just 4)) 5 "Data.Maybe maybe Just")
+(assert-eq (maybe 0 (+ 1) Nothing) 0 "Data.Maybe maybe Nothing")
+(assert-eq (fromMaybe 9 Nothing) 9 "Data.Maybe fromMaybe default")
+(assert-eq (fromMaybe 9 (Just 3)) 3 "Data.Maybe fromMaybe value")
+(assert-eq (just? (Just 3)) True "Data.Maybe just?")
+(assert-eq (nothing? Nothing) True "Data.Maybe nothing?")
+(assert-eq (catMaybes [Just 1 Nothing Just 3]) [1 3] "Data.Maybe catMaybes")
+(assert-eq (mapMaybe (lambda ([x : Int] -> Maybe Int) (if (> x 0) (Just x) Nothing)) [1 -2 3]) [1 3] "Data.Maybe mapMaybe")
+(assert-eq (firstJust [Nothing Just 7 Just 9]) (Just 7) "Data.Maybe firstJust")
+(assert-eq (safe-last [1 2 3]) (Just 3) "Data.Maybe safe-last"))
+=== end ===
+
+
+=== desugared AST (/usr/local/lib/monad/core/Data/Maybe.mon) ===
+  wrote json: /tmp/monadc-tests-zdohhl28/sugar.wisp_arrow_pattern/sugar.wisp_arrow_pattern.json
+[skip]    /usr/local/lib/monad/core/Data/Maybe.mon (.o is up to date)
+(import Class)
+(module Data.Maybe [Maybe Nothing Just maybe fromMaybe fromJust just? nothing? isJust isNothing mapMaybe catMaybes maybeToList listToMaybe safe-head safe-tail safe-last safe-init firstJust orElse])
+(data Maybe Nothing | Just a)
+(define maybe (lambda ([__p_0 :: b] [__p_1 :: (Fn :: ( a -> b ))] [__p_2 :: (Maybe a)] -> b) "Eliminate a Maybe by providing a default and a function for Just." (if (= __p_2.__tag __adt_tag_Nothing) __p_0 (if (= __p_2.__tag __adt_tag_Just) (__p_1 (__field_Just_0 __p_2)) __p_0))))
+(define fromMaybe (lambda ([__p_0 :: a] [__p_1 :: (Maybe a)] -> a) "Extract a value from Maybe, or return DEFAULT when it is Nothing." (if (= __p_1.__tag __adt_tag_Nothing) __p_0 (if (= __p_1.__tag __adt_tag_Just) (__field_Just_0 __p_1) __p_0))))
+(define fromJust (lambda ([__p_0 :: (Maybe a)] -> a) "Extract the value from Just. Partial: fails on Nothing." (maybe (error "fromJust: Nothing") (lambda ([x :: a]) x) __p_0)))
+(define just? (lambda ([__p_0 :: (Maybe a)] -> Bool) "Return True when the value is Just." (maybe False (lambda ([x :: a]) True) __p_0)))
+(define nothing? (lambda ([__p_0 :: (Maybe a)] -> Bool) "Return True when the value is Nothing." (maybe True (lambda ([x :: a]) False) __p_0)))
+(define maybeToList (lambda ([__p_0 :: (Maybe a)] -> [a]) "Convert Maybe to a list with zero or one element." (if (= __p_0.__tag __adt_tag_Nothing) [] (if (= __p_0.__tag __adt_tag_Just) (rt_coll_concat (__field_Just_0 __p_0) []) []))))
+(define listToMaybe (lambda ([__p_0 :: ([ a ])] -> Maybe a) "Convert a list to Maybe by taking its first element if present." (if (rt_coll_is_empty __p_0) Nothing (if (if (rt_coll_is_empty __p_0) False True) (Just (__p_0 0)) (undefined)))))
+(define catMaybes (lambda ([__p_0 :: ([ Maybe a ])] -> [a]) "Collect all present values from a sequence of Maybe values." (if (rt_coll_is_empty __p_0) (rt_coll_empty __p_0) (if (if (rt_coll_is_empty __p_0) False True) (rt_coll_concat (maybeToList (__p_0 0)) (catMaybes (rt_coll_drop __p_0 1))) (undefined)))))
+(define consMaybe (lambda ([__p_0 :: ([ a ])] [__p_1 :: (Maybe a)] -> [a]) "Prepend a present Maybe value to an accumulated sequence." (if (= __p_1.__tag __adt_tag_Nothing) __p_0 (if (= __p_1.__tag __adt_tag_Just) (rt_coll_concat (__field_Just_0 __p_1) __p_0) (undefined)))))
+(define mapMaybe (lambda ([__p_0 :: (Fn :: ( a -> Maybe b ))] [__p_1 :: ([ a ])] -> [b]) "Map a function returning Maybe and collect all Just results." (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (if (rt_coll_is_empty __p_1) False True) (consMaybe (mapMaybe __p_0 (rt_coll_drop __p_1 1)) (__p_0 (__p_1 0))) (undefined)))))
+(define orElse (lambda ([__p_0 :: (Maybe a)] [__p_1 :: (Maybe a)] -> Maybe a) "Return the first argument when it is Just, otherwise the second." (if (= __p_0.__tag __adt_tag_Nothing) __p_1 (if (= __p_0.__tag __adt_tag_Just) (Just (__field_Just_0 __p_0)) __p_1))))
+(define firstJust (lambda ([__p_0 :: ([ Maybe a ])] -> Maybe a) "Return the first Just value in a sequence, or Nothing." (if (rt_coll_is_empty __p_0) Nothing (if (if (rt_coll_is_empty __p_0) False True) (orElse (__p_0 0) (firstJust (rt_coll_drop __p_0 1))) (undefined)))))
+(define safe-head (lambda ([__p_0 :: ([ a ])] -> Maybe a) "Return Just the first element, or Nothing for an empty sequence." (if (rt_coll_is_empty __p_0) Nothing (if (if (rt_coll_is_empty __p_0) False True) (Just (__p_0 0)) (undefined)))))
+(define safe-tail (lambda ([__p_0 :: ([ a ])] -> Maybe [a]) "Return Just the tail, or Nothing for an empty sequence." (if (rt_coll_is_empty __p_0) Nothing (if (if (rt_coll_is_empty __p_0) False True) (Just (rt_coll_drop __p_0 1)) (undefined)))))
+(define safe-last (lambda ([__p_0 :: ([ a ])] -> Maybe a) "Return Just the last element, or Nothing for an empty sequence." (if (rt_coll_is_empty __p_0) Nothing (if (= (count __p_0) 1) (Just (__p_0 0)) (if (if (rt_coll_is_empty __p_0) False True) (safe-last (rt_coll_drop __p_0 1)) Nothing)))))
+(define safe-init (lambda ([__p_0 :: ([ a ])] -> Maybe [a]) "Return Just all but the last element, or Nothing for an empty sequence." (if (rt_coll_is_empty __p_0) Nothing (if (= (count __p_0) 1) (Just []) (if (if (rt_coll_is_empty __p_0) False True) (Just (rt_coll_concat (__p_0 0) (fromMaybe [] (safe-init (rt_coll_drop __p_0 1))))) (undefined))))))
+
+=== end desugared AST ===
+
+
+=== wisp expanded (/usr/local/lib/monad/core/prelude/Coll.mon) ===
+(#line 17 1) import
+(#line 17 1) Class
+(#line 18 1) import
+(#line 18 1) Numeric
+(#line 19 1) import
+(#line 19 1) Data.Maybe
+(#line 21 1) module
+(#line 21 1) Coll
+(#line 44 1) [naturals positives evens odds (#line 23 1) cons head tail last init uncons (#line 24 1) null? empty? length singleton? (#line 25 1) take drop splitAt takeEnd dropEnd (#line 27 1) map foreach filter reject mapIndexed (#line 28 1) find findIndex elemIndex indexOf lookup lookupWithDefault (#line 29 1) any? all? none? (#line 30 1) foldl foldl' foldl1 foldr foldr1 (#line 31 1) zip zipWith zipWith3 unzip unzip3 (#line 32 1) reverse append snoc concat flatten concatMap concatMapMaybe (#line 33 1) replicate repeat iterate (#line 34 1) intersperse intercalate transpose (#line 35 1) inits tails (#line 36 1) and-list? or-list? sum product maximum minimum maximumBy minimumBy (#line 37 1) clamp (#line 38 1) elem? contains? notElem? (#line 39 1) delete deleteBy nub nubBy difference union intersect (#line 40 1) insertSorted insertBy sort sortBy (#line 42 1) countWhere count elemCount (#line 43 1) isPrefixOf? isSuffixOf? isInfixOf? (#line 44 1) range rangeBy]
+(#line 50 1) define
+(#line 50 1) [naturals  :: List]
+(#line 50 1) ⌜0..  ⌝ :doc "The infinite list of natural numbers: 0, 1, 2, ..."
+(#line 51 1) define
+(#line 51 1) [positives :: List]
+(#line 51 1) ⌜1..  ⌝ :doc "The infinite list of positive integers: 1, 2, 3, ..."
+(#line 52 1) define
+(#line 52 1) [evens     :: List]
+(#line 52 1) ⌜0,2..⌝ :doc "The infinite list of even natural numbers: 0, 2, 4, ..."
+(#line 53 1) define
+(#line 53 1) [odds      :: List]
+(#line 53 1) ⌜1,3..⌝ :doc "The infinite list of positive odd integers: 1, 3, 5, ..."
+(#line 60 1) define
+(#line 60 1) (cons [__p_0 : a] [__p_1 : [a]] -> [a])
+(#line 61 1) :doc
+(#line 61 1) "Prepend X to XS."
+(#line 62 1) x xs 
+(#line 62 1) ->
+(#line 62 1) [x | xs]
+(#line 65 1) define
+(#line 65 1) (head [__p_0 : [a]] -> a)
+(#line 66 1) :doc
+(#line 66 1) "Return the first element. Partial: fails on an empty sequence."
+(#line 67 1) [x|_] 
+(#line 67 1) ->
+(#line 67 1) x
+(#line 68 1) [] 
+(#line 68 1) ->
+(#line 68 1) (error "head: empty sequence")
+(#line 70 1) define
+(#line 70 1) (tail [__p_0 : [a]] -> [a])
+(#line 71 1) :doc
+(#line 71 1) "Return all elements after the first. Partial: fails on an empty sequence."
+(#line 72 1) [_|xs] 
+(#line 72 1) ->
+(#line 72 1) xs
+(#line 73 1) [] 
+(#line 73 1) ->
+(#line 73 1) (error "tail: empty sequence")
+(#line 76 1) define
+(#line 76 1) (last [__p_0 : [a]] -> a)
+(#line 77 1) :doc
+(#line 77 1) "Return the last element. Partial: fails on an empty sequence."
+(#line 78 1) [x] 
+(#line 78 1) ->
+(#line 78 1) x
+(#line 79 1) [_|xs] 
+(#line 79 1) ->
+(#line 79 1) (last xs)
+(#line 80 1) [] 
+(#line 80 1) ->
+(#line 80 1) (error "last: empty sequence")
+(#line 83 1) define
+(#line 83 1) (init [__p_0 : [a]] -> [a])
+(#line 84 1) :doc
+(#line 84 1) "Return all but the last element. Partial: fails on an empty sequence."
+(#line 85 1) [_] 
+(#line 85 1) ->
+(#line 85 1) []
+(#line 86 1) [x|xs] 
+(#line 86 1) ->
+(#line 86 1) [x | init xs]
+(#line 87 1) [] 
+(#line 87 1) ->
+(#line 87 1) (error "init: empty sequence")
+(#line 90 1) define
+(#line 90 1) (uncons [__p_0 : [a]] -> Maybe (a, [a]))
+(#line 91 1) :doc
+(#line 91 1) "Return Just (head, tail) or Nothing for an empty sequence."
+(#line 92 1) [] 
+(#line 92 1) ->
+(#line 92 1) Nothing
+(#line 93 1) [x|xs] 
+(#line 93 1) ->
+(#line 93 1) (Just (x, xs))
+(#line 110 1) define
+(#line 110 1) (null? [__p_0 : [a]] -> Bool)
+(#line 111 1) :doc
+(#line 111 1) "Return True when XS is empty."
+(#line 112 1) [] 
+(#line 112 1) ->
+(#line 112 1) True
+(#line 113 1) _ 
+(#line 113 1) ->
+(#line 113 1) False
+(#line 116 1) define
+(#line 116 1) (empty? [__p_0 : [a]] -> Bool)
+(#line 117 1) :doc
+(#line 117 1) "Return True when XS is empty."
+(#line 118 1) [] 
+(#line 118 1) ->
+(#line 118 1) True
+(#line 119 1) _ 
+(#line 119 1) ->
+(#line 119 1) False
+(#line 122 1) define
+(#line 122 1) (length [__p_0 : [a]] -> Int)
+(#line 123 1) :doc
+(#line 123 1) "Return the number of elements in XS."
+(#line 124 1) [] 
+(#line 124 1) ->
+(#line 124 1) 0
+(#line 125 1) [_|xs] 
+(#line 125 1) ->
+(#line 125 1) (1 + (length xs))
+(#line 128 1) define
+(#line 128 1) (singleton? [__p_0 : [a]] -> Bool)
+(#line 129 1) :doc
+(#line 129 1) "Return True when XS has exactly one element."
+(#line 130 1) [_] 
+(#line 130 1) ->
+(#line 130 1) True
+(#line 131 1) _ 
+(#line 131 1) ->
+(#line 131 1) False
+(#line 137 1) define
+(#line 137 1) (take [__p_0 : Int] [__p_1 : [a]] -> [a])
+(#line 138 1) n _ 
+(#line 138 1) |
+(#line 138 1) (<= n 0)
+(#line 138 1) ->
+(#line 138 1) []
+(#line 139 1) _ [] 
+(#line 139 1) ->
+(#line 139 1) []
+(#line 140 1) n [x|xs] 
+(#line 140 1) ->
+(#line 140 1) [x | take (n - 1) xs]
+(#line 141 1) :doc
+(#line 141 1) "Return the first N elements, or fewer if XS is shorter."
+(#line 144 1) define
+(#line 144 1) (drop [__p_0 : Int] [__p_1 : [a]] -> [a])
+(#line 145 1) n xs 
+(#line 145 1) |
+(#line 145 1) (and n (<= 0))
+(#line 145 1) ->
+(#line 145 1) xs
+(#line 146 1) _ [] 
+(#line 146 1) ->
+(#line 146 1) []
+(#line 147 1) n [_|xs] 
+(#line 147 1) ->
+(#line 147 1) (drop (n - 1) xs)
+(#line 148 1) :doc
+(#line 148 1) "Drop the first N elements."
+(#line 151 1) define
+(#line 151 1) (splitAt [__p_0 : Int] [__p_1 : [a]] -> [[a]])
+(#line 152 1) n xs 
+(#line 152 1) ->
+(#line 152 1) [(take n xs) | [(drop n xs) | []]]
+(#line 153 1) :doc
+(#line 153 1) "Split XS at index N."
+(#line 156 1) define
+(#line 156 1) (takeEnd [__p_0 : Int] [__p_1 : [a]] -> [a])
+(#line 157 1) n xs 
+(#line 157 1) |
+(#line 157 1) (and n (<= 0))
+(#line 157 1) ->
+(#line 157 1) []
+(#line 158 1) |
+(#line 158 1) otherwise
+(#line 158 1) ->
+(#line 158 1) (drop ((length xs) - n) xs)
+(#line 159 1) :doc
+(#line 159 1) "Return the last N elements."
+(#line 162 1) define
+(#line 162 1) (dropEnd [__p_0 : Int] [__p_1 : [a]] -> [a])
+(#line 163 1) n xs 
+(#line 163 1) |
+(#line 163 1) (and n (<= 0))
+(#line 163 1) ->
+(#line 163 1) xs
+(#line 164 1) |
+(#line 164 1) otherwise
+(#line 164 1) ->
+(#line 164 1) (take ((length xs) - n) xs)
+(#line 165 1) :doc
+(#line 165 1) "Drop the last N elements."
+(#line 205 1) define
+(#line 205 1) (map [__p_0 : Fn :: (a -> b)] [__p_1 : [a]] -> [b])
+(#line 206 1) :doc
+(#line 206 1) "Map F over XS."
+(#line 207 1) _ [] 
+(#line 207 1) ->
+(#line 207 1) []
+(#line 208 1) f [x|xs] 
+(#line 208 1) ->
+(#line 208 1) [(f x) | map f xs]
+(#line 211 1) define
+(#line 211 1) (foreach [__p_0 : Fn :: (a -> b)] [__p_1 : [a]] -> [b])
+(#line 212 1) :alias
+(#line 212 1) forEach
+(#line 213 1) :doc
+(#line 213 1) "Alias-style name for map, kept as metadata on the canonical binding."
+(#line 214 1) f xs 
+(#line 214 1) ->
+(#line 214 1) (map f xs)
+(#line 217 1) define
+(#line 217 1) (mapIndexedFrom [__p_0 : Fn :: (Int -> a -> b)] [__p_1 : Int] [__p_2 : [a]] -> [b])
+(#line 218 1) _ _ [] 
+(#line 218 1) ->
+(#line 218 1) []
+(#line 219 1) f n [x|ys] 
+(#line 219 1) ->
+(#line 219 1) [(f n x) | mapIndexedFrom f (n + 1) ys]
+(#line 222 1) define
+(#line 222 1) (mapIndexed [__p_0 : Fn :: (Int -> a -> b)] [__p_1 : [a]] -> [b])
+(#line 223 1) :doc
+(#line 223 1) "Map F over XS with a zero-based index."
+(#line 224 1) f xs 
+(#line 224 1) ->
+(#line 224 1) (mapIndexedFrom f 0 xs)
+(#line 227 1) define
+(#line 227 1) (filter [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> [a])
+(#line 228 1) :doc
+(#line 228 1) "Keep elements satisfying P."
+(#line 229 1) _ [] 
+(#line 229 1) ->
+(#line 229 1) []
+(#line 230 1) p [x|xs] 
+(#line 231 1) |
+(#line 231 1) (p x)
+(#line 231 1) ->
+(#line 231 1) [x | filter p xs]
+(#line 232 1) |
+(#line 232 1) otherwise
+(#line 232 1) ->
+(#line 232 1) (filter p xs)
+(#line 235 1) define
+(#line 235 1) (reject [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> [a])
+(#line 236 1) :doc
+(#line 236 1) "Remove elements satisfying P."
+(#line 237 1) _ [] 
+(#line 237 1) ->
+(#line 237 1) []
+(#line 238 1) p [x|xs] 
+(#line 239 1) |
+(#line 239 1) (p x)
+(#line 239 1) ->
+(#line 239 1) (reject p xs)
+(#line 240 1) |
+(#line 240 1) otherwise
+(#line 240 1) ->
+(#line 240 1) [x | reject p xs]
+(#line 243 1) define
+(#line 243 1) (find [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Maybe a)
+(#line 244 1) :doc
+(#line 244 1) "Return the first element satisfying P, or Nothing."
+(#line 245 1) _ [] 
+(#line 245 1) ->
+(#line 245 1) Nothing
+(#line 246 1) p [x|xs] 
+(#line 247 1) |
+(#line 247 1) (p x)
+(#line 247 1) ->
+(#line 247 1) (Just x)
+(#line 248 1) |
+(#line 248 1) otherwise
+(#line 248 1) ->
+(#line 248 1) (find p xs)
+(#line 251 1) define
+(#line 251 1) (findIndexFrom [__p_0 : Fn :: (a -> Bool)] [__p_1 : Int] [__p_2 : [a]] -> Maybe Int)
+(#line 252 1) _ _ [] 
+(#line 252 1) ->
+(#line 252 1) Nothing
+(#line 253 1) p n [x|ys] 
+(#line 254 1) |
+(#line 254 1) (p x)
+(#line 254 1) ->
+(#line 254 1) (Just n)
+(#line 255 1) |
+(#line 255 1) otherwise
+(#line 255 1) ->
+(#line 255 1) (findIndexFrom p (n + 1) ys)
+(#line 258 1) define
+(#line 258 1) (findIndex [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Maybe Int)
+(#line 259 1) :doc
+(#line 259 1) "Return the first index whose element satisfies P, or Nothing."
+(#line 260 1) p xs 
+(#line 260 1) ->
+(#line 260 1) (findIndexFrom p 0 xs)
+(#line 263 1) define
+(#line 263 1) (elemIndex [__p_0 : Eq a => a] [__p_1 : [a]] -> Maybe Int)
+(#line 264 1) :alias
+(#line 264 1) indexOf
+(#line 265 1) :doc
+(#line 265 1) "Return the index of X in XS, or Nothing."
+(#line 266 1) x xs 
+(#line 266 1) ->
+(#line 266 1) (findIndex (= x) xs)
+(#line 269 1) define
+(#line 269 1) (lookup [__p_0 : Eq a => a] [__p_1 : [(a, b)]] -> Maybe b)
+(#line 270 1) :doc
+(#line 270 1) "Look up KEY in an association sequence."
+(#line 271 1) _ [] 
+(#line 271 1) ->
+(#line 271 1) Nothing
+(#line 272 1) key [(k, v)|rest] 
+(#line 273 1) |
+(#line 273 1) (var key k)
+(#line 273 1) ->
+(#line 273 1) (Just v)
+(#line 274 1) |
+(#line 274 1) otherwise
+(#line 274 1) ->
+(#line 274 1) (lookup key rest)
+(#line 277 1) define
+(#line 277 1) (lookupWithDefault [__p_0 : Eq a => b] [__p_1 : a] [__p_2 : [(a, b)]] -> b)
+(#line 278 1) :doc
+(#line 278 1) "Look up KEY, returning DEFAULT when absent."
+(#line 279 1) default key xs 
+(#line 279 1) ->
+(#line 279 1) (fromMaybe default (lookup key xs))
+(#line 285 1) define
+(#line 285 1) (any? [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Bool)
+(#line 286 1) :doc
+(#line 286 1) "Return True if any element satisfies P."
+(#line 287 1) _ [] 
+(#line 287 1) ->
+(#line 287 1) False
+(#line 288 1) p [x|xs] 
+(#line 289 1) |
+(#line 289 1) (p x)
+(#line 289 1) ->
+(#line 289 1) True
+(#line 290 1) |
+(#line 290 1) otherwise
+(#line 290 1) ->
+(#line 290 1) (any? p xs)
+(#line 293 1) define
+(#line 293 1) (all? [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Bool)
+(#line 294 1) :doc
+(#line 294 1) "Return True if all elements satisfy P."
+(#line 295 1) _ [] 
+(#line 295 1) ->
+(#line 295 1) True
+(#line 296 1) p [x|xs] 
+(#line 297 1) |
+(#line 297 1) (p x)
+(#line 297 1) ->
+(#line 297 1) (all? p xs)
+(#line 298 1) |
+(#line 298 1) otherwise
+(#line 298 1) ->
+(#line 298 1) False
+(#line 301 1) define
+(#line 301 1) (none? [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Bool)
+(#line 302 1) :doc
+(#line 302 1) "Return True if no element satisfies P."
+(#line 303 1) p xs 
+(#line 303 1) ->
+(#line 303 1) (not (any? p xs))
+(#line 309 1) define
+(#line 309 1) (foldl [__p_0 : Fn :: (b -> a -> b)] [__p_1 : b] [__p_2 : [a]] -> b)
+(#line 310 1) :doc
+(#line 310 1) "Left fold over XS."
+(#line 311 1) _ acc [] 
+(#line 311 1) ->
+(#line 311 1) acc
+(#line 312 1) f acc [x|xs] 
+(#line 312 1) ->
+(#line 312 1) (foldl f (f acc x) xs)
+(#line 315 1) define
+(#line 315 1) (foldl' [__p_0 : Fn :: (b -> a -> b)] [__p_1 : b] [__p_2 : [a]] -> b)
+(#line 316 1) :doc
+(#line 316 1) "Strict left fold. Currently aliases foldl until strictness is explicit."
+(#line 317 1) f acc xs 
+(#line 317 1) ->
+(#line 317 1) (foldl f acc xs)
+(#line 320 1) define
+(#line 320 1) (foldl1 [__p_0 : Fn :: (a -> a -> a)] [__p_1 : [a]] -> a)
+(#line 321 1) :doc
+(#line 321 1) "Left fold requiring a non-empty sequence."
+(#line 322 1) _ [] 
+(#line 322 1) ->
+(#line 322 1) (error "foldl1: empty sequence")
+(#line 323 1) f [x|xs] 
+(#line 323 1) ->
+(#line 323 1) (foldl f x xs)
+(#line 326 1) define
+(#line 326 1) (foldr [__p_0 : Fn :: (a -> b -> b)] [__p_1 : b] [__p_2 : [a]] -> b)
+(#line 327 1) :doc
+(#line 327 1) "Right fold over XS."
+(#line 328 1) _ acc [] 
+(#line 328 1) ->
+(#line 328 1) acc
+(#line 329 1) f acc [x|xs] 
+(#line 329 1) ->
+(#line 329 1) (f x (foldr f acc xs))
+(#line 332 1) define
+(#line 332 1) (foldr1 [__p_0 : Fn :: (a -> a -> a)] [__p_1 : [a]] -> a)
+(#line 333 1) :doc
+(#line 333 1) "Right fold requiring a non-empty sequence."
+(#line 334 1) _ [] 
+(#line 334 1) ->
+(#line 334 1) (error "foldr1: empty sequence")
+(#line 335 1) _ [x] 
+(#line 335 1) ->
+(#line 335 1) x
+(#line 336 1) f [x|xs] 
+(#line 336 1) ->
+(#line 336 1) (f x (foldr1 f xs))
+(#line 379 1) define
+(#line 379 1) (zip [__p_0 : [a]] [__p_1 : [b]] -> [(a, b)])
+(#line 380 1) :doc
+(#line 380 1) "Zip two sequences into pairs, stopping at the shorter sequence."
+(#line 381 1) [] _ 
+(#line 381 1) ->
+(#line 381 1) []
+(#line 382 1) _ [] 
+(#line 382 1) ->
+(#line 382 1) []
+(#line 383 1) [x|xs] [y|ys] 
+(#line 383 1) ->
+(#line 383 1) [(x, y) | zip xs ys]
+(#line 386 1) define
+(#line 386 1) (zipWith [__p_0 : Fn :: (a -> b -> c)] [__p_1 : [a]] [__p_2 : [b]] -> [c])
+(#line 387 1) :doc
+(#line 387 1) "Zip two sequences with F."
+(#line 388 1) _ [] _ 
+(#line 388 1) ->
+(#line 388 1) []
+(#line 389 1) _ _ [] 
+(#line 389 1) ->
+(#line 389 1) []
+(#line 390 1) f [x|xs] [y|ys] 
+(#line 390 1) ->
+(#line 390 1) [(f x y) | zipWith f xs ys]
+(#line 393 1) define
+(#line 393 1) (zipWith3 [__p_0 : Fn :: (a -> b -> c -> d)] [__p_1 : [a]] [__p_2 : [b]] [__p_3 : [c]] -> [d])
+(#line 394 1) :doc
+(#line 394 1) "Zip three sequences with F."
+(#line 395 1) _ [] _ _ 
+(#line 395 1) ->
+(#line 395 1) []
+(#line 396 1) _ _ [] _ 
+(#line 396 1) ->
+(#line 396 1) []
+(#line 397 1) _ _ _ [] 
+(#line 397 1) ->
+(#line 397 1) []
+(#line 398 1) f [x|xs] [y|ys] [z|zs] 
+(#line 398 1) ->
+(#line 398 1) [(f x y z) | zipWith3 f xs ys zs]
+(#line 401 1) define
+(#line 401 1) (unzip [__p_0 : [(a, b)]] -> ([a], [b]))
+(#line 402 1) :doc
+(#line 402 1) "Split a sequence of pairs into a pair of sequences."
+(#line 404 1) [(x, y)|rest] 
+(#line 404 1) ->
+(#line 404 1) (letrec ([prepend (lambda (__wisp_arg_0 __wisp_arg_1 __wisp_arg_2) x y (xs, ys)  -> ([x | xs], [y | ys]))] ) (prepend x y (unzip rest)))
+(#line 405 1) [] 
+(#line 405 1) ->
+(#line 405 1) ([], [])
+(#line 408 1) define
+(#line 408 1) (unzip3 [__p_0 : [(a, b, c)]] -> ([a], [b], [c]))
+(#line 409 1) :doc
+(#line 409 1) "Split a sequence of triples into three sequences."
+(#line 411 1) [(x, y, z)|rest] 
+(#line 411 1) ->
+(#line 411 1) (letrec ([prepend (lambda (__wisp_arg_0 __wisp_arg_1 __wisp_arg_2 __wisp_arg_3) x y z (xs, ys, zs)  -> ([x | xs], [y | ys], [z | zs]))] ) (prepend x y z) (unzip3 rest))
+(#line 412 1) [] 
+(#line 412 1) ->
+(#line 412 1) ([], [], [])
+(#line 418 1) define
+(#line 418 1) (append [__p_0 : [a]] [__p_1 : [a]] -> [a])
+(#line 419 1) :doc
+(#line 419 1) "Append XS and YS."
+(#line 420 1) [] ys 
+(#line 420 1) ->
+(#line 420 1) ys
+(#line 421 1) [x|xs] ys 
+(#line 421 1) ->
+(#line 421 1) [x | append xs ys]
+(#line 424 1) define
+(#line 424 1) (reverse [__p_0 : [a]] -> [a])
+(#line 425 1) :doc
+(#line 425 1) "Reverse XS."
+(#line 426 1) [] 
+(#line 426 1) ->
+(#line 426 1) []
+(#line 427 1) [y|ys] 
+(#line 427 1) ->
+(#line 427 1) (append (reverse ys) [y])
+(#line 430 1) define
+(#line 430 1) (snoc [__p_0 : [a]] [__p_1 : a] -> [a])
+(#line 431 1) :doc
+(#line 431 1) "Append X to the end of XS."
+(#line 432 1) xs x 
+(#line 432 1) ->
+(#line 432 1) (append xs [x])
+(#line 435 1) define
+(#line 435 1) (concat [__p_0 : [[a]]] -> [a])
+(#line 436 1) :alias
+(#line 436 1) flatten
+(#line 437 1) :doc
+(#line 437 1) "Flatten one level of nested sequences."
+(#line 438 1) [] 
+(#line 438 1) ->
+(#line 438 1) []
+(#line 439 1) [xs|xss] 
+(#line 439 1) ->
+(#line 439 1) (append xs (concat xss))
+(#line 442 1) define
+(#line 442 1) (concatMap [__p_0 : Fn :: (a -> [b])] [__p_1 : [a]] -> [b])
+(#line 443 1) :doc
+(#line 443 1) "Map F over XS and concatenate the results."
+(#line 444 1) f xs 
+(#line 444 1) ->
+(#line 444 1) (concat (map f xs))
+(#line 447 1) define
+(#line 447 1) (concatMapMaybe [__p_0 : Fn :: (a -> Maybe b)] [__p_1 : [a]] -> [b])
+(#line 448 1) :doc
+(#line 448 1) "Map F over XS and collect Just results."
+(#line 449 1) f xs 
+(#line 449 1) ->
+(#line 449 1) (catMaybes (map f xs))
+(#line 452 1) define
+(#line 452 1) (replicate [__p_0 : Int] [__p_1 : a] -> [a])
+(#line 453 1) n _ 
+(#line 453 1) |
+(#line 453 1) (<= n 0)
+(#line 453 1) ->
+(#line 453 1) []
+(#line 454 1) n x 
+(#line 454 1) |
+(#line 454 1) otherwise
+(#line 454 1) ->
+(#line 454 1) [x | replicate (n - 1) x]
+(#line 455 1) :doc
+(#line 455 1) "Return a sequence containing X repeated N times."
+(#line 458 1) define
+(#line 458 1) (repeat [__p_0 : a] -> [a])
+(#line 459 1) :doc
+(#line 459 1) "Return the infinite repetition of X."
+(#line 460 1) x 
+(#line 460 1) ->
+(#line 460 1) [x | repeat x]
+(#line 463 1) define
+(#line 463 1) (iterate [__p_0 : Fn :: (a -> a)] [__p_1 : a] -> [a])
+(#line 464 1) :doc
+(#line 464 1) "Return the infinite sequence X, F X, F (F X), ..."
+(#line 465 1) f x 
+(#line 465 1) ->
+(#line 465 1) [x | iterate f (f x)]
+(#line 481 1) define
+(#line 481 1) (intersperse [__p_0 : a] [__p_1 : [a]] -> [a])
+(#line 482 1) :doc
+(#line 482 1) "Place SEP between every pair of elements in XS."
+(#line 483 1) _ [] 
+(#line 483 1) ->
+(#line 483 1) []
+(#line 484 1) _ [x] 
+(#line 484 1) ->
+(#line 484 1) [x]
+(#line 485 1) sep [x|xs] 
+(#line 485 1) ->
+(#line 485 1) [x | [sep | intersperse sep xs]]
+(#line 488 1) define
+(#line 488 1) (intercalate [__p_0 : [a]] [__p_1 : [[a]]] -> [a])
+(#line 489 1) :doc
+(#line 489 1) "Insert SEP between sequences and concatenate."
+(#line 490 1) sep xss 
+(#line 490 1) ->
+(#line 490 1) (concat (intersperse sep xss))
+(#line 493 1) define
+(#line 493 1) (transpose [__p_0 : [[a]]] -> [[a]])
+(#line 494 1) :doc
+(#line 494 1) "Transpose rows and columns."
+(#line 495 1) rows 
+(#line 495 1) |
+(#line 495 1) (all? null? rows)
+(#line 495 1) ->
+(#line 495 1) []
+(#line 497 1) |
+(#line 497 1) otherwise
+(#line 497 1) ->
+(#line 497 1) [(map head (filter (lambda (row) (not (null? row))) rows)) | transpose (map tail (filter (lambda (row) (not (null? row))) rows))]
+(#line 500 1) define
+(#line 500 1) (inits [__p_0 : [a]] -> [[a]])
+(#line 501 1) :doc
+(#line 501 1) "Return all initial segments of XS, shortest first."
+(#line 502 1) [] 
+(#line 502 1) ->
+(#line 502 1) [[]]
+(#line 503 1) [x|xs] 
+(#line 503 1) ->
+(#line 503 1) [[] | map (lambda (ys) (cons x ys)) (inits xs)]
+(#line 506 1) define
+(#line 506 1) (tails [__p_0 : [a]] -> [[a]])
+(#line 507 1) :doc
+(#line 507 1) "Return all final segments of XS, longest first."
+(#line 508 1) [] 
+(#line 508 1) ->
+(#line 508 1) [[]]
+(#line 509 1) [x|ys] 
+(#line 509 1) ->
+(#line 509 1) [(cons x ys) | tails ys]
+(#line 515 1) define
+(#line 515 1) (and-list? [__p_0 : [Bool]] -> Bool)
+(#line 516 1) :doc
+(#line 516 1) "Return True if every element is True."
+(#line 517 1) [] 
+(#line 517 1) ->
+(#line 517 1) True
+(#line 518 1) [x|xs] 
+(#line 518 1) |
+(#line 518 1) x
+(#line 518 1) ->
+(#line 518 1) (and-list? xs)
+(#line 519 1) |
+(#line 519 1) otherwise
+(#line 519 1) ->
+(#line 519 1) False
+(#line 522 1) define
+(#line 522 1) (or-list? [__p_0 : [Bool]] -> Bool)
+(#line 523 1) :doc
+(#line 523 1) "Return True if any element is True."
+(#line 524 1) [] 
+(#line 524 1) ->
+(#line 524 1) False
+(#line 525 1) [x|xs] 
+(#line 525 1) |
+(#line 525 1) x
+(#line 525 1) ->
+(#line 525 1) True
+(#line 526 1) |
+(#line 526 1) otherwise
+(#line 526 1) ->
+(#line 526 1) (or-list? xs)
+(#line 529 1) define
+(#line 529 1) (sum [__p_0 : [Int]] -> Int)
+(#line 530 1) :doc
+(#line 530 1) "Return the sum of XS."
+(#line 531 1) [] 
+(#line 531 1) ->
+(#line 531 1) 0
+(#line 532 1) [x|xs] 
+(#line 532 1) ->
+(#line 532 1) (x + (sum xs))
+(#line 535 1) define
+(#line 535 1) (product [__p_0 : [Int]] -> Int)
+(#line 536 1) :doc
+(#line 536 1) "Return the product of XS."
+(#line 537 1) [] 
+(#line 537 1) ->
+(#line 537 1) 1
+(#line 538 1) [x|xs] 
+(#line 538 1) ->
+(#line 538 1) (x * (product xs))
+(#line 541 1) define
+(#line 541 1) (maximum [__p_0 : [Int]] -> Int)
+(#line 542 1) :doc
+(#line 542 1) "Return the greatest element. Partial: fails on an empty sequence."
+(#line 543 1) [] 
+(#line 543 1) ->
+(#line 543 1) (error "maximum: empty sequence")
+(#line 544 1) [x] 
+(#line 544 1) ->
+(#line 544 1) x
+(#line 545 1) [x|xs] 
+(#line 545 1) |
+(#line 545 1) (x < (maximum xs))
+(#line 545 1) ->
+(#line 545 1) (maximum xs)
+(#line 546 1) |
+(#line 546 1) otherwise
+(#line 546 1) ->
+(#line 546 1) x
+(#line 549 1) define
+(#line 549 1) (minimum [__p_0 : [Int]] -> Int)
+(#line 550 1) :doc
+(#line 550 1) "Return the least element. Partial: fails on an empty sequence."
+(#line 551 1) [] 
+(#line 551 1) ->
+(#line 551 1) (error "minimum: empty sequence")
+(#line 552 1) [x] 
+(#line 552 1) ->
+(#line 552 1) x
+(#line 553 1) [x|xs] 
+(#line 553 1) |
+(#line 553 1) (x > (minimum xs))
+(#line 553 1) ->
+(#line 553 1) (minimum xs)
+(#line 554 1) |
+(#line 554 1) otherwise
+(#line 554 1) ->
+(#line 554 1) x
+(#line 557 1) define
+(#line 557 1) (maximumBy [__p_0 : Fn :: (a -> a -> Ordering)] [__p_1 : [a]] -> a)
+(#line 558 1) :doc
+(#line 558 1) "Return the greatest element according to CMP."
+(#line 559 1) _ [] 
+(#line 559 1) ->
+(#line 559 1) (error "maximumBy: empty sequence")
+(#line 560 1) _ [x] 
+(#line 560 1) ->
+(#line 560 1) x
+(#line 561 1) cmp [x|xs] 
+(#line 561 1) |
+(#line 561 1) (= (cmp x (maximumBy cmp xs)) LT)
+(#line 561 1) ->
+(#line 561 1) (maximumBy cmp xs)
+(#line 562 1) |
+(#line 562 1) otherwise
+(#line 562 1) ->
+(#line 562 1) x
+(#line 565 1) define
+(#line 565 1) (minimumBy [__p_0 : Fn :: (a -> a -> Ordering)] [__p_1 : [a]] -> a)
+(#line 566 1) :doc
+(#line 566 1) "Return the least element according to CMP."
+(#line 567 1) _ [] 
+(#line 567 1) ->
+(#line 567 1) (error "minimumBy: empty sequence")
+(#line 568 1) _ [x] 
+(#line 568 1) ->
+(#line 568 1) x
+(#line 569 1) cmp [x|xs] 
+(#line 569 1) |
+(#line 569 1) (= (cmp x (minimumBy cmp xs)) GT)
+(#line 569 1) ->
+(#line 569 1) (minimumBy cmp xs)
+(#line 570 1) |
+(#line 570 1) otherwise
+(#line 570 1) ->
+(#line 570 1) x
+(#line 573 1) define
+(#line 573 1) (clamp [__p_0 : Int] [__p_1 : Int] [__p_2 : Int] -> Int)
+(#line 574 1) x lo hi 
+(#line 574 1) |
+(#line 574 1) (and x (< lo))
+(#line 574 1) ->
+(#line 574 1) lo
+(#line 575 1) |
+(#line 575 1) (x > hi)
+(#line 575 1) ->
+(#line 575 1) hi
+(#line 576 1) |
+(#line 576 1) otherwise
+(#line 576 1) ->
+(#line 576 1) x
+(#line 577 1) :doc
+(#line 577 1) "Clamp X into the inclusive range LO..HI."
+(#line 583 1) define
+(#line 583 1) (elem? [__p_0 : Int] [__p_1 : [Int]] -> Bool)
+(#line 584 1) :doc
+(#line 584 1) "Return True if X occurs in XS."
+(#line 585 1) _ [] 
+(#line 585 1) ->
+(#line 585 1) False
+(#line 586 1) x [y|ys] 
+(#line 587 1) |
+(#line 587 1) (= x y)
+(#line 587 1) ->
+(#line 587 1) True
+(#line 588 1) |
+(#line 588 1) otherwise
+(#line 588 1) ->
+(#line 588 1) (elem? x ys)
+(#line 591 1) define
+(#line 591 1) (contains? [__p_0 : Int] [__p_1 : [Int]] -> Bool)
+(#line 592 1) :doc
+(#line 592 1) "Return True if X occurs in XS."
+(#line 593 1) x xs 
+(#line 593 1) ->
+(#line 593 1) (elem? x xs)
+(#line 596 1) define
+(#line 596 1) (notElem? [__p_0 : Int] [__p_1 : [Int]] -> Bool)
+(#line 597 1) :doc
+(#line 597 1) "Return True if X does not occur in XS."
+(#line 598 1) x xs 
+(#line 598 1) ->
+(#line 598 1) (not (elem? x xs))
+(#line 601 1) define
+(#line 601 1) (deleteBy [__p_0 : Fn :: (a -> a -> Bool)] [__p_1 : a] [__p_2 : [a]] -> [a])
+(#line 602 1) :doc
+(#line 602 1) "Delete the first element equal to X according to EQ."
+(#line 603 1) _ _ [] 
+(#line 603 1) ->
+(#line 603 1) []
+(#line 604 1) eq x [y|ys] 
+(#line 605 1) |
+(#line 605 1) (eq x y)
+(#line 605 1) ->
+(#line 605 1) ys
+(#line 606 1) |
+(#line 606 1) otherwise
+(#line 606 1) ->
+(#line 606 1) [y | deleteBy eq x ys]
+(#line 609 1) define
+(#line 609 1) (delete [__p_0 : Int] [__p_1 : [Int]] -> [Int])
+(#line 610 1) :doc
+(#line 610 1) "Delete the first occurrence of X."
+(#line 611 1) x xs 
+(#line 611 1) ->
+(#line 611 1) (deleteBy (lambda (a b) (a = b)) x xs)
+(#line 614 1) define
+(#line 614 1) (dropEqualBy [__p_0 : Fn :: (Int -> Int -> Bool)] [__p_1 : Int] [__p_2 : [Int]] -> [Int])
+(#line 615 1) :doc
+(#line 615 1) "Remove elements equal to X according to EQ."
+(#line 616 1) _ _ [] 
+(#line 616 1) ->
+(#line 616 1) []
+(#line 617 1) eq x [y|ys] 
+(#line 618 1) |
+(#line 618 1) (eq x y)
+(#line 618 1) ->
+(#line 618 1) (dropEqualBy eq x ys)
+(#line 619 1) |
+(#line 619 1) otherwise
+(#line 619 1) ->
+(#line 619 1) [y | dropEqualBy eq x ys]
+(#line 622 1) define
+(#line 622 1) (nubBy [__p_0 : Fn :: (Int -> Int -> Bool)] [__p_1 : [Int]] -> [Int])
+(#line 623 1) :doc
+(#line 623 1) "Remove duplicate elements according to EQ, keeping first occurrences."
+(#line 624 1) _ [] 
+(#line 624 1) ->
+(#line 624 1) []
+(#line 625 1) eq [x|rest] 
+(#line 625 1) ->
+(#line 625 1) [x | nubBy eq (dropEqualBy eq x rest)]
+(#line 628 1) define
+(#line 628 1) (nub [__p_0 : [Int]] -> [Int])
+(#line 629 1) :doc
+(#line 629 1) "Remove duplicate elements, keeping first occurrences."
+(#line 630 1) xs 
+(#line 630 1) ->
+(#line 630 1) (nubBy (lambda (a b) (a = b)) xs)
+(#line 633 1) define
+(#line 633 1) (difference [__p_0 : [Int]] [__p_1 : [Int]] -> [Int])
+(#line 634 1) :doc
+(#line 634 1) "Return elements of XS that are not in YS."
+(#line 635 1) xs ys 
+(#line 635 1) ->
+(#line 635 1) (filter (lambda (x) (notElem? x ys)) xs)
+(#line 638 1) define
+(#line 638 1) (union [__p_0 : [Int]] [__p_1 : [Int]] -> [Int])
+(#line 639 1) :doc
+(#line 639 1) "Return the stable union of XS and YS."
+(#line 640 1) xs ys 
+(#line 640 1) ->
+(#line 640 1) (append xs (difference ys xs))
+(#line 643 1) define
+(#line 643 1) (intersect [__p_0 : [Int]] [__p_1 : [Int]] -> [Int])
+(#line 644 1) :doc
+(#line 644 1) "Return elements of XS that also occur in YS."
+(#line 645 1) xs ys 
+(#line 645 1) ->
+(#line 645 1) (filter (lambda (x) (elem? x ys)) xs)
+(#line 651 1) define
+(#line 651 1) (insertBy [__p_0 : Fn :: (a -> a -> Ordering)] [__p_1 : a] [__p_2 : [a]] -> [a])
+(#line 652 1) :doc
+(#line 652 1) "Insert X into a sorted sequence according to CMP."
+(#line 653 1) _ x [] 
+(#line 653 1) ->
+(#line 653 1) [x]
+(#line 654 1) cmp x [y|ys] 
+(#line 655 1) |
+(#line 655 1) (= (cmp x y) GT)
+(#line 655 1) ->
+(#line 655 1) [y | insertBy cmp x ys]
+(#line 656 1) |
+(#line 656 1) otherwise
+(#line 656 1) ->
+(#line 656 1) [x | [y | ys]]
+(#line 659 1) define
+(#line 659 1) (insertSorted [__p_0 : Int] [__p_1 : [Int]] -> [Int])
+(#line 660 1) :doc
+(#line 660 1) "Insert X into a sorted sequence."
+(#line 661 1) x [] 
+(#line 661 1) ->
+(#line 661 1) [x]
+(#line 662 1) x [y|ys] 
+(#line 663 1) |
+(#line 663 1) (x > y)
+(#line 663 1) ->
+(#line 663 1) [y | insertSorted x ys]
+(#line 664 1) |
+(#line 664 1) otherwise
+(#line 664 1) ->
+(#line 664 1) [x | [y | ys]]
+(#line 667 1) define
+(#line 667 1) (sortBy [__p_0 : Fn :: (a -> a -> Ordering)] [__p_1 : [a]] -> [a])
+(#line 668 1) :doc
+(#line 668 1) "Stable insertion sort according to CMP."
+(#line 669 1) _ [] 
+(#line 669 1) ->
+(#line 669 1) []
+(#line 670 1) cmp [x|xs] 
+(#line 670 1) ->
+(#line 670 1) (insertBy cmp x (sortBy cmp xs))
+(#line 673 1) define
+(#line 673 1) (sort [__p_0 : [Int]] -> [Int])
+(#line 674 1) :doc
+(#line 674 1) "Stable insertion sort."
+(#line 675 1) [] 
+(#line 675 1) ->
+(#line 675 1) []
+(#line 676 1) [x|xs] 
+(#line 676 1) ->
+(#line 676 1) (insertSorted x (sort xs))
+(#line 693 1) define
+(#line 693 1) (countWhere [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Int)
+(#line 694 1) :doc
+(#line 694 1) "Count elements satisfying P."
+(#line 695 1) p xs 
+(#line 695 1) ->
+(#line 695 1) (length (filter p xs))
+(#line 698 1) define
+(#line 698 1) (count [__p_0 : [a]] -> Int)
+(#line 699 1) :doc
+(#line 699 1) "Alias-style name for length."
+(#line 700 1) xs 
+(#line 700 1) ->
+(#line 700 1) (length xs)
+(#line 703 1) define
+(#line 703 1) (elemCount [__p_0 : Int] [__p_1 : [Int]] -> Int)
+(#line 704 1) :doc
+(#line 704 1) "Count occurrences of X in XS."
+(#line 705 1) _ [] 
+(#line 705 1) ->
+(#line 705 1) 0
+(#line 706 1) x [y|ys] 
+(#line 707 1) |
+(#line 707 1) (= x y)
+(#line 707 1) ->
+(#line 707 1) (elemCount (1 +) x) ys
+(#line 708 1) |
+(#line 708 1) otherwise
+(#line 708 1) ->
+(#line 708 1) (elemCount x ys)
+(#line 711 1) define
+(#line 711 1) (isPrefixOf? [__p_0 : [Int]] [__p_1 : [Int]] -> Bool)
+(#line 712 1) :doc
+(#line 712 1) "Return True if PREFIX is a prefix of XS."
+(#line 713 1) [] _ 
+(#line 713 1) ->
+(#line 713 1) True
+(#line 714 1) _ [] 
+(#line 714 1) ->
+(#line 714 1) False
+(#line 715 1) [p|ps]
+(#line 715 1) [x|xs]
+(#line 716 1) |
+(#line 716 1) (= p x)
+(#line 716 1) ->
+(#line 716 1) (isPrefixOf? ps xs)
+(#line 717 1) |
+(#line 717 1) otherwise
+(#line 717 1) ->
+(#line 717 1) False
+(#line 720 1) define
+(#line 720 1) (isSuffixOf? [__p_0 : [Int]] [__p_1 : [Int]] -> Bool)
+(#line 721 1) :doc
+(#line 721 1) "Return True if SUFFIX is a suffix of XS."
+(#line 722 1) suffix xs 
+(#line 722 1) ->
+(#line 722 1) (isPrefixOf? (reverse suffix) (reverse xs))
+(#line 725 1) define
+(#line 725 1) (isInfixOf? [__p_0 : [Int]] [__p_1 : [Int]] -> Bool)
+(#line 726 1) :doc
+(#line 726 1) "Return True if NEEDLE occurs contiguously inside HAYSTACK."
+(#line 727 1) [] _ 
+(#line 727 1) ->
+(#line 727 1) True
+(#line 728 1) _ [] 
+(#line 728 1) ->
+(#line 728 1) False
+(#line 729 1) needle [x|rest] 
+(#line 730 1) |
+(#line 730 1) (isPrefixOf? needle (cons x rest))
+(#line 730 1) ->
+(#line 730 1) True
+(#line 731 1) |
+(#line 731 1) otherwise
+(#line 731 1) ->
+(#line 731 1) (isInfixOf? needle rest)
+(#line 737 1) define
+(#line 737 1) (range [__p_0 : Int] [__p_1 : Int] -> [Int])
+(#line 738 1) lo hi 
+(#line 738 1) |
+(#line 738 1) (and lo (> hi))
+(#line 738 1) ->
+(#line 738 1) []
+(#line 739 1) |
+(#line 739 1) otherwise
+(#line 739 1) ->
+(#line 739 1) [lo | range (lo + 1) hi]
+(#line 740 1) :doc
+(#line 740 1) "Return the inclusive integer range LO..HI."
+(#line 743 1) define
+(#line 743 1) (rangeBy [__p_0 : Int] [__p_1 : Int] [__p_2 : Int] -> [Int])
+(#line 744 1) step lo hi 
+(#line 745 1) |
+(#line 745 1) (= step 0)
+(#line 745 1) ->
+(#line 745 1) (error "rangeBy: zero step")
+(#line 746 1) |
+(#line 746 1) (step > 0 and lo > hi)
+(#line 746 1) ->
+(#line 746 1) []
+(#line 747 1) |
+(#line 747 1) (step < 0 and lo < hi)
+(#line 747 1) ->
+(#line 747 1) []
+(#line 748 1) |
+(#line 748 1) otherwise
+(#line 748 1) ->
+(#line 748 1) [lo | rangeBy step (lo + step) hi]
+(#line 749 1) :doc
+(#line 749 1) "Return an inclusive integer range using STEP."
+(#line 770 1) tests
+(#line 771 1) (assert-eq (length [1 2 3]) 3 "Coll length")
+(#line 772 1) (assert-eq (take 2 [1 2 3]) [1 2] "Coll take")
+(#line 773 1) (assert-eq (drop 2 [1 2 3]) [3] "Coll drop")
+(#line 774 1) (assert-eq (map (+ 1) [1 2 3]) [2 3 4] "Coll map")
+(#line 775 1) (assert-eq (filter (> 1) [1 2 3]) [2 3] "Coll filter")
+(#line 776 1) (assert-eq (find (> 2) [1 2 3]) (Just 3) "Coll find")
+(#line 777 1) (assert-eq (find (> 9) [1 2 3]) Nothing "Coll find Nothing")
+(#line 778 1) (assert-eq (foldl (lambda (acc x) (acc + x)) 0 [1 2 3]) 6 "Coll foldl")
+(#line 779 1) (assert-eq (reverse [1 2 3]) [3 2 1] "Coll reverse")
+(#line 780 1) (assert-eq (append [1 2] [3]) [1 2 3] "Coll append")
+(#line 781 1) (assert-eq (replicate 3 7) [7 7 7] "Coll replicate")
+(#line 782 1) (assert-eq (zip [1 2] [3 4]) [(1, 3) (2, 4)] "Coll zip")
+(#line 783 1) (assert-eq (nub [1 2 1 3 2]) [1 2 3] "Coll nub")
+(#line 784 1) (assert-eq (sort [3 1 2]) [1 2 3] "Coll sort")
+=== end ===
+
+DEBUG parse_expr_base: unexpected token type=21 value=':' line=60 col=27
+/usr/local/lib/monad/core/prelude/Coll.mon:60:27: error: unexpected token type: 21
+   60 | define cons :: a -> [a] -> [a]
+      |                           ^
+  wrote json: /tmp/monadc-tests-zdohhl28/sugar.wisp_arrow_pattern/sugar.wisp_arrow_pattern.json
+#+END_EXAMPLE

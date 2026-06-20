@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Wisp syntax expander — reader, sugar transforms, arity table
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -178,6 +179,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Integration points with other subsystems
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -444,11 +446,14 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Cross-file links and relationships to other context nodes
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :CONFIDENCE: high
 :END:
+
+Cross-reference links to related context nodes. See [[file:connections.org][connections.org]] for the canonical routing table.
 
 * LLM Analysis
 :PROPERTIES:
@@ -547,9 +552,12 @@
 
 * Test Coverage Anchors
 
+Test-driven observations and failure records for the corresponding subsystem.
+
 * Wisp Comparison Operators
 :PROPERTIES:
 :ID: monadc.context.wisp.comparison-operators
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp comparison operators
 :CUSTOM_ID: test-anchor-wisp-comparison-operators
 :END:
 [OBS id:obs.wisp.comparison-operators.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -560,6 +568,7 @@
 * Wisp Define Parenthesized Signature
 :PROPERTIES:
 :ID: monadc.context.wisp.define-parenthesized-signature
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp define parenthesized signature
 :CUSTOM_ID: test-anchor-wisp-define-parenthesized-signature
 :END:
 [OBS id:obs.wisp.define-parenthesized-signature.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -570,6 +579,7 @@
 * Wisp Define Signature Clause
 :PROPERTIES:
 :ID: monadc.context.wisp.define-signature-clause
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp define signature clause
 :CUSTOM_ID: test-anchor-wisp-define-signature-clause
 :END:
 [OBS id:obs.wisp.define-signature-clause.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -580,6 +590,7 @@
 * Wisp Define Typed Value Sugar
 :PROPERTIES:
 :ID: monadc.context.wisp.define-typed-value-sugar
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp define typed value sugar
 :CUSTOM_ID: test-anchor-wisp-define-typed-value-sugar
 :END:
 [OBS id:obs.wisp.define-typed-value-sugar.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -590,6 +601,7 @@
 * Wisp Define Value
 :PROPERTIES:
 :ID: monadc.context.wisp.define-value
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp define value
 :CUSTOM_ID: test-anchor-wisp-define-value
 :END:
 [OBS id:obs.wisp.define-value.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -600,6 +612,7 @@
 * Wisp If Form
 :PROPERTIES:
 :ID: monadc.context.wisp.if-form
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp if form
 :CUSTOM_ID: test-anchor-wisp-if-form
 :END:
 [OBS id:obs.wisp.if-form.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -610,6 +623,7 @@
 * Wisp Infix Operators
 :PROPERTIES:
 :ID: monadc.context.wisp.infix-operators
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp infix operators
 :CUSTOM_ID: test-anchor-wisp-infix-operators
 :END:
 [OBS id:obs.wisp.infix-operators.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -620,6 +634,7 @@
 * Wisp Lists
 :PROPERTIES:
 :ID: monadc.context.wisp.lists
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp lists
 :CUSTOM_ID: test-anchor-wisp-lists
 :END:
 [OBS id:obs.wisp.lists.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -630,6 +645,7 @@
 * Wisp Logic Operators
 :PROPERTIES:
 :ID: monadc.context.wisp.logic-operators
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp logic operators
 :CUSTOM_ID: test-anchor-wisp-logic-operators
 :END:
 [OBS id:obs.wisp.logic-operators.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -640,6 +656,7 @@
 * Wisp Mutation
 :PROPERTIES:
 :ID: monadc.context.wisp.mutation
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp mutation
 :CUSTOM_ID: test-anchor-wisp-mutation
 :END:
 [OBS id:obs.wisp.mutation.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -650,6 +667,7 @@
 * Wisp Quote
 :PROPERTIES:
 :ID: monadc.context.wisp.quote
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp quote
 :CUSTOM_ID: test-anchor-wisp-quote
 :END:
 [OBS id:obs.wisp.quote.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -660,6 +678,7 @@
 * Wisp Sexpr Mixing
 :PROPERTIES:
 :ID: monadc.context.wisp.sexpr-mixing
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp sexpr mixing
 :CUSTOM_ID: test-anchor-wisp-sexpr-mixing
 :END:
 [OBS id:obs.wisp.sexpr-mixing.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -670,6 +689,7 @@
 * Wisp Sugar Arrow Clause
 :PROPERTIES:
 :ID: monadc.context.wisp.sugar.arrow-clause
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp sugar arrow clause
 :CUSTOM_ID: test-anchor-wisp-sugar-arrow-clause
 :END:
 [OBS id:obs.wisp.sugar.arrow-clause.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -680,6 +700,7 @@
 * Wisp Sugar Def
 :PROPERTIES:
 :ID: monadc.context.wisp.sugar.def
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp sugar def
 :CUSTOM_ID: test-anchor-wisp-sugar-def
 :END:
 [OBS id:obs.wisp.sugar.def.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -690,6 +711,7 @@
 * Wisp Sugar For Sugar
 :PROPERTIES:
 :ID: monadc.context.wisp.sugar.for-sugar
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp sugar for sugar
 :CUSTOM_ID: test-anchor-wisp-sugar-for-sugar
 :END:
 [OBS id:obs.wisp.sugar.for-sugar.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -700,6 +722,7 @@
 * Wisp Sugar If Sugar
 :PROPERTIES:
 :ID: monadc.context.wisp.sugar.if-sugar
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp sugar if sugar
 :CUSTOM_ID: test-anchor-wisp-sugar-if-sugar
 :END:
 [OBS id:obs.wisp.sugar.if-sugar.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -710,6 +733,7 @@
 * Wisp Sugar Where
 :PROPERTIES:
 :ID: monadc.context.wisp.sugar.where
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp sugar where
 :CUSTOM_ID: test-anchor-wisp-sugar-where
 :END:
 [OBS id:obs.wisp.sugar.where.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]
@@ -720,6 +744,7 @@
 * Wisp Syntax Basic
 :PROPERTIES:
 :ID: monadc.context.wisp.syntax-basic
+:CONTEXT_DESCRIPTION: Test-context anchor for Wisp syntax basic
 :CUSTOM_ID: test-anchor-wisp-syntax-basic
 :END:
 [OBS id:obs.wisp.syntax-basic.test-anchor src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.wisp.define/wisp_define.mon conf:high]

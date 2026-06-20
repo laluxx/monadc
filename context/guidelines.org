@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,6 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Consolidated guidelines — hard constraints and soft preferences
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -59,6 +60,8 @@
 :CONTEXT_DESCRIPTION: Mandatory rules that must always be followed: context upkeep, stale context cleanup, always extend context, and opinions-as-TODOs.
 :END:
 
+Non-negotiable constraints — must always check before acting.
+
 ** Context Upkeep Rule
 :PROPERTIES:
 :ID: monadc.context.guidelines.context-upkeep
@@ -70,6 +73,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Context record lifecycle guidelines
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -116,6 +120,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Stale record handling guidelines
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -142,6 +147,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Always log observations guideline
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -172,6 +178,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
+:CONTEXT_DESCRIPTION: Opinion records guidelines
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -194,6 +201,8 @@
 :CONTEXT_DESCRIPTION: Recommended practices: completion phrases, living coverage workflow, recurring TODOs. Should be followed when practical; violations should be documented.
 :END:
 
+Preferred patterns — may be relaxed with explicit justification.
+
 ** Completion Phrase
 :PROPERTIES:
 :ID: monadc.context.guidelines.completion-phrase
@@ -205,6 +214,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Completion records guidelines
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active
@@ -228,6 +238,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-11
+:CONTEXT_DESCRIPTION: Living document guidelines
 :CONTEXT_UPDATED: 2026-06-12
 :CONTEXT_STABILITY: stable
 :CONTEXT_STATUS: active

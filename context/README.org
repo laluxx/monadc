@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -175,6 +175,7 @@ Start here when asking "where does this failure belong?":
 :PROPERTIES:
 :ID: monadc.context.readme.round3-category-directory
 :CONTEXT_KIND: navigation
+:CONTEXT_DESCRIPTION: Round 3 development milestone — formal category context went live
 :CONTEXT_STATUS: active
 :SOURCE: context/README.org
 :CONFIDENCE: high
@@ -189,6 +190,7 @@ Start here when asking "where does this failure belong?":
 :ID: monadc.context.readme.live-category-tooling
 :CUSTOM_ID: readme-live-category-tooling
 :CONTEXT_KIND: portal
+:CONTEXT_DESCRIPTION: Category subsystem — live TUI explorer, query language, and executable scripts
 :CONTEXT_STATUS: active
 :SOURCE: context/README.org
 :CONFIDENCE: high

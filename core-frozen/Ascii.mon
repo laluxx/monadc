@@ -1,0 +1,22 @@
+;;; Ascii.mon --- compatibility facade for Data.Char.Ascii
+
+;; Author: Laluxx
+;; Version: 0.6.0
+;; Keywords: ascii char compatibility
+
+;;; Commentary:
+
+;; Deprecated compatibility module. New code should import Data.Char.Ascii.
+;; This facade exists so old code that imports Ascii keeps working while the
+;; core follows the Haskell-style Data.Char namespace.
+
+;;; Code:
+
+import Data.Char.Ascii
+
+module Ascii
+  [case-delta char-nul char-tab char-lf char-cr char-space char-del
+   char-lower? char-upper? char-alpha? char-digit? char-alnum? char-space?
+   char-whitespace? char-control? char-printable? char-hex? char-oct?
+   char-binary? char-upcase char-downcase char-toggle-case digit->int
+   int->digit hex-digit->int int->hex-digit]

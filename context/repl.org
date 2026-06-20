@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-13
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -33,6 +33,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-13
+:CONTEXT_DESCRIPTION: Interactive REPL — JIT eval, readline, completion, error recovery
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
@@ -311,6 +312,7 @@
 * Category Contract
 :PROPERTIES:
 :ID: monadc.context.repl.category-contract
+:CONTEXT_DESCRIPTION: Category-theoretic contract for REPL
 :CUSTOM_ID: repl-category-contract
 :CONTEXT_KIND: contract
 :END:

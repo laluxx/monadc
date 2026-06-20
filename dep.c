@@ -9,7 +9,7 @@
 /// Trace Utilities
 
 int g_trace_depth = 0;
-bool g_trace_enabled = true; // Set to false to disable tracing
+bool g_trace_enabled = false; // Enable with --trace=dep or --trace=all
 
 void shared_trace_indent(void) {
     if (!g_trace_enabled) return;
@@ -1530,6 +1530,103 @@ ConvCtx conv_ctx_make(DepCtx *dctx, int depth) {
 //
 static bool dep_conv_vals(ConvCtx *cctx, Value *v1, Value *v2, Value *ty);
 
+static bool embedded_type_arg_compatible(Type *a, Type *b) {
+    if (!a || !b) return true;
+    if (a->kind == TYPE_UNKNOWN || b->kind == TYPE_UNKNOWN) return true;
+    if (a->kind == TYPE_VAR || b->kind == TYPE_VAR) return true;
+    return types_equal(a, b);
+}
+
+static Type *embedded_collection_elem(Type *t) {
+    if (!t) return NULL;
+    if (t->kind == TYPE_COLL) return t->element_type;
+    if (t->kind == TYPE_ARR) return t->arr_element_type;
+    if (t->kind == TYPE_LIST && t->list_count == 1) return t->list_elem;
+    return NULL;
+}
+
+static bool embedded_coll_compatible(Type *a, Type *b) {
+    if (!a || !b) return false;
+
+    if (a->kind == TYPE_COLL && b->kind == TYPE_COLL) {
+        return embedded_type_arg_compatible(a->element_type,
+                                            b->element_type);
+    }
+
+    if (a->kind == TYPE_COLL &&
+        (b->kind == TYPE_ARR || b->kind == TYPE_LIST || b->kind == TYPE_STRING)) {
+        return embedded_type_arg_compatible(a->element_type,
+                                            embedded_collection_elem(b));
+    }
+
+    if (b->kind == TYPE_COLL &&
+        (a->kind == TYPE_ARR || a->kind == TYPE_LIST || a->kind == TYPE_STRING)) {
+        return embedded_type_arg_compatible(b->element_type,
+                                            embedded_collection_elem(a));
+    }
+
+    return false;
+}
+
+static bool embedded_adt_type_compatible(Type *a, Type *b) {
+    if (!a || !b) return false;
+    if (types_equal(a, b)) return true;
+    if (embedded_coll_compatible(a, b)) return true;
+
+    if (a->kind == TYPE_APP && b->kind == TYPE_LAYOUT) {
+        if (a->app_constructor && b->layout_name &&
+            strcmp(a->app_constructor, b->layout_name) == 0)
+            return true;
+        const char *bname = b->layout_name ? b->layout_name : "";
+        if (strncmp(bname, "__type_", 7) == 0 && a->app_constructor &&
+            strcmp(a->app_constructor, bname + 7) == 0)
+            return true;
+    }
+
+    if (b->kind == TYPE_APP && a->kind == TYPE_LAYOUT) {
+        if (b->app_constructor && a->layout_name &&
+            strcmp(b->app_constructor, a->layout_name) == 0)
+            return true;
+        const char *aname = a->layout_name ? a->layout_name : "";
+        if (strncmp(aname, "__type_", 7) == 0 && b->app_constructor &&
+            strcmp(b->app_constructor, aname + 7) == 0)
+            return true;
+    }
+
+    return false;
+}
+
+static bool embedded_adt_matches_neutral(Type *embed_type, Value *neutral) {
+    if (!embed_type || !neutral) return false;
+    if (neutral->kind != VAL_NEUTRAL) return false;
+    if (neutral->spine.count != 0) return false;
+    if (!neutral->neutral_name) return false;
+
+    const char *name = neutral->neutral_name;
+    if (strncmp(name, "__type_", 7) == 0) {
+        name += 7;
+    }
+
+    if (embed_type->kind == TYPE_APP &&
+        embed_type->app_constructor &&
+        strcmp(embed_type->app_constructor, name) == 0) {
+        return true;
+    }
+
+    if (embed_type->kind == TYPE_LAYOUT &&
+        embed_type->layout_name) {
+        const char *layout_name = embed_type->layout_name;
+        if (strncmp(layout_name, "__type_", 7) == 0) {
+            layout_name += 7;
+        }
+        if (strcmp(layout_name, name) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 //  Apply a fresh neutral at depth `cctx->depth` to extend the context
 static Value *fresh_neutral(ConvCtx *cctx, const char *hint) {
     char name[64];
@@ -1687,6 +1784,15 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
     }
 
     if (v1->kind != v2->kind) {
+        if (v1->kind == VAL_EMBED && v2->kind == VAL_NEUTRAL &&
+            embedded_adt_matches_neutral(v1->embed_type, v2)) {
+            return true;
+        }
+        if (v2->kind == VAL_EMBED && v1->kind == VAL_NEUTRAL &&
+            embedded_adt_matches_neutral(v2->embed_type, v1)) {
+            return true;
+        }
+
         // Unify numbers across representations
         if (v1->kind == VAL_NUM_LIT && v1->num_lit == 0 && v2->kind == VAL_ZERO) return true;
         if (v2->kind == VAL_NUM_LIT && v2->num_lit == 0 && v1->kind == VAL_ZERO) return true;
@@ -1705,7 +1811,7 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
 
         // Embed vs ground — compare underlying types
         if (v1->kind == VAL_EMBED && v2->kind == VAL_EMBED) {
-            if (types_equal(v1->embed_type, v2->embed_type)) return true;
+            if (embedded_adt_type_compatible(v1->embed_type, v2->embed_type)) return true;
             int k1 = v1->embed_type ? v1->embed_type->kind : -1;
             int k2 = v2->embed_type ? v2->embed_type->kind : -1;
             if ((k1 == TYPE_INT && k2 == TYPE_CHAR) || (k1 == TYPE_CHAR && k2 == TYPE_INT)) return true;
@@ -1807,7 +1913,7 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
             && dep_conv_vals(cctx, v1->if_else_val, v2->if_else_val, ty);
 
     case VAL_EMBED: {
-        if (types_equal(v1->embed_type, v2->embed_type)) return true;
+        if (embedded_adt_type_compatible(v1->embed_type, v2->embed_type)) return true;
 
         /* Implicit coercions for characters acting as small integers */
         int k1 = v1->embed_type->kind;
@@ -2366,7 +2472,8 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
                         if (!dep_check(ctx, t->app_args[i], val_embed(type_int()))) return NULL;
                     }
                     Type *elem_type = NULL;
-                    if (k == TYPE_LIST) elem_type = fn_ty->embed_type->element_type;
+                    if (k == TYPE_COLL) elem_type = fn_ty->embed_type->element_type;
+                    else if (k == TYPE_LIST && fn_ty->embed_type->list_count == 1) elem_type = fn_ty->embed_type->list_elem;
                     else if (k == TYPE_ARR) elem_type = fn_ty->embed_type->arr_element_type;
 
                     if (elem_type) {
@@ -2810,6 +2917,37 @@ Type *dep_ground_of_value_env(Value *v, MetaCtx *mctx, DepEnv *globals) {
     return type_unknown();
 }
 
+static char *dep_type_parse_source(const char *type_name) {
+    if (!type_name) return NULL;
+
+    const char *start = strstr(type_name, "=>");
+    if (start) {
+        start += 2;
+    } else {
+        start = type_name;
+    }
+
+    while (*start == ' ' || *start == '\t' || *start == '\n')
+        start++;
+
+    const char *end = start + strlen(start);
+    while (end > start &&
+           (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n'))
+        end--;
+
+    if (*start == '(' && end > start + 1 && end[-1] == ')') {
+        start++;
+        end--;
+        while (*start == ' ' || *start == '\t' || *start == '\n')
+            start++;
+        while (end > start &&
+               (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n'))
+            end--;
+    }
+
+    return strndup(start, (size_t)(end - start));
+}
+
 static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     if (!ast) return term_hole();
 
@@ -2989,26 +3127,28 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
         Term *ty   = NULL;
 
         if (ast->lambda.return_type) {
-            const char *rname = ast->lambda.return_type;
+            char *rname = dep_type_parse_source(ast->lambda.return_type);
 
             AST *ret_ast = parse(rname);
             if (ret_ast) {
                 ty = dep_term_of_type_ast(ctx, ret_ast);
                 /* Intentional leak to prevent UAF in HM phase */
             }
+            free(rname);
         }
 
         for (int i = ast->lambda.param_count - 1; i >= 0; i--) {
             ASTParam *p = &ast->lambda.params[i];
             Term *dom = term_hole();
             if (p->type_name) {
-                const char *tname = p->type_name;
+                char *tname = dep_type_parse_source(p->type_name);
 
                 AST *ty_ast = parse(tname);
                 if (ty_ast) {
                     dom = dep_term_of_type_ast(ctx, ty_ast);
                     /* Intentional leak to prevent UAF in HM phase */
                 }
+                free(tname);
             }
             body = term_lam(p->name, term_clone(dom), body);
             if (ty) {
@@ -3100,12 +3240,55 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
                 ast->array.elements[0]->type == AST_SYMBOL && strcmp(ast->array.elements[0]->symbol, "Fn") == 0 &&
                 ast->array.elements[1]->type == AST_SYMBOL && strcmp(ast->array.elements[1]->symbol, "::") == 0) {
                 res = dep_term_of_type_ast(ctx, ast->array.elements[2]);
-        } else if (ast->array.element_count == 1 || ast->array.element_count == 0) {
-            /* Treat [a] and [] as generic polymorphic collections (?coll),
-             * not strictly 'List'. This allows Strings and Arrays to pass
-             * through to the HM checker for accurate Coll validation. */
-            res = term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?coll"));
+        } else if (ast->array.element_count == 0) {
+            res = term_embed(type_arr_fat(type_unknown()));
+        } else if (ast->array.element_count == 1) {
+            AST *elem_ast = ast->array.elements[0];
+
+            Type *coll = type_coll();
+
+            if (elem_ast->type == AST_SYMBOL &&
+                elem_ast->symbol[0] >= 'a' && elem_ast->symbol[0] <= 'z') {
+                coll->element_type = type_unknown();
+                res = term_embed(coll);
+            } else if (elem_ast->type == AST_SYMBOL) {
+                Type *elem = type_from_name(elem_ast->symbol);
+                coll->element_type = elem ? elem : type_layout_ref(elem_ast->symbol);
+                res = term_embed(coll);
+            } else {
+                Term *elem_term = dep_term_of_type_ast(ctx, elem_ast);
+                if (elem_term && elem_term->kind == TERM_EMBED && elem_term->embed_type) {
+                    coll->element_type = type_clone(elem_term->embed_type);
+                } else {
+                    coll->element_type = type_unknown();
+                }
+                res = term_embed(coll);
+            }
+        } else {
+            char type_buf[512] = {0};
+
+            for (size_t i = 0; i < ast->array.element_count; i++) {
+                AST *elem = ast->array.elements[i];
+                if (!elem || elem->type != AST_SYMBOL || !elem->symbol) {
+                    type_buf[0] = '\0';
+                    break;
+                }
+                if (type_buf[0]) {
+                    strncat(type_buf, " ", sizeof(type_buf) - strlen(type_buf) - 1);
+                }
+                strncat(type_buf, elem->symbol, sizeof(type_buf) - strlen(type_buf) - 1);
+            }
+
+            Type *coll = type_coll();
+            if (type_buf[0]) {
+                Type *elem = type_from_name(type_buf);
+                coll->element_type = elem ? elem : type_unknown();
+            } else {
+                coll->element_type = type_unknown();
+            }
+            res = term_embed(coll);
         }
+
     } else if (ast->type == AST_LIST) {
         bool is_arrow = false;
         for (size_t i = 0; i < ast->list.count; i++) {

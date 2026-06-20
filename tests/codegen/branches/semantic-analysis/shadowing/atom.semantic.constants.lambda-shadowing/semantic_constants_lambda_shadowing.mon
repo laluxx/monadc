@@ -1,0 +1,11 @@
+;; TEST-ID: tests.semantic.constants.lambda-shadowing
+;; TEST-CONTEXT: context/codegen.org
+;; TEST-PURPOSE: Lambda parameters shadow typed top-level constants during propagation.
+;; TEST-EXPECT: parse-json
+;; TEST-TIER: regression
+;; TEST-COMPILE-FLAGS: -O
+;; TEST-MENU-PATH: codegen/branches/semantic-analysis/shadowing
+
+(module Main)
+x :: Int = 30
+(show ((lambda ([x : Int]) (+ x 1)) 5))

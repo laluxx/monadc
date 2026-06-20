@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-17
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:nil num:nil
@@ -241,6 +241,7 @@ file in =context/*.org=:
 * Formal Category Navigation
 :PROPERTIES:
 :ID: monadc.context.navigation.round3-category-directory
+:CONTEXT_DESCRIPTION: Formal category documentation routing
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active
 :SOURCE: context/navigation.org
@@ -266,6 +267,7 @@ file in =context/*.org=:
 * Live Category Tooling
 :PROPERTIES:
 :ID: monadc.context.navigation.live-category-tooling
+:CONTEXT_DESCRIPTION: Live category interface routing
 :CUSTOM_ID: navigation-live-category-tooling
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active
@@ -281,6 +283,7 @@ file in =context/*.org=:
 * Language Reference Zone (info/)
 :PROPERTIES:
 :ID: monadc.context.navigation.info-zone
+:CONTEXT_DESCRIPTION: Language reference zone routing
 :CUSTOM_ID: navigation-info-zone
 :CONTEXT_KIND: navigation
 :CONTEXT_STATUS: active

@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Entropy of the Garden
 :PROPERTIES:
 :ID: monadc.context.category.info.entropy
+:CONTEXT_DESCRIPTION: Shannon entropy for the context garden
 :CUSTOM_ID: category-info-entropy
 :CONTEXT_KIND: metric
 :CONTEXT_STATUS: active
@@ -37,6 +38,7 @@ H(X) = - Σ_x p(x) log2 p(x)
 * Information Gain for Search
 :PROPERTIES:
 :ID: monadc.context.category.info.search
+:CONTEXT_DESCRIPTION: Information gain metrics for search ranking
 :CUSTOM_ID: category-info-search
 :CONTEXT_KIND: metric
 :CONTEXT_STATUS: active
@@ -63,6 +65,7 @@ H(X) = - Σ_x p(x) log2 p(x)
 * Surprise and Staleness
 :PROPERTIES:
 :ID: monadc.context.category.info.surprise-staleness
+:CONTEXT_DESCRIPTION: Surprise and staleness metrics for curation
 :CUSTOM_ID: category-info-surprise-staleness
 :CONTEXT_KIND: metric
 :CONTEXT_STATUS: active
@@ -83,6 +86,7 @@ H(X) = - Σ_x p(x) log2 p(x)
 * Minimum Description Length
 :PROPERTIES:
 :ID: monadc.context.category.info.mdl
+:CONTEXT_DESCRIPTION: Minimum Description Length for context pruning
 :CUSTOM_ID: category-info-mdl
 :CONTEXT_KIND: metric
 :CONTEXT_STATUS: active

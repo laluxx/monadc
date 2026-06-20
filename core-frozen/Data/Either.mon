@@ -1,0 +1,126 @@
+;;; Either.mon --- Sum type for errors and alternatives
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Data.Either either error result functor applicative monad
+
+;;; Commentary:
+
+;; Either models computations that may fail with a typed Left value or succeed
+;; with a Right value. Prefer Either e a over Maybe a when failure should carry
+;; a reason.
+
+;;; Code:
+
+import Class
+
+module Data.Either
+  [Either Left Right
+   either left? right? isLeft isRight
+   fromLeft fromRight mapLeft mapRight bimap
+   partitionEithers rights lefts]
+
+
+data Either e a = Left e | Right a
+
+
+instance (Eq e, Eq a) => Eq (Either e a) where
+  (Left x  = Left y)  => x = y
+  (Right x = Right y) => x = y
+  (_       = _)       => False
+
+
+instance (Show e, Show a) => Show (Either e a) where
+  (show (Left e))  => "Left "  ++ show e
+  (show (Right x)) => "Right " ++ show x
+
+
+instance Functor (Either e) where
+  (fmap _ (Left e))  => Left e
+  (fmap f (Right x)) => Right (f x)
+
+
+instance Applicative (Either e) where
+  (pure x) => Right x
+
+  (Left e  <*> _) => Left e
+  (Right f <*> x) => fmap f x
+
+
+instance Monad (Either e) where
+  (ma >>= f) =>
+    match ma with
+      Left e  -> Left e
+      Right x -> f x
+
+  (return x) => Right x
+
+
+define either :: (e -> c) -> (a -> c) -> Either e a -> c
+  :doc "Eliminate Either by handling Left and Right."
+  f _ (Left e)  -> f e
+  _ g (Right x) -> g x
+
+
+define left? :: Either e a -> Bool
+  :alias isLeft
+  :doc "Return True if the value is Left."
+  Left _  -> True
+  Right _ -> False
+
+
+define right? :: Either e a -> Bool
+  :alias isRight
+  :doc "Return True if the value is Right."
+  Right _ -> True
+  Left _  -> False
+
+
+define fromLeft :: e -> Either e a -> e
+  :doc "Extract a Left value or return DEFAULT."
+  _ (Left e)  -> e
+  default _   -> default
+
+
+define fromRight :: a -> Either e a -> a
+  :doc "Extract a Right value or return DEFAULT."
+  _ (Right x) -> x
+  default _   -> default
+
+
+define mapLeft :: (e -> f) -> Either e a -> Either f a
+  f (Left e)  -> Left (f e)
+  _ (Right x) -> Right x
+  :doc "Map a function over the Left side of Either."
+
+
+define mapRight :: (a -> b) -> Either e a -> Either e b
+  _ (Left e)  -> Left e
+  f (Right x) -> Right (f x)
+  :alias fmap
+  :doc "Map a function over the Right side of Either."
+
+
+define bimap :: (e -> f) -> (a -> b) -> Either e a -> Either f b
+  f _ (Left e)  -> Left (f e)
+  _ g (Right x) -> Right (g x)
+  :doc "Map both sides of Either."
+
+
+define lefts :: [Either e a] -> (e)
+  []              -> []
+  [Left e |rest]  -> [e | lefts rest]
+  [Right _|rest]  -> lefts rest
+  :doc "Collect all Left values."
+
+
+define rights :: [Either e a] -> (a)
+  []              -> []
+  [Left _ |rest]  -> rights rest
+  [Right x|rest]  -> [x | rights rest]
+  :doc "Collect all Right values."
+
+
+define partitionEithers :: [Either e a] -> ((e), (a))
+  :doc "Split a sequence of Either values into all Lefts and all Rights."
+  xs -> (lefts xs, rights xs)

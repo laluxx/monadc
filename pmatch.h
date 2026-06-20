@@ -30,8 +30,15 @@ ASTPattern parse_single_pattern(Parser *p);
 
 void pmatch_rename_anon_params(AST *pm, ASTParam *params, int param_count);
 
-// Transform an AST_PMATCH node into an equivalent (cond ...) AST
+// Transform an AST_PMATCH node into an equivalent conditional AST
 // given the function's parameter list.
+//
+// Discrete constructor and integer-literal clauses are emitted as
+// same-selector equality chains.  codegen.c recognizes that shape and
+// lowers it with LLVMBuildSwitch, giving pmatch-backed constructor
+// dispatch the same jump-table-friendly IR as explicit switch forms.
+// Guarded clauses and structural/list/string matches keep conditional
+// lowering because their predicates are not single-tag dispatch.
 // The returned AST is freshly allocated and owned by the caller.
 // Called from codegen before the lambda body is compiled.
 AST *pmatch_desugar(AST *pmatch_node, ASTParam *params, int param_count);

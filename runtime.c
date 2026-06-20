@@ -1519,6 +1519,18 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
     if (a->type == RT_THUNK) a = rt_force(a->data.thunk_val);
     if (b->type == RT_THUNK) b = rt_force(b->data.thunk_val);
     if (a->type == RT_NIL && b->type == RT_NIL) return 1;
+    if (a->type == RT_ARRAY && b->type == RT_LIST) {
+        RuntimeList *lb = b->data.list_val;
+        for (size_t i = 0; i < a->data.array_val.length; i++) {
+            if (rt_list_is_empty_list(lb)) return 0;
+            if (!rt_equal_p(a->data.array_val.elements[i], rt_list_car(lb))) return 0;
+            lb = rt_list_cdr(lb);
+        }
+        return rt_list_is_empty_list(lb);
+    }
+    if (a->type == RT_LIST && b->type == RT_ARRAY) {
+        return rt_equal_p(b, a);
+    }
     if (a->type != b->type) return 0;
     switch (a->type) {
         case RT_INT:     return a->data.int_val   == b->data.int_val;

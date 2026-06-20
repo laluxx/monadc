@@ -2,7 +2,7 @@
 #+AUTHOR: GPT-5.5 Thinking
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-16
+#+LAST_MODIFIED: 2026-06-18
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:3 num:t
@@ -16,6 +16,7 @@
 * Purpose
 :PROPERTIES:
 :ID: monadc.context.category.catface.purpose
+:CONTEXT_DESCRIPTION: Purpose of Catface, the live category interface
 :CUSTOM_ID: category-catface-purpose
 :CONTEXT_KIND: interface
 :CONTEXT_STATUS: active
@@ -38,6 +39,7 @@
 * Source Layout
 :PROPERTIES:
 :ID: monadc.context.category.catface.source-layout
+:CONTEXT_DESCRIPTION: Source file layout and module responsibilities
 :CUSTOM_ID: category-catface-source-layout
 :CONTEXT_KIND: source-map
 :CONTEXT_STATUS: active
@@ -68,6 +70,7 @@
 * Interface Contract
 :PROPERTIES:
 :ID: monadc.context.category.catface.interface-contract
+:CONTEXT_DESCRIPTION: Dual-pane interface contract and keybindings
 :CUSTOM_ID: category-catface-interface-contract
 :CONTEXT_KIND: contract
 :CONTEXT_STATUS: active
@@ -91,6 +94,7 @@
 * Query Language
 :PROPERTIES:
 :ID: monadc.context.category.catface.query-language
+:CONTEXT_DESCRIPTION: Catface query language specification
 :CUSTOM_ID: category-catface-query-language
 :CONTEXT_KIND: language-contract
 :CONTEXT_STATUS: active
@@ -114,6 +118,7 @@
 * Mathematical Contract
 :PROPERTIES:
 :ID: monadc.context.category.catface.mathematical-contract
+:CONTEXT_DESCRIPTION: Category-theoretic model for Catface
 :CUSTOM_ID: category-catface-mathematical-contract
 :CONTEXT_KIND: mathematical-contract
 :CONTEXT_STATUS: active
@@ -136,6 +141,7 @@
 * Category Contract
 :PROPERTIES:
 :ID: monadc.context.category.catface.category-contract
+:CONTEXT_DESCRIPTION: Category contract for Catface Zig interface
 :CUSTOM_ID: category-catface-category-contract
 :CONTEXT_KIND: contract
 :CONTEXT_STATUS: active
@@ -166,6 +172,7 @@
 * Build and Run
 :PROPERTIES:
 :ID: monadc.context.category.catface.build-run
+:CONTEXT_DESCRIPTION: Build, test, and run instructions for Catface
 :CUSTOM_ID: category-catface-build-run
 :CONTEXT_KIND: executable-contract
 :CONTEXT_STATUS: active
@@ -192,6 +199,7 @@ zig build run -- --check ../../
 * Superseded Prototype
 :PROPERTIES:
 :ID: monadc.context.category.catface.superseded-prototype
+:CONTEXT_DESCRIPTION: Superseded Python curses prototype
 :CUSTOM_ID: category-catface-superseded-prototype
 :CONTEXT_KIND: supersession
 :CONTEXT_STATUS: active

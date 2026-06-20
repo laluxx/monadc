@@ -1,11 +1,78 @@
 
+show 3 + 3
+
+
+
+;; I think this should work
+;; We should support both the define version and the multi clause version
+;; todo :: String -> Todo
+;; todo "dlskjdlksjadlkjsalkjl"
+
+;; define todo :: String -> Link
+;;   "Porco dio fai sta roba"[3..4]
+
+;; y = 2x + x²
+
+
+;; a = [1 2 3]
+
+
+;; show a[2..3]
+
+;; show a 2
+
+
+;; show (a 2)
 
 ;; TODO
-define matrix [1 2 3
-               4 5 6
-               7 8 9]
+;; define product-range :: Int -> Int -> Int
+;;   lo hi | >         -> 1
+;;         | otherwise -> lo * product-range (lo + 1) hi
+;;   :doc "Return the product of all integers from LO to HI inclusive."
 
 
+;; show 3 + 3
+
+
+;; TODO Do ALL This Shit
+
+
+;; define matrix [1 2 3
+;;                4 5 6
+;;                7 8 9]
+
+
+
+;; Both shoudl work
+
+;; define digit->int :: Char -> Int
+;;   c | .digit?   -> c - '0'
+;;     | otherwise -> error "digit->int: not a decimal digit"
+;;   :doc "Convert an ASCII decimal digit to Int."
+
+;; define digit->int :: Char -> Int
+;;   c | digit?    -> c - '0'
+;;     | otherwise -> error "digit->int: not a decimal digit"
+;;   :doc "Convert an ASCII decimal digit to Int."
+
+
+
+;; define const :: λx.λy.x
+
+;; const = λx.λy.x
+;; const <- λx.x
+
+
+;; x = (1, "hello")
+
+;; show x
+
+;; define type-id :: ∀a -> a
+;;   _ -> a
+;;   :doc "Returns the type of whatever you pass."
+
+;; if type-id ~[1 2 3] :: Heap
+;;  then sladkslakjd
 
 
 

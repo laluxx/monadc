@@ -6,6 +6,48 @@
 
 static Type *make_type(TypeKind kind);
 
+static char *type_trim_copy(const char *s) {
+    if (!s) return strdup("");
+    while (*s == ' ' || *s == '\t') s++;
+    const char *end = s + strlen(s);
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t')) end--;
+    return strndup(s, (size_t)(end - s));
+}
+
+static const char *type_find_top_level_arrow(const char *s) {
+    int depth = 0;
+    for (const char *p = s; p && *p; p++) {
+        if (*p == '(' || *p == '[' || *p == '{') {
+            depth++;
+        } else if (*p == ')' || *p == ']' || *p == '}') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && p[0] == '-' && p[1] == '>') {
+            return p;
+        }
+    }
+    return NULL;
+}
+
+static Type *type_parse_arrow_chain(const char *name) {
+    const char *arrow = type_find_top_level_arrow(name);
+    if (!arrow) return NULL;
+
+    char *left_s = strndup(name, (size_t)(arrow - name));
+    char *left = type_trim_copy(left_s);
+    free(left_s);
+    char *right = type_trim_copy(arrow + 2);
+
+    Type *ret = type_from_name(right);
+    free(right);
+    if (!ret) ret = type_unknown();
+
+    Type *param = type_from_name(left);
+    free(left);
+    if (!param) param = type_unknown();
+
+    return type_arrow(param, ret);
+}
+
 /// Type alias
 
 TypeAlias *g_aliases = NULL;
@@ -229,7 +271,29 @@ int refinement_check_literal(const char *type_name, double val,
 Type *type_from_name(const char *name) {
     if (!name) return NULL;
 
+    char *trimmed_name = type_trim_copy(name);
+    if (!trimmed_name) return NULL;
+    if (trimmed_name[0] == '\0') {
+        free(trimmed_name);
+        return NULL;
+    }
+    if (strcmp(trimmed_name, name) != 0) {
+        Type *t = type_from_name(trimmed_name);
+        free(trimmed_name);
+        return t;
+    }
+    free(trimmed_name);
+
+    const char *constraint_arrow = strstr(name, "=>");
+    if (constraint_arrow) {
+        Type *t = type_from_name(constraint_arrow + 2);
+        if (t) return t;
+    }
+
     size_t len = strlen(name);
+
+    Type *arrow_type = type_parse_arrow_chain(name);
+    if (arrow_type) return arrow_type;
 
     if (len > 1 && name[0] == '*') {
         const char *inner_name = name + 1;
@@ -244,16 +308,71 @@ Type *type_from_name(const char *name) {
         return type_var(2000 + (name[0] - 'a'));
     }
 
-    // Parameterized List: (T) or (T1 T2 ...)
+    /* Parenthesized type application: (Maybe a) is grouping, not the
+     * list/tuple spelling below. Wisp/desugar can preserve ADT applications
+     * with these parens in lambda annotations. */
+    if (len > 2 && name[0] == '(' && name[len - 1] == ')') {
+        const char *inner_start = name + 1;
+        size_t inner_len = len - 2;
+        while (inner_len > 0 && (*inner_start == ' ' || *inner_start == '\t')) {
+            inner_start++;
+            inner_len--;
+        }
+        while (inner_len > 0 &&
+               (inner_start[inner_len - 1] == ' ' ||
+                inner_start[inner_len - 1] == '\t')) {
+            inner_len--;
+        }
+
+        char *inner_name = strndup(inner_start, inner_len);
+        char *trimmed_inner = type_trim_copy(inner_name);
+        free(inner_name);
+        Type *inner_arrow = type_parse_arrow_chain(trimmed_inner);
+        free(trimmed_inner);
+        if (inner_arrow) return inner_arrow;
+
+        if (inner_len > 0 && inner_start[0] >= 'A' && inner_start[0] <= 'Z') {
+            int depth = 0;
+            bool has_top_level_space = false;
+            for (size_t i = 0; i < inner_len; i++) {
+                char c = inner_start[i];
+                if (c == '(' || c == '[' || c == '{') depth++;
+                else if (c == ')' || c == ']' || c == '}') depth--;
+                else if ((c == ' ' || c == '\t') && depth == 0) {
+                    has_top_level_space = true;
+                    break;
+                }
+            }
+            if (has_top_level_space) {
+                char *inner_name = strndup(inner_start, inner_len);
+                Type *inner_type = type_from_name(inner_name);
+                free(inner_name);
+                if (inner_type) return inner_type;
+            }
+        }
+    }
+
+    // Parameterized product: (T), (T1 T2 ...), or comma tuple spelling.
     if (len > 1 && name[0] == '(' && name[len - 1] == ')') {
         char *inner_name = strndup(name + 1, len - 2);
         Type *t = make_type(TYPE_LIST);
         t->list_count = 0;
         t->list_types = NULL;
 
+        bool has_top_level_comma = false;
+        int scan_depth = 0;
+        for (char *q = inner_name; *q; q++) {
+            if (*q == '(' || *q == '[' || *q == '{') scan_depth++;
+            else if (*q == ')' || *q == ']' || *q == '}') scan_depth--;
+            else if (*q == ',' && scan_depth == 0) {
+                has_top_level_comma = true;
+                break;
+            }
+        }
+
         char *p = inner_name;
         while (*p) {
-            while (*p == ' ') p++;
+            while (*p == ' ' || *p == '\t' || (has_top_level_comma && *p == ',')) p++;
             if (!*p) break;
 
             char *start = p;
@@ -261,10 +380,15 @@ Type *type_from_name(const char *name) {
             while (*p) {
                 if (*p == '(' || *p == '[' || *p == '{') depth++;
                 if (*p == ')' || *p == ']' || *p == '}') depth--;
-                if (depth == 0 && *p == ' ') break;
+                if (depth == 0) {
+                    if (has_top_level_comma && *p == ',') break;
+                    if (!has_top_level_comma && (*p == ' ' || *p == '\t')) break;
+                }
                 p++;
             }
-            char *elem_str = strndup(start, p - start);
+            char *end = p;
+            while (end > start && (end[-1] == ' ' || end[-1] == '\t')) end--;
+            char *elem_str = strndup(start, end - start);
             Type *elem_t = type_from_name(elem_str);
             if (!elem_t) elem_t = type_unknown();
             free(elem_str);
@@ -272,18 +396,25 @@ Type *type_from_name(const char *name) {
             t->list_count++;
             t->list_types = realloc(t->list_types, t->list_count * sizeof(Type*));
             t->list_types[t->list_count - 1] = elem_t;
+            if (has_top_level_comma && *p == ',') p++;
         }
         free(inner_name);
         return t;
     }
 
-    // Parameterized Collection: [T]
+    // Bracketed type syntax:
+    //   [T] = abstract collection of T in type annotations.
+    // Concrete/runtime arrays must use Arr :: T or Arr :: T :: N.
     if (len > 2 && name[0] == '[' && name[len - 1] == ']') {
         char *inner_name = strndup(name + 1, len - 2);
-        Type *inner = type_from_name(inner_name);
+        char *trimmed_inner = type_trim_copy(inner_name);
         free(inner_name);
+
+        Type *inner = type_from_name(trimmed_inner);
+        free(trimmed_inner);
+
         Type *t = type_coll();
-        t->element_type = inner;
+        t->element_type = inner ? inner : type_unknown();
         return t;
     }
 
@@ -309,6 +440,14 @@ Type *type_from_name(const char *name) {
             inner_type = type_layout_ref(inner_name);
         }
         return type_ptr(inner_type);
+    }
+
+    if (strncmp(name, "Coll :: ", 8) == 0) {
+        const char *inner_name = name + 8;
+        Type *inner_type = type_from_name(inner_name);
+        Type *t = type_coll();
+        t->element_type = inner_type ? inner_type : type_unknown();
+        return t;
     }
 
     if (strncmp(name, "Arr :: ", 7) == 0) {
@@ -641,10 +780,17 @@ Type *type_parse_fn_arrow(const char *name) {
         p2 = arrow_pos + 4;
     }
     if (nparts < 2) return NULL;
-    Type *result = type_from_name(parts[nparts - 1]);
+    Type *result = NULL;
+    {
+        char *trimmed = type_trim_copy(parts[nparts - 1]);
+        result = type_from_name(trimmed);
+        free(trimmed);
+    }
     if (!result) result = type_unknown();
     for (int _i = nparts - 2; _i >= 0; _i--) {
-        Type *param_t = type_from_name(parts[_i]);
+        char *trimmed = type_trim_copy(parts[_i]);
+        Type *param_t = type_from_name(trimmed);
+        free(trimmed);
         if (!param_t) param_t = type_unknown();
         result = type_arrow(param_t, result);
     }
@@ -843,7 +989,10 @@ const char *type_to_string(Type *t) {
             return buf;
         }
         case TYPE_COLL:
-            snprintf(buf, 512, "[%s]", type_to_string(t->element_type));
+            if (t->element_type)
+                snprintf(buf, 512, "Coll :: %s", type_to_string(t->element_type));
+            else
+                snprintf(buf, 512, "Coll");
             return buf;
         case TYPE_PATH: return "Path";
         case TYPE_ARR:
@@ -858,7 +1007,7 @@ const char *type_to_string(Type *t) {
             snprintf(buf, 512, "Arr :: %s :: %lld",
                      type_to_string(t->arr_element_type), (long long)t->arr_size);
         } else if (t->arr_element_type) {
-            snprintf(buf, 512, "Arr :: %s", type_to_string(t->arr_element_type));
+            snprintf(buf, 512, "[%s]", type_to_string(t->arr_element_type));
         } else if (t->arr_size >= 0) {
             snprintf(buf, 512, "Arr :: ? :: %lld", (long long)t->arr_size);
         } else {
@@ -949,15 +1098,58 @@ Type *infer_literal_type(double value, const char *literal_str) {
     return type_int();
 }
 
+static void append_type_node(char *buf, size_t cap, struct AST *node) {
+    size_t off = strlen(buf);
+    if (!node || off + 1 >= cap) return;
+
+    switch (node->type) {
+    case AST_SYMBOL:
+        snprintf(buf + off, cap - off, "%s", node->symbol);
+        break;
+    case AST_NUMBER:
+        snprintf(buf + off, cap - off, "%.0f", node->number);
+        break;
+    case AST_ARRAY:
+        snprintf(buf + off, cap - off, "[");
+        for (size_t i = 0; i < node->array.element_count; i++) {
+            if (i > 0) strncat(buf, " ", cap - strlen(buf) - 1);
+            append_type_node(buf, cap, node->array.elements[i]);
+        }
+        strncat(buf, "]", cap - strlen(buf) - 1);
+        break;
+    case AST_LIST:
+        snprintf(buf + off, cap - off, "(");
+        for (size_t i = 0; i < node->list.count; i++) {
+            if (i > 0) strncat(buf, " ", cap - strlen(buf) - 1);
+            append_type_node(buf, cap, node->list.items[i]);
+        }
+        strncat(buf, ")", cap - strlen(buf) - 1);
+        break;
+    default:
+        snprintf(buf + off, cap - off, "?");
+        break;
+    }
+}
+
+static Type *parse_type_slice(struct AST **items, size_t start, size_t count) {
+    char buf[512] = {0};
+    for (size_t i = start; i < count; i++) {
+        if (i > start) strncat(buf, " ", sizeof(buf) - strlen(buf) - 1);
+        append_type_node(buf, sizeof(buf), items[i]);
+    }
+    Type *t = type_from_name(buf);
+    return t ? t : type_unknown();
+}
+
 static Type *parse_type_node(struct AST *node) {
     if (!node) return NULL;
     if (node->type == AST_ARRAY) {
-        Type *t = type_coll();
-        if (node->array.element_count == 1) {
-            t->element_type = parse_type_node(node->array.elements[0]);
-        }
-        return t;
+        char buf[512] = {0};
+        append_type_node(buf, sizeof(buf), node);
+        Type *t = type_from_name(buf);
+        return t ? t : type_unknown();
     }
+
     if (node->type == AST_LIST) {
         Type **elems = malloc(sizeof(Type*) * node->list.count);
         for (size_t j = 0; j < node->list.count; j++) {
@@ -1005,7 +1197,7 @@ Type *parse_type_annotation(struct AST *ast) {
 
             // Support array syntax in arrow shorthand
             if (inner_node->type == AST_ARRAY) {
-                inner = type_coll();
+                inner = parse_type_node(inner_node);
             } else if (inner_node->type == AST_SYMBOL) {
                 inner = type_from_name(inner_node->symbol);
                 if (!inner) inner = type_layout_ref(inner_node->symbol);
@@ -1060,7 +1252,7 @@ Type *parse_type_annotation(struct AST *ast) {
             }
         }
 
-        return parse_type_node(type_node);
+        return parse_type_slice(items, i + 1, count);
     }
     return NULL;
 }

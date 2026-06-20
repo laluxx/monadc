@@ -1,0 +1,331 @@
+;;; Json.mon --- JSON values, optics, encoding, and parser surface
+
+;; Author: Laluxx
+;; Version: 0.5.0
+;; Keywords: Data.Json json codec parser encoder maybe either
+
+;;; Commentary:
+
+;; A design-quality JSON core module. Public fallible APIs use Either when an
+;; error message/position matters and Maybe only for absence such as object
+;; lookup. Arrays and objects preserve source order.
+
+;;; Code:
+
+import Data.Char.Ascii
+import Class
+import Coll
+import Data.Maybe
+import Data.Either
+
+module Data.Json
+ [Json JsonMember JsonError
+  json-null json-bool json-number json-string json-array json-object json-member
+  json-null? json-bool? json-number? json-string? json-array? json-object?
+  member-key member-value lookup-key insert-key delete-key update-key
+  encode encode-pretty escape-string
+  decode decodeMaybe parse]
+
+
+data Json
+  = JsonNull
+  | JsonBool Bool
+  | JsonNumber Float
+  | JsonString String
+  | JsonArray [Json]
+  | JsonObject [JsonMember]
+
+
+data JsonMember = JsonMember String Json
+
+
+data JsonError = JsonError Int String
+
+
+instance Eq Json where
+  (JsonNull       = JsonNull)       => True
+  (JsonBool a     = JsonBool b)     => a = b
+  (JsonNumber a   = JsonNumber b)   => a = b
+  (JsonString a   = JsonString b)   => a = b
+  (JsonArray a    = JsonArray b)    => a = b
+  (JsonObject a   = JsonObject b)   => a = b
+  (_              = _)              => False
+
+
+instance Show Json where
+  (show json) => encode json
+
+
+instance Show JsonError where
+  (show (JsonError offset message)) => "JsonError at " ++ show offset ++ ": " ++ message
+
+
+define [json-null :: Json] JsonNull
+  :doc "JSON null."
+
+
+define json-bool :: Bool -> Json
+  :doc "Construct a JSON boolean."
+  x -> JsonBool x
+
+
+define json-number :: Float -> Json
+  :doc "Construct a JSON number."
+  x -> JsonNumber x
+
+
+define json-string :: String -> Json
+  :doc "Construct a JSON string."
+  x -> JsonString x
+
+
+define json-array :: [Json] -> Json
+  :doc "Construct a JSON array."
+  xs -> JsonArray xs
+
+
+define json-object :: [JsonMember] -> Json
+  :doc "Construct a JSON object."
+  xs -> JsonObject xs
+
+
+define json-member :: String -> Json -> JsonMember
+  :doc "Construct a JSON object member."
+  key value -> JsonMember key value
+
+
+define json-null? :: Json -> Bool
+  :doc "Return True if VALUE is JSON null."
+  JsonNull -> True
+  _        -> False
+
+
+define json-bool? :: Json -> Bool
+  :doc "Return True if VALUE is a JSON boolean."
+  JsonBool _ -> True
+  _          -> False
+
+
+define json-number? :: Json -> Bool
+  :doc "Return True if VALUE is a JSON number."
+  JsonNumber _ -> True
+  _            -> False
+
+
+define json-string? :: Json -> Bool
+  :doc "Return True if VALUE is a JSON string."
+  JsonString _ -> True
+  _            -> False
+
+
+define json-array? :: Json -> Bool
+  :doc "Return True if VALUE is a JSON array."
+  JsonArray _ -> True
+  _           -> False
+
+
+define json-object? :: Json -> Bool
+  :doc "Return True if VALUE is a JSON object."
+  JsonObject _ -> True
+  _            -> False
+
+
+define member-key :: JsonMember -> String
+  :doc "Return the key of a JSON object member."
+  JsonMember key _ -> key
+
+
+define member-value :: JsonMember -> Json
+  :doc "Return the value of a JSON object member."
+  JsonMember _ value -> value
+
+
+define lookup-key :: String -> Json -> Maybe Json
+  :doc "Look up KEY in a JSON object. Return Just value or Nothing."
+  key (JsonObject members) -> go members
+  _ _                      -> Nothing
+  where
+    go [] -> Nothing
+    go [JsonMember k v|rest]
+      | key = k   -> Just v
+      | otherwise -> go rest
+
+
+define insert-key :: String -> Json -> Json -> Json
+  :doc "Insert or replace KEY with VALUE in a JSON object. Non-objects become singleton objects."
+  key value (JsonObject members) -> JsonObject (insert members)
+  key value _                    -> JsonObject [JsonMember key value]
+  where
+    insert [] -> [JsonMember key value]
+    insert [JsonMember k v|rest]
+      | key = k   -> [JsonMember key value | rest]
+      | otherwise -> [JsonMember k v | insert rest]
+
+
+define delete-key :: String -> Json -> Json
+  :doc "Remove KEY from a JSON object. Non-objects become null."
+  key (JsonObject members) -> JsonObject (delete members)
+  _ _                      -> JsonNull
+  where
+    delete [] -> []
+    delete [JsonMember k v|rest]
+      | key = k   -> rest
+      | otherwise -> [JsonMember k v | delete rest]
+
+
+define update-key :: String -> (Json -> Json) -> Json -> Json
+  :doc "Update KEY in a JSON object if present. Non-objects are returned unchanged."
+  key f (JsonObject members) -> JsonObject (update members)
+  _ _ value                  -> value
+  where
+    update [] -> []
+    update [JsonMember k v|rest]
+      | key = k   -> [JsonMember k (f v) | rest]
+      | otherwise -> [JsonMember k v | update rest]
+
+
+define encode :: Json -> String
+  :doc "Encode a JSON value as compact JSON text."
+  JsonNull          -> "null"
+  JsonBool True     -> "true"
+  JsonBool False    -> "false"
+  JsonNumber n      -> show n
+  JsonString s      -> escape-string s
+  JsonArray xs      -> "[" ++ (intercalate "," (map encode xs)) ++ "]"
+  JsonObject fields -> "{" ++ (intercalate "," (map encodeMember fields)) ++ "}"
+  where
+    encodeMember (JsonMember key value) -> (escape-string key) ++ ":" ++ (encode value)
+
+
+define encode-pretty :: Int -> Json -> String
+  :doc "Pretty-print JSON using INDENT spaces."
+  indent value -> render 0 value
+  where
+    spaces n | n <= 0    -> ""
+             | otherwise -> " " ++ spaces (n - 1)
+
+    newline n -> "\n" ++ spaces n
+
+    render level JsonNull          -> "null"
+    render level (JsonBool True)   -> "true"
+    render level (JsonBool False)  -> "false"
+    render level (JsonNumber n)    -> show n
+    render level (JsonString s)    -> escape-string s
+    render level (JsonArray [])    -> "[]"
+    render level (JsonArray xs)    ->
+      "[" ++ newline (level + indent)
+          ++ intercalate ("," ++ newline (level + indent)) (map (render (level + indent)) xs)
+          ++ newline level ++ "]"
+    render level (JsonObject [])   -> "{}"
+    render level (JsonObject xs)   ->
+      "{" ++ newline (level + indent)
+          ++ intercalate ("," ++ newline (level + indent)) (map (renderMember (level + indent)) xs)
+          ++ newline level ++ "}"
+
+    renderMember level (JsonMember key value) ->
+      escape-string key ++ ": " ++ render level value
+
+
+define escape-string :: String -> String
+  :doc "Escape a Monad string as a JSON string literal."
+  s -> "\"" ++ escapeChars s ++ "\""
+  where
+    escapeChars [] -> ""
+    escapeChars ['\"'|rest] -> "\\\"" ++ escapeChars rest
+    escapeChars ['\\'|rest] -> "\\\\" ++ escapeChars rest
+    escapeChars ['\n'|rest] -> "\\n" ++ escapeChars rest
+    escapeChars ['\r'|rest] -> "\\r" ++ escapeChars rest
+    escapeChars ['\t'|rest] -> "\\t" ++ escapeChars rest
+    escapeChars [c|rest]
+      | char-control? c -> "\\u00" ++ hexByte c ++ escapeChars rest
+      | otherwise       -> string c ++ escapeChars rest
+
+    hexByte c -> [int->hex-digit ((c / 16) mod 16) int->hex-digit (c mod 16)]
+
+
+define decode :: String -> Either JsonError Json
+  :alias parse
+  :doc "Parse JSON text, returning a JsonError with byte offset on failure."
+  text -> finish (parseValue (dropSpace (0, text)))
+  where
+    finish (Left err) -> Left err
+    finish (Right (value, state))
+      | null? (snd state) -> Right value
+      | otherwise         -> Left (JsonError (fst state) "trailing input")
+
+    dropSpace (i, []) -> (i, [])
+    dropSpace (i, [c|rest])
+      | char-whitespace? c -> dropSpace (i + 1, rest)
+      | otherwise          -> (i, [c | rest])
+
+    parseValue state ->
+      match dropSpace state with
+        (i, [])                          -> Left (JsonError i "unexpected end of input")
+        (i, ['n' 'u' 'l' 'l'|rest])      -> Right (JsonNull, (i + 4, rest))
+        (i, ['t' 'r' 'u' 'e'|rest])      -> Right (JsonBool True, (i + 4, rest))
+        (i, ['f' 'a' 'l' 's' 'e'|rest])  -> Right (JsonBool False, (i + 5, rest))
+        (i, ['\"'|rest])                 -> parseString i "" rest
+        (i, ['['|rest])                  -> parseArray [] (i + 1, rest)
+        (i, ['{'|rest])                  -> parseObject [] (i + 1, rest)
+        (i, chars)                       -> parseNumber i chars
+
+    parseString i acc [] -> Left (JsonError i "unterminated string")
+    parseString i acc ['\"'|rest] -> Right (JsonString acc, (i + 1, rest))
+    parseString i acc ['\\' '\"'|rest] -> parseString (i + 2) (acc ++ "\"") rest
+    parseString i acc ['\\' '\\'|rest] -> parseString (i + 2) (acc ++ "\\") rest
+    parseString i acc ['\\' 'n'|rest]  -> parseString (i + 2) (acc ++ "\n") rest
+    parseString i acc ['\\' 'r'|rest]  -> parseString (i + 2) (acc ++ "\r") rest
+    parseString i acc ['\\' 't'|rest]  -> parseString (i + 2) (acc ++ "\t") rest
+    parseString i acc [c|rest]
+      | char-control? c -> Left (JsonError i "control character in string")
+      | otherwise       -> parseString (i + 1) (acc ++ string c) rest
+
+    parseArray acc state ->
+      match dropSpace state with
+        (i, [']'|rest]) -> Right (JsonArray (reverse acc), (i + 1, rest))
+        next            -> parseArrayValue acc next
+
+    parseArrayValue acc state ->
+      parseValue state >>= (lambda ((value, afterValue)) (parseArraySep [value | acc] afterValue))
+
+    parseArraySep acc state ->
+      match dropSpace state with
+        (i, [','|rest]) -> parseArray acc (i + 1, rest)
+        (i, [']'|rest]) -> Right (JsonArray (reverse acc), (i + 1, rest))
+        (i, _)          -> Left (JsonError i "expected comma or closing bracket")
+
+    parseObject acc state ->
+      match dropSpace state with
+        (i, ['}'|rest]) -> Right (JsonObject (reverse acc), (i + 1, rest))
+        next            -> parseMember acc next
+
+    parseMember acc state ->
+      parseValue state >>= expectKey
+      where
+        expectKey (JsonString key, afterKey) -> parseColon key acc afterKey
+        expectKey (_, (i, _))                -> Left (JsonError i "expected object key string")
+
+    parseColon key acc state ->
+      match dropSpace state with
+        (i, [':'|rest]) -> parseValue (i + 1, rest) >>= (lambda ((value, afterValue)) (parseObjectSep [JsonMember key value | acc] afterValue))
+        (i, _)          -> Left (JsonError i "expected colon")
+
+    parseObjectSep acc state ->
+      match dropSpace state with
+        (i, [','|rest]) -> parseObject acc (i + 1, rest)
+        (i, ['}'|rest]) -> Right (JsonObject (reverse acc), (i + 1, rest))
+        (i, _)          -> Left (JsonError i "expected comma or closing brace")
+
+    parseNumber i chars -> Left (JsonError i "number parsing is pending")
+
+
+define decodeMaybe :: String -> Maybe Json
+  :doc "Parse JSON text, discarding error details."
+  text -> either (lambda (_) Nothing) Just (decode text)
+
+
+tests
+  assert-eq (encode JsonNull) "null" "Data.Json encode null"
+  assert-eq (encode (JsonBool True)) "true" "Data.Json encode bool"
+  assert-eq (encode (JsonString "x")) "\"x\"" "Data.Json encode string"
+  assert-eq (lookup-key "x" (JsonObject [JsonMember "x" (JsonNumber 1.0)])) (Just (JsonNumber 1.0)) "Data.Json lookup-key"
