@@ -1153,6 +1153,27 @@ void infer_zonk_ast(InferCtx *ctx, AST *ast) {
 
 /// Type Inference — Expression Walk
 
+static bool infer_ast_numeric_index(AST *ast, int *out_index) {
+    if (!ast || ast->type != AST_NUMBER)
+        return false;
+
+    long long n = (long long)ast->number;
+    if ((double)n != ast->number)
+        return false;
+
+    if (out_index)
+        *out_index = (int)n;
+    return true;
+}
+
+static bool infer_ast_was_postfix_index(AST *call, AST *receiver) {
+    if (!call || !receiver)
+        return false;
+
+    return call->line == receiver->line &&
+           call->column == receiver->end_column;
+}
+
 static void infer_env_remove(InferEnv *env, const char *name) {
     if (!env || !name) return;
     size_t idx = infer_env_hash(name);
@@ -1326,18 +1347,11 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                  * poisons HM with spurious single-element tuple types.    */
                 const char *tname = p->type_name;
                 char tname_buf[256];
-                /* Strip surrounding parens only for compound types that were
-                 * wrapped in reader.c: "(Pointer :: T)" -> "Pointer :: T".
-                 * Simple types no longer arrive with parens after the reader
-                 * fix, but we keep this as a safety net for any edge cases. */
-                if (tname[0] == '(' && tname[strlen(tname)-1] == ')') {
-                    size_t len = strlen(tname);
-                    if (len >= 3 && len - 2 < sizeof(tname_buf)) {
-                        memcpy(tname_buf, tname + 1, len - 2);
-                        tname_buf[len - 2] = '\0';
-                        tname = tname_buf;
-                    }
-                }
+                (void)tname_buf;
+                /* Do not strip ordinary parentheses here.
+                 * Tuple types and tuple-argument function types depend on
+                 * them, e.g. (a, b) and ((a, b) -> c). Only unwrap the old
+                 * Pointer wrapper case below. */
                 /* Strip pointer qualifiers — HM works on value types only;
                  * pointer-vs-value distinction is handled in codegen.
                  * Keep Fn :: (...) intact so type_from_name can recover the
@@ -1818,6 +1832,78 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                     while (ft && ft->kind == TYPE_ARROW) ft = ft->arrow_ret;
                     result = ft ? ft : infer_fresh(ctx);
                     break;
+                }
+            }
+        }
+
+        /* ---- postfix indexing ---------------------------------------- */
+        /* The reader represents adjacent postfix index syntax:
+         *
+         *   pair[0]
+         *
+         * as the same AST list shape as:
+         *
+         *   (pair 0)
+         *
+         * The only reliable difference today is source position: for
+         * postfix index, the list starts at '[' and the receiver ends at
+         * that same column. Handle that here before generic application,
+         * otherwise HM incorrectly constrains pair : Int -> a.
+         */
+        if (ast->list.count == 2 &&
+            head->type == AST_SYMBOL &&
+            infer_ast_was_postfix_index(ast, head)) {
+            TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
+            if (head_sc) {
+                Type *head_t = subst_apply(ctx->subst, head_sc->type);
+                int index_value = -1;
+
+                if (head_t &&
+                    infer_ast_numeric_index(ast->list.items[1], &index_value)) {
+                    infer_expr(ctx, ast->list.items[1]);
+
+                    if (head_t->kind == TYPE_LIST &&
+                        index_value >= 0 &&
+                        index_value < head_t->list_count &&
+                        head_t->list_types &&
+                        head_t->list_types[index_value]) {
+                        result = subst_apply(ctx->subst,
+                                             head_t->list_types[index_value]);
+                        break;
+                    }
+
+                    if (head_t->kind == TYPE_LIST &&
+                        head_t->list_count == 1 &&
+                        head_t->list_types &&
+                        head_t->list_types[0]) {
+                        result = subst_apply(ctx->subst,
+                                             head_t->list_types[0]);
+                        break;
+                    }
+
+                    if (head_t->kind == TYPE_STRING) {
+                        result = type_char();
+                        break;
+                    }
+
+                    if (head_t->kind == TYPE_COLL && head_t->element_type) {
+                        result = subst_apply(ctx->subst, head_t->element_type);
+                        break;
+                    }
+
+                    if (head_t->kind == TYPE_ARR && head_t->arr_element_type) {
+                        result = subst_apply(ctx->subst,
+                                             head_t->arr_element_type);
+                        break;
+                    }
+
+                    if (head_t->kind == TYPE_SET ||
+                        head_t->kind == TYPE_MAP ||
+                        head_t->kind == TYPE_COLL ||
+                        head_t->kind == TYPE_ARR) {
+                        result = infer_fresh(ctx);
+                        break;
+                    }
                 }
             }
         }

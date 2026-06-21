@@ -2197,7 +2197,7 @@ Value *dep_ctx_type_at_level(DepCtx *ctx, int level) {
 // the same meta appearing multiple times in one type (e.g. Π(x:?0).?0)
 // gets consistently renamed to the same fresh meta throughout.
 //
-static Value *dep_freshen_type_val(DepCtx *ctx, Value *v, int *old_ids, int *new_ids, int *count, int cap);
+/* dep_freshen_type_val was removed; dep_freshen_term drives freshening now. */
 
 static Term *dep_freshen_term(DepCtx *ctx, Term *t, int *old_ids, int *new_ids, int *count, int cap) {
     if (!t) return NULL;
@@ -2262,6 +2262,8 @@ Value *dep_freshen_type(DepCtx *ctx, Term *quoted_type) {
     // fresh_term is intentionally not freed: v's closures may reference it
     return v;
 }
+
+static bool dep_term_numeric_index(Term *t, int *out_index);
 
 static Value *dep_infer_internal(DepCtx *ctx, Term *t);
 
@@ -2482,6 +2484,22 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
                         fn_ty = val_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?elem"), val_spine_empty());
                     }
                     continue;
+                }
+            }
+
+            if (fn_ty && fn_ty->kind == VAL_SIGMA) {
+                int index_value = -1;
+                if (dep_term_numeric_index(t->app_args[i], &index_value)) {
+                    if (index_value == 0) {
+                        return fn_ty->domain;
+                    }
+
+                    if (index_value == 1) {
+                        Term *fst_term = term_fst(term_clone(t->app_fn));
+                        Value *fst_val = dep_eval(fst_term, ctx->env, ctx->mctx);
+                        term_free(fst_term);
+                        return dep_closure_apply(fn_ty->closure, fst_val);
+                    }
                 }
             }
 
@@ -2935,17 +2953,40 @@ static char *dep_type_parse_source(const char *type_name) {
            (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n'))
         end--;
 
-    if (*start == '(' && end > start + 1 && end[-1] == ')') {
-        start++;
-        end--;
-        while (*start == ' ' || *start == '\t' || *start == '\n')
-            start++;
-        while (end > start &&
-               (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n'))
-            end--;
-    }
-
     return strndup(start, (size_t)(end - start));
+}
+
+static bool dep_ast_numeric_index(AST *ast, int *out_index) {
+    if (!ast || ast->type != AST_NUMBER)
+        return false;
+
+    long long n = (long long)ast->number;
+    if ((double)n != ast->number)
+        return false;
+
+    if (out_index)
+        *out_index = (int)n;
+    return true;
+}
+
+static bool dep_term_numeric_index(Term *t, int *out_index) {
+    if (!t || t->kind != TERM_NUM_LIT)
+        return false;
+
+    if (t->num_lit > 2147483647ULL)
+        return false;
+
+    if (out_index)
+        *out_index = (int)t->num_lit;
+    return true;
+}
+
+static bool dep_ast_was_postfix_index(AST *call, AST *receiver) {
+    if (!call || !receiver)
+        return false;
+
+    return call->line == receiver->line &&
+           call->column == receiver->end_column;
 }
 
 static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
@@ -3099,6 +3140,84 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
                     term_hole(),
                     dep_term_of_ast(ctx, ast->list.items[2]),
                     dep_term_of_ast(ctx, ast->list.items[3]));
+            /* Postfix tuple index:
+             *
+             *   pair[0]  -> fst(pair)
+             *   pair[1]  -> snd(pair)
+             *
+             * The reader currently represents postfix index as the same
+             * list shape as a normal call, but it preserves source columns:
+             * the list column is the '[' column, which is also the receiver's
+             * end_column. Use that to avoid changing normal calls like
+             * (f 0).
+             */
+            if (ast->list.count == 2 &&
+                dep_ast_was_postfix_index(ast, head)) {
+                int index_value = -1;
+                if (dep_ast_numeric_index(ast->list.items[1], &index_value)) {
+                    Term *receiver = dep_term_of_ast(ctx, head);
+                    if (index_value == 0)
+                        return term_fst(receiver);
+                    if (index_value == 1)
+                        return term_snd(receiver);
+                }
+            }
+
+            /* Tuple value:
+             *
+             *   (x, y)  -> TERM_PAIR(x, y)
+             *
+             * The reader represents tuple syntax as a list containing a comma
+             * symbol. Lower it here before the generic function application
+             * path, otherwise (x, y) looks like a call whose head is x.
+             */
+            {
+                size_t comma_idx = 0;
+                bool is_tuple_value = false;
+
+                for (size_t i = 0; i < ast->list.count; i++) {
+                    AST *item = ast->list.items[i];
+                    if (item &&
+                        item->type == AST_SYMBOL &&
+                        item->symbol &&
+                        strcmp(item->symbol, ",") == 0) {
+                        comma_idx = i;
+                        is_tuple_value = true;
+                        break;
+                    }
+                }
+
+                if (is_tuple_value && comma_idx > 0 &&
+                    comma_idx + 1 < ast->list.count) {
+                    AST *lhs_ast = NULL;
+                    AST *rhs_ast = NULL;
+
+                    if (comma_idx == 1) {
+                        lhs_ast = ast->list.items[0];
+                    } else {
+                        lhs_ast = ast_new_list();
+                        lhs_ast->line = ast->line;
+                        lhs_ast->column = ast->column;
+                        for (size_t i = 0; i < comma_idx; i++)
+                            ast_list_append(lhs_ast, ast_clone(ast->list.items[i]));
+                    }
+
+                    if (ast->list.count - comma_idx - 1 == 1) {
+                        rhs_ast = ast->list.items[comma_idx + 1];
+                    } else {
+                        rhs_ast = ast_new_list();
+                        rhs_ast->line = ast->list.items[comma_idx + 1]->line;
+                        rhs_ast->column = ast->list.items[comma_idx + 1]->column;
+                        for (size_t i = comma_idx + 1; i < ast->list.count; i++)
+                            ast_list_append(rhs_ast, ast_clone(ast->list.items[i]));
+                    }
+
+                    return term_pair(dep_term_of_ast(ctx, lhs_ast),
+                                     dep_term_of_ast(ctx, rhs_ast),
+                                     NULL);
+                }
+            }
+
             // Function application: (f a1 a2 ... an)
             Term  *fn    = dep_term_of_ast(ctx, head);
             Term **args  = malloc(sizeof(Term *) * (ast->list.count - 1));
@@ -3142,6 +3261,13 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
             Term *dom = term_hole();
             if (p->type_name) {
                 char *tname = dep_type_parse_source(p->type_name);
+
+                if (getenv("MONAD_DEP_DEBUG")) {
+                    fprintf(stderr,
+                            "[dep-lambda-param] name=%s type='%s'\n",
+                            p->name ? p->name : "_",
+                            tname ? tname : "<null>");
+                }
 
                 AST *ty_ast = parse(tname);
                 if (ty_ast) {
@@ -3331,7 +3457,59 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
 
             res = term_pi("_", dom, ret, IMPLICIT_EXPLICIT);
         } else {
-            res = term_meta(meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, "?ty"));
+            size_t comma_idx = 0;
+            bool is_tuple_type = false;
+
+            for (size_t i = 0; i < ast->list.count; i++) {
+                AST *item = ast->list.items[i];
+                if (item &&
+                    item->type == AST_SYMBOL &&
+                    item->symbol &&
+                    strcmp(item->symbol, ",") == 0) {
+                    comma_idx = i;
+                    is_tuple_type = true;
+                    break;
+                }
+            }
+
+            if (is_tuple_type && comma_idx > 0 &&
+                comma_idx + 1 < ast->list.count) {
+                AST *lhs_ast = NULL;
+                AST *rhs_ast = NULL;
+
+                if (comma_idx == 1) {
+                    lhs_ast = ast->list.items[0];
+                } else {
+                    lhs_ast = ast_new_list();
+                    lhs_ast->line = ast->line;
+                    lhs_ast->column = ast->column;
+                    for (size_t i = 0; i < comma_idx; i++)
+                        ast_list_append(lhs_ast, ast_clone(ast->list.items[i]));
+                }
+
+                if (ast->list.count - comma_idx - 1 == 1) {
+                    rhs_ast = ast->list.items[comma_idx + 1];
+                } else {
+                    rhs_ast = ast_new_list();
+                    rhs_ast->line = ast->list.items[comma_idx + 1]->line;
+                    rhs_ast->column = ast->list.items[comma_idx + 1]->column;
+                    for (size_t i = comma_idx + 1; i < ast->list.count; i++)
+                        ast_list_append(rhs_ast, ast_clone(ast->list.items[i]));
+                }
+
+                Term *dom = dep_term_of_type_ast(ctx, lhs_ast);
+                Term *cod = dep_term_of_type_ast(ctx, rhs_ast);
+                res = term_sigma("_", dom, cod);
+
+                /* lhs_ast/rhs_ast may alias ast children, so intentionally
+                 * do not free them here. This file already uses intentional
+                 * leaks in type elaboration to avoid closure UAF. */
+            } else {
+                res = term_meta(meta_fresh(ctx->mctx,
+                                           val_universe_n(0),
+                                           ctx->depth,
+                                           "?ty"));
+            }
         }
     }
 

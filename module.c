@@ -832,6 +832,12 @@ char *module_name_to_path(const char *module_name)
         if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
         snprintf(candidate, sizeof(candidate), "%s/%s.monad", env_core, rel);
         if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
+        snprintf(candidate, sizeof(candidate), "%s/prelude/%s.mon", env_core, rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "%s/prelude/%s.monad", env_core, rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
         char *found = find_mon_recursive(env_core, module_name);
         if (found) return found;
     }
@@ -841,6 +847,12 @@ char *module_name_to_path(const char *module_name)
     if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
     snprintf(candidate, sizeof(candidate), "/usr/local/lib/monad/core/%s.monad", rel);
     if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
+    snprintf(candidate, sizeof(candidate), "/usr/local/lib/monad/core/prelude/%s.mon", rel);
+    if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+    snprintf(candidate, sizeof(candidate), "/usr/local/lib/monad/core/prelude/%s.monad", rel);
+    if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
     {
         char *found = find_mon_recursive("/usr/local/lib/monad/core", module_name);
         if (found) return found;

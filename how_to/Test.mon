@@ -1,5 +1,13 @@
 
-show 3 + 3
+;; show 3 + 3
+
+(show (upcase 'a'))
+(show (Char.upcase 'a'))
+(show ('a'.upcase))
+
+show upcase 'a'
+show Char.upcase 'a'
+show 'a'.upcase
 
 
 

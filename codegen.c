@@ -1165,6 +1165,19 @@ static bool ast_list_is_tuple_expr(AST *ast) {
     return false;
 }
 
+static bool codegen_ast_numeric_index(AST *ast, int *out_index) {
+    if (!ast || ast->type != AST_NUMBER)
+        return false;
+
+    long long n = (long long)ast->number;
+    if ((double)n != ast->number)
+        return false;
+
+    if (out_index)
+        *out_index = (int)n;
+    return true;
+}
+
 static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
     LLVMValueRef rt_val = NULL;
     LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -11504,6 +11517,49 @@ if (ast->list.count >= 5) {
                         ? type_clone(ast->inferred_type)
                         : type_unknown();
                     return result;
+                }
+
+                if (entry->type &&
+                    entry->type->kind == TYPE_LIST &&
+                    ast->list.count == 2) {
+                    int index_value = -1;
+
+                    if (codegen_ast_numeric_index(ast->list.items[1],
+                                                  &index_value)) {
+                        LLVMTypeRef ptr_t = LLVMPointerType(
+                            LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+
+                        CodegenResult pair_r = codegen_expr(ctx, head);
+
+                        LLVMValueRef raw_list = LLVMBuildCall2(
+                            ctx->builder,
+                            LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
+                            get_rt_unbox_list(ctx),
+                            &pair_r.value,
+                            1,
+                            "tuple_raw");
+
+                        LLVMValueRef idx = LLVMConstInt(
+                            i64_t,
+                            (unsigned long long)index_value,
+                            0);
+
+                        LLVMValueRef nth = LLVMBuildCall2(
+                            ctx->builder,
+                            LLVMFunctionType(ptr_t,
+                                             (LLVMTypeRef[]){ptr_t, i64_t},
+                                             2,
+                                             0),
+                            get_rt_list_nth(ctx),
+                            (LLVMValueRef[]){raw_list, idx},
+                            2,
+                            "tuple_nth");
+
+                        result.value = nth;
+                        result.type = type_unknown();
+                        return result;
+                    }
                 }
 
                 CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' is a variable, not a function",

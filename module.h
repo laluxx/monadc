@@ -281,8 +281,8 @@ bool module_resolve_export(ModuleRegistry *registry, ModuleDecl *decl,
 
 // Convert "Std.Math" to "Std/Math.mon" (or ".monad" fallback), searching:
 //   1. relative to the current directory
-//   2. $MONAD_CORE (if set)
-//   3. /usr/local/lib/monad/core
+//   2. $MONAD_CORE and $MONAD_CORE/prelude
+//   3. /usr/local/lib/monad/core and /usr/local/lib/monad/core/prelude
 // Returns a heap-allocated path; caller must free().
 char *module_name_to_path(const char *module_name);
 

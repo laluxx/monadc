@@ -890,6 +890,42 @@ static const char *wisp_find_top_level_arrow(const char *s) {
     return NULL;
 }
 
+static bool wisp_has_top_level_pipe(const char *s) {
+    int depth = 0;
+    bool in_str = false;
+
+    for (const char *q = s; *q; q++) {
+        if (in_str) {
+            if (*q == '\\' && *(q + 1)) q++;
+            else if (*q == '"') in_str = false;
+            continue;
+        }
+
+        if (*q == '"') {
+            in_str = true;
+            continue;
+        }
+
+        if (*q == ';')
+            break;
+
+        if (*q == '(' || *q == '[' || *q == '{') {
+            depth++;
+            continue;
+        }
+
+        if (*q == ')' || *q == ']' || *q == '}') {
+            if (depth > 0) depth--;
+            continue;
+        }
+
+        if (depth == 0 && *q == '|')
+            return true;
+    }
+
+    return false;
+}
+
 static const char *wisp_find_top_level_assignment(const char *s) {
     int depth = 0;
     bool in_str = false;
@@ -4206,6 +4242,15 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             (strncmp(t, "method", 6) == 0 &&
              (t[6] == ' ' || t[6] == '\t' || t[6] == '\0'))) {
 
+            bool is_method_block =
+                (strncmp(t, "method", 6) == 0 &&
+                 (t[6] == ' ' || t[6] == '\t' || t[6] == '\0'));
+
+            size_t method_meta_cap = 128;
+            size_t method_meta_len = 0;
+            char *method_meta = malloc(method_meta_cap);
+            method_meta[0] = '\0';
+
             size_t acc_cap = 256;
             char *acc = malloc(acc_cap);
             size_t acc_len = 0;
@@ -4256,6 +4301,34 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                 char _ld2[48];
                 int _ld2len = snprintf(_ld2, sizeof(_ld2), " (#line %d 1) ", lineno);
+
+                bool is_method_meta_line =
+                    is_method_block &&
+                    ((lt_end - lt >= 4 &&
+                      strncmp(lt, ":doc", 4) == 0 &&
+                      (lt + 4 == lt_end || lt[4] == ' ' || lt[4] == '\t')) ||
+                     (lt_end - lt >= 6 &&
+                      strncmp(lt, ":alias", 6) == 0 &&
+                      (lt + 6 == lt_end || lt[6] == ' ' || lt[6] == '\t')));
+
+                if (is_method_meta_line) {
+                    size_t ltlen = lt_end - lt;
+                    while (method_meta_len + ltlen + 4 >= method_meta_cap) {
+                        method_meta_cap *= 2;
+                        method_meta = realloc(method_meta, method_meta_cap);
+                    }
+
+                    if (method_meta_len > 0) {
+                        method_meta[method_meta_len++] = ' ';
+                    }
+                    memcpy(method_meta + method_meta_len, lt, ltlen);
+                    method_meta_len += ltlen;
+                    method_meta[method_meta_len] = '\0';
+
+                    free(lraw);
+                    lineno++;
+                    continue;
+                }
 
                 /* Detect => or -> at depth 0 so we can wisp-process the body */
                 const char *fat_arrow = NULL;
@@ -4518,14 +4591,41 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                                      new_subject_count);
                         }
 
-                        pat_emit = strdup(pat_str);
+                        if (is_method_block && !wisp_has_top_level_pipe(pat_str)) {
+                            size_t plen = strlen(pat_str);
+                            pat_emit = malloc(plen + 8);
+                            snprintf(pat_emit, plen + 8, "%s | True", pat_str);
+
+                            if (wisp_debug_enabled()) {
+                                fprintf(stderr,
+                                        "[wisp-method] default guard line=%d pat='%s' emit='%s'\n",
+                                        lineno, pat_str, pat_emit);
+                            }
+                        } else {
+                            pat_emit = strdup(pat_str);
+                        }
                     }
 
                     size_t pat_emit_len = strlen(pat_emit);
-                    size_t need = acc_len + _ld2len + pat_emit_len + 4 + strlen(body_expanded) + 4;
+                    size_t line_len = is_method_block ? 1 : (size_t)_ld2len;
+                    size_t need = acc_len + line_len + pat_emit_len + 4 + strlen(body_expanded) + 4;
                     while (need >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
-                    memcpy(acc + acc_len, _ld2, _ld2len); acc_len += _ld2len;
+
+                    if (is_method_block) {
+                        acc[acc_len++] = ' ';
+                    } else {
+                        memcpy(acc + acc_len, _ld2, _ld2len);
+                        acc_len += _ld2len;
+                    }
+
+                    if (wisp_debug_enabled()) {
+                        fprintf(stderr,
+                                "[wisp-method] append clause line=%d pat='%s' body='%s' before_len=%zu\n",
+                                lineno, pat_emit, body_expanded, acc_len);
+                    }
+
                     memcpy(acc + acc_len, pat_emit, pat_emit_len); acc_len += pat_emit_len;
+
                     acc[acc_len++] = ' '; acc[acc_len++] = arrow_char; acc[acc_len++] = '>';
                     acc[acc_len++] = ' ';
                     size_t bel = strlen(body_expanded);
@@ -4539,15 +4639,40 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 } else {
                     /* :: signature line or other -- keep verbatim */
                     size_t ltlen = lt_end - lt;
-                    while (acc_len + (size_t)_ld2len + ltlen + 4 >= acc_cap) {
+                    size_t line_len = is_method_block ? 1 : (size_t)_ld2len;
+                    while (acc_len + line_len + ltlen + 4 >= acc_cap) {
                         acc_cap *= 2; acc = realloc(acc, acc_cap);
                     }
-                    memcpy(acc + acc_len, _ld2, _ld2len); acc_len += _ld2len;
+
+                    if (is_method_block) {
+                        acc[acc_len++] = ' ';
+                    } else {
+                        memcpy(acc + acc_len, _ld2, _ld2len);
+                        acc_len += _ld2len;
+                    }
+
+                    if (wisp_debug_enabled()) {
+                        fprintf(stderr,
+                                "[wisp-method] append raw line=%d text='%.*s' before_len=%zu\n",
+                                lineno, (int)ltlen, lt, acc_len);
+                    }
+
                     memcpy(acc + acc_len, lt, ltlen); acc_len += ltlen;
                     acc[acc_len] = '\0';
                 }
                 free(lraw);
                 lineno++;
+            }
+
+            if (method_meta_len > 0) {
+                while (acc_len + method_meta_len + 5 >= acc_cap) {
+                    acc_cap *= 2;
+                    acc = realloc(acc, acc_cap);
+                }
+                acc[acc_len++] = ' ';
+                memcpy(acc + acc_len, method_meta, method_meta_len);
+                acc_len += method_meta_len;
+                acc[acc_len] = '\0';
             }
 
             while (acc_len + 2 >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
@@ -4557,8 +4682,15 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             wisp_free_guard_subjects(block_guard_subjects,
                                      block_guard_subject_count);
 
+            if (wisp_debug_enabled()) {
+                fprintf(stderr,
+                        "[wisp-block] final token line=%d text='%s'\n",
+                        lineno - 1, acc);
+            }
+
             wts_push(&s, acc, indent, lineno - 1);
             free(acc);
+            free(method_meta);
             continue;
         }
 
@@ -6813,6 +6945,18 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     if (g_wisp_trace_enabled) {
         fprintf(stderr, "\n=== wisp expanded (%s) ===\n%s\n=== end ===\n\n",
                 filename ? filename : "<input>", transformed);
+    }
+
+    if (wisp_debug_enabled()) {
+        const char *m = transformed;
+        while ((m = strstr(m, "(method ")) != NULL) {
+            const char *e = strchr(m, '\n');
+            if (!e)
+                e = m + strlen(m);
+            fprintf(stderr, "[wisp-debug] raw method form: %.*s\n",
+                    (int)(e - m), m);
+            m = e;
+        }
     }
 
     /* Install param-kind hook so reader.c can do automatic infix detection */

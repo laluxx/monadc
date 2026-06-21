@@ -190,6 +190,11 @@ static CompiledModule *registry_find_by_obj(const char *obj_path) {
     return NULL;
 }
 
+/* Top-level method validation does not belong here.
+ * In this compiler, Wisp/reader lower method syntax before codegen.
+ * There is no ExprArray type and no AST_METHOD node in main.c.
+ */
+
 static CompiledModule *registry_new(const char *name, const char *obj,
                                      bool skipped) {
     CompiledModule *m = calloc(1, sizeof(CompiledModule));
@@ -870,6 +875,7 @@ static CompiledModule *compile_one(const char *source_path,
             "U8",  "U16", "U32", "U64", "U128",
             "Float", "F32", "F80",
             "Bool", "String", "Char",
+            "Tuple", "List", "Arr", "Array",
             NULL
         };
 
@@ -910,9 +916,29 @@ static CompiledModule *compile_one(const char *source_path,
             if (!file_exists(type_path)) continue;
 
             /* Do not auto-load ourselves.
-             * Use realpath-aware comparison so "Char.mon" and "./Char.mon"
-             * are treated as the same file. */
+             * Use both realpath and stem comparison. The realpath check can
+             * miss relative spelling differences during recursive core loads,
+             * so the stem check prevents Tuple.mon from loading ./Tuple.mon
+             * while it is already being compiled. */
             if (path_is_current_source(type_path, my_source_path)) continue;
+
+            {
+                char *current_base = base_no_ext(my_source_path);
+                const char *slash = strrchr(current_base, '/');
+                const char *current_stem = slash ? slash + 1 : current_base;
+
+                if (strcmp(current_stem, stem) == 0) {
+                    if (flags->verbose_level > 0 || flags->trace_codegen) {
+                        fprintf(stderr,
+                                "[type-debug] skip self type module stem=%s current=%s candidate=%s\n",
+                                stem, my_source_path, type_path);
+                    }
+                    free(current_base);
+                    continue;
+                }
+
+                free(current_base);
+            }
 
             /* Skip if already in the registry under any path tail matching stem */
             bool already_done = false;
@@ -1258,7 +1284,9 @@ skip_primitive_type_autoload:
     if (flags->verbose_level > 0 || flags->trace_codegen)
         printf("  module: %s\n", mod_name);
 
-/// Phase 2: Verify dependencies are compiled
+    /* Top-level method validation is not performed here. */
+
+///// Phase 2: Verify dependencies are compiled
 
     // (pre-scan already did the work)
     for (size_t i = 0; i < mod_ctx->import_count; i++) {
@@ -1327,6 +1355,7 @@ skip_primitive_type_autoload:
             "U8",  "U16", "U32", "U64", "U128",
             "Float", "F32", "F80",
             "Bool", "String", "Char",
+            "Tuple", "List", "Arr", "Array",
             NULL
         };
 
