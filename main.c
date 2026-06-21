@@ -232,6 +232,9 @@ static Type *registry_function_return_type(Type *t) {
     return t ? t : type_unknown();
 }
 
+
+
+
 static void registry_push_func(CompiledModule *m, const char *local,
                                 const char *mangled, Type *ret,
                                 EnvParam *params, int pc, LLVMValueRef fn) {
@@ -252,6 +255,46 @@ static void registry_push_func(CompiledModule *m, const char *local,
         for (int i = 0; i < pc; i++) {
             e->params[i].name = strdup(params[i].name ? params[i].name : "_");
             e->params[i].type = type_clone(params[i].type);
+        }
+    }
+}
+
+static void register_compiled_module_wisp_arities(CompiledModule *m) {
+    if (!m)
+        return;
+
+    const char *module_name = m->module_name ? m->module_name : "";
+    const char *module_tail = module_name;
+
+    {
+        const char *dot = strrchr(module_tail, '.');
+        if (dot && dot[1]) module_tail = dot + 1;
+    }
+
+    {
+        const char *slash = strrchr(module_tail, '/');
+        if (slash && slash[1]) module_tail = slash + 1;
+    }
+
+    for (size_t i = 0; i < m->export_count; i++) {
+        CompiledExport *e = &m->exports[i];
+        if (e->kind != ENV_FUNC || !e->local_name)
+            continue;
+
+        wisp_register_arity(e->local_name, e->param_count);
+
+        if (module_tail[0]) {
+            char qualified_tail[512];
+            snprintf(qualified_tail, sizeof(qualified_tail), "%s.%s",
+                     module_tail, e->local_name);
+            wisp_register_arity(qualified_tail, e->param_count);
+        }
+
+        if (module_name[0] && strcmp(module_name, module_tail) != 0) {
+            char qualified_full[512];
+            snprintf(qualified_full, sizeof(qualified_full), "%s.%s",
+                     module_name, e->local_name);
+            wisp_register_arity(qualified_full, e->param_count);
         }
     }
 }
@@ -585,7 +628,8 @@ static void compile_prelude_dir(const char *dir, const char *current_source,
         if (!file_exists(path) || path_is_current_source(path, current_source))
             continue;
 
-        compile_one(path, flags, false);
+        CompiledModule *prelude_cm = compile_one(path, flags, false);
+        register_compiled_module_wisp_arities(prelude_cm);
         parser_set_context(current_source, source);
     }
 
@@ -888,7 +932,8 @@ static CompiledModule *compile_one(const char *source_path,
             /* Compile the type method file as a dependency */
             if (flags->verbose_level > 0 || flags->trace_codegen)
                 printf("[type]    %s\n", type_path);
-            compile_one(type_path, flags, false);
+            CompiledModule *type_cm = compile_one(type_path, flags, false);
+            register_compiled_module_wisp_arities(type_cm);
             parser_set_context(my_source_path, source);
         }
 skip_primitive_type_autoload:
@@ -925,7 +970,8 @@ skip_primitive_type_autoload:
                         mod_name[mlen] = '\0';
                         char *dep_src = module_name_to_path(mod_name);
                         if (dep_src && file_exists(dep_src)) {
-                            compile_one(dep_src, flags, false);
+                            CompiledModule *dep_cm = compile_one(dep_src, flags, false);
+                            register_compiled_module_wisp_arities(dep_cm);
                             parser_set_context(my_source_path, source);
                             /* dep headers already in global FFI context */
                         }
@@ -952,7 +998,8 @@ skip_primitive_type_autoload:
                         mod_name[mlen] = '\0';
                         char *dep_src = module_name_to_path(mod_name);
                         if (dep_src && file_exists(dep_src)) {
-                            compile_one(dep_src, flags, false);
+                            CompiledModule *dep_cm = compile_one(dep_src, flags, false);
+                            register_compiled_module_wisp_arities(dep_cm);
                             parser_set_context(my_source_path, source);
                             /* Re-parse dep's headers into our FFI context
                              * so types like VkApplicationInfo are visible */
