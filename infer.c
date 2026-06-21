@@ -1836,29 +1836,97 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             }
         }
 
-        /* ---- postfix indexing ---------------------------------------- */
-        /* The reader represents adjacent postfix index syntax:
+        /* ---- explicit internal indexing ------------------------------ */
+        /* Wisp lowers pair[0] to (__index pair 0). Treat this as a
+         * primitive HM operation, not as an ordinary function call. */
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "__index") == 0 &&
+            ast->list.count == 3) {
+            Type *base_t = subst_apply(ctx->subst,
+                                        infer_expr(ctx, ast->list.items[1]));
+            int index_value = -1;
+
+            if (infer_ast_numeric_index(ast->list.items[2], &index_value)) {
+                infer_expr(ctx, ast->list.items[2]);
+
+                if (base_t &&
+                    base_t->kind == TYPE_LIST &&
+                    index_value >= 0 &&
+                    index_value < base_t->list_count &&
+                    base_t->list_types &&
+                    base_t->list_types[index_value]) {
+                    result = subst_apply(ctx->subst,
+                                         base_t->list_types[index_value]);
+                    break;
+                }
+
+                if (base_t &&
+                    base_t->kind == TYPE_LIST &&
+                    base_t->list_count == 1 &&
+                    base_t->list_types &&
+                    base_t->list_types[0]) {
+                    result = subst_apply(ctx->subst,
+                                         base_t->list_types[0]);
+                    break;
+                }
+
+                if (base_t && base_t->kind == TYPE_STRING) {
+                    result = type_char();
+                    break;
+                }
+
+                if (base_t && base_t->kind == TYPE_COLL && base_t->element_type) {
+                    result = subst_apply(ctx->subst, base_t->element_type);
+                    break;
+                }
+
+                if (base_t && base_t->kind == TYPE_ARR && base_t->arr_element_type) {
+                    result = subst_apply(ctx->subst, base_t->arr_element_type);
+                    break;
+                }
+
+                result = infer_fresh(ctx);
+                break;
+            }
+        }
+
+        /* ---- typed indexing / product projection ---------------------- */
+        /* Indexing must be typed, not purely syntactic.
+         *
+         * The reader may represent both:
          *
          *   pair[0]
-         *
-         * as the same AST list shape as:
-         *
          *   (pair 0)
          *
-         * The only reliable difference today is source position: for
-         * postfix index, the list starts at '[' and the receiver ends at
-         * that same column. Handle that here before generic application,
-         * otherwise HM incorrectly constrains pair : Int -> a.
+         * as the same application shape. That is fine: if the callee has a
+         * product, list, string, collection, array, set, or map type and the
+         * argument is a numeric index, this is indexing/projection, not a
+         * normal function call.
+         *
+         * This also lets Wisp safely canonicalize pair[0] to (pair 0)
+         * without depending on fragile source-column metadata.
          */
         if (ast->list.count == 2 &&
-            head->type == AST_SYMBOL &&
-            infer_ast_was_postfix_index(ast, head)) {
+            head->type == AST_SYMBOL) {
             TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
             if (head_sc) {
                 Type *head_t = subst_apply(ctx->subst, head_sc->type);
-                int index_value = -1;
+                bool syntax_index = infer_ast_was_postfix_index(ast, head);
+                bool typed_index = false;
 
+                if (head_t) {
+                    typed_index =
+                        head_t->kind == TYPE_LIST ||
+                        head_t->kind == TYPE_STRING ||
+                        head_t->kind == TYPE_COLL ||
+                        head_t->kind == TYPE_ARR ||
+                        head_t->kind == TYPE_SET ||
+                        head_t->kind == TYPE_MAP;
+                }
+
+                int index_value = -1;
                 if (head_t &&
+                    (syntax_index || typed_index) &&
                     infer_ast_numeric_index(ast->list.items[1], &index_value)) {
                     infer_expr(ctx, ast->list.items[1]);
 
@@ -1881,6 +1949,13 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         break;
                     }
 
+                    if (head_t->kind == TYPE_LIST &&
+                        head_t->list_elem) {
+                        result = subst_apply(ctx->subst,
+                                             head_t->list_elem);
+                        break;
+                    }
+
                     if (head_t->kind == TYPE_STRING) {
                         result = type_char();
                         break;
@@ -1900,7 +1975,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                     if (head_t->kind == TYPE_SET ||
                         head_t->kind == TYPE_MAP ||
                         head_t->kind == TYPE_COLL ||
-                        head_t->kind == TYPE_ARR) {
+                        head_t->kind == TYPE_ARR ||
+                        head_t->kind == TYPE_LIST) {
                         result = infer_fresh(ctx);
                         break;
                     }

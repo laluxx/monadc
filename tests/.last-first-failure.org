@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-20T07:26:13
+#+DATE: 2026-06-21T19:05:35
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -10,7 +10,7 @@
 - Test: =sugar.wisp_higher_order_predicate_arg=
 - Status: =FAIL=
 - Menu: =sugar=
-- Duration: =[  22.78 ] ms=
+- Duration: =[  17.07 ] ms=
 - Reason: =desugared AST mismatch: expected '(define (all? [__p_0 : Fn] [__p_1 : Coll] -> Bool) (p xs -> True)) (define (null? [__p_0 : Coll] -> Bool) (xs -> True)) (define (ok [__p_0 : Coll] -> Bool) (rows -> (all? null? rows)))', got '(define all? (lambda ([__p_0 :: (Fn :: ( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) True))\n(define null? (lambda ([__p_0 :: ([ a ])] -> Bool) True))\n(define ok (lambda ([__p_0 :: ([ [ Int ] ])] -> Bool) (all? null? __p_0)))'=
 - Failure kind: =desugar-mismatch=
 - Artifacts: =tests/.last-failures/sugar.wisp_higher_order_predicate_arg=
@@ -45,7 +45,7 @@ define ok :: [[Int]] -> Bool
 ** Output
 #+BEGIN_EXAMPLE
 
-=== wisp expanded (/tmp/monadc-tests-x2514pu5/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon) ===
+=== wisp expanded (/tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon) ===
 (#line 1 1) (define (all? [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Bool) p xs 
 (#line 2 1) ->
 (#line 2 1) True)
@@ -58,12 +58,12 @@ define ok :: [[Int]] -> Bool
 === end ===
 
 
-=== desugared AST (/tmp/monadc-tests-x2514pu5/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon) ===
-[compile] /tmp/monadc-tests-x2514pu5/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon
+=== desugared AST (/tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon) ===
+[compile] /tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon
 (define all? (lambda ([__p_0 :: (Fn :: ( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) True))
 (define null? (lambda ([__p_0 :: ([ a ])] -> Bool) True))
 (define ok (lambda ([__p_0 :: ([ [ Int ] ])] -> Bool) (all? null? __p_0)))
 === end desugared AST ===
 
-  wrote json: /tmp/monadc-tests-x2514pu5/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.json
+  wrote json: /tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.json
 #+END_EXAMPLE

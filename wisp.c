@@ -811,6 +811,118 @@ typedef struct {
     int     pos;   // current read position
 } WTokenStream;
 
+static bool wisp_index_ident_start_char(char c) {
+    unsigned char u = (unsigned char)c;
+    return (u >= 'A' && u <= 'Z') ||
+           (u >= 'a' && u <= 'z') ||
+           u == '_';
+}
+
+static bool wisp_index_ident_char(char c) {
+    unsigned char u = (unsigned char)c;
+    return (u >= 'A' && u <= 'Z') ||
+           (u >= 'a' && u <= 'z') ||
+           (u >= '0' && u <= '9') ||
+           u == '_' || u == '-' || u == '?' || u == '!' || u == '.';
+}
+
+static char *wisp_rewrite_postfix_index_token(const char *text) {
+    if (!text)
+        return strdup("");
+
+    SB out;
+    sb_init(&out);
+
+    const char *p = text;
+
+    while (*p) {
+        if (*p == '"') {
+            const char *start = p++;
+            while (*p) {
+                if (*p == '\\' && p[1]) {
+                    p += 2;
+                    continue;
+                }
+                if (*p == '"') {
+                    p++;
+                    break;
+                }
+                p++;
+            }
+
+            char *lit = strndup(start, (size_t)(p - start));
+            sb_puts(&out, lit);
+            free(lit);
+            continue;
+        }
+
+        if (*p == '\'') {
+            const char *start = p++;
+            while (*p) {
+                if (*p == '\\' && p[1]) {
+                    p += 2;
+                    continue;
+                }
+                if (*p == '\'') {
+                    p++;
+                    break;
+                }
+                p++;
+            }
+
+            char *lit = strndup(start, (size_t)(p - start));
+            sb_puts(&out, lit);
+            free(lit);
+            continue;
+        }
+
+        if (wisp_index_ident_start_char(*p)) {
+            const char *name_start = p;
+            p++;
+
+            while (wisp_index_ident_char(*p))
+                p++;
+
+            if (*p == '[') {
+                const char *idx_start = p + 1;
+                const char *idx = idx_start;
+
+                while (*idx >= '0' && *idx <= '9')
+                    idx++;
+
+                if (idx > idx_start && *idx == ']') {
+                    char *name = strndup(name_start,
+                                         (size_t)(p - name_start));
+                    char *index = strndup(idx_start,
+                                          (size_t)(idx - idx_start));
+
+                    sb_putc(&out, '(');
+                    sb_puts(&out, name);
+                    sb_putc(&out, ' ');
+                    sb_puts(&out, index);
+                    sb_putc(&out, ')');
+
+                    free(name);
+                    free(index);
+
+                    p = idx + 1;
+                    continue;
+                }
+            }
+
+            char *name = strndup(name_start, (size_t)(p - name_start));
+            sb_puts(&out, name);
+            free(name);
+            continue;
+        }
+
+        sb_putc(&out, *p);
+        p++;
+    }
+
+    return sb_take(&out);
+}
+
 static void wts_push(WTokenStream *s, const char *text, int indent, int lineno) {
     if (!s) return;
 
@@ -831,7 +943,7 @@ static void wts_push(WTokenStream *s, const char *text, int indent, int lineno) 
         s->cap = new_cap;
     }
 
-    s->tokens[s->count].text = strdup(text);
+    s->tokens[s->count].text = wisp_rewrite_postfix_index_token(text);
     if (!s->tokens[s->count].text) {
         fprintf(stderr, "[wisp] out of memory copying token at line %d\n", lineno);
         abort();

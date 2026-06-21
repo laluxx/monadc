@@ -1,18 +1,31 @@
 ;;; Tuple.mon --- Product helpers
 
 ;; Author: Laluxx
-;; Version: 0.1.0
-;; Keywords: Data.Tuple tuple pair curry uncurry
+;; Version: 0.2.0
+;; Keywords: Data.Tuple tuple pair product curry uncurry bimap fanout
 
 ;;; Commentary:
 
-;; Tuple helpers for two-element products. Native tuple syntax is preferred over
-;; encoding pairs as two-element lists.
+;; Tuple helpers for two-element products.
+;;
+;; Native tuple syntax is preferred over encoding pairs as ad-hoc lists.
+;; Both tuple type spellings are canonical:
+;;
+;;   (a, b)
+;;   (a b)
+;;
+;; and both denote the same two-element product type.
+;;
+;; This module intentionally stays focused on binary products.  Nested product
+;; transformations such as reassociation can be added later once nested tuple
+;; codegen and printing are fully stable.
 
 ;;; Code:
 
 module Data.Tuple
- [fst snd swap curry uncurry dup both first second]
+ [fst snd swap pair dup
+  curry uncurry
+  bimap first second both fanout]
 
 
 method fst :: (a, b) -> a
@@ -30,6 +43,16 @@ method swap :: (a, b) -> (b, a)
   pair -> (pair[1], pair[0])
 
 
+method pair :: a -> b -> (a, b)
+  :doc "Construct a pair from two values."
+  x y -> (x, y)
+
+
+method dup :: a -> (a, a)
+  :doc "Duplicate a value into a homogeneous pair."
+  x -> (x, x)
+
+
 method curry :: ((a, b) -> c) -> a -> b -> c
   :doc "Convert a function on a pair into a curried function."
   f x y -> f (x, y)
@@ -40,9 +63,9 @@ method uncurry :: (a -> b -> c) -> (a, b) -> c
   f pair -> f pair[0] pair[1]
 
 
-method dup :: a -> (a, a)
-  :doc "Duplicate X into a pair."
-  x -> (x, x)
+method bimap :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
+  :doc "Map the first component with F and the second component with G."
+  f g pair -> (f pair[0], g pair[1])
 
 
 method first :: (a -> c) -> (a, b) -> (c, b)
@@ -56,5 +79,10 @@ method second :: (b -> c) -> (a, b) -> (a, c)
 
 
 method both :: (a -> b) -> (a, a) -> (b, b)
-  :doc "Map both components of a homogeneous pair."
+  :doc "Map both components of a homogeneous pair with the same function."
   f pair -> (f pair[0], f pair[1])
+
+
+method fanout :: (a -> b) -> (a -> c) -> a -> (b, c)
+  :doc "Apply two functions to the same value and pair their results."
+  f g x -> (f x, g x)

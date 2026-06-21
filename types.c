@@ -48,6 +48,87 @@ static Type *type_parse_arrow_chain(const char *name) {
     return type_arrow(param, ret);
 }
 
+static bool type_has_top_level_comma(const char *name) {
+    int depth = 0;
+
+    for (const char *p = name; p && *p; p++) {
+        if (*p == '(' || *p == '[' || *p == '{') {
+            depth++;
+            continue;
+        }
+
+        if (*p == ')' || *p == ']' || *p == '}') {
+            if (depth > 0)
+                depth--;
+            continue;
+        }
+
+        if (depth == 0 && *p == ',')
+            return true;
+    }
+
+    return false;
+}
+
+static Type *type_parse_comma_tuple(const char *name) {
+    if (!name || !type_has_top_level_comma(name))
+        return NULL;
+
+    Type *t = make_type(TYPE_LIST);
+    t->list_count = 0;
+    t->list_types = NULL;
+
+    const char *seg_start = name;
+    int depth = 0;
+
+    for (const char *p = name; ; p++) {
+        bool at_end = (*p == '\0');
+        bool at_split = false;
+
+        if (!at_end) {
+            if (*p == '(' || *p == '[' || *p == '{') {
+                depth++;
+            } else if (*p == ')' || *p == ']' || *p == '}') {
+                if (depth > 0)
+                    depth--;
+            } else if (depth == 0 && *p == ',') {
+                at_split = true;
+            }
+        }
+
+        if (at_end || at_split) {
+            char *raw = strndup(seg_start, (size_t)(p - seg_start));
+            char *part = type_trim_copy(raw);
+            free(raw);
+
+            if (part[0]) {
+                Type *elem = type_from_name(part);
+                if (!elem)
+                    elem = type_unknown();
+
+                t->list_count++;
+                t->list_types = realloc(t->list_types,
+                                        sizeof(Type *) * t->list_count);
+                t->list_types[t->list_count - 1] = elem;
+            }
+
+            free(part);
+
+            if (at_end)
+                break;
+
+            seg_start = p + 1;
+        }
+    }
+
+    if (t->list_count < 2) {
+        type_free(t);
+        return NULL;
+    }
+
+    return t;
+}
+
 /// Type alias
 
 TypeAlias *g_aliases = NULL;
@@ -294,6 +375,9 @@ Type *type_from_name(const char *name) {
 
     Type *arrow_type = type_parse_arrow_chain(name);
     if (arrow_type) return arrow_type;
+
+    Type *comma_tuple = type_parse_comma_tuple(name);
+    if (comma_tuple) return comma_tuple;
 
     if (len > 1 && name[0] == '*') {
         const char *inner_name = name + 1;
@@ -980,10 +1064,15 @@ const char *type_to_string(Type *t) {
                 snprintf(buf, 512, "()");
                 return buf;
             }
+
             int offset = snprintf(buf, 512, "(");
             for (int i = 0; i < t->list_count; i++) {
-                if (i > 0) offset += snprintf(buf + offset, 512 - offset, " ");
-                offset += snprintf(buf + offset, 512 - offset, "%s", type_to_string(t->list_types[i]));
+                if (i > 0)
+                    offset += snprintf(buf + offset, 512 - offset, ", ");
+                offset += snprintf(buf + offset,
+                                   512 - offset,
+                                   "%s",
+                                   type_to_string(t->list_types[i]));
             }
             snprintf(buf + offset, 512 - offset, ")");
             return buf;

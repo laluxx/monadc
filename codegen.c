@@ -1178,6 +1178,14 @@ static bool codegen_ast_numeric_index(AST *ast, int *out_index) {
     return true;
 }
 
+static bool codegen_ast_was_postfix_index(AST *call, AST *receiver) {
+    if (!call || !receiver)
+        return false;
+
+    return call->line == receiver->line &&
+           call->column == receiver->end_column;
+}
+
 static LLVMValueRef ast_to_runtime_value(CodegenContext *ctx, AST *ast_elem) {
     LLVMValueRef rt_val = NULL;
     LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -5161,6 +5169,81 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         if (head->type == AST_SYMBOL) {
+            if (strcmp(head->symbol, "__index") == 0) {
+                if (ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx,
+                                  "%s:%d:%d: error: __index requires exactly 2 arguments",
+                                  parser_get_filename(),
+                                  ast->line,
+                                  ast->column);
+                }
+
+                int index_value = -1;
+                bool const_index =
+                    codegen_ast_numeric_index(ast->list.items[2],
+                                              &index_value);
+
+                CodegenResult coll_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult idx_r;
+
+                LLVMTypeRef ptr_t = LLVMPointerType(
+                    LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+
+                LLVMValueRef boxed_coll = coll_r.value;
+                if (LLVMGetTypeKind(LLVMTypeOf(boxed_coll)) !=
+                    LLVMPointerTypeKind) {
+                    boxed_coll = codegen_box(ctx, coll_r.value, coll_r.type);
+                }
+
+                LLVMValueRef idx;
+                if (const_index) {
+                    idx = LLVMConstInt(i64_t,
+                                       (unsigned long long)index_value,
+                                       0);
+                } else {
+                    idx_r = codegen_expr(ctx, ast->list.items[2]);
+                    idx = type_is_float(idx_r.type)
+                        ? LLVMBuildFPToSI(ctx->builder,
+                                          idx_r.value,
+                                          i64_t,
+                                          "idx")
+                        : idx_r.value;
+
+                    if (LLVMTypeOf(idx) != i64_t) {
+                        idx = LLVMBuildZExt(ctx->builder,
+                                            idx,
+                                            i64_t,
+                                            "idx64");
+                    }
+                }
+
+                LLVMValueRef raw_list = LLVMBuildCall2(
+                    ctx->builder,
+                    LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
+                    get_rt_unbox_list(ctx),
+                    &boxed_coll,
+                    1,
+                    "index_raw");
+
+                LLVMValueRef nth = LLVMBuildCall2(
+                    ctx->builder,
+                    LLVMFunctionType(ptr_t,
+                                     (LLVMTypeRef[]){ptr_t, i64_t},
+                                     2,
+                                     0),
+                    get_rt_list_nth(ctx),
+                    (LLVMValueRef[]){raw_list, idx},
+                    2,
+                    "index_nth");
+
+                result.value = nth;
+                result.type = ast->inferred_type
+                    ? type_clone(ast->inferred_type)
+                    : type_unknown();
+                return result;
+            }
+
             /* check_purity(ctx, ctx->current_function_name, head->symbol, ast); */ // TODO HERE
 
       //// define
@@ -11288,6 +11371,72 @@ if (ast->list.count >= 5) {
                 result.value = phi;
                 result.type  = type_unknown();
                 return result;
+            }
+
+            /* Postfix tuple projection:
+             *
+             *   pair[0] and pair[1]
+             *
+             * reach codegen as the same AST shape as a normal call:
+             *
+             *   (pair 0)
+             *
+             * Do this before closure/pointer/function-call handling. The
+             * parameter may be polymorphic, so checking only TYPE_LIST is
+             * too narrow; the source-position check is what proves this was
+             * postfix index syntax rather than a real call.
+             */
+            if (entry && entry->kind == ENV_VAR &&
+                ast->list.count == 2 &&
+                codegen_ast_was_postfix_index(ast, head)) {
+                int index_value = -1;
+
+                if (codegen_ast_numeric_index(ast->list.items[1],
+                                              &index_value)) {
+                    LLVMTypeRef ptr_t = LLVMPointerType(
+                        LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+
+                    CodegenResult pair_r = codegen_expr(ctx, head);
+                    LLVMValueRef boxed_pair = pair_r.value;
+
+                    if (LLVMGetTypeKind(LLVMTypeOf(boxed_pair)) !=
+                        LLVMPointerTypeKind) {
+                        boxed_pair = codegen_box(ctx,
+                                                 pair_r.value,
+                                                 pair_r.type);
+                    }
+
+                    LLVMValueRef raw_list = LLVMBuildCall2(
+                        ctx->builder,
+                        LLVMFunctionType(ptr_t, &ptr_t, 1, 0),
+                        get_rt_unbox_list(ctx),
+                        &boxed_pair,
+                        1,
+                        "tuple_raw");
+
+                    LLVMValueRef idx = LLVMConstInt(
+                        i64_t,
+                        (unsigned long long)index_value,
+                        0);
+
+                    LLVMValueRef nth = LLVMBuildCall2(
+                        ctx->builder,
+                        LLVMFunctionType(ptr_t,
+                                         (LLVMTypeRef[]){ptr_t, i64_t},
+                                         2,
+                                         0),
+                        get_rt_list_nth(ctx),
+                        (LLVMValueRef[]){raw_list, idx},
+                        2,
+                        "tuple_nth");
+
+                    result.value = nth;
+                    result.type = ast->inferred_type
+                        ? type_clone(ast->inferred_type)
+                        : type_unknown();
+                    return result;
+                }
             }
 
             /* Closure call: variable of type Fn or unknown used in call position */
