@@ -1006,3 +1006,8 @@ Test-driven observations and failure records for the corresponding subsystem.
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+[FIX id:fix.reader.parenthesized-literal-dot-method-2026-06-20 src:reader.c,tests/reader-sugars.tsv conf:high]
+  A synthetic postfix dot-method call is marked by the reader so an immediately
+  enclosing singleton parenthesized form is treated as grouping. Therefore
+  =('a'.upcase)= desugars to =(upcase 'a')= rather than the invalid
+  =((upcase 'a'))= zero-argument call of the method result.

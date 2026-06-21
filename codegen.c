@@ -1274,8 +1274,30 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
     const char *dot = strchr(symbol_name, '.');
 
     if (dot) {
+        size_t prefix_len = (size_t)(dot - symbol_name);
+        /* Module-local type methods are already registered under their exact
+         * qualified name (for example Probe.identity).  Resolve that entry
+         * before interpreting the prefix as an imported module or a value
+         * participating in layout/method dot access. */
+        const char *current_module =
+            (ctx->module_ctx && ctx->module_ctx->decl)
+                ? ctx->module_ctx->decl->name : NULL;
+        const char *short_module = current_module
+            ? strrchr(current_module, '.') : NULL;
+        short_module = short_module ? short_module + 1 : current_module;
+        bool is_current_module =
+            current_module &&
+            ((strlen(current_module) == prefix_len &&
+              strncmp(symbol_name, current_module, prefix_len) == 0) ||
+             (short_module && strlen(short_module) == prefix_len &&
+              strncmp(symbol_name, short_module, prefix_len) == 0));
+        EnvEntry *entry = is_current_module
+            ? env_lookup(ctx->env, symbol_name) : NULL;
+        if (entry) {
+            return entry;
+        }
+
         // Qualified symbol: Module.symbol
-        size_t prefix_len = dot - symbol_name;
         char *module_prefix = malloc(prefix_len + 1);
         memcpy(module_prefix, symbol_name, prefix_len);
         module_prefix[prefix_len] = '\0';
@@ -1314,7 +1336,7 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
 
         // Look up the symbol in the environment
         // For now, we look up the fully qualified name
-        EnvEntry *entry = env_lookup(ctx->env, symbol_name);
+        entry = env_lookup(ctx->env, symbol_name);
         if (!entry) {
             // Try looking up just the local symbol name
             entry = env_lookup(ctx->env, local_symbol);
@@ -1499,7 +1521,51 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
         emit_call_1(ctx, get_rt_print_value(ctx), void_t, val, "");
         if (newline) emit_call_1(ctx, printf_fn, i32, nl_str, "");
     } else if (type->kind == TYPE_UNKNOWN) {
-        emit_call_1(ctx, get_rt_print_value_newline(ctx), void_t, val, "");
+        LLVMTypeRef val_t = LLVMTypeOf(val);
+        LLVMTypeKind val_k = LLVMGetTypeKind(val_t);
+
+        if (val_k == LLVMIntegerTypeKind) {
+            unsigned bits = LLVMGetIntTypeWidth(val_t);
+
+            if (bits == 1) {
+                LLVMValueRef bs = LLVMBuildSelect(ctx->builder, val,
+                    LLVMBuildGlobalStringPtr(ctx->builder, "True", "t"),
+                    LLVMBuildGlobalStringPtr(ctx->builder, "False", "f"),
+                    "bs");
+                emit_call_2(ctx, printf_fn, i32,
+                            newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx),
+                            bs, "");
+            } else if (bits == 8) {
+                LLVMValueRef ch = LLVMBuildZExt(ctx->builder, val, i32, "char_ext");
+                emit_call_2(ctx, printf_fn, i32,
+                            newline ? get_fmt_char(ctx) : get_fmt_char_no_newline(ctx),
+                            ch, "");
+            } else {
+                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                LLVMValueRef iv = val;
+                if (val_t != i64)
+                    iv = LLVMBuildIntCast2(ctx->builder, val, i64, 1, "int_ext");
+                emit_call_2(ctx, printf_fn, i32,
+                            newline ? get_fmt_int(ctx) : get_fmt_int_no_newline(ctx),
+                            iv, "");
+            }
+        } else if (val_k == LLVMFloatTypeKind) {
+            LLVMValueRef fv = LLVMBuildFPExt(ctx->builder, val,
+                                             LLVMDoubleTypeInContext(ctx->context),
+                                             "float_ext");
+            emit_call_2(ctx, printf_fn, i32,
+                        newline ? get_fmt_float(ctx) : get_fmt_float_no_newline(ctx),
+                        fv, "");
+        } else if (val_k == LLVMDoubleTypeKind) {
+            emit_call_2(ctx, printf_fn, i32,
+                        newline ? get_fmt_float(ctx) : get_fmt_float_no_newline(ctx),
+                        val, "");
+        } else {
+            if (newline)
+                emit_call_1(ctx, get_rt_print_value_newline(ctx), void_t, val, "");
+            else
+                emit_call_1(ctx, get_rt_print_value(ctx), void_t, val, "");
+        }
     } else if (type->kind == TYPE_PTR) {
         emit_call_2(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, newline ? "%p\n" : "%p", "fmt_ptr"), val, "");
     } else if (type->kind == TYPE_LAYOUT || type->kind == TYPE_APP) {
@@ -3359,6 +3425,13 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
 
     Type *current_lay = base_entry->type;
 
+    /* Namespace/type marker entries can intentionally have no value type.
+     * Such names (for example Char.upcase) are qualified symbols, not layout
+     * field chains; let the normal module-aware lookup handle them. */
+    if (!current_lay) {
+        return NULL;
+    }
+
     if (current_lay && current_lay->kind == TYPE_APP && current_lay->app_constructor) {
         Type *resolved = env_lookup_layout(ctx->env, current_lay->app_constructor);
         if (resolved) current_lay = resolved;
@@ -4011,6 +4084,13 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
         entry->source_ast = NULL;
         entry->lifted_count = 0;
         entry->is_closure_abi = false;
+
+        if (!entry->module_name) {
+            const char *dot = strchr(name, '.');
+            if (dot && dot > name) {
+                entry->module_name = strndup(name, (size_t)(dot - name));
+            }
+        }
     }
 
     result.value = LLVMBuildCall2(ctx->builder,

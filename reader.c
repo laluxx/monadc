@@ -6939,7 +6939,9 @@ static AST *parse_list(Parser *p) {
             list->list.items[0]->list.count > 0 &&
             list->list.items[0]->list.items[0]->type == AST_SYMBOL &&
             list->list.items[0]->list.items[0]->literal_str &&
-            strcmp(list->list.items[0]->list.items[0]->literal_str, "<-") == 0) {
+            (strcmp(list->list.items[0]->list.items[0]->literal_str, "<-") == 0 ||
+             strcmp(list->list.items[0]->list.items[0]->literal_str,
+                    "<postfix-dot-method>") == 0)) {
 
             AST *inner = list->list.items[0];
             free(list->list.items);
@@ -8068,6 +8070,7 @@ AST *parse_expr(Parser *p) {
              */
             AST *method_call = ast_new_list();
             AST *method_sym = ast_new_symbol(field);
+            method_sym->literal_str = my_strdup("<postfix-dot-method>");
 
             method_sym->line = dot_line;
             method_sym->column = dot_col + 1;

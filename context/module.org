@@ -524,3 +524,9 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+[FIX id:fix.module.qualified-self-call-dot-disambiguation-2026-06-20 src:codegen.c,tests/codegen/branches/symbol-env/module-resolution/atom.codegen.module.qualified.self.call/Probe.mon conf:high]
+  Codegen resolves an exact qualified environment entry such as
+  =Probe.identity= before treating =Probe= as an imported-module prefix or a
+  layout dot-access base. Namespace marker entries with no value type are not
+  passed into layout dot-chain codegen. This prevents qualified calls within a
+  type module, including =Char.upcase=, from crashing in =codegen_dot_chain=.

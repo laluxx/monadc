@@ -222,16 +222,29 @@ static void registry_push_var(CompiledModule *m, const char *local,
     e->type         = type_clone(type);
 }
 
+static Type *registry_function_return_type(Type *t) {
+    if (!t)
+        return type_unknown();
+
+    while (t && t->kind == TYPE_ARROW)
+        t = t->arrow_ret;
+
+    return t ? t : type_unknown();
+}
+
 static void registry_push_func(CompiledModule *m, const char *local,
                                 const char *mangled, Type *ret,
                                 EnvParam *params, int pc, LLVMValueRef fn) {
     registry_grow(m);
     CompiledExport *e = &m->exports[m->export_count++];
     memset(e, 0, sizeof(*e));
+
+    Type *abi_ret = registry_function_return_type(ret);
+
     e->local_name   = strdup(local);
     e->mangled_name = strdup(mangled);
     e->kind         = ENV_FUNC;
-    e->return_type  = type_clone(ret);
+    e->return_type  = type_clone(abi_ret);
     e->param_count  = pc;
     e->func_ref     = fn;
     if (pc > 0 && params) {
@@ -1519,37 +1532,50 @@ skip_primitive_type_autoload:
         while (ent) {
             if (ent->kind == ENV_BUILTIN || ent->module_name != NULL ||
                 ent->name[0] == '*') { ent = ent->next; continue; }
+
+            /* Canonicalize the public export name before export filtering.
+             *
+             * Type-module methods are defined internally as "Char.upcase",
+             * but the module export list contains the member name "upcase".
+             * Therefore export filtering must accept either spelling:
+             * the internal implementation name or the public member name.
+             */
+            const char *_local_name = ent->name;
+            {
+                const char *_dot = strrchr(ent->name, '.');
+                if (_dot && _dot[1]) _local_name = _dot + 1;
+            }
+
             /* Force-export closure-ABI functions so inner closures work in .so */
             bool force_export = (ent->kind == ENV_FUNC && ent->is_closure_abi);
-            if (!force_export && !module_decl_is_exported(module_decl, ent->name)) {
-                /* Also check if this is an alias for an exported symbol */
+            if (!force_export &&
+                !module_decl_is_exported(module_decl, ent->name) &&
+                !module_decl_is_exported(module_decl, _local_name)) {
+                /* Also check if this is an alias for an exported symbol. */
                 bool alias_exported = false;
                 if (ent->llvm_name) {
                     const char *base = strstr(ent->llvm_name, "__");
                     if (base) base += 2;
                     else base = ent->llvm_name;
+
                     if (module_decl_is_exported(module_decl, base))
+                        alias_exported = true;
+
+                    const char *base_dot = strrchr(base, '.');
+                    if (base_dot && base_dot[1] &&
+                        module_decl_is_exported(module_decl, base_dot + 1))
                         alias_exported = true;
                 }
                 if (!alias_exported) { ent = ent->next; continue; }
             }
 
-            /* If the symbol name is already qualified (e.g. "Int.double"
-             * from a method definition), use only the part after the last
-             * dot as the local name so we get "Int__double" not
-             * "Int__Int.double".                                          */
-            const char *_local_name = ent->name;
-            {
-                const char *_dot = strrchr(ent->name, '.');
-                if (_dot) _local_name = _dot + 1;
-            }
             char *ms = mangle(mod_name, _local_name);
 
             if (ent->kind == ENV_FUNC || ent->kind == ENV_ADT_CTOR) {
                 /* Never rename FFI functions — they must keep their original
                  * symbol names so the linker can find them in libraylib etc. */
                 if (ent->is_ffi) { free(ms); ent = ent->next; continue; }
-                registry_push_func(cm, ent->name, ms,
+                registry_push_func(cm, _local_name, ms,
                                    ent->return_type ? ent->return_type : ent->type,
                                    ent->params, ent->param_count,
                                    ent->func_ref);
@@ -1567,7 +1593,10 @@ skip_primitive_type_autoload:
                             other->module_name == NULL &&
                             other->func_ref == ent->func_ref &&
                             strcmp(other->name, ent->name) != 0) {
-                            registry_push_func(cm, other->name, ms,
+                            const char *other_local_name = other->name;
+                            const char *other_dot = strrchr(other->name, '.');
+                            if (other_dot && other_dot[1]) other_local_name = other_dot + 1;
+                            registry_push_func(cm, other_local_name, ms,
                                                ent->return_type ? ent->return_type : ent->type,
                                                ent->params, ent->param_count,
                                                ent->func_ref);
@@ -1576,7 +1605,7 @@ skip_primitive_type_autoload:
                 }
             } else {
                 if (!ent->type) { free(ms); ent = ent->next; continue; }
-                registry_push_var(cm, ent->name, ms, ent->type);
+                registry_push_var(cm, _local_name, ms, ent->type);
                 LLVMValueRef gv = ent->value;
                 if (gv && LLVMIsAGlobalVariable(gv)) {
                     const char *cur = LLVMGetValueName(gv);
@@ -1595,7 +1624,10 @@ skip_primitive_type_autoload:
                         const char *other_llvm = other->llvm_name ? other->llvm_name : other->name;
                         const char *ent_llvm   = ent->name; /* before Phase 9 rename, ent->name IS the llvm name */
                         if (strcmp(other_llvm, ent_llvm) == 0) {
-                            registry_push_var(cm, other->name, ms,
+                            const char *other_local_name = other->name;
+                            const char *other_dot = strrchr(other->name, '.');
+                            if (other_dot && other_dot[1]) other_local_name = other_dot + 1;
+                            registry_push_var(cm, other_local_name, ms,
                                               other->type ? other->type : ent->type);
                         }
                     }
@@ -1608,7 +1640,10 @@ skip_primitive_type_autoload:
                             other->module_name == NULL &&
                             other->value == ent->value &&
                             strcmp(other->name, ent->name) != 0) {
-                            registry_push_var(cm, other->name, ms, other->type ? other->type : ent->type);
+                            const char *other_local_name = other->name;
+                            const char *other_dot = strrchr(other->name, '.');
+                            if (other_dot && other_dot[1]) other_local_name = other_dot + 1;
+                            registry_push_var(cm, other_local_name, ms, other->type ? other->type : ent->type);
                         }
                         other = other->next;
                     }

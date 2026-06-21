@@ -39,6 +39,7 @@ postfix_call_chained_multi	monadc.context.reader.sugar.postfix-call	Chained post
 # ── Dot Field Access Sugar ──────────────────────────────────────────────────
 dot_field_simple	monadc.context.reader.sugar.dot-access	Dot field access on expression parses.	obj.field	obj.field			regression	passing-baseline-2026-06-15
 dot_field_chain	monadc.context.reader.sugar.dot-access	Chained dot field access parses.	obj.field.sub	obj.field.sub			regression	passing-baseline-2026-06-15
+dot_method_parenthesized	monadc.context.reader.sugar.dot-access	Parentheses around a literal dot-method expression group the call without invoking its result.	('a'.upcase)	(upcase 'a')			regression	regression-2026-06-20
 # ── Assignment Sugar ────────────────────────────────────────────────────────
 assign_arrow	monadc.context.reader.sugar.assign-arrow	Left arrow becomes set! and returns value.	x <- 5	(set! x 5)			regression	passing-baseline-2026-06-15
 assign_compound	monadc.context.reader.sugar.assign-arrow	Left arrow with compound expression.	x <- x + 1	(set! x (+ x 1))			regression	passing-baseline-2026-06-15

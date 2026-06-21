@@ -1,0 +1,27 @@
+;; TEST-ID: tests.codegen.module-qualified-self-call
+;; TEST-TIER: regression
+;; TEST-STATUS: regression-2026-06-20
+;; TEST-CODEGEN-ATOM: atom.codegen.module.qualified.self.call
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: module-resolution
+;; TEST-CATEGORY: 05-symbol-env
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.module.codegen-import-resolution
+;; TEST-PURPOSE: A module can call one of its exported functions through its own short qualified name.
+;; TEST-ATOM: Probe.identity resolves as a function rather than layout dot-access.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c codegen_dot_chain module-qualified function disambiguation
+;; TEST-USES-ATOM: atom.codegen.category.05.symbol.env
+;; TEST-MENU: branches/symbol-env/module-resolution/atom.codegen.module.qualified.self.call
+;; TEST-MENU-PATH: codegen/branches/symbol-env/module-resolution/atom.codegen.module.qualified.self.call
+;; TEST-ATOM-LEAF: atom.codegen.module.qualified.self.call
+;; TEST-CLI-TARGET: codegen branches symbol-env module-resolution
+
+module Data.Probe where
+  identity
+
+method identity :: Int -> Int
+  x -> x
+
+show (Probe.identity 42)
