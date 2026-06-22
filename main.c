@@ -585,7 +585,17 @@ static CompiledModule *compile_one(const char *source_path,
 
 static bool source_is_prelude_file(const char *path)
 {
-    return path && strstr(path, "/prelude/");
+    if (!path)
+        return false;
+
+    if (strstr(path, "/prelude/"))
+        return true;
+
+    char real[1024];
+    if (realpath(path, real) && strstr(real, "/prelude/"))
+        return true;
+
+    return false;
 }
 
 static bool path_is_current_source(const char *path, const char *current)
@@ -624,6 +634,14 @@ static void compile_prelude_dir(const char *dir, const char *current_source,
         if (!mon_file_stem(ent->d_name, module_name, sizeof(module_name)))
             continue;
         if (!module_name_is_valid(module_name))
+            continue;
+
+        char *current_module = path_to_module_name(current_source);
+        bool is_current_module =
+            current_module && strcmp(module_name, current_module) == 0;
+        free(current_module);
+
+        if (is_current_module)
             continue;
         if (registry_find(module_name))
             continue;
@@ -1919,7 +1937,9 @@ static void compile(CompilerFlags *flags) {
         /* printf("[done] %s", exec_name); */
         if (flags->verbose_level > 0 || flags->trace_codegen)
             printf("[done] %s\n\n", exec_name);
-        if (!flags->emit_obj)
+        bool keep_objects = flags->emit_obj || flags->emit_ir ||
+                             flags->emit_asm || flags->emit_bc;
+        if (!keep_objects)
             for (size_t i = 0; i < n; i++) remove(objs[i]);
     } else {
         fprintf(stderr, "[error] linking failed\n");

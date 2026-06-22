@@ -794,6 +794,7 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     case TYPE_FLOAT:
         return LLVMDoubleTypeInContext(ctx->context);
     case TYPE_CHAR:
+    case TYPE_BYTE:
         return LLVMInt8TypeInContext(ctx->context);
     case TYPE_STRING:
     case TYPE_PATH:
@@ -1037,10 +1038,10 @@ static LLVMValueRef codegen_load_arr_fat_entry(CodegenContext *ctx, EnvEntry *en
 
 /// Type checking for operations
 
-bool type_is_numeric (Type *t) { return t && (t->kind == TYPE_INT   || t->kind == TYPE_FLOAT || t->kind == TYPE_HEX || t->kind == TYPE_BIN || t->kind == TYPE_OCT  || t->kind == TYPE_CHAR || t->kind == TYPE_RATIO); }
-bool type_is_integer (Type *t) { return t && (t->kind == TYPE_INT   || t->kind == TYPE_HEX   || t->kind == TYPE_BIN || t->kind == TYPE_OCT || t->kind == TYPE_CHAR || (t->kind >= TYPE_I8 && t->kind <= TYPE_U128) || t->kind == TYPE_INT_ARBITRARY); }
+bool type_is_numeric (Type *t) { return t && (t->kind == TYPE_INT   || t->kind == TYPE_FLOAT || t->kind == TYPE_HEX || t->kind == TYPE_BIN || t->kind == TYPE_OCT  || t->kind == TYPE_CHAR || t->kind == TYPE_BYTE || t->kind == TYPE_RATIO); }
+bool type_is_integer (Type *t) { return t && (t->kind == TYPE_INT   || t->kind == TYPE_HEX   || t->kind == TYPE_BIN || t->kind == TYPE_OCT || t->kind == TYPE_CHAR || t->kind == TYPE_BYTE || (t->kind >= TYPE_I8 && t->kind <= TYPE_U128) || t->kind == TYPE_INT_ARBITRARY); }
 bool type_is_float   (Type *t) { return t && (t->kind == TYPE_FLOAT || t->kind == TYPE_F32   || t->kind == TYPE_F80); }
-bool type_is_unsigned(Type *t) { return t && (t->kind == TYPE_U8    || t->kind == TYPE_U16   || t->kind == TYPE_U32 || t->kind == TYPE_U64 || t->kind == TYPE_U128); }
+bool type_is_unsigned(Type *t) { return t && (t->kind == TYPE_BYTE  || t->kind == TYPE_U8    || t->kind == TYPE_U16   || t->kind == TYPE_U32 || t->kind == TYPE_U64 || t->kind == TYPE_U128); }
 
 char *mangle_unicode_name(const char *name) {
     /* Check if name needs mangling — any non-ASCII char OR any ASCII
@@ -1512,6 +1513,16 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
 
     if (type->kind == TYPE_STRING || type->kind == TYPE_PATH) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), val, "");
     else if (type->kind == TYPE_CHAR) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_char(ctx) : get_fmt_char_no_newline(ctx), val, "");
+    else if (type->kind == TYPE_BYTE) {
+        LLVMValueRef ext = LLVMTypeOf(val) != LLVMInt64TypeInContext(ctx->context)
+            ? LLVMBuildZExt(ctx->builder, val, LLVMInt64TypeInContext(ctx->context), "byte_ext")
+            : val;
+        emit_call_2(ctx, printf_fn, i32,
+                    LLVMBuildGlobalStringPtr(ctx->builder,
+                                             newline ? "0x%02lX\n" : "0x%02lX",
+                                             "fmt_byte"),
+                    ext, "");
+    }
     else if (type->kind == TYPE_FLOAT) emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_float(ctx) : get_fmt_float_no_newline(ctx), val, "");
     else if (type->kind == TYPE_HEX || type->kind == TYPE_OCT) {
         emit_call_2(ctx, printf_fn, i32, type->kind == TYPE_HEX ? get_fmt_hex(ctx) : get_fmt_oct(ctx), val, "");
@@ -1536,7 +1547,35 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
         emit_call_1(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, ":", "kw_colon"), "");
         emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), val, "");
     } else if (type->kind == TYPE_BOOL) {
-        LLVMValueRef bs = LLVMBuildSelect(ctx->builder, val, LLVMBuildGlobalStringPtr(ctx->builder, "True", "t"), LLVMBuildGlobalStringPtr(ctx->builder, "False", "f"), "bs");
+        LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
+        LLVMTypeRef val_t = LLVMTypeOf(val);
+        LLVMValueRef pred = val;
+
+        if (val_t != i1) {
+            LLVMTypeKind val_k = LLVMGetTypeKind(val_t);
+
+            if (val_k == LLVMIntegerTypeKind) {
+                pred = LLVMBuildICmp(ctx->builder,
+                                     LLVMIntNE,
+                                     val,
+                                     LLVMConstInt(val_t, 0, 0),
+                                     "bool_pred");
+            } else if (val_k == LLVMPointerTypeKind) {
+                pred = LLVMBuildICmp(ctx->builder,
+                                     LLVMIntNE,
+                                     val,
+                                     LLVMConstNull(val_t),
+                                     "bool_pred");
+            } else {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot print Bool value with non-integer/non-pointer LLVM type",
+                              parser_get_filename(), 0, 0);
+            }
+        }
+
+        LLVMValueRef bs = LLVMBuildSelect(ctx->builder, pred,
+                                          LLVMBuildGlobalStringPtr(ctx->builder, "True", "t"),
+                                          LLVMBuildGlobalStringPtr(ctx->builder, "False", "f"),
+                                          "bs");
         emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), bs, "");
     } else if (type->kind == TYPE_COLL) {
         emit_call_1(ctx, get_rt_print_value(ctx), void_t, val, "");
@@ -2107,6 +2146,7 @@ static int layout_field_byte_size(CodegenContext *ctx, Type *t) {
         case TYPE_OCT:   return 8;
         case TYPE_FLOAT: return 8;
         case TYPE_CHAR:  return 1;
+        case TYPE_BYTE:  return 1;
         case TYPE_BOOL:  return 1;
         case TYPE_ARR:
             if (t->arr_element_type && t->arr_size > 0)
@@ -2947,8 +2987,18 @@ static LLVMValueRef resolve_to_closure(CodegenContext *ctx, AST *fn_node) {
     if (fn_node->type == AST_SYMBOL) {
         EnvEntry *e = env_lookup(ctx->env, fn_node->symbol);
 
-        /* Already a stored closure variable */
-        if (e && e->kind == ENV_VAR && e->type && e->type->kind == TYPE_FN)
+        /* Already a stored closure variable.
+         *
+         * Wisp/HM represents annotated function parameters like
+         *
+         *   f : (a -> Bool)
+         *
+         * as TYPE_ARROW, while runtime passes function values as closure
+         * RuntimeValue* values. Treat TYPE_ARROW the same as TYPE_FN here,
+         * otherwise higher-order functions such as both capture f/g but
+         * fail to invoke them as closures inside the returned lambda. */
+        if (e && e->kind == ENV_VAR && e->type &&
+            (e->type->kind == TYPE_FN || e->type->kind == TYPE_ARROW))
             return LLVMBuildLoad2(ctx->builder, ptr, e->value, fn_node->symbol);
 
         /* Named function — trampoline if needed, then wrap */
@@ -3546,23 +3596,20 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
 
         EnvEntry *mentry = env_lookup(ctx->env, method_key);
         if (!mentry || !mentry->func_ref) {
-            fprintf(stderr, "DEBUG method lookup failed: method_key='%s' mentry=%p func_ref=%p\n",
-                    method_key, (void*)mentry,
-                    mentry ? (void*)mentry->func_ref : NULL);
-            /* Dump all env entries containing a dot to help diagnose */
-            fprintf(stderr, "DEBUG env entries with dots:\n");
-            for (size_t _bi = 0; _bi < ctx->env->size; _bi++) {
-                for (EnvEntry *_e = ctx->env->buckets[_bi]; _e; _e = _e->next) {
-                    if (strchr(_e->name, '.'))
-                        fprintf(stderr, "  '%s' kind=%d func_ref=%p\n",
-                                _e->name, _e->kind, (void*)_e->func_ref);
-                }
+            char predicate_key[512];
+            snprintf(predicate_key, sizeof(predicate_key), "%s.%s?",
+                     type_name_str, rest_of_chain);
+
+            EnvEntry *predicate_entry = env_lookup(ctx->env, predicate_key);
+            if (predicate_entry && predicate_entry->func_ref) {
+                CODEGEN_ERROR(ctx, "%s:%d:%d: error: type '%s' has no method '%s'; did you mean '%s?'?",
+                              parser_get_filename(), ast->line, ast->column,
+                              type_name_str, rest_of_chain, rest_of_chain);
             }
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: type '%s' has no method '%s' "
-                          "(looked up '%s' -- is %s.mon compiled and loaded?)",
+
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: type '%s' has no method '%s'",
                           parser_get_filename(), ast->line, ast->column,
-                          type_name_str, rest_of_chain, method_key,
-                          type_name_str);
+                          type_name_str, rest_of_chain);
             return NULL;
         }
 
@@ -4033,6 +4080,118 @@ static char *codegen_imported_call_name(CodegenContext *ctx,
     return NULL;
 }
 
+static const char *codegen_type_method_receiver_name(Type *type) {
+    if (!type)
+        return NULL;
+
+    switch (type->kind) {
+    case TYPE_CHAR:
+        return "Char";
+    case TYPE_INT:
+    case TYPE_HEX:
+    case TYPE_BIN:
+    case TYPE_OCT:
+    case TYPE_INT_ARBITRARY:
+        return "Int";
+    case TYPE_FLOAT:
+    case TYPE_F32:
+        return "Float";
+    case TYPE_BOOL:
+        return "Bool";
+    case TYPE_STRING:
+        return "String";
+    case TYPE_PATH:
+        return "Path";
+    case TYPE_SYMBOL:
+        return "Symbol";
+    case TYPE_KEYWORD:
+        return "Keyword";
+    case TYPE_LIST:
+        return "List";
+    case TYPE_ARR:
+        return "Arr";
+    case TYPE_SET:
+        return "Set";
+    case TYPE_MAP:
+        return "Map";
+    case TYPE_COLL:
+        return "Coll";
+    case TYPE_LAYOUT:
+        return type->layout_name;
+    case TYPE_APP:
+        return type->app_constructor;
+    default:
+        return NULL;
+    }
+}
+
+static const char *codegen_type_method_receiver_name_from_ast(CodegenContext *ctx,
+                                                              AST *receiver) {
+    Type *type = NULL;
+
+    if (!receiver)
+        return NULL;
+
+    type = receiver->inferred_type;
+
+    if ((!type || type->kind == TYPE_UNKNOWN || type->kind == TYPE_VAR) &&
+        receiver->type == AST_SYMBOL &&
+        receiver->symbol) {
+        EnvEntry *entry = env_lookup(ctx->env, receiver->symbol);
+        if (entry && entry->type)
+            type = entry->type;
+    }
+
+    if (type && type->kind != TYPE_UNKNOWN && type->kind != TYPE_VAR)
+        return codegen_type_method_receiver_name(type);
+
+    switch (receiver->type) {
+    case AST_CHAR:
+        return "Char";
+    case AST_STRING:
+        return "String";
+    case AST_PATH:
+        return "Path";
+    case AST_KEYWORD:
+        return "Keyword";
+    case AST_NUMBER: {
+        Type *literal_type =
+            infer_literal_type(receiver->number, receiver->literal_str);
+        return codegen_type_method_receiver_name(literal_type);
+    }
+    default:
+        return NULL;
+    }
+}
+
+static char *codegen_type_method_call_name(CodegenContext *ctx,
+                                           AST *ast,
+                                           const char *method_name) {
+    if (!ctx || !ast || ast->type != AST_LIST || !method_name)
+        return NULL;
+
+    if (strchr(method_name, '.'))
+        return NULL;
+
+    if (ast->list.count < 2)
+        return NULL;
+
+    const char *type_name =
+        codegen_type_method_receiver_name_from_ast(ctx, ast->list.items[1]);
+
+    if (!type_name || !*type_name)
+        return NULL;
+
+    char candidate[512];
+    snprintf(candidate, sizeof(candidate), "%s.%s", type_name, method_name);
+
+    EnvEntry *entry = env_lookup(ctx->env, candidate);
+    if (entry && entry->kind == ENV_FUNC)
+        return strdup(candidate);
+
+    return codegen_imported_call_name(ctx, candidate);
+}
+
 static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast, const char *name) {
     CodegenResult result = {NULL, NULL};
 
@@ -4379,11 +4538,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
         if (type_is_float(num_type)) {
             result.value = LLVMConstReal(LLVMDoubleTypeInContext(ctx->context), ast->number);
-        } else if (ast->has_raw_int) {
-            result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context),
-                                        (int64_t)ast->raw_int, 0);
         } else {
-            result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), (long long)ast->number, 0);
+            LLVMTypeRef num_llvm = type_to_llvm(ctx, num_type);
+            uint64_t raw_value = ast->has_raw_int
+                ? (uint64_t)ast->raw_int
+                : (uint64_t)((long long)ast->number);
+
+            if (LLVMGetTypeKind(num_llvm) == LLVMIntegerTypeKind) {
+                result.value = LLVMConstInt(num_llvm, raw_value,
+                                            type_is_unsigned(num_type) ? 0 : 1);
+            } else {
+                result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context),
+                                            raw_value, 0);
+            }
         }
         if (ast->has_raw_int) {
             char *val_str = LLVMPrintValueToString(result.value);
@@ -6719,7 +6886,7 @@ if (ast->list.count >= 5) {
             // Type predicates: Int?, Float?, Boolean?, ...
             {
                 struct { const char *pred; int tag; int tag2; } type_preds[] = {
-                    {"Int?", RT_INT, -1}, {"Float?", RT_FLOAT, -1}, {"Number?", RT_INT, RT_FLOAT}, {"Char?", RT_CHAR, -1}, {"String?", RT_STRING, -1}, {"Bool?", -3, -1}, {"Symbol?", RT_SYMBOL, -1}, {"Keyword?", RT_KEYWORD, -1}, {"List?", RT_LIST, -1}, {"Ratio?", RT_RATIO, -1}, {"Set?", RT_SET, -1}, {"Map?", RT_MAP, -1}, {"Fn?", RT_CLOSURE, -1}, {"Hex?", RT_INT, -1}, {"Bin?", RT_INT, -1}, {"Oct?", RT_INT, -1}, {"Arr?", -2, -1}, {NULL, 0, 0}
+                    {"Int?", RT_INT, -1}, {"Float?", RT_FLOAT, -1}, {"Number?", RT_INT, RT_FLOAT}, {"Char?", RT_CHAR, -1}, {"Byte?", -4, -1}, {"String?", RT_STRING, -1}, {"Bool?", -3, -1}, {"Symbol?", RT_SYMBOL, -1}, {"Keyword?", RT_KEYWORD, -1}, {"List?", RT_LIST, -1}, {"Ratio?", RT_RATIO, -1}, {"Set?", RT_SET, -1}, {"Map?", RT_MAP, -1}, {"Fn?", RT_CLOSURE, -1}, {"Hex?", RT_INT, -1}, {"Bin?", RT_INT, -1}, {"Oct?", RT_INT, -1}, {"Arr?", -2, -1}, {"Path?", -5, -1}, {NULL, 0, 0}
                 };
                 for (int _pi = 0; type_preds[_pi].pred; _pi++) {
                     if (strcmp(head->symbol, type_preds[_pi].pred) != 0) continue;
@@ -6741,6 +6908,8 @@ if (ast->list.count >= 5) {
                         else if (t == RT_CLOSURE) m = arg.type->kind == TYPE_FN;
                         else if (t == -2) m = arg.type->kind == TYPE_ARR;
                         else if (t == -3) m = arg.type->kind == TYPE_BOOL;
+                        else if (t == -4) m = arg.type->kind == TYPE_BYTE;
+                        else if (t == -5) m = arg.type->kind == TYPE_PATH;
                         result.value = LLVMConstInt(i1, m, 0); result.type = type_bool(); return result;
                     }
                     if (type_preds[_pi].tag < 0) { result.value = LLVMConstInt(i1, 0, 0); result.type = type_bool(); return result; }
@@ -7697,17 +7866,32 @@ if (ast->list.count >= 5) {
                     cond = LLVMBuildICmp(ctx->builder, LLVMIntEQ, lhs_bool, rhs_bool, "eq");
 
 
-                } else if (LLVMTypeOf(lhs) == ptr || LLVMTypeOf(rhs) == ptr) {
+                               } else if (LLVMTypeOf(lhs) == ptr || LLVMTypeOf(rhs) == ptr) {
+                    bool lhs_raw_ptr =
+                        actual.type &&
+                        (actual.type->kind == TYPE_STRING ||
+                         actual.type->kind == TYPE_PATH ||
+                         actual.type->kind == TYPE_SYMBOL ||
+                         actual.type->kind == TYPE_KEYWORD ||
+                         actual.type->kind == TYPE_ARR);
+
+                    bool rhs_raw_ptr =
+                        expected.type &&
+                        (expected.type->kind == TYPE_STRING ||
+                         expected.type->kind == TYPE_PATH ||
+                         expected.type->kind == TYPE_SYMBOL ||
+                         expected.type->kind == TYPE_KEYWORD ||
+                         expected.type->kind == TYPE_ARR);
+
                     LLVMValueRef lhs_boxed =
-                        (LLVMTypeOf(lhs) == ptr &&
-                         (!actual.type || actual.type->kind != TYPE_ARR))
+                        (LLVMTypeOf(lhs) == ptr && !lhs_raw_ptr)
                             ? lhs
                             : codegen_box(ctx, lhs, actual.type);
                     LLVMValueRef rhs_boxed =
-                        (LLVMTypeOf(rhs) == ptr &&
-                         (!expected.type || expected.type->kind != TYPE_ARR))
+                        (LLVMTypeOf(rhs) == ptr && !rhs_raw_ptr)
                             ? rhs
                             : codegen_box(ctx, rhs, expected.type);
+
                     LLVMTypeRef eq_params[] = {ptr, ptr};
                     LLVMValueRef eq_args[] = {lhs_boxed, rhs_boxed};
                     LLVMValueRef eq_p = LLVMBuildCall2(
@@ -8357,21 +8541,26 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
                 CodegenResult left_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult right_r = codegen_expr(ctx, ast->list.items[2]);
 
-                /* String */
-                if (left_r.type && left_r.type->kind == TYPE_STRING) {
-                    CodegenResult right_r = codegen_expr(ctx, ast->list.items[2]);
-                    result.value = LLVMBuildCall2(ctx->builder,
-                                                  LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, ptr}, 2, 0),
-                                                  get_rt_string_concat(ctx),
-                                                  (LLVMValueRef[]){left_r.value, right_r.value}, 2, "");
+                /* String-involved collection concat.
+                 * A string can be rebuilt by Char ++ String during filter,
+                 * takeWhile, map, etc. append also uses String ++ Char.
+                 * Dispatch those mixed cases through rt_coll_concat so runtime
+                 * preserves String shape and owns Char/String coercion. */
+                if ((left_r.type && left_r.type->kind == TYPE_STRING) ||
+                    (right_r.type && right_r.type->kind == TYPE_STRING)) {
+                    result.value = emit_call_2(ctx, get_rt_coll_concat(ctx), ptr,
+                                               codegen_box(ctx, left_r.value, left_r.type),
+                                               codegen_box(ctx, right_r.value, right_r.type),
+                                               "concat_coll");
                     result.type = type_string();
                     return result;
                 }
 
+
                 /* Array */
                 if (left_r.type && left_r.type->kind == TYPE_ARR) {
-                    CodegenResult right_r = codegen_expr(ctx, ast->list.items[2]);
                     LLVMTypeRef fat_t  = get_arr_fat_type(ctx);
                     LLVMTypeRef elem_t = type_to_llvm(ctx, left_r.type->arr_element_type);
 
@@ -8398,168 +8587,132 @@ if (ast->list.count >= 5) {
                     return result;
                 }
 
-                /* If HM tells us the left argument is an element (e.g. a tuple RT_LIST) being prepended
-                 * to a generic collection, wrap it so rt_coll_lazy_cons doesn't flatten it! */
+                /* If HM proves that the left operand is a list/tuple value
+                 * being used as one element of the output collection, wrap it
+                 * before concat so tuple-like RT_LIST values are not flattened.
+                 *
+                 * Do not wrap TYPE_UNKNOWN or TYPE_VAR here. Polymorphic
+                 * collection indexing, including String indexing, reaches this
+                 * branch as TYPE_UNKNOWN but the value is already a boxed
+                 * RuntimeValue*. Wrapping that boxed char corrupts the
+                 * Char ++ String case used by filter/takeWhile.
+                 *
+                 * Also never re-codegen the RHS here. right_r was already
+                 * emitted above; re-emitting it duplicates recursive calls. */
                 bool should_wrap = false;
-                if (ast->inferred_type) {
+
+                if (ast->inferred_type && left_r.type) {
                     Type *elem_t = NULL;
+
                     if (ast->inferred_type->kind == TYPE_COLL) {
                         elem_t = ast->inferred_type->element_type;
-                    } else if (ast->inferred_type->kind == TYPE_LIST && ast->inferred_type->list_count == 1) {
+                    } else if (ast->inferred_type->kind == TYPE_LIST &&
+                               ast->inferred_type->list_count == 1) {
                         elem_t = ast->inferred_type->list_types[0];
                     }
 
-                    if (elem_t && left_r.type && types_equal(left_r.type, elem_t)) {
+                    if (elem_t &&
+                        left_r.type->kind == TYPE_LIST &&
+                        types_equal(left_r.type, elem_t)) {
                         should_wrap = true;
                     }
                 }
 
-                if (!should_wrap && left_r.type) {
-                    bool is_coll = (left_r.type->kind == TYPE_COLL) ||
-                        (left_r.type->kind == TYPE_STRING) ||
-                        (left_r.type->kind == TYPE_ARR) ||
-                        (left_r.type->kind == TYPE_LIST && left_r.type->list_count <= 1);
-                    if (!is_coll) {
-                        should_wrap = true;
-                    }
+                if (getenv("MONAD_COLL_DEBUG")) {
+                    fprintf(stderr,
+                            "[codegen ++] %s:%d:%d left=%s right=%s inferred=%s should_wrap=%d\n",
+                            parser_get_filename(),
+                            ast->line,
+                            ast->column,
+                            left_r.type ? type_to_string(left_r.type) : "<null>",
+                            right_r.type ? type_to_string(right_r.type) : "<null>",
+                            ast->inferred_type ? type_to_string(ast->inferred_type) : "<null>",
+                            should_wrap ? 1 : 0);
                 }
 
                 if (should_wrap) {
-                    CodegenResult rhs_template_r = codegen_expr(ctx, ast->list.items[2]);
+                    if (getenv("MONAD_COLL_DEBUG")) {
+                        fprintf(stderr,
+                                "[codegen ++] %s:%d:%d wrapping-left\n",
+                                parser_get_filename(),
+                                ast->line,
+                                ast->column);
+                    }
+
                     left_r.value = emit_call_2(ctx, get_rt_coll_wrap(ctx), ptr,
-                                               rhs_template_r.value,
+                                               right_r.value,
                                                codegen_box(ctx, left_r.value, left_r.type),
                                                "wrapped_elem");
                 }
 
-                /* Coll / List: do NOT evaluate rhs eagerly ...
-                 * Capture all ENV_VAR symbols referenced in the rhs AST into a
-                 * malloc'd env array, emit a thunk function that re-evaluates rhs
-                 * with those locals restored, then call rt_coll_lazy_cons(lhs, thunk). */
-                {
-#define MAX_CAPS 64
+                /* Generic collection concat/prepend.
+                 *
+                 * Do not lower this to rt_coll_lazy_cons here. This branch has
+                 * already emitted right_r eagerly above, so the old thunk path
+                 * duplicated the RHS and also forced every polymorphic
+                 * Char ++ String rebuild into a lazy-list shape.
+                 *
+                 * rt_coll_concat is the runtime-level shape-preserving
+                 * operation. It keeps String results as strings, list results
+                 * as lists, and array results as arrays where supported. */
+                LLVMValueRef concat_left_box =
+                    codegen_box(ctx, left_r.value, left_r.type);
+                LLVMValueRef concat_right_box =
+                    codegen_box(ctx, right_r.value, right_r.type);
 
-                    const char  *cap_names[MAX_CAPS];
-                    LLVMValueRef cap_vals[MAX_CAPS];
-                    int          ncaps = 0;
+                if (getenv("MONAD_COLL_DEBUG")) {
+                    LLVMTypeRef void_t = LLVMVoidTypeInContext(ctx->context);
+                    LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
 
-                    /* Walk rhs AST, collect unique symbols that resolve to ENV_VAR */
-                    AST *stk[256];
-                    int  sp = 0;
-                    stk[sp++] = ast->list.items[2];
-                    while (sp > 0 && ncaps < MAX_CAPS) {
-                        AST *node = stk[--sp];
-                        if (!node) continue;
-                        if (node->type == AST_SYMBOL) {
-                            EnvEntry *ee = env_lookup(ctx->env, node->symbol);
-                            if (!ee) continue;
-                            if (ee->kind == ENV_FUNC || ee->kind == ENV_BUILTIN) continue;
-                            bool dup = false;
-                            for (int i = 0; i < ncaps; i++)
-                                if (strcmp(cap_names[i], node->symbol) == 0) { dup = true; break; }
-                            if (dup) continue;
-                            AST tmp = { .type = AST_SYMBOL, .symbol = (char*)node->symbol };
-                            LLVMValueRef v = codegen_expr(ctx, &tmp).value;
-                            if (LLVMGetTypeKind(LLVMTypeOf(v)) == LLVMIntegerTypeKind) {
-                                LLVMTypeRef  ft = LLVMFunctionType(ptr, &i64, 1, 0);
-                                LLVMValueRef ci = LLVMBuildIntCast2(ctx->builder, v, i64, 1, "");
-                                v = LLVMBuildCall2(ctx->builder, ft, get_rt_value_int(ctx), &ci, 1, "");
-                            } else if (LLVMGetTypeKind(LLVMTypeOf(v)) == LLVMDoubleTypeKind) {
-                                LLVMTypeRef dbl = LLVMDoubleTypeInContext(ctx->context);
-                                LLVMTypeRef ft  = LLVMFunctionType(ptr, &dbl, 1, 0);
-                                v = LLVMBuildCall2(ctx->builder, ft, get_rt_value_float(ctx), &v, 1, "");
-                            }
-                            cap_names[ncaps] = node->symbol;
-                            cap_vals[ncaps]  = v;
-                            ncaps++;
-                        } else if (node->type == AST_LIST) {
-                            for (size_t i = 0; i < node->list.count && sp < 255; i++)
-                                stk[sp++] = node->list.items[i];
-                        }
-                    }
+                    fprintf(stderr,
+                            "[codegen ++] %s:%d:%d emitting rt_coll_concat probes\n",
+                            parser_get_filename(),
+                            ast->line,
+                            ast->column);
 
-                    /* Allocate env array on heap: ncaps ptr-sized slots */
-                    LLVMValueRef malloc_fn = LLVMGetNamedFunction(ctx->module, "malloc");
-                    if (!malloc_fn) {
-                        LLVMTypeRef ft = LLVMFunctionType(ptr, &i64, 1, 0);
-                        malloc_fn = LLVMAddFunction(ctx->module, "malloc", ft);
-                        LLVMSetLinkage(malloc_fn, LLVMExternalLinkage);
-                    }
-                    LLVMTypeRef  malloc_ft = LLVMFunctionType(ptr, &i64, 1, 0);
-                    LLVMValueRef env_bytes = LLVMConstInt(i64, (uint64_t)ncaps * sizeof(void*), 0);
-                    LLVMValueRef env_ptr   = LLVMBuildCall2(ctx->builder, malloc_ft, malloc_fn, &env_bytes, 1, "");
-
-                    for (int i = 0; i < ncaps; i++)
-                        LLVMBuildStore(ctx->builder, cap_vals[i],
-                                       LLVMBuildGEP2(ctx->builder, ptr, env_ptr,
-                                                     (LLVMValueRef[]){LLVMConstInt(i64, i, 0)}, 1, ""));
-
-                    LLVMBasicBlockRef outer_bb = LLVMGetInsertBlock(ctx->builder);
-
-                    static int thunk_counter = 0;
-                    char thunk_name[64];
-                    snprintf(thunk_name, sizeof(thunk_name), "__pp_rhs_thunk_%d", thunk_counter++);
-
-                    LLVMTypeRef  thunk_ft = LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr}, 1, 0);
-                    LLVMValueRef thunk_fn = LLVMAddFunction(ctx->module, thunk_name, thunk_ft);
-                    LLVMSetLinkage(thunk_fn, LLVMInternalLinkage);
-
-                    LLVMBasicBlockRef thunk_bb = LLVMAppendBasicBlockInContext(ctx->context, thunk_fn, "entry");
-                    LLVMPositionBuilderAtEnd(ctx->builder, thunk_bb);
-                    LLVMValueRef ep = LLVMGetParam(thunk_fn, 0);
-
-                    /* Swap in a child env so the thunk body sees the restored locals */
-                    Env *saved_env = ctx->env;
-                    ctx->env = env_create_child(ctx->env);
-
-                    for (int i = 0; i < ncaps; i++) {
-                        LLVMValueRef sv = LLVMBuildLoad2(ctx->builder, ptr,
-                                                         LLVMBuildGEP2(ctx->builder, ptr, ep,
-                                                                       (LLVMValueRef[]){LLVMConstInt(i64, i, 0)},
-                                                                       1, ""), "");
-                        EnvEntry *ee = env_lookup(saved_env, cap_names[i]);
-                        bool is_int  = ee && ee->type &&
-                            (ee->type->kind == TYPE_INT ||
-                             ee->type->kind == TYPE_I64 ||
-                             ee->type->kind == TYPE_I32);
-                        LLVMValueRef final_val = sv;
-                        if (is_int) {
-                            LLVMTypeRef ft = LLVMFunctionType(i64, &ptr, 1, 0);
-                            final_val = LLVMBuildCall2(ctx->builder, ft, get_rt_unbox_int(ctx), &sv, 1, "");
-                        }
-                        Type *cap_type = (ee && ee->type) ? type_clone(ee->type) : NULL;
-                        LLVMValueRef slot = LLVMBuildAlloca(ctx->builder, LLVMTypeOf(final_val), cap_names[i]);
-                        LLVMBuildStore(ctx->builder, final_val, slot);
-                        env_insert(ctx->env, cap_names[i], cap_type, slot);
-                    }
-
-                    CodegenResult rhs_r = codegen_expr(ctx, ast->list.items[2]);
-                    LLVMValueRef  rhs_v = rhs_r.value;
-                    if (LLVMGetTypeKind(LLVMTypeOf(rhs_v)) == LLVMIntegerTypeKind) {
-                        LLVMTypeRef  ft = LLVMFunctionType(ptr, &i64, 1, 0);
-                        LLVMValueRef ci = LLVMBuildIntCast2(ctx->builder, rhs_v, i64, 1, "");
-                        rhs_v = LLVMBuildCall2(ctx->builder, ft, get_rt_value_int(ctx), &ci, 1, "");
-                    }
-                    LLVMBuildRet(ctx->builder, rhs_v);
-
-                    env_free(ctx->env);
-                    ctx->env = saved_env;
-
-                    LLVMPositionBuilderAtEnd(ctx->builder, outer_bb);
-
-                    LLVMValueRef thunk_v = LLVMBuildCall2(ctx->builder,
-                                                          LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, ptr}, 2, 0),
-                                                          get_rt_thunk_create(ctx),
-                                                          (LLVMValueRef[]){thunk_fn, env_ptr}, 2, "");
-
-                    result.value = LLVMBuildCall2(ctx->builder,
-                                                  LLVMFunctionType(ptr, (LLVMTypeRef[]){ptr, ptr}, 2, 0),
-                                                  get_rt_coll_lazy_cons(ctx),
-                                                  (LLVMValueRef[]){left_r.value, thunk_v}, 2, "");
-                    result.type = type_coll();
-                    return result;
-#undef MAX_CAPS
+                    LLVMBuildCall2(ctx->builder,
+                                   LLVMFunctionType(void_t, (LLVMTypeRef[]){ptr}, 1, 0),
+                                   print_fn,
+                                   (LLVMValueRef[]){concat_left_box},
+                                   1,
+                                   "");
+                    LLVMBuildCall2(ctx->builder,
+                                   LLVMFunctionType(void_t, (LLVMTypeRef[]){ptr}, 1, 0),
+                                   print_fn,
+                                   (LLVMValueRef[]){concat_right_box},
+                                   1,
+                                   "");
                 }
+
+                result.value = emit_call_2(ctx, get_rt_coll_concat(ctx), ptr,
+                                           concat_left_box,
+                                           concat_right_box,
+                                           "concat_coll");
+
+                if (getenv("MONAD_COLL_DEBUG")) {
+                    LLVMTypeRef void_t = LLVMVoidTypeInContext(ctx->context);
+                    LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
+
+                    LLVMBuildCall2(ctx->builder,
+                                   LLVMFunctionType(void_t, (LLVMTypeRef[]){ptr}, 1, 0),
+                                   print_fn,
+                                   (LLVMValueRef[]){result.value},
+                                   1,
+                                   "");
+                }
+
+                result.type = type_coll();
+
+                if (right_r.type && right_r.type->kind == TYPE_STRING)
+                    result.type = type_string();
+                else if (right_r.type && right_r.type->kind == TYPE_ARR)
+                    result.type = type_clone(right_r.type);
+                else if (right_r.type && right_r.type->kind == TYPE_LIST)
+                    result.type = type_clone(right_r.type);
+                else if (right_r.type && right_r.type->kind == TYPE_COLL)
+                    result.type = type_clone(right_r.type);
+
+                return result;
             }
 
             // (show-value v) — print any RuntimeValue* with newline
@@ -10600,22 +10753,81 @@ if (ast->list.count >= 5) {
                 CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
                 CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
 
+                if (lhs.type &&
+                    (lhs.type->kind == TYPE_LAYOUT ||
+                     lhs.type->kind == TYPE_STRING ||
+                     lhs.type->kind == TYPE_PATH)) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot perform modulo on type %s",
+                                  parser_get_filename(), ast->line, ast->column,
+                                  type_to_string(lhs.type));
+                }
+
+                if (rhs.type &&
+                    (rhs.type->kind == TYPE_LAYOUT ||
+                     rhs.type->kind == TYPE_STRING ||
+                     rhs.type->kind == TYPE_PATH)) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot perform modulo on type %s",
+                                  parser_get_filename(), ast->line, ast->column,
+                                  type_to_string(rhs.type));
+                }
+
                 bool use_float = type_is_float(lhs.type) || type_is_float(rhs.type);
 
                 if (use_float) {
-                    LLVMValueRef lv = lhs.value, rv = rhs.value;
-                    if (type_is_integer(lhs.type))
-                        lv = LLVMBuildSIToFP(ctx->builder, lv,
-                                             LLVMDoubleTypeInContext(ctx->context), "lf");
-                    if (type_is_integer(rhs.type))
-                        rv = LLVMBuildSIToFP(ctx->builder, rv,
-                                             LLVMDoubleTypeInContext(ctx->context), "rf");
+                    LLVMTypeRef dbl_t = LLVMDoubleTypeInContext(ctx->context);
+                    LLVMValueRef lv = lhs.value;
+                    LLVMValueRef rv = rhs.value;
+
+                    if (lhs.type && type_is_integer(lhs.type))
+                        lv = LLVMBuildSIToFP(ctx->builder, lv, dbl_t, "mod_lf");
+                    else if (LLVMTypeOf(lv) != dbl_t)
+                        lv = LLVMBuildFPExt(ctx->builder, lv, dbl_t, "mod_lf_ext");
+
+                    if (rhs.type && type_is_integer(rhs.type))
+                        rv = LLVMBuildSIToFP(ctx->builder, rv, dbl_t, "mod_rf");
+                    else if (LLVMTypeOf(rv) != dbl_t)
+                        rv = LLVMBuildFPExt(ctx->builder, rv, dbl_t, "mod_rf_ext");
+
                     result.value = LLVMBuildFRem(ctx->builder, lv, rv, "fremtmp");
                     result.type  = type_float();
                 } else {
-                    result.value = LLVMBuildSRem(ctx->builder, lhs.value, rhs.value, "sremtmp");
+                    LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                    LLVMValueRef lv = lhs.value;
+                    LLVMValueRef rv = rhs.value;
+
+                    if (lhs.type &&
+                        (lhs.type->kind == TYPE_CHAR ||
+                         LLVMGetTypeKind(LLVMTypeOf(lv)) == LLVMIntegerTypeKind)) {
+                        if (LLVMTypeOf(lv) != i64_t)
+                            lv = LLVMBuildSExtOrBitCast(ctx->builder, lv, i64_t, "mod_lhs_i64");
+                    }
+
+                    if (rhs.type &&
+                        (rhs.type->kind == TYPE_CHAR ||
+                         LLVMGetTypeKind(LLVMTypeOf(rv)) == LLVMIntegerTypeKind)) {
+                        if (LLVMTypeOf(rv) != i64_t)
+                            rv = LLVMBuildSExtOrBitCast(ctx->builder, rv, i64_t, "mod_rhs_i64");
+                    }
+
+                    if (LLVMTypeOf(lv) != LLVMTypeOf(rv)) {
+                        unsigned lhs_bits = LLVMGetIntTypeWidth(LLVMTypeOf(lv));
+                        unsigned rhs_bits = LLVMGetIntTypeWidth(LLVMTypeOf(rv));
+
+                        if (lhs_bits > rhs_bits) {
+                            rv = LLVMBuildSExtOrBitCast(ctx->builder, rv,
+                                                         LLVMTypeOf(lv),
+                                                         "mod_rhs_widen");
+                        } else if (rhs_bits > lhs_bits) {
+                            lv = LLVMBuildSExtOrBitCast(ctx->builder, lv,
+                                                         LLVMTypeOf(rv),
+                                                         "mod_lhs_widen");
+                        }
+                    }
+
+                    result.value = LLVMBuildSRem(ctx->builder, lv, rv, "sremtmp");
                     result.type  = type_int();
                 }
+
                 return result;
             }
 
@@ -10970,6 +11182,34 @@ if (ast->list.count >= 5) {
                         (void *)entry,
                         entry ? (int)entry->kind : -1,
                         (entry && entry->type) ? (int)entry->type->kind : -1);
+            }
+
+            if (!entry) {
+                char *type_method_call_name =
+                    codegen_type_method_call_name(ctx, ast, head->symbol);
+
+                if (codegen_import_debug_enabled()) {
+                    fprintf(stderr,
+                            "[import-debug] call-site type-method head=%s resolved=%s\n",
+                            head->symbol ? head->symbol : "(null)",
+                            type_method_call_name ? type_method_call_name : "(null)");
+                }
+
+                if (type_method_call_name) {
+                    EnvEntry *method_entry =
+                        env_lookup(ctx->env, type_method_call_name);
+
+                    if (method_entry) {
+                        entry = method_entry;
+                        free(type_method_call_name);
+                    } else {
+                        CodegenResult method_result =
+                            codegen_forward_declared_call(ctx, ast,
+                                                          type_method_call_name);
+                        free(type_method_call_name);
+                        return method_result;
+                    }
+                }
             }
 
             if (!entry) {
@@ -11763,6 +12003,27 @@ if (ast->list.count >= 5) {
             }
 
       /// Function call
+
+            if (!entry) {
+                char *type_method_call_name =
+                    codegen_type_method_call_name(ctx, ast, head->symbol);
+
+                if (type_method_call_name) {
+                    EnvEntry *method_entry =
+                        env_lookup(ctx->env, type_method_call_name);
+
+                    if (method_entry) {
+                        entry = method_entry;
+                        free(type_method_call_name);
+                    } else {
+                        CodegenResult method_result =
+                            codegen_forward_declared_call(ctx, ast,
+                                                          type_method_call_name);
+                        free(type_method_call_name);
+                        return method_result;
+                    }
+                }
+            }
 
             if (!entry) {
                 char *imported_call_name =
@@ -13437,7 +13698,7 @@ if (ast->list.count >= 5) {
 
             // Type cast: (TypeName expr)
             const char *cast_target = NULL;
-            const char *types[] = {"Int", "Float", "Char", "String", "Hex", "Bin", "Oct", "F32", "I8", "U8", "I16", "U16", "I32", "U32", "I64", "U64", "I128", "U128", NULL};
+            const char *types[] = {"Int", "Float", "Char", "Byte", "String", "Hex", "Bin", "Oct", "Path", "F32", "I8", "U8", "I16", "U16", "I32", "U32", "I64", "U64", "I128", "U128", NULL};
             for (int i = 0; types[i]; i++) if (strcmp(head->symbol, types[i]) == 0) { cast_target = types[i]; break; }
 
             if (cast_target) {

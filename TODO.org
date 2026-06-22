@@ -723,7 +723,7 @@ schema plus where
 
  — A particular application with concrete judgments substituted in
 
-Think of ⌜plus⌝ as a function that takes ⌜Γ⌝, ⌜e₁⌝, ⌜e₂⌝ and returns an inference rule:
+Think of =plus= as a function that takes =Γ=, =e₁=, =e₂= and returns an inference rule:
 
  #+begin_src monad
 

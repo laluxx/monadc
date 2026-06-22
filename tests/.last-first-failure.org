@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-21T19:05:35
+#+DATE: 2026-06-22T00:36:24
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -7,63 +7,200 @@
   debugging pass can start from the earliest observed failure.
 
 * Failure
-- Test: =sugar.wisp_higher_order_predicate_arg=
+- Test: =sugar.wisp_def_simple=
 - Status: =FAIL=
 - Menu: =sugar=
-- Duration: =[  17.07 ] ms=
-- Reason: =desugared AST mismatch: expected '(define (all? [__p_0 : Fn] [__p_1 : Coll] -> Bool) (p xs -> True)) (define (null? [__p_0 : Coll] -> Bool) (xs -> True)) (define (ok [__p_0 : Coll] -> Bool) (rows -> (all? null? rows)))', got '(define all? (lambda ([__p_0 :: (Fn :: ( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) True))\n(define null? (lambda ([__p_0 :: ([ a ])] -> Bool) True))\n(define ok (lambda ([__p_0 :: ([ [ Int ] ])] -> Bool) (all? null? __p_0)))'=
+- Duration: =[  19.35 ] ms=
+- Reason: =desugared AST mismatch: expected '(define x 42)', got 'define\nx\n42'=
 - Failure kind: =desugar-mismatch=
-- Artifacts: =tests/.last-failures/sugar.wisp_higher_order_predicate_arg=
+- Artifacts: =tests/.last-failures/sugar.wisp_def_simple=
 
 ** Materialized Source
 #+BEGIN_SRC monad
-define all? :: (a -> Bool) -> [a] -> Bool
-  p xs -> True
-
-define null? :: [a] -> Bool
-  xs -> True
-
-define ok :: [[Int]] -> Bool
-  rows -> all? null? rows
+define x 42
 #+END_SRC
 
 ** Metadata
 - =TEST-CLI-TARGET=: sugar
-- =TEST-CONTEXT=: monadc.context.wisp.old-core-prelude-compat
+- =TEST-CONTEXT=: monadc.context.wisp.sugar.def
 - =TEST-EXPECT=: parse-json
-- =TEST-EXPECT-DESUGAR=: (define (all? [__p_0 : Fn] [__p_1 : Coll] -> Bool) (p xs -> True)) (define (null? [__p_0 : Coll] -> Bool) (xs -> True)) (define (ok [__p_0 : Coll] -> Bool) (rows -> (all? null? rows)))
-- =TEST-ID=: tests.sugar.wisp_higher_order_predicate_arg
+- =TEST-EXPECT-DESUGAR=: (define x 42)
+- =TEST-ID=: tests.sugar.wisp_def_simple
 - =TEST-MENU=: sugar
 - =TEST-MENU-PATH=: sugar
-- =TEST-PURPOSE=: Wisp preserves bare predicate symbols in function-typed argument positions.
-- =TEST-STATUS=: wisp-function-arg-regression-2026-06-20
+- =TEST-PURPOSE=: Wisp def shorthand desugars to define.
+- =TEST-STATUS=: passing-baseline-2026-06-15
 - =TEST-TIER=: regression
 
 ** Context Links
-- =monadc.context.wisp.old-core-prelude-compat=
+- =monadc.context.wisp.sugar.def=
 
 ** Output
 #+BEGIN_EXAMPLE
 
-=== wisp expanded (/tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon) ===
-(#line 1 1) (define (all? [__p_0 : Fn :: (a -> Bool)] [__p_1 : [a]] -> Bool) p xs 
-(#line 2 1) ->
-(#line 2 1) True)
-(#line 4 1) (define (null? [__p_0 : [a]] -> Bool) xs 
-(#line 5 1) ->
-(#line 5 1) True)
-(#line 7 1) (define (ok [__p_0 : [[Int]]] -> Bool) rows 
-(#line 8 1) ->
-(#line 8 1) (all? null? rows))
+=== wisp expanded (/usr/local/lib/monad/core/prelude/Coll.mon) ===
+(#line 16 1) (module Coll
+[take      drop (#line 18 1) takeWhile dropWhile (#line 19 1) map all?  foldl foldr])
+(#line 22 1) (define (take [__p_0 : Int] [__p_1 : [a]] -> [a]) _ [] 
+(#line 23 1) ->
+(#line 23 1) []
+(#line 24 1) n [x|xs] 
+(#line 25 1) |
+(#line 25 1) (> n 0)
+(#line 25 1) ->
+(#line 25 1) (x ++ (take (n - 1) xs))
+(#line 26 1) |
+(#line 26 1) otherwise
+(#line 26 1) ->
+(#line 26 1) [])
+(#line 29 1) (define (drop [__p_0 : Int] [__p_1 : [a]] -> [a]) _ [] 
+(#line 30 1) ->
+(#line 30 1) []
+(#line 31 1) n [x|xs] 
+(#line 32 1) |
+(#line 32 1) (> n 0)
+(#line 32 1) ->
+(#line 32 1) (drop (n - 1) xs)
+(#line 33 1) |
+(#line 33 1) otherwise
+(#line 33 1) ->
+(#line 33 1) (x ++ xs))
+(#line 36 1) (define (takeWhile [__p_0 : (a -> Bool)] [__p_1 : [a]] -> [a]) _ [] 
+(#line 37 1) ->
+(#line 37 1) []
+(#line 38 1) p [x|xs] 
+(#line 39 1) |
+(#line 39 1) (p x)
+(#line 39 1) ->
+(#line 39 1) (x ++ (takeWhile p xs))
+(#line 40 1) |
+(#line 40 1) otherwise
+(#line 40 1) ->
+(#line 40 1) [])
+(#line 43 1) (define (dropWhile [__p_0 : (a -> Bool)] [__p_1 : [a]] -> [a]) _ [] 
+(#line 44 1) ->
+(#line 44 1) []
+(#line 45 1) p [x|xs] 
+(#line 46 1) |
+(#line 46 1) (p x)
+(#line 46 1) ->
+(#line 46 1) (dropWhile p xs)
+(#line 47 1) |
+(#line 47 1) otherwise
+(#line 47 1) ->
+(#line 47 1) (x ++ xs))
+(#line 50 1) (define (map [__p_0 : (a -> b)] [__p_1 : [a]] -> [b]) _ [] 
+(#line 51 1) ->
+(#line 51 1) []
+(#line 52 1) f [x|xs] 
+(#line 52 1) ->
+(#line 52 1) ((f x) ++ (map f xs)))
+(#line 56 1) (define (any? [__p_0 : (a -> Bool)] [__p_1 : [a]] -> Bool) _ [] 
+(#line 57 1) ->
+(#line 57 1) False
+(#line 58 1) p [x|xs] 
+(#line 58 1) ->
+(#line 58 1) (or (p x) (any? p xs)))
+(#line 61 1) (define (all? [__p_0 : (a -> Bool)] [__p_1 : [a]] -> Bool) _ [] 
+(#line 62 1) ->
+(#line 62 1) True
+(#line 63 1) p [x|xs] 
+(#line 64 1) |
+(#line 64 1) (p x)
+(#line 64 1) ->
+(#line 64 1) (all? p xs)
+(#line 65 1) |
+(#line 65 1) otherwise
+(#line 65 1) ->
+(#line 65 1) False)
+(#line 68 1) (define (foldl [__p_0 : (b -> a -> b)] [__p_1 : b] [__p_2 : [a]] -> b) _ acc [] 
+(#line 69 1) ->
+(#line 69 1) acc
+(#line 70 1) f acc [x|xs] 
+(#line 70 1) ->
+(#line 70 1) (foldl f (f acc x) xs))
+(#line 73 1) (define (foldr [__p_0 : (a -> b -> b)] [__p_1 : b] [__p_2 : [a]] -> b) _ acc [] 
+(#line 74 1) ->
+(#line 74 1) acc
+(#line 75 1) f acc [x|xs] 
+(#line 75 1) ->
+(#line 75 1) (f x (foldr f acc xs)))
+(#line 78 1) (define (zip [__p_0 : [a]] [__p_1 : [b]] -> [c]) [] _ 
+(#line 79 1) ->
+(#line 79 1) []
+(#line 80 1) _ [] 
+(#line 80 1) ->
+(#line 80 1) []
+(#line 81 1) [x|xs] [y|ys] 
+(#line 81 1) ->
+(#line 81 1) ((list x y) ++ (zip xs ys)))
+(#line 84 1) (define (zipwith [__p_0 : (a -> b -> c)] [__p_1 : [a]] [__p_2 : [b]] -> [c]) _ [] _ 
+(#line 85 1) ->
+(#line 85 1) []
+(#line 86 1) _ _ [] 
+(#line 86 1) ->
+(#line 86 1) []
+(#line 87 1) f [x|xs] [y|ys] 
+(#line 87 1) ->
+(#line 87 1) ((f x y) ++ (zipwith f xs ys)))
+(#line 90 1) (define (append [__p_0 : [a]] [__p_1 : a] -> [a]) [] val 
+(#line 91 1) ->
+(#line 91 1) (val ++ [])
+(#line 92 1) [x|xs] val 
+(#line 92 1) ->
+(#line 92 1) (x ++ (append xs val)))
+(#line 99 1) (define (filter [__p_0 : (a -> Bool)] [__p_1 : [a]] -> [a]) _ [] 
+(#line 100 1) ->
+(#line 100 1) []
+(#line 101 1) p [x|xs] 
+(#line 102 1) |
+(#line 102 1) (p x)
+(#line 102 1) ->
+(#line 102 1) (x ++ (filter p xs))
+(#line 103 1) |
+(#line 103 1) otherwise
+(#line 103 1) ->
+(#line 103 1) (filter p xs))
+(#line 107 1) (define (both [f : (a -> Bool)] [g : (a -> Bool)] -> (a -> Bool)) (lambda (x) (and (f x) (g x))))
+(#line 191 1) (tests (#line 113 1) (assert-eq (filter (> 0)  [1 -2 3 -4])                  [1 3]     "filter positive Array") (#line 114 1) (assert-eq (filter (> 0) '(1 -2 3 -4))                 '(1 3)     "filter positive List") (#line 115 1) (assert-eq (filter (> 0)  [])                           []        "filter empty") (#line 116 1) (assert-eq (filter (both (>= 'A') (<= 'Z')) "PoRcOdIo") "PROI"    "filter string") (#line 119 1) (assert-eq (append [1 2 3] 4)    [1 2 3 4]      "append item to Array") (#line 120 1) (assert-eq (append '(1 2 3) 4)  '(1 2 3 4)      "append item to List") (#line 121 1) (assert-eq (append "hello " 'w') "hello w"      "append char to String") (#line 122 1) (assert-eq (append [] 1)         [1]            "append to empty Array") (#line 125 1) (assert-eq (take 2 [1 2 3 4])   [1 2]      "take 2 Array") (#line 126 1) (assert-eq (take 2 '(1 2 3 4)) '(1 2)      "take 2 List") (#line 127 1) (assert-eq (take 2 "monad")     "mo"       "take 2 String") (#line 128 1) (assert-eq (take 0 [1 2 3])     []         "take 0 Array") (#line 129 1) (assert-eq (take 5 [1 2])       [1 2]      "take over-length Array") (#line 130 1) (assert-eq (take 5 "hi")        "hi"       "take over-length String") (#line 131 1) (assert-eq (take 3 [])          []         "take from empty Array") (#line 132 1) (assert-eq (take 3 "")          ""         "take from empty String") (#line 135 1) (assert-eq (drop 2 [1 2 3 4])   [3 4]      "drop 2 Array") (#line 136 1) (assert-eq (drop 2 '(1 2 3 4)) '(3 4)      "drop 2 List") (#line 137 1) (assert-eq (drop 2 "monad")     "nad"      "drop 2 String") (#line 138 1) (assert-eq (drop 0 [1 2 3])     [1 2 3]    "drop 0 Array") (#line 139 1) (assert-eq (drop 5 [1 2])       []         "drop over-length Array") (#line 140 1) (assert-eq (drop 5 "hi")        ""         "drop over-length String") (#line 141 1) (assert-eq (drop 3 [])          []         "drop from empty Array") (#line 144 1) (assert-eq (takeWhile (< 3) [1 2 3 4 1]) [1 2]   "takeWhile Array stops at 3") (#line 145 1) (assert-eq (takeWhile (< 3) '(1 2 3 4)) '(1 2)   "takeWhile List stops at 3") (#line 146 1) (assert-eq (takeWhile (< 3) [1 2])       [1 2]   "takeWhile takes all if true") (#line 147 1) (assert-eq (takeWhile (< 3) [5 6])       []      "takeWhile takes none if false") (#line 148 1) (assert-eq (takeWhile (< 3) [])          []      "takeWhile empty") (#line 151 1) (assert-eq (dropWhile (< 3) [1 2 3 4 1]) [3 4 1] "dropWhile Array stops at 3") (#line 152 1) (assert-eq (dropWhile (< 3) '(1 2 3 4)) '(3 4)   "dropWhile List stops at 3") (#line 153 1) (assert-eq (dropWhile (< 3) [1 2])       []      "dropWhile drops all if true") (#line 154 1) (assert-eq (dropWhile (< 3) [5 6])       [5 6]   "dropWhile drops none if false") (#line 155 1) (assert-eq (dropWhile (< 3) [])          []      "dropWhile empty") (#line 158 1) (assert-eq (map (* 2) [1 2 3])     [2 4 6]      "map Array") (#line 159 1) (assert-eq (map (* 2) '(1 2 3))   '(2 4 6)      "map List") (#line 160 1) (assert-eq (map (* 2) [])          []           "map empty Array") (#line 163 1) (assert-eq (all? (> 0) [2 4 6])   True         "all? true case (all positive)") (#line 164 1) (assert-eq (all? (> 0) [2 -5 6])  False        "all? false case mid-collection") (#line 165 1) (assert-eq (all? (> 0) [-1 2 3])  False        "all? false case first element") (#line 166 1) (assert-eq (all? (> 0) [])        True         "all? empty collection is vacuously true") (#line 169 1) (assert-eq (foldl + 0 [1 2 3 4])    10           "foldl sum Array") (#line 170 1) (assert-eq (foldr + 0 '(1 2 3 4))   10           "foldr sum List") (#line 171 1) (assert-eq (foldl - 10 [1 2 3])     4            "foldl left-associativity test") (#line 172 1) (assert-eq (foldr - 10 [1 2 3])     -8           "foldr right-associativity test") (#line 175 1) (assert-eq (zip [1 2] [3 4])        [[1 3] [2 4]]       "zip equal length Arrays") (#line 176 1) (assert-eq (zip '(1 2) '(3 4))     '((1 3) (2 4))       "zip equal length Lists") (#line 177 1) (assert-eq (zip [1 2 3] [4 5])      [[1 4] [2 5]]       "zip drops extra left elements") (#line 178 1) (assert-eq (zip [1 2] [3 4 5])      [[1 3] [2 4]]       "zip drops extra right elements") (#line 179 1) (assert-eq (zip [] [1 2])           []                  "zip empty left") (#line 180 1) (assert-eq (zip [1 2] [])           []                  "zip empty right") (#line 183 1) (assert-eq (zipwith * [1 2 3] [4 5 6])     [4 10 18]    "zipwith math Array") (#line 184 1) (assert-eq (zipwith * '(1 2) '(3 4 5))    '(3 8)        "zipwith math List mismatched lengths") (#line 185 1) (assert-eq (zipwith * [] [1 2 3])          []           "zipwith empty left") (#line 188 1) (assert-eq (foldl + 0 (zipwith * '(1 2 3)   '(4 5 6)))   32 "dot product Lists") (#line 189 1) (assert-eq (foldl + 0 (zipwith * '(1 2 3 4) '(1 2 3 4))) 30 "dot product squares") (#line 190 1) (assert-eq (foldl + 0 (zipwith * [1 2 3]    [4 5 6]))    32 "dot product Arrays") (#line 191 1) )
 === end ===
 
 
-=== desugared AST (/tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon) ===
-[compile] /tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.mon
-(define all? (lambda ([__p_0 :: (Fn :: ( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) True))
-(define null? (lambda ([__p_0 :: ([ a ])] -> Bool) True))
-(define ok (lambda ([__p_0 :: ([ [ Int ] ])] -> Bool) (all? null? __p_0)))
+=== desugared AST (/usr/local/lib/monad/core/prelude/Coll.mon) ===
+[compile] /tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.mon
+[skip]    /usr/local/lib/monad/core/prelude/Coll.mon (.o is up to date)
+(module Coll [take drop takeWhile dropWhile map all? foldl foldr])
+(define take (lambda ([__p_0 :: Int] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (> __p_0 0)) (++ (__p_1 0) (take (- __p_0 1) (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (rt_coll_empty __p_1) (undefined))))))
+(define drop (lambda ([__p_0 :: Int] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (> __p_0 0)) (drop (- __p_0 1) (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_1 0) (rt_coll_drop __p_1 1)) (undefined))))))
+(define takeWhile (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (++ (__p_1 0) (takeWhile __p_0 (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (rt_coll_empty __p_1) (undefined))))))
+(define dropWhile (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (dropWhile __p_0 (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_1 0) (rt_coll_drop __p_1 1)) (undefined))))))
+(define map (lambda ([__p_0 :: (( a -> b ))] [__p_1 :: ([ a ])] -> [b]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_0 (__p_1 0)) (map __p_0 (rt_coll_drop __p_1 1))) (undefined)))))
+(define any? (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) (if (rt_coll_is_empty __p_1) False (if (if (rt_coll_is_empty __p_1) False True) (or (__p_0 (__p_1 0)) (any? __p_0 (rt_coll_drop __p_1 1))) (undefined)))))
+(define all? (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) (if (rt_coll_is_empty __p_1) True (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (all? __p_0 (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) False (undefined))))))
+(define foldl (lambda ([__p_0 :: (( b -> a -> b ))] [__p_1 :: b] [__p_2 :: ([ a ])] -> b) (if (rt_coll_is_empty __p_2) __p_1 (if (if (rt_coll_is_empty __p_2) False True) (foldl __p_0 (__p_0 __p_1 (__p_2 0)) (rt_coll_drop __p_2 1)) (undefined)))))
+(define foldr (lambda ([__p_0 :: (( a -> b -> b ))] [__p_1 :: b] [__p_2 :: ([ a ])] -> b) (if (rt_coll_is_empty __p_2) __p_1 (if (if (rt_coll_is_empty __p_2) False True) (__p_0 (__p_2 0) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) (undefined)))))
+(define zip (lambda ([__p_0 :: ([ a ])] [__p_1 :: ([ b ])] -> [c]) (if (rt_coll_is_empty __p_0) (rt_coll_empty __p_0) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_0) False True) (if (rt_coll_is_empty __p_1) False True)) (++ (list (__p_0 0) (__p_1 0)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) (undefined))))))
+(define zipwith (lambda ([__p_0 :: (( a -> b -> c ))] [__p_1 :: ([ a ])] [__p_2 :: ([ b ])] -> [c]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (rt_coll_is_empty __p_2) (rt_coll_empty __p_2) (if (and (if (rt_coll_is_empty __p_1) False True) (if (rt_coll_is_empty __p_2) False True)) (++ (__p_0 (__p_1 0) (__p_2 0)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) (undefined))))))
+(define append (lambda ([__p_0 :: ([ a ])] [__p_1 :: a] -> [a]) (if (rt_coll_is_empty __p_0) (++ __p_1 []) (if (if (rt_coll_is_empty __p_0) False True) (++ (__p_0 0) (append (rt_coll_drop __p_0 1) __p_1)) (undefined)))))
+(define filter (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (++ (__p_1 0) (filter __p_0 (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (filter __p_0 (rt_coll_drop __p_1 1)) (undefined))))))
+(define both (lambda ([f :: (( a -> Bool ))] [g :: (( a -> Bool ))] -> Fn :: (a -> Bool)) (lambda ([x :: a]) (and (f x) (g x)))))
+
 === end desugared AST ===
 
-  wrote json: /tmp/monadc-tests-7h5mrvqi/sugar.wisp_higher_order_predicate_arg/sugar.wisp_higher_order_predicate_arg.json
+
+=== wisp expanded (/tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.mon) ===
+(#line 1 1) define
+(#line 1 1) x
+(#line 1 1) 42
+=== end ===
+
+
+=== desugared AST (/tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.mon) ===
+  wrote json: /tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.json
+define
+x
+42
+=== end desugared AST ===
+
+  wrote json: /tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.json
 #+END_EXAMPLE

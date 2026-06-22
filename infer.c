@@ -114,6 +114,29 @@ Type *infer_freshen_annotation_vars(InferCtx *ctx, Type *t,
     }
 }
 
+static Type *infer_normalize_annotation_type(Type *t) {
+    if (!t) return NULL;
+
+    while (t &&
+           t->kind == TYPE_LIST &&
+           t->list_count == 1 &&
+           t->list_types &&
+           t->list_types[0]) {
+        Type *inner = infer_normalize_annotation_type(t->list_types[0]);
+
+        if (inner &&
+            (inner->kind == TYPE_ARROW ||
+             inner->kind == TYPE_FN)) {
+            t = inner;
+            continue;
+        }
+
+        break;
+    }
+
+    return t;
+}
+
 /// InferEnv
 
 #define INFER_ENV_BUCKETS 64
@@ -1377,9 +1400,11 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                  * like "(a)" or "[a]" should get TYPE_COLL — bare names get 'a. */
                 if (p->type_name) {
                     pt = type_from_name(p->type_name);
-                    if (pt)
+                    if (pt) {
                         pt = infer_freshen_annotation_vars(ctx, pt, ann_from,
                                                            ann_to, &ann_count);
+                        pt = infer_normalize_annotation_type(pt);
+                    }
                     if (!pt) pt = infer_fresh(ctx);
                 } else {
                     pt = infer_fresh(ctx);
@@ -1396,9 +1421,11 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             if (i == ast->lambda.body_count - 1) {
                 if (ast->lambda.return_type) {
                     Type *ann = type_from_name(ast->lambda.return_type);
-                    if (ann)
+                    if (ann) {
                         ann = infer_freshen_annotation_vars(ctx, ann, ann_from,
                                                             ann_to, &ann_count);
+                        ann = infer_normalize_annotation_type(ann);
+                    }
                     if (ann) {
                         infer_constrain(ctx, bt, ann, ast->line, ast->column);
                         bt = ann;
@@ -1760,7 +1787,87 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
-        /* ---- n-ary logic — (and a b c ...) / (or a b c ...) --------- */
+        /* ---- collection append/prepend: (++ lhs rhs) ---------------- */
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "++") == 0 &&
+            ast->list.count == 3) {
+            Type *lhs_t = subst_apply(ctx->subst,
+                                       infer_expr(ctx, ast->list.items[1]));
+            Type *rhs_t = subst_apply(ctx->subst,
+                                       infer_expr(ctx, ast->list.items[2]));
+
+            bool lhs_is_collection =
+                lhs_t &&
+                (lhs_t->kind == TYPE_COLL ||
+                 lhs_t->kind == TYPE_ARR ||
+                 lhs_t->kind == TYPE_LIST ||
+                 lhs_t->kind == TYPE_STRING);
+
+            bool rhs_is_collection =
+                rhs_t &&
+                (rhs_t->kind == TYPE_COLL ||
+                 rhs_t->kind == TYPE_ARR ||
+                 rhs_t->kind == TYPE_LIST ||
+                 rhs_t->kind == TYPE_STRING);
+
+            if (lhs_is_collection && rhs_is_collection) {
+                infer_constrain(ctx, lhs_t, rhs_t,
+                                ast->line, ast->column);
+                result = rhs_t;
+                break;
+            }
+
+            if (rhs_t && rhs_t->kind == TYPE_STRING) {
+                infer_constrain(ctx, lhs_t, type_char(),
+                                ast->list.items[1]->line,
+                                ast->list.items[1]->column);
+                result = rhs_t;
+                break;
+            }
+
+            if (rhs_t && rhs_t->kind == TYPE_COLL) {
+                if (!rhs_t->element_type)
+                    rhs_t->element_type = infer_fresh(ctx);
+
+                infer_constrain(ctx, lhs_t, rhs_t->element_type,
+                                ast->list.items[1]->line,
+                                ast->list.items[1]->column);
+                result = rhs_t;
+                break;
+            }
+
+            if (rhs_t && rhs_t->kind == TYPE_ARR) {
+                if (!rhs_t->arr_element_type)
+                    rhs_t->arr_element_type = infer_fresh(ctx);
+
+                infer_constrain(ctx, lhs_t, rhs_t->arr_element_type,
+                                ast->list.items[1]->line,
+                                ast->list.items[1]->column);
+                result = rhs_t;
+                break;
+            }
+
+            if (rhs_t && rhs_t->kind == TYPE_LIST &&
+                rhs_t->list_count == 1 &&
+                rhs_t->list_types &&
+                rhs_t->list_types[0]) {
+                infer_constrain(ctx, lhs_t, rhs_t->list_types[0],
+                                ast->list.items[1]->line,
+                                ast->list.items[1]->column);
+                result = rhs_t;
+                break;
+            }
+
+            Type *coll_t = type_coll();
+            coll_t->element_type = type_clone(lhs_t);
+            infer_constrain(ctx, rhs_t, coll_t,
+                            ast->list.items[2]->line,
+                            ast->list.items[2]->column);
+            result = coll_t;
+            break;
+        }
+
+        /* ---- n-ary logic - (and a b c ...) / (or a b c ...) --------- */
         if (head->type == AST_SYMBOL &&
             (strcmp(head->symbol, "and") == 0 ||
              strcmp(head->symbol, "or")  == 0) &&
@@ -1984,31 +2091,43 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             }
         }
 
-        /* ---- function application ------------------------------------ */
-        /* If the head is a symbol that resolves to a collection, String,
-         * Arr, Set, or Map variable, skip arrow unification entirely.
-         * Indexing (s[i]) is lowered to rt_coll_index in codegen and
-         * has no arrow type in HM — generating String ~ (Int -> 'a)
-         * here is always wrong and causes unification explosions.       */
-        if (head->type == AST_SYMBOL) {
+        /* ---- collection indexing ------------------------------------- */
+        /* A collection can look like a call in the AST:
+         *
+         *   (xs 0)
+         *
+         * but this shortcut must only fire for a real numeric index.
+         * Previously every TYPE_LIST with one element was treated as an
+         * indexable collection. That is wrong for parenthesized function
+         * annotations: (a -> Bool) can arrive as a singleton TYPE_LIST
+         * wrapper, and then (p x) incorrectly returns the arrow type itself
+         * instead of applying p.
+         */
+        if (head->type == AST_SYMBOL && ast->list.count == 2) {
             TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
-            if (head_sc) {
+            int index_value = -1;
+
+            if (head_sc &&
+                infer_ast_numeric_index(ast->list.items[1], &index_value)) {
                 Type *head_t = subst_apply(ctx->subst, head_sc->type);
-                if (head_t && head_t->kind == TYPE_LIST && head_t->list_count == 1) {
-                    for (size_t i = 1; i < ast->list.count; i++)
-                        infer_expr(ctx, ast->list.items[i]);
+
+                if (head_t &&
+                    head_t->kind == TYPE_LIST &&
+                    head_t->list_count == 1 &&
+                    head_t->list_types &&
+                    head_t->list_types[0]) {
+                    infer_expr(ctx, ast->list.items[1]);
                     result = subst_apply(ctx->subst, head_t->list_types[0]);
                     break;
                 }
+
                 if (head_t && (head_t->kind == TYPE_ARR     ||
                                head_t->kind == TYPE_SET     ||
                                head_t->kind == TYPE_MAP     ||
                                head_t->kind == TYPE_STRING  ||
                                head_t->kind == TYPE_COLL)) {
-                    /* Infer arg expressions for side-effects only */
-                    for (size_t i = 1; i < ast->list.count; i++)
-                        infer_expr(ctx, ast->list.items[i]);
-                    /* Return Char for String indexing, unknown for others */
+                    infer_expr(ctx, ast->list.items[1]);
+
                     if (head_t->kind == TYPE_STRING)
                         result = type_char();
                     else if (head_t->kind == TYPE_COLL && head_t->element_type)
@@ -2022,7 +2141,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             }
         }
 
-        Type *fn_t  = infer_expr(ctx, head);
+        Type *fn_t  = infer_normalize_annotation_type(infer_expr(ctx, head));
         Type *ret_t = infer_fresh(ctx);
 
         /* Compile-time refinement check for literal arguments.
@@ -2062,7 +2181,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         Type *expected = ret_t;
         for (int i = (int)ast->list.count - 1; i >= 1; i--) {
-            Type *arg_t = infer_expr(ctx, ast->list.items[i]);
+            Type *arg_t = infer_normalize_annotation_type(
+                infer_expr(ctx, ast->list.items[i]));
             expected = type_arrow(arg_t, expected);
         }
 
@@ -2292,16 +2412,20 @@ void infer_register_builtins(InferCtx *ctx) {
         type_arrow(cons_a, type_arrow(cons_list_in, cons_list_out)), ctx->env);
     infer_env_insert(ctx->env, ".", cons_sc);
 
-    /* ∀a. Coll(a) → Coll(a) → Coll(a)   (append / ++) */
-    Type *app_a     = infer_fresh(ctx);
-    Type *app_coll1 = type_coll();
-    Type *app_coll2 = type_coll();
-    Type *app_coll3 = type_coll();
-    app_coll1->element_type = type_clone(app_a);
-    app_coll2->element_type = type_clone(app_a);
-    app_coll3->element_type = type_clone(app_a);
+    /* ++ is overloaded at the HM expression level.
+     *
+     * It supports both:
+     *   a      -> Coll a -> Coll a
+     *   Coll a -> Coll a -> Coll a
+     *
+     * A single Hindley-Milner scheme cannot express that ad-hoc overload, so
+     * infer_expr handles binary ++ before generic function application.
+     * Keep this fallback intentionally loose for unusual arities/debug paths. */
+    Type *app_lhs = infer_fresh(ctx);
+    Type *app_rhs = infer_fresh(ctx);
+    Type *app_ret = infer_fresh(ctx);
     TypeScheme *app_sc = infer_generalise(ctx,
-        type_arrow(app_coll1, type_arrow(app_coll2, app_coll3)), ctx->env);
+        type_arrow(app_lhs, type_arrow(app_rhs, app_ret)), ctx->env);
     infer_env_insert(ctx->env, "++", app_sc);
 
     /* ∀a. List a → a   (head) */

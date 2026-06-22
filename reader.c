@@ -135,6 +135,16 @@ static void comment_map_add(int open_pos, int close_pos, int para_end) {
     g_comment_count++;
 }
 
+static int line_comment_marker_len_at(const char *s) {
+    const unsigned char *p = (const unsigned char *)s;
+    if (p[0] == ';') return 1;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAD) return 3;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAE) return 3;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAF) return 3;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xB0) return 3;
+    return 0;
+}
+
 /* Pre-scan the entire source once, building the comment map.
  * For each -| found:
  *   - scan forward for |-
@@ -146,8 +156,8 @@ void comment_map_build(const char *source) {
     int len = (int)strlen(source);
     int i   = 0;
     while (i < len - 1) {
-        /* Skip ; line comments so we don't find -| inside them */
-        if (source[i] == ';') {
+        /* Skip line comments so we do not find -| inside them. */
+        if (line_comment_marker_len_at(source + i) > 0) {
             while (i < len && source[i] != '\n') i++;
             continue;
         }
@@ -907,6 +917,30 @@ void ast_free(AST *ast) {
 }
 
 
+static void ast_print_char_literal(unsigned char ch) {
+    if (ch < 0x20) {
+        printf("'^%c'", (char)(ch + '@'));
+        return;
+    }
+
+    if (ch == 0x7F) {
+        printf("'^?'");
+        return;
+    }
+
+    if (ch == '\'') {
+        printf("'\\''");
+        return;
+    }
+
+    if (ch == '\\') {
+        printf("'\\\\'");
+        return;
+    }
+
+    printf("'%c'", ch);
+}
+
 void ast_print(AST *ast) {
     if (!ast) { printf("nil"); return; }
     switch (ast->type) {
@@ -919,7 +953,7 @@ void ast_print(AST *ast) {
     case AST_SYMBOL:  printf("%s", ast->symbol); break;
     case AST_STRING:  printf("\"%s\"", ast->string); break;
     case AST_PATH:    printf("%s", ast->string ? ast->string : ""); break;
-    case AST_CHAR:    printf("'%c'", ast->character); break;
+    case AST_CHAR:    ast_print_char_literal((unsigned char)ast->character); break;
     case AST_LIST:
         printf("(");
         for (size_t i = 0; i < ast->list.count; i++) {
@@ -1230,6 +1264,26 @@ static int hex_value(char c) {
     return 0;
 }
 
+static int control_caret_value(unsigned char c) {
+    if (c >= 'a' && c <= 'z')
+        c = (unsigned char)(c - 'a' + 'A');
+
+    if (c >= '@' && c <= '_')
+        return (int)(c - '@');
+
+    if (c == '?')
+        return 127;
+
+    return -1;
+}
+
+static bool is_bare_control_literal_byte(unsigned char c) {
+    if (c == '\0' || c == '\n' || c == '\r' || c == '\t')
+        return false;
+
+    return c < 0x20 || c == 0x7F;
+}
+
 static char *decode_string_literal(const char *start, size_t len) {
     char *out = malloc(len + 1);
     size_t w = 0;
@@ -1299,7 +1353,7 @@ Token lexer_next_token(Lexer *lex) {
     Token tok = {0};
 
     skip_whitespace(lex);
-    while (peek(lex) == ';') {
+    while (line_comment_marker_len_at(lex->source + lex->pos) > 0) {
         skip_line_comment(lex);
         skip_whitespace(lex);
     }
@@ -1309,8 +1363,18 @@ Token lexer_next_token(Lexer *lex) {
     tok.column = lex->column + g_srcmap_col_bias;
 
     char c = peek(lex);
+    unsigned char uc = (unsigned char)c;
 
     if (c == '\0') { tok.type = TOK_EOF; return tok; }
+
+    if (is_bare_control_literal_byte(uc)) {
+        advance(lex);
+        tok.value = malloc(2);
+        tok.value[0] = (char)uc;
+        tok.value[1] = '\0';
+        tok.type = TOK_CHAR;
+        return tok;
+    }
 
     // #line N COL directive (emitted by wisp, maps transformed pos back to original)
     if (c == '(' && peek_ahead(lex, 1) == '#' &&
@@ -1428,72 +1492,91 @@ Token lexer_next_token(Lexer *lex) {
 ///// Character literal or quote
 
     if (c == '\'') {
-        size_t lp = lex->pos + 1;
-        if (lp < strlen(lex->source)) {
-            char next = lex->source[lp];
+        size_t src_len = strlen(lex->source);
+        size_t lit_pos = lex->pos + 1;
+        unsigned char ch = 0;
+        size_t close_pos = 0;
+        bool is_char_literal = false;
+
+        if (lit_pos < src_len) {
+            unsigned char next = (unsigned char)lex->source[lit_pos];
+
             if (next == '\\') {
-                size_t src_len = strlen(lex->source);
-                size_t esc_start = lp + 1;
-                size_t end = esc_start;
-
-                if (end < src_len) {
-                    if (lex->source[end] == 'x') {
-                        end += 3;
+                size_t esc_pos = lit_pos + 1;
+                if (esc_pos < src_len && lex->source[esc_pos] == 'x') {
+                    if (esc_pos + 3 < src_len &&
+                        is_hex_digit(lex->source[esc_pos + 1]) &&
+                        is_hex_digit(lex->source[esc_pos + 2]) &&
+                        lex->source[esc_pos + 3] == '\'') {
+                        ch = (unsigned char)((hex_value(lex->source[esc_pos + 1]) << 4) |
+                                             hex_value(lex->source[esc_pos + 2]));
+                        close_pos = esc_pos + 3;
+                        is_char_literal = true;
                     } else {
-                        end += 1;
+                        READER_ERROR(lex->line, lex->column,
+                                     "invalid hex character literal");
                     }
-                }
-
-                if (end < src_len && lex->source[end] == '\'') {
-                    char ch = '\0';
-                    size_t esc_len = end - esc_start;
-                    if (esc_len == 1) {
-                        ch = lex->source[lp + 1];
-                        switch (ch) {
-                        case 'n': ch='\n'; break; case 't': ch='\t'; break;
-                        case 'r': ch='\r'; break; case 'v': ch='\v'; break;
-                        case 'f': ch='\f'; break; case '\\': ch='\\'; break;
-                        case '\'': ch='\''; break; case '0': ch='\0'; break;
-                        }
-                    } else if (esc_len == 3 && lex->source[lp + 1] == 'x') {
-                        char hi = lex->source[lp + 2];
-                        char lo = lex->source[lp + 3];
-                        int hv = (hi >= '0' && hi <= '9') ? hi - '0' :
-                                 (hi >= 'a' && hi <= 'f') ? hi - 'a' + 10 :
-                                 (hi >= 'A' && hi <= 'F') ? hi - 'A' + 10 : -1;
-                        int lv = (lo >= '0' && lo <= '9') ? lo - '0' :
-                                 (lo >= 'a' && lo <= 'f') ? lo - 'a' + 10 :
-                                 (lo >= 'A' && lo <= 'F') ? lo - 'A' + 10 : -1;
-                        if (hv < 0 || lv < 0) {
-                            READER_ERROR(lex->line, lex->column, "invalid hex character literal");
-                        }
-                        ch = (char)((hv << 4) | lv);
-                    } else {
-                        READER_ERROR(lex->line, lex->column, "invalid character escape");
+                } else if (esc_pos + 1 < src_len &&
+                           lex->source[esc_pos + 1] == '\'') {
+                    ch = (unsigned char)lex->source[esc_pos];
+                    switch (ch) {
+                    case 'n': ch = '\n'; break;
+                    case 't': ch = '\t'; break;
+                    case 'r': ch = '\r'; break;
+                    case 'v': ch = '\v'; break;
+                    case 'f': ch = '\f'; break;
+                    case '\\': ch = '\\'; break;
+                    case '\'': ch = '\''; break;
+                    case '0': ch = '\0'; break;
+                    default: break;
                     }
-                    while (lex->pos <= end) advance(lex);
-                    tok.value    = malloc(2);
-                    tok.value[0] = ch; tok.value[1] = '\0';
-                    tok.type     = TOK_CHAR;
-                    return tok;
+                    close_pos = esc_pos + 1;
+                    is_char_literal = true;
+                } else {
+                    READER_ERROR(lex->line, lex->column,
+                                 "invalid character escape");
                 }
-            } else if (next != '\'' && next != '\0') {
-                if (lp + 1 < strlen(lex->source) &&
-                    lex->source[lp + 1] == '\'') {
-                    advance(lex);
-                    char ch = peek(lex);
-                    advance(lex);
-                    if (peek(lex) != '\'') {
-                        READER_ERROR(lex->line, lex->column, "unterminated character literal");
-                    }
-                    advance(lex);
-                    tok.value    = malloc(2);
-                    tok.value[0] = ch; tok.value[1] = '\0';
-                    tok.type     = TOK_CHAR;
-                    return tok;
+            } else if (next == '^' &&
+                       lit_pos + 2 < src_len &&
+                       lex->source[lit_pos + 2] == '\'') {
+                int cv = control_caret_value((unsigned char)lex->source[lit_pos + 1]);
+                if (cv < 0) {
+                    READER_ERROR(lex->line, lex->column,
+                                 "invalid caret control character literal");
                 }
+                ch = (unsigned char)cv;
+                close_pos = lit_pos + 2;
+                is_char_literal = true;
+            } else if (next == '^' &&
+                       lit_pos + 2 < src_len &&
+                       lex->source[lit_pos + 2] == '\'') {
+                int cv = control_caret_value((unsigned char)lex->source[lit_pos + 1]);
+                if (cv < 0) {
+                    READER_ERROR(lex->line, lex->column,
+                                 "invalid caret control character literal");
+                }
+                ch = (unsigned char)cv;
+                close_pos = lit_pos + 2;
+                is_char_literal = true;
+            } else if (next != '\'' && next != '\0' &&
+                       next != '\n' && next != '\r' &&
+                       lit_pos + 1 < src_len &&
+                       lex->source[lit_pos + 1] == '\'') {
+                ch = next;
+                close_pos = lit_pos + 1;
+                is_char_literal = true;
             }
         }
+
+        if (is_char_literal) {
+            while (lex->pos <= close_pos) advance(lex);
+            tok.value    = malloc(2);
+            tok.value[0] = (char)ch;
+            tok.value[1] = '\0';
+            tok.type     = TOK_CHAR;
+            return tok;
+        }
+
         advance(lex);
         tok.type = TOK_QUOTE;
         return tok;
@@ -1831,8 +1914,8 @@ Token lexer_next_token(Lexer *lex) {
                 skip_whitespace(lex);
             }
 
-            // Also skip wisp line comments: ; ... \n
-            while (peek(lex) == ';') {
+            // Also skip line comments between lambda parameters.
+            while (line_comment_marker_len_at(lex->source + lex->pos) > 0) {
                 skip_line_comment(lex);
                 skip_whitespace(lex);
                 while (peek(lex) == '(' &&
@@ -5448,7 +5531,7 @@ static AST *parse_list(Parser *p) {
                  * separator and all remaining tokens until ) are uppercase,
                  * treat as shorthand single-constructor.                      */
                 const char *known_types[] = {
-                    "Float", "Int", "Bool", "Char", "String",
+                    "Float", "Int", "Bool", "Char", "Byte", "String", "Path",
                     "F32", "I8", "U8", "I16", "U16", "I32", "U32",
                     "I64", "U64", "I128", "U128", NULL
                 };

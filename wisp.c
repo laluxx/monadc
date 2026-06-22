@@ -984,6 +984,58 @@ static char *wisp_trim_range_dup(const char *start, const char *end) {
     return strndup(start, (size_t)(end - start));
 }
 
+static const char *wisp_skip_clause_function_name(WTokenStream *s,
+                                                  const char *lscan) {
+    if (!s || !lscan)
+        return lscan;
+
+    char def_name[128] = {0};
+
+    for (int i = s->count - 1; i >= 0; i--) {
+        bool is_define = strcmp(s->tokens[i].text, "define") == 0 ||
+                         strcmp(s->tokens[i].text, "(define") == 0;
+
+        if (!is_define || i + 1 >= s->count)
+            continue;
+
+        const char *name = s->tokens[i + 1].text;
+        if (name[0] == '(')
+            name++;
+
+        int n = 0;
+        while (name[n] &&
+               name[n] != ' ' &&
+               name[n] != '\t' &&
+               name[n] != ')' &&
+               n < 127) {
+            def_name[n] = name[n];
+            n++;
+        }
+
+        def_name[n] = '\0';
+        break;
+    }
+
+    if (!def_name[0])
+        return lscan;
+
+    size_t len = strlen(def_name);
+
+    if (strncmp(lscan, def_name, len) != 0)
+        return lscan;
+
+    if (lscan[len] != '\0' &&
+        lscan[len] != ' ' &&
+        lscan[len] != '\t')
+        return lscan;
+
+    lscan += len;
+    while (*lscan == ' ' || *lscan == '\t')
+        lscan++;
+
+    return lscan;
+}
+
 static const char *wisp_find_top_level_arrow(const char *s) {
     int depth = 0;
     bool in_str = false;
@@ -1496,6 +1548,31 @@ static void wisp_guard_append_subjects(SB *out, char **subjects, int subject_cou
     }
 }
 
+static bool wisp_name_looks_unary_predicate(const char *name) {
+    size_t len = name ? strlen(name) : 0;
+    return len > 0 && name[len - 1] == '?';
+}
+
+static void wisp_guard_append_implicit_subjects(ArityTable *at,
+                                                SB *out,
+                                                const char *head,
+                                                char **subjects,
+                                                int subject_count) {
+    if (!subjects || subject_count <= 0)
+        return;
+
+    int arity = at ? arity_get(at, head) : -2;
+
+    if (arity == 1 ||
+        (arity == -2 && wisp_name_looks_unary_predicate(head))) {
+        sb_putc(out, ' ');
+        sb_puts(out, subjects[subject_count - 1]);
+        return;
+    }
+
+    wisp_guard_append_subjects(out, subjects, subject_count);
+}
+
 static bool wisp_guard_bare_should_not_apply(const char *s) {
     if (!s || !*s) return true;
     if (wisp_guard_special_head(s)) return true;
@@ -1547,7 +1624,8 @@ static char *wisp_guard_apply_expr(ArityTable *at,
         sb_init(&out);
         sb_putc(&out, '(');
         sb_puts(&out, bare);
-        wisp_guard_append_subjects(&out, subjects, subject_count);
+        wisp_guard_append_implicit_subjects(at, &out, bare,
+                                            subjects, subject_count);
         sb_putc(&out, ')');
 
         free(bare);
@@ -1614,7 +1692,8 @@ static char *wisp_guard_apply_expr(ArityTable *at,
 
     if (!wisp_guard_special_head(head)) {
         if (arg_count == 0 && subject_count > 0) {
-            wisp_guard_append_subjects(&out, subjects, subject_count);
+            wisp_guard_append_implicit_subjects(at, &out, head,
+                                                subjects, subject_count);
         } else if (subject_count == 1 &&
                    arity > 0 &&
                    arg_count == arity - 1) {
@@ -1638,7 +1717,9 @@ static bool wisp_guard_is_binary_op(const char *s) {
            strcmp(s, "+") == 0 ||
            strcmp(s, "-") == 0 ||
            strcmp(s, "*") == 0 ||
-           strcmp(s, "/") == 0;
+           strcmp(s, "/") == 0 ||
+           strcmp(s, "mod") == 0 ||
+           strcmp(s, "%") == 0;
 }
 
 static char *wisp_guard_apply_implicit_subjects(ArityTable *at,
@@ -2130,7 +2211,8 @@ static int op_precedence(const char *name) {
     if (strcmp(name, "=")  == 0 || strcmp(name, "!=") == 0 ||
         strcmp(name, "<")  == 0 || strcmp(name, ">")  == 0 ||
         strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0) return 3;
-    if (strcmp(name, "+") == 0 || strcmp(name, "-") == 0) return 4;
+    if (strcmp(name, "+") == 0 || strcmp(name, "-") == 0 ||
+        strcmp(name, "mod") == 0 || strcmp(name, "%") == 0) return 4;
     if (strcmp(name, "*") == 0 || strcmp(name, "/") == 0) return 5;
     return 6;
 }
@@ -2169,6 +2251,98 @@ static void wisp_syntax_error(int line, int column, const char *message, const c
 }
 
 static int g_for_iter_depth = 0;
+
+static int wisp_hex_value(unsigned char c) {
+    if (c >= '0' && c <= '9') return (int)(c - '0');
+    if (c >= 'a' && c <= 'f') return (int)(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return (int)(c - 'A' + 10);
+    return -1;
+}
+
+static int wisp_control_caret_value(unsigned char c) {
+    if (c >= 'a' && c <= 'z')
+        c = (unsigned char)(c - 'a' + 'A');
+
+    if (c >= '@' && c <= '_')
+        return (int)(c - '@');
+
+    if (c == '?')
+        return 127;
+
+    return -1;
+}
+
+static char *wisp_control_char_literal_token(unsigned char ch) {
+    char buf[8];
+
+    if (ch < 0x20) {
+        snprintf(buf, sizeof(buf), "'^%c'", (char)(ch + '@'));
+        return strdup(buf);
+    }
+
+    if (ch == 0x7F)
+        return strdup("'^?'");
+
+    return NULL;
+}
+
+static char *wisp_canonical_char_literal_token(const char *start, size_t len) {
+    if (!start || len < 3)
+        return strndup(start ? start : "", start ? len : 0);
+
+    if (start[0] != '\'' || start[len - 1] != '\'')
+        return strndup(start, len);
+
+    if (len == 3) {
+        unsigned char ch = (unsigned char)start[1];
+        char *control = wisp_control_char_literal_token(ch);
+        if (control)
+            return control;
+        return strndup(start, len);
+    }
+
+    if (len == 4 && start[1] == '^') {
+        int cv = wisp_control_caret_value((unsigned char)start[2]);
+        if (cv >= 0) {
+            char *control = wisp_control_char_literal_token((unsigned char)cv);
+            if (control)
+                return control;
+        }
+        return strndup(start, len);
+    }
+
+    if (len == 4 && start[1] == '\\') {
+        unsigned char ch = (unsigned char)start[2];
+
+        switch (ch) {
+        case 'n': return strdup("'^J'");
+        case 't': return strdup("'^I'");
+        case 'r': return strdup("'^M'");
+        case 'v': return strdup("'^K'");
+        case 'f': return strdup("'^L'");
+        case '0': return strdup("'^@'");
+        default: break;
+        }
+
+        return strndup(start, len);
+    }
+
+    if (len == 6 &&
+        start[1] == '\\' &&
+        (start[2] == 'x' || start[2] == 'X')) {
+        int hv = wisp_hex_value((unsigned char)start[3]);
+        int lv = wisp_hex_value((unsigned char)start[4]);
+
+        if (hv >= 0 && lv >= 0) {
+            unsigned char ch = (unsigned char)((hv << 4) | lv);
+            char *control = wisp_control_char_literal_token(ch);
+            if (control)
+                return control;
+        }
+    }
+
+    return strndup(start, len);
+}
 
 /* Tokenise one line into the stream */
 static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
@@ -2224,7 +2398,7 @@ static void tokenise_into(ArityTable *t, WTokenStream *s, const char *line,
             }
 
             if (p > start + 1 && p[-1] == '\'') {
-                char *tok = strndup(start, (size_t)(p - start));
+                char *tok = wisp_canonical_char_literal_token(start, (size_t)(p - start));
                 wts_push(s, tok, indent, lineno);
                 free(tok);
                 continue;
@@ -3128,6 +3302,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     char *left_str = strndup(t, left_len);
                     const char *lscan = left_str;
                     while (*lscan == ' ' || *lscan == '\t') lscan++;
+                    lscan = wisp_skip_clause_function_name(&s, lscan);
 
                     /* Register pattern variable arities from the enclosing
                      * define's param_fn_arities so body calls like
@@ -3730,25 +3905,24 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                     if (oa < 2 && oa != -1) break;
 
                                     char *op_name = strdup(op_tok2->text);
+                                    int op_prec = op_precedence(op_name);
                                     body_ts.pos++;
 
                                     SB next_acc; sb_init(&next_acc);
-                                    sb_putc(&next_acc, '('); sb_puts(&next_acc, op_name);
-                                    sb_putc(&next_acc, ' '); sb_puts(&next_acc, accum);
-                                    free(op_name); free(accum);
+                                    sb_putc(&next_acc, '(');
+                                    sb_puts(&next_acc, op_name);
+                                    sb_putc(&next_acc, ' ');
+                                    sb_puts(&next_acc, accum);
+                                    free(op_name);
+                                    free(accum);
 
-                                    int rhs_slots = (oa > 0) ? (oa - 1) : -1;
-                                    if (rhs_slots == -1) {
-                                        while (body_ts.pos < body_ts.count) {
-                                            sb_putc(&next_acc, ' ');
-                                            wisp_parse_expr(at, &body_ts, &next_acc, -1, 1, 0);
-                                        }
-                                    } else {
-                                        for (int r = 0; r < rhs_slots && body_ts.pos < body_ts.count; r++) {
-                                            sb_putc(&next_acc, ' ');
-                                            wisp_parse_expr(at, &body_ts, &next_acc, -1, 1, 0);
-                                        }
+                                    if (body_ts.pos < body_ts.count &&
+                                        body_ts.tokens[body_ts.pos].lineno == op_tok2->lineno) {
+                                        sb_putc(&next_acc, ' ');
+                                        wisp_parse_expr(at, &body_ts, &next_acc,
+                                                        -1, 1, op_prec);
                                     }
+
                                     sb_putc(&next_acc, ')');
                                     accum = sb_take(&next_acc);
                                 }
@@ -3779,6 +3953,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                     lscan = left_str;
                     while (*lscan == ' ' || *lscan == '\t') lscan++;
+                    lscan = wisp_skip_clause_function_name(&s, lscan);
 
                     /* Check if left_str contains '|' not at start —
                      * pattern with inline guard: "c | guard -> body"
@@ -5625,23 +5800,13 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                             sb_puts(&hdr, " [");
                                             sb_puts(&hdr, names[i]);
                                             sb_puts(&hdr, " : ");
-                                            if (strstr(ptype, "->") && strncmp(ptype, "Fn ::", 5) != 0) {
-                                                sb_puts(&hdr, "Fn :: ");
-                                                sb_puts(&hdr, ptype);
-                                            } else {
-                                                sb_puts(&hdr, ptype);
-                                            }
+                                            sb_puts(&hdr, ptype);
                                             sb_putc(&hdr, ']');
                                         }
                                         sb_puts(&hdr, " -> ");
                                         const char *rtype = ret_type;
                                         while (*rtype == ' ' || *rtype == '\t') rtype++;
-                                        if (strstr(rtype, "->") && strncmp(rtype, "Fn ::", 5) != 0) {
-                                            sb_puts(&hdr, "Fn :: ");
-                                            sb_puts(&hdr, rtype);
-                                        } else {
-                                            sb_puts(&hdr, rtype);
-                                        }
+                                        sb_puts(&hdr, rtype);
                                         sb_putc(&hdr, ')');
                                         char *header = sb_take(&hdr);
 
@@ -5779,24 +5944,14 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                 sb_puts(&hdr, " [");
                                 sb_puts(&hdr, pname);
                                 sb_puts(&hdr, " : ");
-                                if (strstr(ptype, "->") && strncmp(ptype, "Fn ::", 5) != 0) {
-                                    sb_puts(&hdr, "Fn :: ");
-                                    sb_puts(&hdr, ptype);
-                                } else {
-                                    sb_puts(&hdr, ptype);
-                                }
+                                sb_puts(&hdr, ptype);
                                 sb_putc(&hdr, ']');
                                 free(param_types[i]);
                             }
                             sb_puts(&hdr, " -> ");
                             const char *rtype = ret_type;
                             while (*rtype == ' ' || *rtype == '\t') rtype++;
-                            if (strstr(rtype, "->") && strncmp(rtype, "Fn ::", 5) != 0) {
-                                sb_puts(&hdr, "Fn :: ");
-                                sb_puts(&hdr, rtype);
-                            } else {
-                                sb_puts(&hdr, rtype);
-                            }
+                            sb_puts(&hdr, rtype);
                             sb_putc(&hdr, ')');
                             free(ret_type);
                             header = sb_take(&hdr);
@@ -6687,8 +6842,26 @@ void wisp_register_arities_from_env(Env *env) {
     }
 }
 
-/* Strip -| ... |- and paragraph comments from source, replacing
- * comment content with spaces/newlines to preserve line numbers. */
+static int wisp_line_comment_marker_len_at(const char *s) {
+    const unsigned char *p = (const unsigned char *)s;
+    if (p[0] == ';') return 1;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAD) return 3;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAE) return 3;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAF) return 3;
+    if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xB0) return 3;
+    return 0;
+}
+
+static bool wisp_line_comment_marker_erases_left_at(const char *s) {
+    const unsigned char *p = (const unsigned char *)s;
+    return p[0] == 0xE2 && p[1] == 0x95 &&
+           (p[2] == 0xAE || p[2] == 0xAF);
+}
+
+/* Strip -| ... |-, paragraph comments, and line comments from source,
+ * replacing comment bytes with spaces/newlines to preserve line and column
+ * positions.  This is intentionally a single canonical source-level pass:
+ * later Wisp scanners should not need to know every comment spelling. */
 static char *strip_comments(const char *source) {
     comment_map_build(source);
     int len = (int)strlen(source);
@@ -6702,17 +6875,69 @@ static char *strip_comments(const char *source) {
                   ? span->close_pos + 2
                   : span->para_end;
 
-        /* Check if this is a single-line inline comment */
-        bool is_single_line = true;
-        for (int j = start; j < end && j < len; j++) {
-            if (source[j] == '\n') { is_single_line = false; break; }
-        }
-
-        /* All comments - replace with spaces/newlines to preserve exact line and column numbers.
-         * This improves error reporting accuracy and massively improves performance
-         * from O(N^2) to O(N) by eliminating memmove operations. */
         for (int j = start; j < end && j < len; j++)
             out[j] = (source[j] == '\n') ? '\n' : ' ';
+    }
+
+    bool in_string = false;
+    bool in_char = false;
+    bool escape = false;
+
+    for (int i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)out[i];
+
+        if (in_string) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\') {
+                escape = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if (in_char) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\') {
+                escape = true;
+            } else if (c == '\'') {
+                in_char = false;
+            } else if (c == '\n' || c == '\r') {
+                in_char = false;
+            }
+            continue;
+        }
+
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+
+        if (c == '\'') {
+            in_char = true;
+            continue;
+        }
+
+        int marker_len = wisp_line_comment_marker_len_at(out + i);
+        if (marker_len > 0) {
+            int start = i;
+
+            if (wisp_line_comment_marker_erases_left_at(out + i)) {
+                while (start > 0 && out[start - 1] != '\n')
+                    start--;
+            }
+
+            while (start < len && out[start] != '\n') {
+                out[start] = ' ';
+                start++;
+            }
+
+            i = start;
+            if (i < len && out[i] == '\n')
+                out[i] = '\n';
+        }
     }
 
     return out;
@@ -6966,7 +7191,7 @@ static int pure_is_known_function(const char *name) {
         return 1;
     if (strcmp(name, "+") == 0 || strcmp(name, "-") == 0 ||
         strcmp(name, "*") == 0 || strcmp(name, "/") == 0 ||
-        strcmp(name, "%") == 0)
+        strcmp(name, "%") == 0 || strcmp(name, "mod") == 0)
         return 1;
     if (strcmp(name, "=") == 0 || strcmp(name, "!=") == 0 ||
         strcmp(name, "<") == 0 || strcmp(name, ">") == 0 ||
@@ -7037,6 +7262,14 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
      * wisp_parse_expr emit it as a passthrough atom so the reader sees
      * the raw (def name value) token sequence and handles it correctly. */
     arity_set(&t, "def", -2);
+
+    arity_set(&t, "Byte", 1);
+    arity_set(&t, "Byte?", 1);
+    arity_set(&t, "Path", 1);
+    arity_set(&t, "Path?", 1);
+
+    arity_set(&t, "mod", 2);
+    arity_set(&t, "%", 2);
 
     arity_prescan(&t, stripped);
 

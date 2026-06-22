@@ -436,7 +436,8 @@ Type *type_from_name(const char *name) {
         }
     }
 
-    // Parameterized product: (T), (T1 T2 ...), or comma tuple spelling.
+    // Parenthesized product: (T1 T2 ...) or comma tuple spelling.
+    // A single parenthesized type (T) is grouping, not a unary product.
     if (len > 1 && name[0] == '(' && name[len - 1] == ')') {
         char *inner_name = strndup(name + 1, len - 2);
         Type *t = make_type(TYPE_LIST);
@@ -483,6 +484,14 @@ Type *type_from_name(const char *name) {
             if (has_top_level_comma && *p == ',') p++;
         }
         free(inner_name);
+
+        if (t->list_count == 1) {
+            Type *only = t->list_types[0];
+            free(t->list_types);
+            free(t);
+            return only;
+        }
+
         return t;
     }
 
@@ -555,6 +564,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Int")     == 0) return type_int();
     if (strcmp(name, "Float")   == 0) return type_float();
     if (strcmp(name, "Char")    == 0) return type_char();
+    if (strcmp(name, "Byte")    == 0) return type_byte();
     if (strcmp(name, "String")  == 0) return type_string();
     if (strcmp(name, "Bool")    == 0) return type_bool();
     if (strcmp(name, "Hex")     == 0) return type_hex();
@@ -582,6 +592,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Pointer") == 0) return type_ptr(NULL);
     if (strcmp(name, "F80")     == 0) return type_f80();
     if (strcmp(name, "Path")    == 0) return type_path();
+    if (strcmp(name, "Escape")  == 0) return type_escape();
     if (strcmp(name, "Heap")    == 0) return type_arr_heap(NULL);
 
     /* Arbitrary-width integers: I<n> and U<n> */
@@ -644,6 +655,7 @@ Type *type_unknown(void) { return make_type(TYPE_UNKNOWN); }
 Type *type_int    (void) { return make_type(TYPE_INT);     }
 Type *type_float  (void) { return make_type(TYPE_FLOAT);   }
 Type *type_char   (void) { return make_type(TYPE_CHAR);    }
+Type *type_byte   (void) { return make_type(TYPE_BYTE);    }
 Type *type_string (void) { return make_type(TYPE_STRING);  }
 Type *type_symbol (void) { return make_type(TYPE_SYMBOL);  }
 Type *type_bool   (void) { return make_type(TYPE_BOOL);    }
@@ -668,6 +680,7 @@ Type *type_i128   (void) { return make_type(TYPE_I128);    }
 Type *type_u128   (void) { return make_type(TYPE_U128);    }
 Type *type_f80    (void) { return make_type(TYPE_F80);     }
 Type *type_path   (void) { return make_type(TYPE_PATH);    }
+Type *type_escape (void) { return make_type(TYPE_ESCAPE);  }
 
 Type *type_arr_heap(Type *element_type) {
     Type *t = make_type(TYPE_ARR);
@@ -787,6 +800,11 @@ Type *type_arrow(Type *param, Type *ret) {
 bool types_equal(Type *a, Type *b) {
     if (!a && !b) return true;
     if (!a || !b) return false;
+
+    if ((a->kind == TYPE_BYTE && b->kind == TYPE_CHAR) ||
+        (a->kind == TYPE_CHAR && b->kind == TYPE_BYTE))
+        return true;
+
     if (a->kind != b->kind) return false;
     switch (a->kind) {
     case TYPE_VAR:
@@ -887,6 +905,7 @@ Type *type_clone(Type *t) {
         case TYPE_INT:     return type_int();
         case TYPE_FLOAT:   return type_float();
         case TYPE_CHAR:    return type_char();
+        case TYPE_BYTE:    return type_byte();
         case TYPE_STRING:  return type_string();
         case TYPE_SYMBOL:  return type_symbol();
         case TYPE_BOOL:    return type_bool();
@@ -934,6 +953,7 @@ Type *type_clone(Type *t) {
         case TYPE_OPTIONAL:     return type_optional(type_clone(t->element_type));
         case TYPE_NIL:          return type_nil();
         case TYPE_PATH:         return type_path();
+        case TYPE_ESCAPE:       return type_escape();
         case TYPE_APP:          return type_app(t->app_constructor, type_clone(t->app_arg));
         case TYPE_F80:          return type_f80();
         case TYPE_INT_ARBITRARY: return type_int_arbitrary(t->numeric_width, t->numeric_signed);
@@ -1010,6 +1030,7 @@ const char *type_to_string(Type *t) {
     case TYPE_INT:     return "Int";
     case TYPE_FLOAT:   return "Float";
     case TYPE_CHAR:    return "Char";
+    case TYPE_BYTE:    return "Byte";
     case TYPE_STRING:  return "String";
     case TYPE_SYMBOL:  return "Symbol";
     case TYPE_BOOL:    return "Bool";
@@ -1084,6 +1105,7 @@ const char *type_to_string(Type *t) {
                 snprintf(buf, 512, "Coll");
             return buf;
         case TYPE_PATH: return "Path";
+        case TYPE_ESCAPE: return "Escape";
         case TYPE_ARR:
         if (t->arr_is_heap) {
             if (t->arr_element_type)
@@ -1163,10 +1185,37 @@ Type *infer_literal_type(double value, const char *literal_str) {
         }
     }
 
-    // Hex
+    // Byte / Hex
     if (literal_str[0] == '0' &&
-        (literal_str[1] == 'x' || literal_str[1] == 'X'))
+        (literal_str[1] == 'x' || literal_str[1] == 'X')) {
+        int hex_digits = 0;
+        unsigned long long hex_value_acc = 0;
+
+        for (const char *p = literal_str + 2; *p; p++) {
+            unsigned char ch = (unsigned char)*p;
+            int digit = -1;
+
+            if (ch == '_')
+                continue;
+
+            if (ch >= '0' && ch <= '9')
+                digit = ch - '0';
+            else if (ch >= 'a' && ch <= 'f')
+                digit = ch - 'a' + 10;
+            else if (ch >= 'A' && ch <= 'F')
+                digit = ch - 'A' + 10;
+            else
+                break;
+
+            hex_digits++;
+            hex_value_acc = (hex_value_acc << 4) | (unsigned long long)digit;
+        }
+
+        if (hex_digits > 0 && hex_digits <= 2 && hex_value_acc <= 0xff)
+            return type_byte();
+
         return type_hex();
+    }
 
     // Binary
     if (literal_str[0] == '0' &&

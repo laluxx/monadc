@@ -9,6 +9,12 @@ show upcase 'a'
 show Char.upcase 'a'
 show 'a'.upcase
 
+;; Are guards pipes?
+
+a b c | <=     -> "It's variadic, it grabs everything comparable"
+a b c | upper? -> "since [c :: Char] and 'upper?' is a method of it it will be the same as writing c.upper?
+                  it won't even be a closure it can be optimized to just a method call because we have figured out the intent."
+
 
 
 ;; I think this should work

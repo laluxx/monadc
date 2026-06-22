@@ -9,6 +9,7 @@ typedef enum {
     TYPE_INT,
     TYPE_FLOAT,
     TYPE_CHAR,
+    TYPE_BYTE,
     TYPE_STRING,
     TYPE_SYMBOL,
     TYPE_BOOL,
@@ -46,6 +47,7 @@ typedef enum {
     TYPE_NIL,           // nil
     TYPE_APP,           // type application: M a (e.g. Maybe Float)
     TYPE_PATH,          // Path literal      -- filesystem path
+    TYPE_ESCAPE,        // Escape literal    -- terminal/control escape sequence
 } TypeKind;
 
 
@@ -147,6 +149,7 @@ Type *type_unknown(void);
 Type *type_int(void);
 Type *type_float(void);
 Type *type_char(void);
+Type *type_byte(void);
 Type *type_string(void);
 Type *type_symbol(void);
 Type *type_bool(void);
@@ -180,6 +183,7 @@ Type *type_arr(Type *element_type, int64_t size);
 Type *type_arr_fat(Type *element_type);  // runtime fat pointer  {data, size}
 Type *type_arr_heap(Type *element_type); // heap growable array  {data, size, cap}
 Type *type_path(void);
+Type *type_escape(void);
 Type *type_fn(FnParam *params, int param_count, Type *return_type);
 Type *type_fn_builtin(int min_args, int opt_args, bool variadic);
 Type *type_layout(const char *name, LayoutField *fields, int field_count,

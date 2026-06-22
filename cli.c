@@ -572,6 +572,12 @@ CompilerFlags parse_flags(int argc, char **argv) {
         flags.test_mode  = true;
         flags.test_run   = true;
         flags.input_file = argv[2];
+        for (int i = 3; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
         return flags;
     }
 
