@@ -47,14 +47,14 @@ bridged by a =TERM_EMBED= node type, allowing mixed programs.
 
 ** 1.2 Type System Architecture
 
-| Component        | Source File       | Phase       | Purpose                              | Context Link                                                       |
-|------------------+-------------------+-------------+--------------------------------------+--------------------------------------------------------------------|
-| TypeKind enum    | [[file:../types.h][types.h]]:8         | Types       | 40 type categories                   | [[file:../context/types.org::types-summary-table][context/types.org — TypeKind Enum]]              |
-| HM inference     | [[file:../infer.c][infer.c]]            | Phase 5     | Constraint generation + unification  | [[file:../context/infer.org::constraint-generation][context/infer.org — Constraint Generation]]      |
-| ITT checker      | [[file:../dep.c][dep.c]]              | Phase 6.5   | NbE, bidirectional, Pi/Sigma/Univ    | [[file:../context/dep.org::dep-nbe-kernel][context/dep.org — NbE Kernel]]                      |
-| HM/ITT bridge    | =TERM_EMBED= node | —           | Mixed programs                       | [[file:../context/dep.org::dep-interop-bridge][context/dep.org — HM/ITT Bridge]]                  |
-| Type classes     | [[file:../typeclass.c][typeclass.c]]       | Phase 7     | Dictionary-passing                   | [[file:../context/typeclass.org::typeclass-dict][context/typeclass.org — Dictionary Dispatch]]    |
-| Monomorphization | [[file:../codegen.c][codegen.c]]:109      | Phase 6     | Per-type instantiation               | [[file:../context/codegen.org::codegen-mono-cache][context/codegen.org — Mono Cache]]               |
+| Component        | Source File     | Phase     | Purpose                             | Context Link                                |
+|------------------+-----------------+-----------+-------------------------------------+---------------------------------------------|
+| TypeKind enum    | [[file:../types.h][types.h]]:8       | Types     | 40 type categories                  | [[file:../context/types.org::types-summary-table][context/types.org — TypeKind Enum]]           |
+| HM inference     | [[file:../infer.c][infer.c]]         | Phase 5   | Constraint generation + unification | [[file:../context/infer.org::constraint-generation][context/infer.org — Constraint Generation]]   |
+| ITT checker      | [[file:../dep.c][dep.c]]           | Phase 6.5 | NbE, bidirectional, Pi/Sigma/Univ   | [[file:../context/dep.org::dep-nbe-kernel][context/dep.org — NbE Kernel]]                |
+| HM/ITT bridge    | =TERM_EMBED= node | —         | Mixed programs                      | [[file:../context/dep.org::dep-interop-bridge][context/dep.org — HM/ITT Bridge]]             |
+| Type classes     | [[file:../typeclass.c][typeclass.c]]     | Phase 7   | Dictionary-passing                  | [[file:../context/typeclass.org::typeclass-dict][context/typeclass.org — Dictionary Dispatch]] |
+| Monomorphization | [[file:../codegen.c][codegen.c]]:109   | Phase 6   | Per-type instantiation              | [[file:../context/codegen.org::codegen-mono-cache][context/codegen.org — Mono Cache]]            |
 
 Test coverage: type-system features are exercised by
 [[file:../tests/codegen/types/hm/][tests/codegen/types/hm/]], [[file:../tests/codegen/types/dep/][tests/codegen/types/dep/]], and
@@ -77,20 +77,20 @@ documented in [[file:../context/types.org][context/types.org]].
 Ground types are the primitive value types — they cannot be broken down
 into simpler types:
 
-| Type    | Description           | Example values       | Page                  |
-|---------+-----------------------+----------------------+-----------------------|
-| =Int=     | 63-bit signed integer | =42=, =-7=, =0xFF=         | [[file:numeric.org]]      |
-| =Float=   | 64-bit IEEE 754       | =3.14=, =1e10=           | [[file:numeric.org]]      |
-| =Ratio=   | Exact rational        | =1/2=, =3/4=             | [[file:rationals.org]]  |
-| =Char=    | Unicode codepoint     | ='a'=, ='\n'=            | [[file:characters.org]] |
-| =String=  | UTF-8 string          | ="hello"=              | [[file:strings.org]]    |
-| =Bool=    | Boolean               | =True=, =False=          | [[file:booleans.org]]   |
-| =Symbol=  | Interned name         | ='x=, ='my-fn=           | [[file:symbols.org]]    |
-| =Keyword= | Colon-prefixed name   | =:key=, =:alias=         | [[file:symbols.org]]    |
-| =Path=    | File path             | =/tmp/file=, =~/.config= | [[file:paths.org]]       |
+| Type    | Description           | Example values       | Page                     |
+|---------+-----------------------+----------------------+--------------------------|
+| =Int=     | 63-bit signed integer | =42=, =-7=, =0xFF=         | [[file:numeric.org]]         |
+| =Float=   | 64-bit IEEE 754       | =3.14=, =1e10=           | [[file:numeric.org]]         |
+| =Ratio=   | Exact rational        | =1/2=, =3/4=             | [[file:rationals.org]]       |
+| =Char=    | Unicode codepoint     | ='a'=, ='\n'=            | [[file:characters.org]]      |
+| =String=  | UTF-8 string          | ="hello"=              | [[file:strings.org]]         |
+| =Bool=    | Boolean               | =True=, =False=          | [[file:booleans.org]]        |
+| =Symbol=  | Interned name         | ='x=, ='my-fn=           | [[file:symbols.org]]         |
+| =Keyword= | Colon-prefixed name   | =:key=, =:alias=         | [[file:symbols.org]]         |
+| =Path=    | File path             | =/tmp/file=, =~/.config= | [[file:paths.org]]           |
 | =Type=    | Kind of types         | =Int=, =Float=, =(Type 0)= | [[file:dependent-types.org]] |
-| =Unit=    | Singleton type        | =()=                   | —                     |
-| =Nil=     | Empty                 | =nil=                  | —                     |
+| =Unit=    | Singleton type        | =()=                   | —                        |
+| =Nil=     | Empty                 | =nil=                  | —                        |
 
 Dedicated pages for each ground type:
 - [[file:numeric.org][Numeric Types]] — =Int=, =Float=, =Ratio=, fixed-width types
@@ -106,21 +106,21 @@ Dedicated pages for each ground type:
 The compiler provides fixed-width numeric types for C interop and
 bit-level control:
 
-| Type | Description               |       Width | Use Case                 |
-|------+---------------------------+-------------+--------------------------|
-| =I8=   | Signed 8-bit integer      |      8 bits | Byte values, C =char=     |
-| =U8=   | Unsigned 8-bit            |      8 bits | Byte values, C =uchar=    |
-| =I16=  | Signed 16-bit             |          16 | Short integers           |
-| =U16=  | Unsigned 16-bit           |          16 | Unicode code units       |
-| =I32=  | Signed 32-bit             |          32 | Standard integers        |
-| =U32=  | Unsigned 32-bit           |          32 | Bit flags                |
-| =I64=  | Signed 64-bit             |          64 | Large integers           |
-| =U64=  | Unsigned 64-bit           |          64 | Memory addresses         |
-| =I128= | Signed 128-bit            |         128 | Big integers             |
-| =U128= | Unsigned 128-bit          |         128 | Big unsigned             |
-| =F32=  | IEEE 754 single-precision |          32 | Graphics, performance    |
-| =F80=  | x86 extended precision    |          80 | High-precision math      |
-| =Int=  | Architecture word         | 64 (x86-64) | Default integer type     |
+| Type | Description               |       Width | Use Case              |
+|------+---------------------------+-------------+-----------------------|
+| =I8=   | Signed 8-bit integer      |      8 bits | Byte values, C =char=   |
+| =U8=   | Unsigned 8-bit            |      8 bits | Byte values, C =uchar=  |
+| =I16=  | Signed 16-bit             |          16 | Short integers        |
+| =U16=  | Unsigned 16-bit           |          16 | Unicode code units    |
+| =I32=  | Signed 32-bit             |          32 | Standard integers     |
+| =U32=  | Unsigned 32-bit           |          32 | Bit flags             |
+| =I64=  | Signed 64-bit             |          64 | Large integers        |
+| =U64=  | Unsigned 64-bit           |          64 | Memory addresses      |
+| =I128= | Signed 128-bit            |         128 | Big integers          |
+| =U128= | Unsigned 128-bit          |         128 | Big unsigned          |
+| =F32=  | IEEE 754 single-precision |          32 | Graphics, performance |
+| =F80=  | x86 extended precision    |          80 | High-precision math   |
+| =Int=  | Architecture word         | 64 (x86-64) | Default integer type  |
 
 Note: =Int= is the default inferred type for integer literals and maps
 to the machine word size (i64 on x86-64). Use explicit fixed-width
@@ -138,13 +138,13 @@ for full details.
 
 Compound types combine ground types and other compound types:
 
-| Type syntax   | Description | Constructor                      | Context                                      |
-|---------------+-------------+----------------------------------+----------------------------------------------|
-| =A -> B=        | Function    | =(lambda [x] x)=                   | —                                            |
-| =List :: A=     | Linked list | =nil=, ='(1 2 3)=, =list=              | [[file:../context/runtime.org::runtime-list][context/runtime.org — List]]                  |
-| =Arr :: A=      | Stack array | =[1 2 3]=                        | [[file:../reader.c::5821][reader.c:5821]] (array parsing)                  |
-| =Set :: A=      | Hash set    | ={1 2 3}=                        | [[file:../reader.c::5998][reader.c:5998]] (set parsing)                   |
-| =Map :: K :: V= | Hash map    | =#{:a 1}=                        | [[file:../reader.c::6039][reader.c:6039]] (map parsing)                   |
+| Type syntax   | Description | Constructor         | Context                       |
+|---------------+-------------+---------------------+-------------------------------|
+| =A -> B=        | Function    | =(lambda [x] x)=      | —                             |
+| =List :: A=     | Linked list | =nil=, ='(1 2 3)=, =list= | [[file:../context/runtime.org::runtime-list][context/runtime.org — List]]    |
+| =Arr :: A=      | Stack array | =[1 2 3]=             | [[file:../reader.c::5821][reader.c:5821]] (array parsing) |
+| =Set :: A=      | Hash set    | ={1 2 3}=             | [[file:../reader.c::5998][reader.c:5998]] (set parsing)   |
+| =Map :: K :: V= | Hash map    | =#{:a 1}=             | [[file:../reader.c::6039][reader.c:6039]] (map parsing)   |
 
 See [[file:collections.org][Collections]] for literal syntax and dedicated pages:
 - [[file:list.org][Lists]]
@@ -508,41 +508,41 @@ layout Point
 
 ** 6.8 Advanced Types Summary
 
-| Feature          | S-expr Skeleton          | Checker       | Polymorphism |        |
-|------------------+--------------------------+---------------+--------------+--------|
-| Dependent types  | =((x : A) -> B)=, =(Type n)= | =dep.c=         | Parametric   |        |
-| Refinement types | ={ x ∈ T                 | pred }=       | =types.c=      | Ad-hoc |
-| Algebraic data   | =(data T a ... (C ...))=   | Reader        | Parametric   |        |
+| Feature          | S-expr Skeleton          | Checker     | Polymorphism |        |
+|------------------+--------------------------+-------------+--------------+--------|
+| Dependent types  | =((x : A) -> B)=, =(Type n)= | =dep.c=       | Parametric   |        |
+| Refinement types | ={ x ∈ T                 | pred }=     | =types.c=      | Ad-hoc |
+| Algebraic data   | =(data T a ... (C ...))=   | Reader      | Parametric   |        |
 | Type classes     | =(class C a (meth ...))=   | =typeclass.c= | Ad-hoc       |        |
-| Layout types     | =(layout T [x :: T] ...)=  | Reader        | —            |        |
+| Layout types     | =(layout T [x :: T] ...)=  | Reader      | —            |        |
 
 * 7. Type Predicates
 
 Registered builtins ([[file:../codegen.c::13144][codegen.c:13144]]):
 
-| Predicate   | Tests for        | Returns      |
-|-------------+------------------+--------------|
-| =Int?=        | Int type         | Bool         |
-| =Float?=      | Float type       | Bool         |
-| =Number?=     | Any numeric type | Bool         |
-| =Char?=       | Char type        | Bool         |
-| =String?=     | String type      | Bool         |
-| =Bool?=       | Bool type        | Bool         |
-| =Symbol?=     | Symbol type      | Bool         |
-| =Keyword?=    | Keyword type     | Bool         |
-| =List?=       | List type        | Bool         |
-| =Ratio?=      | Ratio type       | Bool         |
-| =Set?=        | Set type         | Bool         |
-| =Map?=        | Map type         | Bool         |
-| =Fn?=         | Function type    | Bool         |
-| =Arr?=        | Array type       | Bool         |
-| =Hex?=        | Hex literal type | Bool         |
-| =Bin?=        | Bin literal type | Bool         |
-| =Oct?=        | Oct literal type | Bool         |
-| =nil?=        | Nil value        | Bool         |
-| =empty?=      | Empty collection | Bool         |
-| =pair?=       | Pair (cons cell) | Bool         |
-| =collection?= | Collection-like  | Bool         |
+| Predicate   | Tests for        | Returns |
+|-------------+------------------+---------|
+| =Int?=        | Int type         | Bool    |
+| =Float?=      | Float type       | Bool    |
+| =Number?=     | Any numeric type | Bool    |
+| =Char?=       | Char type        | Bool    |
+| =String?=     | String type      | Bool    |
+| =Bool?=       | Bool type        | Bool    |
+| =Symbol?=     | Symbol type      | Bool    |
+| =Keyword?=    | Keyword type     | Bool    |
+| =List?=       | List type        | Bool    |
+| =Ratio?=      | Ratio type       | Bool    |
+| =Set?=        | Set type         | Bool    |
+| =Map?=        | Map type         | Bool    |
+| =Fn?=         | Function type    | Bool    |
+| =Arr?=        | Array type       | Bool    |
+| =Hex?=        | Hex literal type | Bool    |
+| =Bin?=        | Bin literal type | Bool    |
+| =Oct?=        | Oct literal type | Bool    |
+| =nil?=        | Nil value        | Bool    |
+| =empty?=      | Empty collection | Bool    |
+| =pair?=       | Pair (cons cell) | Bool    |
+| =collection?= | Collection-like  | Bool    |
 
 ** 7.1 Type Predicates Key Points
 
@@ -555,14 +555,14 @@ Registered builtins ([[file:../codegen.c::13144][codegen.c:13144]]):
 
 | Syntax     | Description             | Example              |
 |------------+-------------------------+----------------------|
-| =(Int x)=    | Convert to 63-bit int   | =(Int 3.14)= → =3=    |
-| =(Float x)=  | Convert to 64-bit float | =(Float 42)= → =42.0= |
-| =(Char x)=   | Integer to character    | =(Char 65)= → ='A'=   |
-| =(String x)= | To string               | =(String 42)= → ="42"=|
-| =(Hex x)=    | Format as hex           | =(Hex 255)= → ="0xFF"=|
+| =(Int x)=    | Convert to 63-bit int   | =(Int 3.14)= → =3=       |
+| =(Float x)=  | Convert to 64-bit float | =(Float 42)= → =42.0=    |
+| =(Char x)=   | Integer to character    | =(Char 65)= → ='A'=      |
+| =(String x)= | To string               | =(String 42)= → ="42"= |
+| =(Hex x)=    | Format as hex           | =(Hex 255)= → ="0xFF"= |
 | =(Oct x)=    | Format as octal         | —                    |
 | =(Bin x)=    | Format as binary        | —                    |
-| =(I8 x)=     | Signed 8-bit            | —                    |
+| =(I8 x)=     | Signed 8-bit            | n                    |
 | =(U8 x)=     | Unsigned 8-bit          | —                    |
 | =(I16 x)=    | Signed 16-bit           | —                    |
 | =(U16 x)=    | Unsigned 16-bit         | —                    |
@@ -579,12 +579,12 @@ See [[file:casting.org][Casting]] for full details.
 The =TypeKind= enum ([[file:../types.h::8]]) defines 40 type categories
 ([[file:../context/types.org::types-summary-table][context/types.org — TypeKind Enum]]):
 
-| Category | Count | Types                                                                         |
-|----------+-------+-------------------------------------------------------------------------------|
-| Ground   |    13 | INT, FLOAT, CHAR, STRING, SYMBOL, BOOL, HEX, BIN, OCT, KEYWORD, RATIO, NIL, PATH  |
-| Numeric  |    13 | F32, F80, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, INT_ARBITRARY         |
-| Compound |     9 | LIST, ARR, FN, LAYOUT, SET, MAP, PTR, OPTIONAL, COLL                              |
-| Meta     |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP                                                |
+| Category | Count | Types                                                                            |
+|----------+-------+----------------------------------------------------------------------------------|
+| Ground   |    13 | INT, FLOAT, CHAR, STRING, SYMBOL, BOOL, HEX, BIN, OCT, KEYWORD, RATIO, NIL, PATH |
+| Numeric  |    13 | F32, F80, I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, INT_ARBITRARY        |
+| Compound |     9 | LIST, ARR, FN, LAYOUT, SET, MAP, PTR, OPTIONAL, COLL                             |
+| Meta     |     5 | UNKNOWN, VAR, ARROW, VARIADIC, APP                                               |
 
 Each category serves a distinct role:
 - *Ground*: primitive value types that carry data
@@ -596,15 +596,15 @@ See [[file:../context/types.org][context/types.org]] for full per-kind documenta
 
 * 10. Type System Summary
 
-| Concept              | Mechanism                | Phase       |
-|----------------------+--------------------------+-------------|
-| Type representation  | =TypeKind= enum (40 values) | types.h   |
-| Surface inference    | Algorithm W (HM)          | infer.c     |
-| Dependent checking   | ITT/NbE, bidirectional    | dep.c       |
-| HM/ITT bridge        | =TERM_EMBED= node         | infer/dep   |
-| Monomorphization     | Per-instantiation         | codegen.c   |
-| Refinement checking  | Predicate functions       | types.c     |
-| Type class dispatch  | Dictionary passing        | typeclass.c |
+| Concept             | Mechanism                 | Phase       |
+|---------------------+---------------------------+-------------|
+| Type representation | =TypeKind= enum (40 values) | types.h     |
+| Surface inference   | Algorithm W (HM)          | infer.c     |
+| Dependent checking  | ITT/NbE, bidirectional    | dep.c       |
+| HM/ITT bridge       | =TERM_EMBED= node           | infer/dep   |
+| Monomorphization    | Per-instantiation         | codegen.c   |
+| Refinement checking | Predicate functions       | types.c     |
+| Type class dispatch | Dictionary passing        | typeclass.c |
 
 * Further Reading
 

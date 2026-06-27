@@ -1,0 +1,30 @@
+;; TEST-ID: tests.wisp.math-where-guard-regressions
+;; TEST-CONTEXT: monadc.context.tests.core-prelude-module-tests, monadc.context.tests.wisp-define-sugar
+;; TEST-PURPOSE: Math-style guarded helpers in where blocks lower to valid reader forms.
+;; TEST-ATOM: A local where helper with simple parameters and guarded clauses becomes a lambda with an if ladder.
+;; TEST-EXPECT: parse-json
+;; TEST-TIER: regression
+;; TEST-MENU: wisp
+;; TEST-MENU-PATH: wisp/math-where-guard-regressions
+;; TEST-CLI-TARGET: wisp math-where-guard-regressions
+
+(module Wisp.MathWhereGuardRegressions [])
+
+define bounded :: Int -> Int
+  x -> clamp x
+    where
+      clamp n | n > 10    -> 10
+              | otherwise -> n
+
+define wrapped :: Float -> Float
+  x -> wrap x
+    where
+      wrap y | y > 3.0   -> wrap (y - 6.0)
+             | y < -3.0  -> wrap (y + 6.0)
+             | otherwise -> y
+
+define polynomial :: Float -> Float
+  y -> y² + y³
+
+tests [0/1]
+  assert-eq 1 1 "math where guard"

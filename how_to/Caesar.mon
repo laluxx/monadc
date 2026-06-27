@@ -1,0 +1,32 @@
+
+
+;; layout Vec2 :literal v[x y] 2D Vector
+;;   [x :: Float] Vector's x component
+;;   [y :: Float] Vector's y component
+
+layout Vec2  2D Vector
+  [x :: Float] Vector's x component
+  [y :: Float] Vector's y component
+
+
+show doc Vec2.x
+show doc Vec2.y
+show doc Vec2
+
+
+;; layout Vec2 [x :: Float]  You can just type shit
+;;             [y :: Float]  also here? they are docstrings.
+;;                          :literal v[x y]
+
+;;  ╭─ Just write the docstring
+;; define rot :: Int -> Char -> Char                       ╭─ Control char literal
+;;   rot n c | upper?    -> Char (ord c)  -  'A' + n  mod   + 'A'
+;;           | otherwise -> Char (ord c)  -  'a' + n  mod   + 'a'
+
+
+
+
+;; define caesar :: String -> ()
+;;   mapM_ show zipWith (lambda (n) show n ++ ": ") ++ ⌜0..⌝ iterate (map rot 1)
+
+

@@ -1011,3 +1011,70 @@ Test-driven observations and failure records for the corresponding subsystem.
   enclosing singleton parenthesized form is treated as grouping. Therefore
   =('a'.upcase)= desugars to =(upcase 'a')= rather than the invalid
   =((upcase 'a'))= zero-argument call of the method result.
+
+* Org-Like Drawers
+:PROPERTIES:
+:ID: monadc.context.reader.drawers
+:CUSTOM_ID: org-like-drawers
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Reader handling for org-like :Name: ... :Name: drawer blocks that are accepted and skipped as non-executable source structure
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-26
+:CONTEXT_UPDATED: 2026-06-26
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: reader.h,reader.c,wisp.c,tests/reader-sugars.tsv
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.reader.drawers.skip-for-now date:2026-06-26 by:human]
+  Org-like drawer blocks delimited by matching =:Name:= marker lines are reader
+  structure, not executable code. For now the compiler accepts them and skips the
+  enclosed forms; editor folding can later use the same surface syntax.
+
+[OBS id:obs.reader.drawer-span-map src:reader.h,reader.c conf:high]
+  =DrawerSpan= records matching drawer marker spans in the reader source. The
+  lexer skips a drawer span before producing the next token, preserving line
+  accounting through normal character advancement.
+
+[OBS id:obs.wisp.drawer-strip src:wisp.c conf:high]
+  Wisp preprocessing blanks full drawer blocks before metadata stripping, arity
+  prescan, and token lowering. Newlines are preserved so diagnostics and =#line=
+  mappings stay aligned with the original source.
+
+[OBS id:obs.reader.drawer-regression src:tests/reader-sugars.tsv conf:high]
+  =sugar.drawer_round_trips_ignored= covers the requested =:Round trips:= style:
+  assertions inside the drawer do not appear in the emitted/desugared AST, while
+  the expression after the drawer still parses.
+
+* Lambda Source Spans
+:PROPERTIES:
+:ID: monadc.context.reader.lambda-source-spans
+:CUSTOM_ID: lambda-source-spans
+:CONTEXT_KIND: regression
+:CONTEXT_DESCRIPTION: Parenthesized lambda end positions must stop at the closing paren so spaced sibling forms stay separate arguments.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-27
+:CONTEXT_UPDATED: 2026-06-27
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,core/prelude/Coll.mon,tests/run_core.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.reader.lambda-end-column-postfix-call-2026-06-27 date:2026-06-27 by:codex]
+  Parenthesized =(lambda ...)= forms record the closing paren as
+  =end_column=. Do not overwrite that span with the next token's column in
+  =parse_list=: the postfix-call rule is adjacency-based, so using the next
+  spaced token makes =(any? (lambda (x) (< 2 x)) (list 1 2 3))= parse as a
+  one-argument partial call whose argument is =((lambda ...) list 1 2 3)=.
+  =core/prelude/Coll.mon= now keeps active higher-order list tests for this
+  regression, run through =python3 tests/run_core.py=.

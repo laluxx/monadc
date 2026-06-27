@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-CORE_ROOT = ROOT / "core"
+CORE_ROOT = ROOT / os.environ.get("MONAD_CORE_ROOT", "core")
 MONAD = ROOT / "monad"
 WIDTH = 78
 TRACKED_FILES: set[Path] | None = None
@@ -105,20 +105,41 @@ def materialize_test_source(path: Path) -> str:
     assertions: list[str] = []
     in_tests = False
     test_indent = 0
+    open_drawer: str | None = None
+    open_drawer_line = 0
 
-    for line in lines:
+    for line_number, line in enumerate(lines, start=1):
         stripped = line.lstrip()
         indent = len(line) - len(stripped)
         if not in_tests and stripped == "tests":
             assertions = []
             in_tests = True
             test_indent = indent
+            open_drawer = None
+            open_drawer_line = 0
             continue
         if in_tests:
             if stripped and indent <= test_indent and not stripped.startswith(";;"):
+                if open_drawer is not None:
+                    raise ValueError(
+                        f"{path}:{open_drawer_line}: unclosed test drawer :{open_drawer}:"
+                    )
                 out.append(format_tests_block(assertions))
                 in_tests = False
             else:
+                drawer = parse_test_drawer(stripped)
+                if drawer:
+                    if open_drawer is None:
+                        open_drawer = drawer
+                        open_drawer_line = line_number
+                    elif open_drawer == drawer:
+                        open_drawer = None
+                        open_drawer_line = 0
+                    else:
+                        raise ValueError(
+                            f"{path}:{line_number}: test drawer :{drawer}: cannot open before closing :{open_drawer}:"
+                        )
+                    continue
                 converted = convert_test_line(stripped)
                 if converted:
                     assertions.append(converted)
@@ -126,6 +147,8 @@ def materialize_test_source(path: Path) -> str:
         out.append(line)
 
     if in_tests:
+        if open_drawer is not None:
+            raise ValueError(f"{path}:{open_drawer_line}: unclosed test drawer :{open_drawer}:")
         out.append(format_tests_block(assertions))
     return "\n".join(out) + "\n"
 
@@ -139,6 +162,8 @@ def format_tests_block(assertions: list[str]) -> str:
 def convert_test_line(stripped: str) -> str:
     if not stripped or stripped.startswith(";;"):
         return ""
+    if stripped.startswith(":"):
+        return ""
     if not stripped.startswith("assert-eq "):
         return stripped
     value = stripped.removeprefix("assert-eq ").strip()
@@ -148,6 +173,17 @@ def convert_test_line(stripped: str) -> str:
     if len(parts) != 3:
         return f";; malformed core test: {stripped}"
     return f"(assert-eq {parts[0]} {parts[1]} {parts[2]})"
+
+
+def parse_test_drawer(stripped: str) -> str:
+    if not stripped or stripped.startswith(";;"):
+        return ""
+    match = re.fullmatch(r":([^:]+):", stripped)
+    if match:
+        return match.group(1)
+    if stripped.startswith(":"):
+        raise ValueError(f"invalid test drawer marker: {stripped}")
+    return ""
 
 
 def split_top_level(value: str, limit: int) -> list[str]:

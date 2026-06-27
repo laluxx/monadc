@@ -100,11 +100,23 @@ void print_usage(const char *prog)
     row(YELLOW, "-S, asm",              "LLVM-style shortcut for assembly output");
     row(YELLOW, "-c, obj",              "LLVM-style shortcut for object output");
     row(YELLOW, "-O, optimize",         "Enable compiler optimization passes");
-    row(YELLOW, "-v, verbose",          "Increase compile progress verbosity");
-    row(YELLOW, "--trace=<pass>, trace <pass>", "Show pass tree: ast, semantic, dep, codegen, all");
+    row(YELLOW, "-q, --quiet",          "Disable progress output and tracing");
+    row(YELLOW, "-v, -vv, --verbose=N", "Increase or set compile verbosity");
+    row(YELLOW, "--trace-all",          "Enable every compiler trace pass");
+    row(YELLOW, "--trace-off, --no-trace", "Disable every compiler trace pass");
+    row(YELLOW, "--trace-ast",          "Trace reader, Wisp expansion, and AST output");
+    row(YELLOW, "--trace-semantic",     "Trace semantic lowering and optimization");
+    row(YELLOW, "--trace-dep",          "Trace dependency and type checking");
+    row(YELLOW, "--trace-codegen",      "Trace LLVM/codegen output");
+    row(YELLOW, "--trace=<list>",       "Comma list: ast, semantic, dep, codegen, all, off");
     row(YELLOW, "--test, test",         "Embed tests in binary (keep binary)");
-    row(YELLOW, "-Wall",         "Enable all warnings");
-    row(YELLOW, "-Wextra",       "Enable extra warnings");
+    row(YELLOW, "-q, --quiet",          "disable progress output and tracing");
+    row(YELLOW, "-v, -vv, --verbose=N", "increase or set compile verbosity");
+    row(YELLOW, "--trace-all",          "enable every compiler trace pass");
+    row(YELLOW, "--trace-off",          "disable every compiler trace pass");
+    row(YELLOW, "--trace=<list>",       "comma list: ast, semantic, dep, codegen");
+    row(YELLOW, "-Wall",        "enable all warnings");
+    row(YELLOW, "-Wextra",      "enable extra warnings");
     row(YELLOW, "-h, --help",    "Show this help");
 
     /* Hint */
@@ -276,10 +288,13 @@ static void menu_test(void)
 
     section("flags");
     row(YELLOW, "--test <file>", "embed tests but keep the binary");
+    row(YELLOW, "-q, --quiet", "disable progress output and tracing");
+    row(YELLOW, "--trace-all", "enable every compiler trace pass");
+    row(YELLOW, "--trace-off", "disable every compiler trace pass");
 
     section("exit codes");
     row(DIM, "0", "all tests passed");
-    row(DIM, "1", "test binary signalled (assertion failed)");
+    row(DIM, "1", "compile error, assertion failure, or nonzero test exit");
 
     gap();
 }

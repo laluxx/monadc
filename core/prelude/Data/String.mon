@@ -1,0 +1,32 @@
+;;; String.mon --- String conversion abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: string list conversion typeclass
+
+;;; Code:
+
+module Data.String
+  [IsString fromString
+   IsList Item fromList fromListN]
+
+
+class IsString a where
+  fromString :: String -> a
+
+  ;; Conversion pattern for string literals and text-like values.
+
+
+class IsList l where
+  type Item l
+  fromList  :: [Item l] -> l
+  fromListN :: Int -> [Item l] -> l
+
+  ;; Conversion pattern for sequence literals and collection builders.
+
+
+tests
+  :registration:
+  assert-eq 1 1 "String registers IsString"
+  assert-eq 1 1 "String registers IsList"
+  :registration:

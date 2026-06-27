@@ -1,19 +1,98 @@
 
+define pow-int :: Int -> Int -> Int
+  base exp ┬─ exp < 0 -> error "blah blah"
+           ├─ exp = 0 -> 1
+           ╰───▶ base * (pow-int base (exp - 1))
+
+define last :: [a] -> a?
+  []     -> nil
+  [x]    -> x
+  [_|xs] -> last xs
+
+;; Wrong styles for the functions
+
+define fib :: Int -> Int?
+ n  ┬─ < 0 -> nil
+    ├─ = 0 -> 0
+    ├─ = 1 -> 1
+    ╰──────▶ fib (n - 1) + fib (n - 2)
+
+
+define fib :: Int -> Int?
+  n ┬─ < 0 -> nil
+    ├─ = 0 -> 0
+    ├─ = 1 -> 1
+    ╰───▶ fib (n - 1) -> + fib (n - 2)
+
+
+
+
+
+
+;; define pow-int :: Int -> Int -> Int
+;;   base exp ─╮
+;;             ├─ exp < 0 -> error "pow-int: negative exponent"
+;;             │              █
+;;             ├─ exp = 0 -> ───
+;;             │
+;;             ╰─────────▶ base * (pow-int base (exp - 1))
+
+
+;; The hanging style signals that n is being piped
+
+
+define fib :: Int -> Int
+  n ─╮
+     ├─ < 0 -> error "fib: negative input"
+     ├─ = 0 -> 0
+     ├─ = 1 -> 1
+     ╰────────▶ fib (n - 1) + fib (n - 2)
+
+
+;; No piping here
+
+define pow-int :: Int -> Int -> Int
+  base exp ┬─ exp < 0 -> error "pow-int: negative exponent"
+           ├─ exp = 0 -> 1
+           ╰─────────▶ base * (pow-int base (exp - 1))
+
+
+
+
+
+
+
+
+
+
+
+
+
 ;; show 3 + 3
 
-(show (upcase 'a'))
-(show (Char.upcase 'a'))
-(show ('a'.upcase))
+;; (show (upcase 'a'))
+;; (show (Char.upcase 'a'))
+;; (show ('a'.upcase))
 
-show upcase 'a'
-show Char.upcase 'a'
-show 'a'.upcase
+;; show upcase 'a'
+;; show Char.upcase 'a'
+;; show 'a'.upcase
 
-;; Are guards pipes?
+;; ;; Guards are also pipes.
 
-a b c | <=     -> "It's variadic, it grabs everything comparable"
-a b c | upper? -> "since [c :: Char] and 'upper?' is a method of it it will be the same as writing c.upper?
-                  it won't even be a closure it can be optimized to just a method call because we have figured out the intent."
+;; a b c | <=     -> "It's variadic, it grabs everything comparable"
+;; a b c | upper? -> "since [c :: Char] and 'upper?' is a method of it it will be the same as writing c.upper?
+;;                   it won't even be a closure it can be optimized to just a method call because we have figured out the intent."
+
+
+
+;; define type-id :: ∀a -> a
+;;   _ -> a
+;;   :doc "Returns the type of whatever you pass."
+
+;; if tid ~[1 2 3] = Heap
+;;   undefined
+
 
 
 
@@ -80,20 +159,6 @@ a b c | upper? -> "since [c :: Char] and 'upper?' is a method of it it will be t
 ;; x = (1, "hello")
 
 ;; show x
-
-;; define type-id :: ∀a -> a
-;;   _ -> a
-;;   :doc "Returns the type of whatever you pass."
-
-;; if type-id ~[1 2 3] :: Heap
-;;  then sladkslakjd
-
-
-
-
-
-
-
 
 
 ;; layout Color

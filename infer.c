@@ -635,6 +635,9 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         /* TYPE_INT ~ TYPE_CHAR — chars are small integers, coercion is always valid */
         if (a->kind == TYPE_INT && b->kind == TYPE_CHAR) return true;
         if (a->kind == TYPE_CHAR && b->kind == TYPE_INT) return true;
+        /* TYPE_BYTE ~ TYPE_CHAR — byte and char share the same runtime domain. */
+        if (a->kind == TYPE_BYTE && b->kind == TYPE_CHAR) return true;
+        if (a->kind == TYPE_CHAR && b->kind == TYPE_BYTE) return true;
         /* TYPE_INT_ARBITRARY ~ TYPE_CHAR — same reasoning */
         if (a->kind == TYPE_INT_ARBITRARY && b->kind == TYPE_CHAR) return true;
         if (a->kind == TYPE_CHAR && b->kind == TYPE_INT_ARBITRARY) return true;
@@ -1215,6 +1218,46 @@ static void infer_env_remove(InferEnv *env, const char *name) {
     }
 }
 
+static bool infer_type_contains_unknown_or_var(Type *t) {
+    if (!t) return true;
+
+    switch (t->kind) {
+    case TYPE_UNKNOWN:
+    case TYPE_VAR:
+        return true;
+    case TYPE_ARROW:
+        return infer_type_contains_unknown_or_var(t->arrow_param) ||
+               infer_type_contains_unknown_or_var(t->arrow_ret);
+    case TYPE_FN:
+        for (int i = 0; i < t->param_count; i++)
+            if (infer_type_contains_unknown_or_var(t->params[i].type))
+                return true;
+        return infer_type_contains_unknown_or_var(t->return_type);
+    case TYPE_LIST:
+        if (t->list_elem && infer_type_contains_unknown_or_var(t->list_elem))
+            return true;
+        for (int i = 0; i < t->list_count; i++)
+            if (infer_type_contains_unknown_or_var(t->list_types[i]))
+                return true;
+        return false;
+    case TYPE_COLL:
+        return infer_type_contains_unknown_or_var(t->element_type);
+    case TYPE_ARR:
+        return infer_type_contains_unknown_or_var(t->arr_element_type);
+    case TYPE_SET:
+        return infer_type_contains_unknown_or_var(t->element_type);
+    case TYPE_MAP:
+        return false;
+    case TYPE_PTR:
+    case TYPE_OPTIONAL:
+        return infer_type_contains_unknown_or_var(t->element_type);
+    case TYPE_APP:
+        return infer_type_contains_unknown_or_var(t->app_arg);
+    default:
+        return false;
+    }
+}
+
 Type *infer_expr(InferCtx *ctx, AST *ast) {
     if (!ast) return type_unknown();
 
@@ -1225,8 +1268,15 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
     case AST_NUMBER: {
         bool is_float = false;
         if (ast->literal_str) {
-            for (const char *p = ast->literal_str; *p; p++)
-                if (*p == '.' || *p == 'e' || *p == 'E') { is_float = true; break; }
+            bool radix_literal =
+                ast->literal_str[0] == '0' &&
+                (ast->literal_str[1] == 'x' || ast->literal_str[1] == 'X' ||
+                 ast->literal_str[1] == 'b' || ast->literal_str[1] == 'B' ||
+                 ast->literal_str[1] == 'o' || ast->literal_str[1] == 'O');
+            if (!radix_literal) {
+                for (const char *p = ast->literal_str; *p; p++)
+                    if (*p == '.' || *p == 'e' || *p == 'E') { is_float = true; break; }
+            }
         } else {
             is_float = (ast->number != (double)(int64_t)ast->number);
         }
@@ -1265,6 +1315,10 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         if (strcmp(ast->symbol, "True")  == 0) { result = type_bool(); break; }
         if (strcmp(ast->symbol, "False") == 0) { result = type_bool(); break; }
         if (strcmp(ast->symbol, "nil")   == 0) { result = type_nil();  break; }
+        if (strcmp(ast->symbol, "undefined") == 0) {
+            result = infer_fresh(ctx);
+            break;
+        }
         /* Explicit expression hole — ? becomes a fresh type variable.
          * The solved type will be printed after inference completes.  */
         if (strcmp(ast->symbol, "?") == 0) {
@@ -2216,8 +2270,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         bool is_multi_tuple = (k == TYPE_LIST &&
                                ast->inferred_type->list_count > 1);
 
+        bool has_unknown_or_var =
+            infer_type_contains_unknown_or_var(ast->inferred_type);
+
         bool is_ground = (k != TYPE_ARROW && k != TYPE_FN && k != TYPE_UNKNOWN
-                          && k != TYPE_VAR && !is_multi_tuple);
+                          && k != TYPE_VAR && !is_multi_tuple &&
+                          !has_unknown_or_var);
 
         /* Extra safety: reject universe-level leakage and symbol-scope mismatches. */
         bool dep_hint_trustworthy = is_ground;
@@ -2428,16 +2486,22 @@ void infer_register_builtins(InferCtx *ctx) {
         type_arrow(app_lhs, type_arrow(app_rhs, app_ret)), ctx->env);
     infer_env_insert(ctx->env, "++", app_sc);
 
-    /* ∀a. List a → a   (head) */
+    /* ∀a. Coll a → a   (head) */
     Type *head_a = infer_fresh(ctx);
+    Type *head_coll = type_coll();
+    head_coll->element_type = head_a;
     TypeScheme *head_sc = infer_generalise(ctx,
-        type_arrow(type_list(&head_a, 1), head_a), ctx->env);
+        type_arrow(head_coll, head_a), ctx->env);
     infer_env_insert(ctx->env, "head", head_sc);
 
-    /* ∀a. List a → List a   (tail) */
+    /* ∀a. Coll a → Coll a   (tail) */
     Type *tail_a = infer_fresh(ctx);
+    Type *tail_in = type_coll();
+    tail_in->element_type = tail_a;
+    Type *tail_out = type_coll();
+    tail_out->element_type = tail_a;
     TypeScheme *tail_sc = infer_generalise(ctx,
-        type_arrow(type_list(&tail_a, 1), type_list(&tail_a, 1)), ctx->env);
+        type_arrow(tail_in, tail_out), ctx->env);
     infer_env_insert(ctx->env, "tail", tail_sc);
 
     // Arithmetic: ∀a. a -> List a -> a

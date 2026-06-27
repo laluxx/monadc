@@ -5,7 +5,8 @@
 #include <string.h>
 #include <stdbool.h>
 
-/// TODO [0/1]
+/// TODO [0/2]
+// - [ ] First optimize the normal path, then
 // - [ ] pmatch should always produce jump tables when appropriate
 
 extern const char *layout_get_field_name(const char *layout_name, int index);
@@ -150,18 +151,18 @@ ASTPattern parse_single_pattern(Parser *p) {
         int count = 0, cap = 0;
         ASTPattern *tail = NULL;
 
-	        while (!parser_at(p, close_tok) &&
-	               !parser_at(p, TOK_PIPE)     &&
-	               !(parser_at(p, TOK_SYMBOL) && p->current.value &&
-	                 strcmp(p->current.value, "|") == 0) &&
-	               !parser_at(p, TOK_EOF)) {
-	            if (parser_at(p, TOK_SYMBOL) && p->current.value &&
-	                strcmp(p->current.value, ",") == 0) {
-	                parser_advance(p);
-	                continue;
-	            }
-	            /* Detect fused token like "_|xs" or "x|xs" — symbol containing '|' */
-	            if (p->current.type == TOK_SYMBOL && p->current.value) {
+        while (!parser_at(p, close_tok) &&
+               !parser_at(p, TOK_PIPE)     &&
+               !(parser_at(p, TOK_SYMBOL) && p->current.value &&
+                 strcmp(p->current.value, "|") == 0) &&
+               !parser_at(p, TOK_EOF)) {
+            if (parser_at(p, TOK_SYMBOL) && p->current.value &&
+                strcmp(p->current.value, ",") == 0) {
+                parser_advance(p);
+                continue;
+            }
+            /* Detect fused token like "_|xs" or "x|xs" — symbol containing '|' */
+            if (p->current.type == TOK_SYMBOL && p->current.value) {
                 const char *pipe = strchr(p->current.value, '|');
                 if (pipe) {
                     /* Split: part before '|' is an element pattern */
@@ -691,11 +692,22 @@ static AST *make_count_eq(const char *param_name, int n) {
     return make_list(items, 3);
 }
 
-// Helper: (param i) - Unified Indexing
+// Helper: element access for collection patterns.
 static AST *make_index_access(const char *param_name, int idx) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d", idx);
-    AST *items[] = {sym(param_name), ast_new_number((double)idx, buf)};
+    AST *coll = sym(param_name);
+
+    if (idx > 0) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d", idx);
+        AST *drop_items[] = {
+            sym("rt_coll_drop"),
+            coll,
+            ast_new_number((double)idx, buf)
+        };
+        coll = make_list(drop_items, 3);
+    }
+
+    AST *items[] = {sym("head"), coll};
     return make_list(items, 2);
 }
 

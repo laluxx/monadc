@@ -1,0 +1,18 @@
+;; TEST-ID: tests.wisp.multiline-docstring-tests
+;; TEST-CONTEXT: monadc.context.tests.core-prelude-module-tests, monadc.context.tests.wisp-define-sugar
+;; TEST-PURPOSE: Wisp preserves a multiline docstring before an active tests block with trailing string labels.
+;; TEST-ATOM: A multiline :doc string does not leave the reader inside a string before later Wisp tests.
+;; TEST-EXPECT: parse-json
+;; TEST-TIER: regression
+;; TEST-MENU: wisp
+;; TEST-MENU-PATH: wisp/multiline-docstring-tests
+;; TEST-CLI-TARGET: wisp multiline-docstring-tests
+
+(module Wisp.MultilineDocstringTests [])
+
+define [epsilon :: Float] 1e-12
+  :doc "Default floating tolerance
+        used by iterative approximations."
+
+tests [0/1]
+  assert-eq 1 1 "trailing string assert"

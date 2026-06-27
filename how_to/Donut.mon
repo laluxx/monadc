@@ -1,102 +1,134 @@
 ;;; Donut.mon --- The spinning donut
 
-;; Author: Laluxx
-;; Version: 0.0.1
-;; Keywords: cli terminal donut example
+:Author   Laluxx
+:Version  0.0.1
+:Keywords cli terminal donut example
 
 ;;; Commentary:
 
-;
-;                 @@@@@@@@@@
-;            $$$$$$$########$$$$$
-;         $$$####*****!!!!!****####
-;       #####****!!*!!!!!=!!!!*!****#
-;     *###*****!!!===;;;;;;;====!!!!!**
-;    *****!!*!!==;:::~~~~~~~~::;;==!!!!!
-;   !***!*!!!==;::~-,,.....,,-~~:;;===!!=
-;  !!!!!!!!==;;~~-,...........,--::;===!=
-;  !!!!!!!==;::~-......   ......-~:;;;===;
-;  =!!!!===;;:~-,...         ...,-~::;;===;
-;  ==!!===;;::~-,..           .,-~:;;;===;;
-;  ;=======;;:~~-.,          :;;::;;=====;:
-;  ;;=======;;;:::::       ;!***!!======;:
-;  ~;;;===========!!***#$$$$$##***!!!==;~
-;   ~:;;=======!!!**##$$@@@@$$$#**!!!=;~
-;    -::;;=====!!!**##$$$$$$###**!!=;;-
-;     ,~:;;;;==!!!!***######*****!=;~.
-;       ,-~::;;===!!!*!!!!!!*!!=;:~.
-;         .-~~:;:;;===!!!!==;;:~,
-;            ..,--~~~~~~~~--,.
+                 @@@@@@@@@@
+            $$$$$$$########$$$$$
+         $$$####*****!!!!!****####
+       #####****!!*!!!!!=!!!!*!****#
+     *###*****!!!===;;;;;;;====!!!!!**
+    *****!!*!!==;:::~~~~~~~~::;;==!!!!!
+   !***!*!!!==;::~-,,.....,,-~~:;;===!!=
+  !!!!!!!!==;;~~-,...........,--::;===!=
+  !!!!!!!==;::~-......   ......-~:;;;===;
+  =!!!!===;;:~-,...         ...,-~::;;===;
+  ==!!===;;::~-,..           .,-~:;;;===;;
+  ;=======;;:~~-.,          :;;::;;=====;:
+  ;;=======;;;:::::       ;!***!!======;:
+  ~;;;===========!!***#$$$$$##***!!!==;~
+   ~:;;=======!!!**##$$@@@@$$$#**!!!=;~
+    -::;;=====!!!**##$$$$$$###**!!=;;-
+     ,~:;;;;==!!!!***######*****!=;~.
+       ,-~::;;===!!!*!!!!!!*!!=;:~.
+         .-~~:;:;;===!!!!==;;:~,
+            ..,--~~~~~~~~--,.
 
 
 ;;; Code:
 
-import Math
-
-define shades ".,-~:;=!*#$@"
-
-define L :: Float -> ((Float, Float))
-  s -> map (sin && cos) [0.0, s .. τ]
-
-;; TODO
-out a = [] 0.0
+define [shades :: (Char)]
+  ⌜'.' ',' '-' '~' ':' ';' '=' '!' '*' '#' '$' '@'⌝
 
 
+define clamp :: Int -> Int -> Int -> Int
+  lo hi x | x < lo    -> lo
+          | x > hi    -> hi
+          | otherwise -> x
 
-;; Not converted
 
-fn sweep(step) {
- mut out,a = [],p0.0
- while a < TAU { out = out.append([sin(a), cos(a)]) a += step }
- out
-}
+define shade-index :: Float -> Int
+  light -> clamp 0 11 (Int (light * 8.0))
 
-fn shade(light) {
- def i = int(light * 8.0)
- SHADES[i < 0 ? 0 : i > 11 ? 11 : i]
-}
 
-fn draw(c, depth, tube, ring, w, h, rx, ry) {
- mut i = 0
- while i < depth.len { depth[i] = 0.0 i += 1 }
- canvas_clear(c)
+define shade :: Float -> Char
+  light -> shades[(shade-index light)]
 
- def sx, cx, sy, cy = sin(rx), cos(rx), sin(ry), cos(ry)
- def ox, oy, kx, ky = w / 2, h / 2, w * 0.38, h * 0.72
 
- for t in tube {
-  def st, ct, r = t[0], t[1], t[1] + 2.0
+define sweep :: Float -> ((Float, Float))
+  s -> map (sin && cos) ⌜0.0, s .. τ⌝
 
-  for p in ring {
-   def sp, cp = p[0], p[1]
-   def z = 1.0 / (5.0 + cx * r * sp + st * sx)
+sweep :: Float -> ((Float, Float))
+sweep s -> map (sin && cos) ⌜0.0, s .. τ⌝
 
-   def x = int(ox + kx * z * (r * (cy * cp + sx * sy * sp) - st * cx * sy))
-   def y = int(oy - ky * z * (r * (sy * cp - sx * cy * sp) + st * cx * cy))
-   def o = x + y * w
 
-   if x > 0 && x < w && y > 0 && y < h && z > depth[o] {
-    def light = cp * ct * sy - cx * ct * sp - sx * st + cy * (cx * st - ct * sx * sp)
+define inside? :: Int -> Int -> Int -> Int -> Bool
+  w h x y -> and x > 0 and x < w
+                 y > 0 and y < h
 
-    if light > 0.0 {
-     depth[o] = z
-     def _ = canvas_set(c, x, y, shade(light), 6, 0)
-    }
-   }
-  }
- }
 
- canvas_refresh(c)
-}
+define visible? :: Int -> Int -> Int -> Int -> Float -> Bool
+  w h x y light -> and inside? w h x y
+                       light > 0.0
 
-def tube = sweep(0.07)
-def ring = sweep(0.02)
 
-mut rx = 0.0
-mut ry = 0.0
+define clear-depth :: ?
+  depth ->
+    for i -> [0 .. (count depth - 1)]
+      depth[i] <- 0.0
 
-tui_canvas_loop(fn(c, depth, w, h) {
- draw(c, depth, tube, ring, w, h, rx, ry)
- rx += 0.04
- ry += 0.02
-})
+define draw :: ?
+  c depth tube ring w h rx ry ->
+
+    clear-depth depth
+    canvas-clear c
+
+    def ⌜sx⌝ = sin(rx)  def ⌜cx⌝ = cos(rx)
+    def ⌜sy⌝ = sin(ry)  def ⌜cy⌝ = cos(ry)
+
+          w          h
+    ox = ───   oy = ───                 ; Even if we use = hinting at a variable,
+          2          2                  ; the compiler should be smart enough to constant fold it into a pure value.
+
+    def kx 0.38w   def ky 0.72h
+
+    for t -> tube
+      def ⌜st⌝ = t[0]
+      def ⌜ct⌝ = t[1]
+      def ⌜r⌝  = (ct + 2.0)
+
+      for p -> ring
+        def sp p[0]   def cp p[1]
+
+                             1.0
+        def z = ───────────────────────────────
+                 (5.0 + cx * r * sp + st * sx)
+
+        def x ox + kx * z *
+                (r * (cy * cp + sx * sy * sp) - st * cx * sy)
+
+        def y Oy - ky * z *
+                (r * (sy * cp - sx * cy * sp) + st * cx * cy)
+
+        def light
+          cp * ct * sy
+          - cx * ct * sp
+          - sx * st
+          + cy * (cx * st - ct * sx * sp)
+
+        if visible? w h x y light
+          def o (x + y * w)
+
+          if z > depth[o]
+            depth[o] <- z
+            canvas-set c x y (shade light) 6 0
+
+    canvas-refresh c
+
+
+define tube (sweep 0.07)
+define ring (sweep 0.02)
+
+rx = 0.0
+ry = 0.0
+
+
+
+Define tui-canvas-loop :: ?
+   c depth w h -> draw c depth tube ring w h rx ry
+                 rx ⥆ 0.04
+                 ry ⥆ 0.02
+

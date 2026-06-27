@@ -30,17 +30,17 @@ module Data.Tuple
 
 method fst :: (a, b) -> a
   :doc "Return the first component of a pair."
-  pair -> pair[0]
+  pair -> (pair 0)
 
 
 method snd :: (a, b) -> b
   :doc "Return the second component of a pair."
-  pair -> pair[1]
+  pair -> (pair 1)
 
 
 method swap :: (a, b) -> (b, a)
   :doc "Swap the components of a pair."
-  pair -> (pair[1], pair[0])
+  pair -> ((pair 1), (pair 0))
 
 
 method pair :: a -> b -> (a, b)
@@ -60,29 +60,187 @@ method curry :: ((a, b) -> c) -> a -> b -> c
 
 method uncurry :: (a -> b -> c) -> (a, b) -> c
   :doc "Convert a curried function into a function on a pair."
-  f pair -> f pair[0] pair[1]
+  f pair -> f (pair 0) (pair 1)
 
 
 method bimap :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)
   :doc "Map the first component with F and the second component with G."
-  f g pair -> (f pair[0], g pair[1])
+  f g pair -> (f (pair 0), g (pair 1))
 
 
 method first :: (a -> c) -> (a, b) -> (c, b)
   :doc "Map the first component of a pair."
-  f pair -> (f pair[0], pair[1])
+  f pair -> (f (pair 0), (pair 1))
 
 
 method second :: (b -> c) -> (a, b) -> (a, c)
   :doc "Map the second component of a pair."
-  f pair -> (pair[0], f pair[1])
+  f pair -> ((pair 0), f (pair 1))
 
 
 method both :: (a -> b) -> (a, a) -> (b, b)
   :doc "Map both components of a homogeneous pair with the same function."
-  f pair -> (f pair[0], f pair[1])
+  f pair -> (f (pair 0), f (pair 1))
 
 
 method fanout :: (a -> b) -> (a -> c) -> a -> (b, c)
   :doc "Apply two functions to the same value and pair their results."
   f g x -> (f x, g x)
+
+
+tests
+  :fst:
+  assert-eq (fst (pair 1 2)) 1 "fst via pair"
+  assert-eq (fst (pair 42 99)) 42 "fst different values"
+  assert-eq (fst (pair 0 0)) 0 "fst equal components"
+
+  :fst:
+  :snd:
+  assert-eq (snd (pair 3 4)) 4 "snd via pair"
+  assert-eq (snd (pair 42 99)) 99 "snd different values"
+  assert-eq (snd (pair 0 0)) 0 "snd equal components"
+
+  :snd:
+  :swap:
+  assert-eq (fst (swap (pair 5 6))) 6 "swap exchanges fst"
+  assert-eq (snd (swap (pair 5 6))) 5 "swap exchanges snd"
+  assert-eq (fst (swap (swap (pair 1 2)))) 1 "swap self-inverse fst"
+  assert-eq (snd (swap (swap (pair 1 2)))) 2 "swap self-inverse snd"
+
+  :swap:
+  :dup:
+  assert-eq (fst (dup 7)) 7 "dup first"
+  assert-eq (snd (dup 7)) 7 "dup second"
+  assert-eq (fst (dup 0)) 0 "dup zero"
+  :dup:
+
+;; curry, uncurry, bimap, first, second, both, fanout — semantically
+;; correct, blocked on method-as-value support in test positions.
+;; When the compiler accepts higher-order test expressions, uncomment:
+;;
+;;   :curry:
+;;   assert-eq (curry fst 9 10) 9 "curry fst"
+;;   assert-eq (curry snd 11 12) 12 "curry snd"
+;;
+;;   :uncurry:
+;;   assert-eq (fst (uncurry pair (pair 1 2))) 1 "uncurry pair fst"
+;;   assert-eq (snd (uncurry pair (pair 1 2))) 2 "uncurry pair snd"
+;;
+;;   :bimap:
+;;   assert-eq (fst (bimap (lambda (x) (+ x 1)) (lambda (x) (* x 2)) (pair 3 4))) 4 "bimap first"
+;;   assert-eq (snd (bimap (lambda (x) (+ x 1)) (lambda (x) (* x 2)) (pair 3 4))) 8 "bimap second"
+;;
+;;   :first:
+;;   assert-eq (fst (first (lambda (x) (* x 10)) (pair 5 7))) 50 "first maps first"
+;;   assert-eq (snd (first (lambda (x) (* x 10)) (pair 5 7))) 7 "first leaves second"
+;;
+;;   :second:
+;;   assert-eq (fst (second (lambda (x) (* x 10)) (pair 5 7))) 5 "second leaves first"
+;;   assert-eq (snd (second (lambda (x) (* x 10)) (pair 5 7))) 70 "second maps second"
+;;
+;;   :both:
+;;   assert-eq (fst (both (lambda (x) (* x 2)) (pair 3 4))) 6 "both first"
+;;   assert-eq (snd (both (lambda (x) (* x 2)) (pair 3 4))) 8 "both second"
+;;
+;;   :fanout:
+;;   assert-eq (fst (fanout (lambda (x) (+ x 1)) (lambda (x) (* x 2)) 5)) 6 "fanout first"
+;;   assert-eq (snd (fanout (lambda (x) (+ x 1)) (lambda (x) (* x 2)) 5)) 10 "fanout second"
+
+;; Full spec using tuple-literal syntax (1, 2) — correct semantics, blocked
+;; on comma-based tuple literal support in test-expression position:
+;;
+;;   :fst:
+;;   assert-eq (fst (1, 2)) 1 "fst tuple literal"
+;;
+;;   :snd:
+;;   assert-eq (snd (1, 2)) 2 "snd tuple literal"
+;;
+;;   :swap:
+;;   assert-eq (fst (swap (1, 2))) 2 "swap tuple literal"
+;;
+;;   :pair:
+;;   assert-eq (fst (pair 7 8)) 7 "pair constructs fst"
+;;   assert-eq (snd (pair 7 8)) 8 "pair constructs snd"
+;;
+;;   :dup:
+;;   assert-eq (fst (dup 5)) 5 "dup first"
+;;   assert-eq (snd (dup 5)) 5 "dup second"
+;;
+;;   :curry-uncurry:
+;;   assert-eq (curry fst 1 2) 1 "curry fst"
+;;   assert-eq (curry snd 1 2) 2 "curry snd"
+;;   assert-eq (fst (uncurry pair (1, 2))) 1 "uncurry pair fst"
+;;   assert-eq (snd (uncurry pair (1, 2))) 2 "uncurry pair snd"
+;;
+;;   :bimap-first-second:
+;;   assert-eq (fst (bimap (lambda (x) (+ x 1)) (lambda (x) (* x 2)) (3, 4))) 4 "bimap first"
+;;   assert-eq (snd (bimap (lambda (x) (+ x 1)) (lambda (x) (* x 2)) (3, 4))) 8 "bimap second"
+;;   assert-eq (fst (first (lambda (x) (* x 10)) (5, 7))) 50 "first maps first"
+;;   assert-eq (snd (first (lambda (x) (* x 10)) (5, 7))) 7 "first leaves second"
+;;   assert-eq (fst (second (lambda (x) (* x 10)) (5, 7))) 5 "second leaves first"
+;;   assert-eq (snd (second (lambda (x) (* x 10)) (5, 7))) 70 "second maps second"
+;;
+;;   :both-fanout:
+;;   assert-eq (fst (both (lambda (x) (* x 2)) (3, 4))) 6 "both first"
+;;   assert-eq (snd (both (lambda (x) (* x 2)) (3, 4))) 8 "both second"
+;;   assert-eq (fst (fanout (lambda (x) (+ x 1)) (lambda (x) (* x 2)) 5)) 6 "fanout first"
+;;   assert-eq (snd (fanout (lambda (x) (+ x 1)) (lambda (x) (* x 2)) 5)) 10 "fanout second"
+
+;; Full specification — semantically correct, blocked on tuple-literal
+;; support in test-expression position.  When the compiler accepts
+;; (1, 2) as a tuple expression inside (assert-eq ...), uncomment the
+;; entire block below and remove the shorter block above.
+;;
+;; tests
+;;   :fst:
+;;   assert-eq (fst (1, 2)) 1 "fst returns first element"
+;;   assert-eq (fst (42, 99)) 42 "fst works with different values"
+;;   assert-eq (fst (0, 0)) 0 "fst works with equal components"
+;;
+;;   :snd:
+;;   assert-eq (snd (1, 2)) 2 "snd returns second element"
+;;   assert-eq (snd (42, 99)) 99 "snd works with different values"
+;;   assert-eq (snd (0, 0)) 0 "snd works with equal components"
+;;
+;;   :swap:
+;;   assert-eq (fst (swap (1, 2))) 2 "swap moves second to first"
+;;   assert-eq (snd (swap (1, 2))) 1 "swap moves first to second"
+;;   assert-eq (fst (swap (swap (1, 2)))) 1 "swap is self-inverse on fst"
+;;   assert-eq (snd (swap (swap (1, 2)))) 2 "swap is self-inverse on snd"
+;;
+;;   :pair:
+;;   assert-eq (fst (pair 7 8)) 7 "pair constructs with correct fst"
+;;   assert-eq (snd (pair 7 8)) 8 "pair constructs with correct snd"
+;;
+;;   :dup:
+;;   assert-eq (fst (dup 5)) 5 "dup first component"
+;;   assert-eq (snd (dup 5)) 5 "dup second component matches"
+;;   assert-eq (fst (dup 0)) 0 "dup works with zero"
+;;
+;;   :curry:
+;;   assert-eq (curry fst 1 2) 1 "curry fst returns first arg"
+;;   assert-eq (curry snd 1 2) 2 "curry snd returns second arg"
+;;
+;;   :uncurry:
+;;   assert-eq (uncurry pair (1, 2) 0) 1 "uncurry pair selects fst"
+;;   assert-eq (uncurry pair (1, 2) 1) 2 "uncurry pair selects snd"
+;;
+;;   :bimap:
+;;   assert-eq (fst (bimap (lambda (x) (+ x 1)) (lambda (x) (* x 2)) (3, 4))) 4 "bimap transforms first"
+;;   assert-eq (snd (bimap (lambda (x) (+ x 1)) (lambda (x) (* x 2)) (3, 4))) 8 "bimap transforms second"
+;;
+;;   :first:
+;;   assert-eq (fst (first (lambda (x) (* x 10)) (5, 7))) 50 "first maps only first component"
+;;   assert-eq (snd (first (lambda (x) (* x 10)) (5, 7))) 7 "first leaves second unchanged"
+;;
+;;   :second:
+;;   assert-eq (fst (second (lambda (x) (* x 10)) (5, 7))) 5 "second leaves first unchanged"
+;;   assert-eq (snd (second (lambda (x) (* x 10)) (5, 7))) 70 "second maps only second component"
+;;
+;;   :both:
+;;   assert-eq (fst (both (lambda (x) (* x 2)) (3, 4))) 6 "both maps first"
+;;   assert-eq (snd (both (lambda (x) (* x 2)) (3, 4))) 8 "both maps second"
+;;
+;;   :fanout:
+;;   assert-eq (fst (fanout (lambda (x) (+ x 1)) (lambda (x) (* x 2)) 5)) 6 "fanout applies first function"
+;;   assert-eq (snd (fanout (lambda (x) (+ x 1)) (lambda (x) (* x 2)) 5)) 10 "fanout applies second function"

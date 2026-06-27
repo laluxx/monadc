@@ -85,6 +85,19 @@ extern int          g_comment_cap;
 
 void comment_map_build(const char *source);
 
+/// Drawer map — pre-scanned :Name: ... :Name: spans
+
+typedef struct DrawerSpan {
+    int open_pos;   /* position of ':' in opening :Name: marker */
+    int close_end;  /* position after closing marker line */
+} DrawerSpan;
+
+extern DrawerSpan *g_drawer_spans;
+extern int         g_drawer_count;
+extern int         g_drawer_cap;
+
+void drawer_map_build(const char *source);
+
 /// Pattern matching
 
 typedef enum {
@@ -263,6 +276,9 @@ typedef struct AST {
         struct {
             char  *name;           // "Eq"
             char  *type_var;       // "a"
+            char **superclass_names;     // ["Eq"] in (class Eq a => Ord a ...)
+            char **superclass_type_vars; // ["a"]
+            int    superclass_count;
             char **assoc_types;    // ["Result"]
             int    assoc_count;
             // Method signatures: name + type string
@@ -340,6 +356,8 @@ AST *ast_new_data(const char *name,
                   ASTDataConstructor *constructors, int constructor_count,
                   char **deriving, int deriving_count);
 AST *ast_new_class(const char *name, const char *type_var,
+                   char **superclass_names, char **superclass_type_vars,
+                   int superclass_count,
                    char **assoc_types, int assoc_count,
                    char **method_names, char **method_types, int method_count,
                    char **default_names, AST **default_bodies, int default_count);

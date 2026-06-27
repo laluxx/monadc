@@ -1,0 +1,423 @@
+;;; Term.mon --- POSIX terminal and termios bindings
+
+;; Author: Laluxx
+;; Version: 0.7.0
+;; Keywords: system posix terminal termios ioctl
+
+;;; Commentary:
+
+;; Canonical home: System.Posix.Term. This module is platform-specific and is
+;; intentionally not part of the pure prelude.
+
+;;; Code:
+
+module System.Posix.Term
+  [Termios WinSize
+   TCGETS TCSETS TCSETSW TCSETSF TCGETA TCSETA TCSETAW TCSETAF
+   TCSBRK TCXONC TCFLSH TIOCEXCL TIOCNXCL TIOCSCTTY TIOCGPGRP TIOCSPGRP
+   TIOCOUTQ TIOCSTI TIOCGWINSZ TIOCSWINSZ TIOCMGET TIOCMBIS TIOCMBIC
+   TIOCMSET TIOCGSOFTCAR TIOCSSOFTCAR TIOCLINUX TIOCCONS TIOCGSERIAL
+   TIOCSSERIAL TIOCPKT TIOCNOTTY TIOCSETD TIOCGETD TCSBRKP TIOCSBRK
+   TIOCCBRK TIOCGSID
+   IGNBRK BRKINT IGNPAR PARMRK INPCK ISTRIP INLCR IGNCR ICRNL IXON
+   IXOFF IXANY IMAXBEL IUTF8
+   OPOST ONLCR OCRNL ONOCR ONLRET OFILL OFDEL NLDLY CRDLY TABDLY BSDLY
+   VTDLY FFDLY
+   CSIZE CS5 CS6 CS7 CS8 CSTOPB CREAD PARENB PARODD HUPCL CLOCAL
+   B0 B50 B75 B110 B134 B150 B200 B300 B600 B1200 B1800 B2400 B4800
+   B9600 B19200 B38400 B57600 B115200 B230400
+   ISIG ICANON XCASE ECHO ECHOE ECHOK ECHONL NOFLSH TOSTOP ECHOCTL
+   ECHOPRT ECHOKE FLUSHO PENDIN IEXTEN
+   VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
+   TIOCM_LE TIOCM_DTR TIOCM_RTS TIOCM_ST TIOCM_SR TIOCM_CTS TIOCM_CAR
+   TIOCM_RNG TIOCM_DSR TIOCM_CD TIOCM_RI
+   STDIN STDOUT STDERR
+   term-or3 term-or4 term-or5 raw-iflag-mask raw-lflag-mask cbreak-lflag-mask
+   sys-read sys-write sys-ioctl
+   tty-get-attr tty-set-attr tty-set-attr-drain tty-set-attr-flush
+   tty-raw-termios tty-cbreak-termios tty-raw-mode tty-cbreak-mode
+   get-winsize set-winsize tty-flush tty-flow tty-send-break
+   tty-get-modem tty-set-modem tty-set-modem-bits tty-clear-modem-bits
+   tty-get-pgrp tty-set-pgrp tty-get-sid tty-make-controlling
+   tty-release-controlling read-char write-char write-str read-buf]
+
+
+layout Termios
+  [c_iflag  :: Int] [c_oflag  :: Int]
+  [c_cflag  :: Int] [c_lflag  :: Int]
+  [c_line   :: Int] [c_cc     :: Int]
+  [c_ispeed :: Int] [c_ospeed :: Int]
+
+
+layout WinSize
+  [ws_row    :: Int]
+  [ws_col    :: Int]
+  [ws_xpixel :: Int]
+  [ws_ypixel :: Int]
+
+
+define TCGETS      0x5401
+define TCSETS      0x5402
+define TCSETSW     0x5403
+define TCSETSF     0x5404
+define TCGETA      0x5405
+define TCSETA      0x5406
+define TCSETAW     0x5407
+define TCSETAF     0x5408
+define TCSBRK      0x5409
+define TCXONC      0x540A
+define TCFLSH      0x540B
+define TIOCEXCL    0x540C
+define TIOCNXCL    0x540D
+define TIOCSCTTY   0x540E
+define TIOCGPGRP   0x540F
+define TIOCSPGRP   0x5410
+define TIOCOUTQ    0x5411
+define TIOCSTI     0x5412
+define TIOCGWINSZ  0x5413
+define TIOCSWINSZ  0x5414
+define TIOCMGET    0x5415
+define TIOCMBIS    0x5416
+define TIOCMBIC    0x5417
+define TIOCMSET    0x5418
+define TIOCGSOFTCAR 0x5419
+define TIOCSSOFTCAR 0x541A
+define TIOCLINUX   0x541C
+define TIOCCONS    0x541D
+define TIOCGSERIAL 0x541E
+define TIOCSSERIAL 0x541F
+define TIOCPKT     0x5420
+define TIOCNOTTY   0x5422
+define TIOCSETD    0x5423
+define TIOCGETD    0x5424
+define TCSBRKP     0x5425
+define TIOCSBRK    0x5427
+define TIOCCBRK    0x5428
+define TIOCGSID    0x5429
+
+
+define IGNBRK  0x0001
+define BRKINT  0x0002
+define IGNPAR  0x0004
+define PARMRK  0x0008
+define INPCK   0x0010
+define ISTRIP  0x0020
+define INLCR   0x0040
+define IGNCR   0x0080
+define ICRNL   0x0100
+define IXON    0x0400
+define IXANY   0x0800
+define IXOFF   0x1000
+define IMAXBEL 0x2000
+define IUTF8   0x4000
+
+
+define OPOST   0x0001
+define ONLCR   0x0004
+define OCRNL   0x0008
+define ONOCR   0x0010
+define ONLRET  0x0020
+define OFILL   0x0040
+define OFDEL   0x0080
+define NLDLY   0x0100
+define CRDLY   0x0600
+define TABDLY  0x1800
+define BSDLY   0x2000
+define VTDLY   0x4000
+define FFDLY   0x8000
+
+
+define CSIZE   0x0030
+define CS5     0x0000
+define CS6     0x0010
+define CS7     0x0020
+define CS8     0x0030
+define CSTOPB  0x0040
+define CREAD   0x0080
+define PARENB  0x0100
+define PARODD  0x0200
+define HUPCL   0x0400
+define CLOCAL  0x0800
+
+
+define B0      0x0000
+define B50     0x0001
+define B75     0x0002
+define B110    0x0003
+define B134    0x0004
+define B150    0x0005
+define B200    0x0006
+define B300    0x0007
+define B600    0x0008
+define B1200   0x0009
+define B1800   0x000A
+define B2400   0x000B
+define B4800   0x000C
+define B9600   0x000D
+define B19200  0x000E
+define B38400  0x000F
+define B57600  0x1001
+define B115200 0x1002
+define B230400 0x1003
+
+
+define ISIG    0x0001
+define ICANON  0x0002
+define XCASE   0x0004
+define ECHO    0x0008
+define ECHOE   0x0010
+define ECHOK   0x0020
+define ECHONL  0x0040
+define NOFLSH  0x0080
+define TOSTOP  0x0100
+define ECHOCTL 0x0200
+define ECHOPRT 0x0400
+define ECHOKE  0x0800
+define FLUSHO  0x1000
+define PENDIN  0x4000
+define IEXTEN  0x8000
+
+
+define VEOF    4
+define VEOL    11
+define VERASE  2
+define VINTR   0
+define VKILL   3
+define VMIN    6
+define VQUIT   1
+define VSTART  8
+define VSTOP   9
+define VSUSP   10
+define VTIME   5
+
+
+define TIOCM_LE   0x001
+define TIOCM_DTR  0x002
+define TIOCM_RTS  0x004
+define TIOCM_ST   0x008
+define TIOCM_SR   0x010
+define TIOCM_CTS  0x020
+define TIOCM_CAR  0x040
+define TIOCM_RNG  0x080
+define TIOCM_DSR  0x100
+define TIOCM_CD   TIOCM_CAR
+define TIOCM_RI   TIOCM_RNG
+
+
+define STDIN  0
+define STDOUT 1
+define STDERR 2
+
+
+define term-or3 :: Int -> Int -> Int -> Int
+  a b c -> bit-or (bit-or a b) c
+
+
+define term-or4 :: Int -> Int -> Int -> Int -> Int
+  a b c d -> bit-or (bit-or (bit-or a b) c) d
+
+
+define term-or5 :: Int -> Int -> Int -> Int -> Int -> Int
+  a b c d e -> bit-or (bit-or (bit-or (bit-or a b) c) d) e
+
+
+define raw-iflag-mask (term-or5 BRKINT ICRNL INPCK ISTRIP IXON)
+
+
+define raw-lflag-mask (term-or4 ECHO ICANON IEXTEN ISIG)
+
+
+define cbreak-lflag-mask (bit-or ECHO ICANON)
+
+
+define sys-read :: Int -> *U8 -> Int -> Int
+  fd buf len -> (asm mov 0 %rax mov fd %rdi mov buf %rsi mov len %rdx syscall ret)
+
+
+define sys-write :: Int -> *U8 -> Int -> Int
+  fd buf len -> (asm mov 1 %rax mov fd %rdi mov buf %rsi mov len %rdx syscall ret)
+
+
+define sys-ioctl :: Int -> Int -> *a -> Int
+  fd req arg -> (asm mov 16 %rax mov fd %rdi mov req %rsi mov arg %rdx syscall ret)
+
+
+define tty-get-attr :: Int -> Termios
+  :doc "Reads current terminal attributes via TCGETS."
+  fd -> def t (Termios 0 0 0 0 0 0 0 0)
+        def ignored (sys-ioctl fd TCGETS &t)
+        t
+
+
+define tty-set-attr :: Int -> Termios -> Int
+  :doc "Applies terminal attributes immediately via TCSETS."
+  fd t -> (sys-ioctl fd TCSETS &t)
+
+
+define tty-set-attr-drain :: Int -> Termios -> Int
+  :doc "Applies terminal attributes after output drains via TCSETSW."
+  fd t -> (sys-ioctl fd TCSETSW &t)
+
+
+define tty-set-attr-flush :: Int -> Termios -> Int
+  :doc "Applies terminal attributes after drain and input flush via TCSETSF."
+  fd t -> (sys-ioctl fd TCSETSF &t)
+
+
+define tty-raw-termios :: Termios -> Termios
+  :doc "Return a raw-mode Termios value derived from ORIGINAL."
+  original -> (Termios
+                 (original.c_iflag & (~ raw-iflag-mask))
+                 (original.c_oflag & (~ OPOST))
+                 (bit-or original.c_cflag CS8)
+                 (original.c_lflag & (~ raw-lflag-mask))
+                 original.c_line
+                 original.c_cc
+                 original.c_ispeed
+                 original.c_ospeed)
+
+
+define tty-cbreak-termios :: Termios -> Termios
+  :doc "Return a cbreak-mode Termios value derived from ORIGINAL."
+  original -> (Termios
+                 original.c_iflag
+                 original.c_oflag
+                 original.c_cflag
+                 (original.c_lflag & (~ cbreak-lflag-mask))
+                 original.c_line
+                 original.c_cc
+                 original.c_ispeed
+                 original.c_ospeed)
+
+
+define tty-raw-mode :: Int -> Termios
+  :doc "Enable raw mode and return the original Termios for restoration."
+  fd -> def original (tty-get-attr fd)
+        def ignored (tty-set-attr fd (tty-raw-termios original))
+        original
+
+
+define tty-cbreak-mode :: Int -> Termios
+  :doc "Enable cbreak mode and return the original Termios for restoration."
+  fd -> def original (tty-get-attr fd)
+        def ignored (tty-set-attr fd (tty-cbreak-termios original))
+        original
+
+
+define get-winsize :: Int -> WinSize
+  :doc "Return terminal window dimensions via TIOCGWINSZ."
+  fd -> def ws (WinSize 0 0 0 0)
+        def ignored (sys-ioctl fd TIOCGWINSZ &ws)
+        ws
+
+
+define set-winsize :: Int -> WinSize -> Int
+  :doc "Set terminal window dimensions via TIOCSWINSZ."
+  fd ws -> (sys-ioctl fd TIOCSWINSZ &ws)
+
+
+define tty-flush :: Int -> Int -> Int
+  :doc "Flush terminal queue: 0 input, 1 output, 2 both."
+  fd queue -> (sys-ioctl fd TCFLSH &queue)
+
+
+define tty-flow :: Int -> Int -> Int
+  :doc "Suspend or resume terminal I/O flow."
+  fd action -> (sys-ioctl fd TCXONC &action)
+
+
+define tty-send-break :: Int -> Int -> Int
+  :doc "Send a terminal break."
+  fd duration -> (sys-ioctl fd TCSBRK &duration)
+
+
+define tty-get-modem :: Int -> Int
+  :doc "Return current modem line bits."
+  fd -> def bits 0
+        def ignored (sys-ioctl fd TIOCMGET &bits)
+        bits
+
+
+define tty-set-modem :: Int -> Int -> Int
+  fd bits -> (sys-ioctl fd TIOCMSET &bits)
+
+
+define tty-set-modem-bits :: Int -> Int -> Int
+  fd bits -> (sys-ioctl fd TIOCMBIS &bits)
+
+
+define tty-clear-modem-bits :: Int -> Int -> Int
+  fd bits -> (sys-ioctl fd TIOCMBIC &bits)
+
+
+define tty-get-pgrp :: Int -> Int
+  fd -> def pgrp 0
+        def ignored (sys-ioctl fd TIOCGPGRP &pgrp)
+        pgrp
+
+
+define tty-set-pgrp :: Int -> Int -> Int
+  fd pgrp -> (sys-ioctl fd TIOCSPGRP &pgrp)
+
+
+define tty-get-sid :: Int -> Int
+  fd -> def sid 0
+        def ignored (sys-ioctl fd TIOCGSID &sid)
+        sid
+
+
+define tty-make-controlling :: Int -> Int
+  fd -> def arg 0
+        (sys-ioctl fd TIOCSCTTY &arg)
+
+
+define tty-release-controlling :: Int -> Int
+  fd -> def arg 0
+        (sys-ioctl fd TIOCNOTTY &arg)
+
+
+define read-char :: Int -> Int
+  fd -> def c 0
+        def n (sys-read fd &c 1)
+        if n <= 0 then -1 else c
+
+
+define write-char :: Int -> Int -> Int
+  fd c -> (sys-write fd &c 1)
+
+
+define write-str :: Int -> *U8 -> Int -> Int
+  fd s len -> (sys-write fd s len)
+
+
+define read-buf :: Int -> *U8 -> Int -> Int
+  fd buf len -> (sys-read fd buf len)
+
+
+define term-test-raw-iflag :: Int -> Int
+  _ -> (tty-raw-termios (Termios raw-iflag-mask OPOST 0 raw-lflag-mask 0 0 0 0)).c_iflag
+
+
+define term-test-cbreak-lflag :: Int -> Int
+  _ -> (tty-cbreak-termios (Termios 0 0 0 cbreak-lflag-mask 0 0 0 0)).c_lflag
+
+
+tests
+  :constants:
+  assert-eq TCGETS 0x5401 "Term TCGETS"
+  assert-eq TIOCGWINSZ 0x5413 "Term TIOCGWINSZ"
+  assert-eq STDIN 0 "Term STDIN"
+  assert-eq STDOUT 1 "Term STDOUT"
+  assert-eq STDERR 2 "Term STDERR"
+  :constants:
+
+  :masks:
+  assert-eq raw-iflag-mask (term-or5 BRKINT ICRNL INPCK ISTRIP IXON) "Term raw iflag mask"
+  assert-eq raw-lflag-mask (term-or4 ECHO ICANON IEXTEN ISIG) "Term raw lflag mask"
+  assert-eq cbreak-lflag-mask (bit-or ECHO ICANON) "Term cbreak lflag mask"
+
+  :masks:
+  :layouts:
+  assert-eq (term-test-raw-iflag 0) 0 "Term raw clears input flags"
+  assert-eq (term-test-cbreak-lflag 0) 0 "Term cbreak clears local flags"
+  :layouts:

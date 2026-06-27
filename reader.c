@@ -70,6 +70,62 @@ const char *layout_get_field_name(const char *layout_name, int index) {
     return NULL;
 }
 
+typedef struct {
+    char *layout_name;
+    char *field_name;
+    char *docstring;
+} LayoutFieldDocEntry;
+
+static LayoutFieldDocEntry *g_layout_field_docs = NULL;
+static int g_layout_field_doc_count = 0;
+static int g_layout_field_doc_cap = 0;
+
+static void register_layout_field_docstring(const char *layout_name,
+                                            const char *field_name,
+                                            const char *docstring) {
+    if (!layout_name || !field_name || !docstring || !docstring[0])
+        return;
+
+    for (int i = 0; i < g_layout_field_doc_count; i++) {
+        if (strcmp(g_layout_field_docs[i].layout_name, layout_name) == 0 &&
+            strcmp(g_layout_field_docs[i].field_name, field_name) == 0) {
+            free(g_layout_field_docs[i].docstring);
+            g_layout_field_docs[i].docstring = strdup(docstring);
+            return;
+        }
+    }
+
+    if (g_layout_field_doc_count >= g_layout_field_doc_cap) {
+        g_layout_field_doc_cap =
+            g_layout_field_doc_cap == 0 ? 8 : g_layout_field_doc_cap * 2;
+        g_layout_field_docs = realloc(g_layout_field_docs,
+                                      sizeof(LayoutFieldDocEntry) *
+                                      g_layout_field_doc_cap);
+    }
+
+    g_layout_field_docs[g_layout_field_doc_count].layout_name =
+        strdup(layout_name);
+    g_layout_field_docs[g_layout_field_doc_count].field_name =
+        strdup(field_name);
+    g_layout_field_docs[g_layout_field_doc_count].docstring =
+        strdup(docstring);
+    g_layout_field_doc_count++;
+}
+
+const char *layout_get_field_docstring(const char *layout_name,
+                                       const char *field_name) {
+    if (!layout_name || !field_name)
+        return NULL;
+
+    for (int i = 0; i < g_layout_field_doc_count; i++) {
+        if (strcmp(g_layout_field_docs[i].layout_name, layout_name) == 0 &&
+            strcmp(g_layout_field_docs[i].field_name, field_name) == 0)
+            return g_layout_field_docs[i].docstring;
+    }
+
+    return NULL;
+}
+
 /// Local function tracking for the parser
 
 typedef struct {
@@ -116,6 +172,10 @@ CommentSpan *g_comment_spans = NULL;
 int          g_comment_count = 0;
 int          g_comment_cap   = 0;
 
+DrawerSpan *g_drawer_spans = NULL;
+int         g_drawer_count = 0;
+int         g_drawer_cap   = 0;
+
 static void comment_map_free(void) {
     free(g_comment_spans);
     g_comment_spans = NULL;
@@ -143,6 +203,135 @@ static int line_comment_marker_len_at(const char *s) {
     if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAF) return 3;
     if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xB0) return 3;
     return 0;
+}
+
+static void drawer_map_free(void) {
+    free(g_drawer_spans);
+    g_drawer_spans = NULL;
+    g_drawer_count = 0;
+    g_drawer_cap   = 0;
+}
+
+static void drawer_map_add(int open_pos, int close_end) {
+    if (g_drawer_count >= g_drawer_cap) {
+        g_drawer_cap = g_drawer_cap == 0 ? 8 : g_drawer_cap * 2;
+        g_drawer_spans = realloc(g_drawer_spans,
+                                  sizeof(DrawerSpan) * g_drawer_cap);
+    }
+    g_drawer_spans[g_drawer_count].open_pos  = open_pos;
+    g_drawer_spans[g_drawer_count].close_end = close_end;
+    g_drawer_count++;
+}
+
+static bool drawer_name_char(unsigned char c) {
+    return (c >= 'A' && c <= 'Z') ||
+           (c >= 'a' && c <= 'z') ||
+           (c >= '0' && c <= '9') ||
+           c == '_' || c == '-' || c == '?' || c == '!' ||
+           c == ' ' || c > 127;
+}
+
+static bool drawer_marker_at_line(const char *source,
+                                  int line_start,
+                                  int line_end,
+                                  int *marker_pos,
+                                  char **name_out) {
+    int p = line_start;
+    while (p < line_end && (source[p] == ' ' || source[p] == '\t'))
+        p++;
+
+    if (p >= line_end || source[p] != ':')
+        return false;
+
+    int name_start = p + 1;
+    int q = name_start;
+    while (q < line_end && source[q] != ':') {
+        if (!drawer_name_char((unsigned char)source[q]))
+            return false;
+        q++;
+    }
+
+    if (q >= line_end || q == name_start)
+        return false;
+
+    int r = q + 1;
+    while (r < line_end && (source[r] == ' ' || source[r] == '\t'))
+        r++;
+    if (r != line_end)
+        return false;
+
+    size_t name_len = (size_t)(q - name_start);
+    char *name = malloc(name_len + 1);
+    if (!name)
+        return false;
+    memcpy(name, source + name_start, name_len);
+    name[name_len] = '\0';
+
+    *marker_pos = p;
+    *name_out = name;
+    return true;
+}
+
+void drawer_map_build(const char *source) {
+    drawer_map_free();
+    if (!source)
+        return;
+
+    int len = (int)strlen(source);
+    int line_start = 0;
+    while (line_start < len) {
+        int line_end = line_start;
+        while (line_end < len && source[line_end] != '\n')
+            line_end++;
+
+        int marker_pos = -1;
+        char *name = NULL;
+        if (!drawer_marker_at_line(source, line_start, line_end,
+                                   &marker_pos, &name)) {
+            line_start = line_end < len ? line_end + 1 : line_end;
+            continue;
+        }
+
+        int scan_start = line_end < len ? line_end + 1 : line_end;
+        int close_end = -1;
+        int scan_line = scan_start;
+        while (scan_line < len) {
+            int scan_line_end = scan_line;
+            while (scan_line_end < len && source[scan_line_end] != '\n')
+                scan_line_end++;
+
+            int close_marker_pos = -1;
+            char *close_name = NULL;
+            if (drawer_marker_at_line(source, scan_line, scan_line_end,
+                                      &close_marker_pos, &close_name)) {
+                bool same = strcmp(name, close_name) == 0;
+                free(close_name);
+                if (same) {
+                    close_end = scan_line_end < len ? scan_line_end + 1
+                                                    : scan_line_end;
+                    break;
+                }
+            }
+
+            scan_line = scan_line_end < len ? scan_line_end + 1 : scan_line_end;
+        }
+
+        free(name);
+
+        if (close_end >= 0) {
+            drawer_map_add(marker_pos, close_end);
+            line_start = close_end;
+        } else {
+            line_start = scan_start;
+        }
+    }
+}
+
+static DrawerSpan *drawer_map_lookup(int pos) {
+    for (int i = 0; i < g_drawer_count; i++)
+        if (g_drawer_spans[i].open_pos == pos)
+            return &g_drawer_spans[i];
+    return NULL;
 }
 
 /* Pre-scan the entire source once, building the comment map.
@@ -244,7 +433,8 @@ const char *original_source = NULL;
 
 void parser_set_original_source(const char *orig_source) {
     original_source = orig_source;
-    if (orig_source) comment_map_build(orig_source);
+    if (orig_source)
+        comment_map_build(orig_source);
 }
 
 void parser_set_context(const char *filename, const char *source) {
@@ -259,7 +449,10 @@ void parser_set_context(const char *filename, const char *source) {
             free(g_local_funcs[i].name);
         g_local_func_count = 0;
     }
-    if (source) comment_map_build(source);
+    if (source) {
+        comment_map_build(source);
+        drawer_map_build(source);
+    }
 }
 
 const char *parser_get_filename(void) {
@@ -556,6 +749,38 @@ void ast_pattern_free(ASTPattern *p) {
         ast_pattern_free(p->tail);
         free(p->tail);
     }
+    if (p->ctor_fields) {
+        for (int i = 0; i < p->ctor_field_count; i++)
+            ast_pattern_free(&p->ctor_fields[i]);
+        free(p->ctor_fields);
+    }
+}
+
+static ASTPattern ast_pattern_clone(const ASTPattern *p) {
+    ASTPattern c = *p;
+    c.var_name = p->var_name ? strdup(p->var_name) : NULL;
+    c.elements = NULL;
+    c.tail = NULL;
+    c.ctor_fields = NULL;
+
+    if (p->element_count > 0 && p->elements) {
+        c.elements = malloc(sizeof(ASTPattern) * p->element_count);
+        for (int i = 0; i < p->element_count; i++)
+            c.elements[i] = ast_pattern_clone(&p->elements[i]);
+    }
+
+    if (p->tail) {
+        c.tail = malloc(sizeof(ASTPattern));
+        *c.tail = ast_pattern_clone(p->tail);
+    }
+
+    if (p->ctor_field_count > 0 && p->ctor_fields) {
+        c.ctor_fields = malloc(sizeof(ASTPattern) * p->ctor_field_count);
+        for (int i = 0; i < p->ctor_field_count; i++)
+            c.ctor_fields[i] = ast_pattern_clone(&p->ctor_fields[i]);
+    }
+
+    return c;
 }
 
 AST *ast_new_data(const char *name,
@@ -575,6 +800,8 @@ AST *ast_new_data(const char *name,
 }
 
 AST *ast_new_class(const char *name, const char *type_var,
+                   char **superclass_names, char **superclass_type_vars,
+                   int superclass_count,
                    char **assoc_types, int assoc_count,
                    char **method_names, char **method_types, int method_count,
                    char **default_names, AST **default_bodies, int default_count) {
@@ -582,6 +809,9 @@ AST *ast_new_class(const char *name, const char *type_var,
     a->type                          = AST_CLASS;
     a->class_decl.name               = my_strdup(name);
     a->class_decl.type_var           = my_strdup(type_var);
+    a->class_decl.superclass_names    = superclass_names;
+    a->class_decl.superclass_type_vars = superclass_type_vars;
+    a->class_decl.superclass_count    = superclass_count;
     a->class_decl.assoc_types        = assoc_types;
     a->class_decl.assoc_count        = assoc_count;
     a->class_decl.method_names       = method_names;
@@ -639,7 +869,11 @@ AST *ast_clone(AST *ast) {
     if (!ast) return NULL;
     AST *c = calloc(1, sizeof(AST));
     *c = *ast;  /* shallow copy all fields */
-    c->literal_str = ast->literal_str ? strdup(ast->literal_str) : NULL;
+    c->literal_str = NULL;
+    if ((ast->type == AST_NUMBER || ast->type == AST_SYMBOL) &&
+        ast->literal_str) {
+        c->literal_str = strdup(ast->literal_str);
+    }
 
     switch (ast->type) {
     case AST_SYMBOL:
@@ -678,6 +912,13 @@ AST *ast_clone(AST *ast) {
         for (int i = 0; i < ast->lambda.body_count; i++)
             c->lambda.body_exprs[i] = ast_clone(ast->lambda.body_exprs[i]);
         c->lambda.body        = c->lambda.body_exprs[c->lambda.body_count - 1];
+        break;
+    }
+    case AST_ASM: {
+        c->asm_block.instructions = malloc(sizeof(AST*) * (ast->asm_block.instruction_count ? ast->asm_block.instruction_count : 1));
+        c->asm_block.instruction_count = ast->asm_block.instruction_count;
+        for (size_t i = 0; i < ast->asm_block.instruction_count; i++)
+            c->asm_block.instructions[i] = ast_clone(ast->asm_block.instructions[i]);
         break;
     }
     case AST_ARRAY: {
@@ -721,6 +962,122 @@ AST *ast_clone(AST *ast) {
         c->refinement.predicate  = ast_clone(ast->refinement.predicate);
         c->refinement.docstring  = ast->refinement.docstring  ? strdup(ast->refinement.docstring)  : NULL;
         c->refinement.alias_name = ast->refinement.alias_name ? strdup(ast->refinement.alias_name) : NULL;
+        break;
+
+    case AST_TESTS:
+        c->tests.assertions = malloc(sizeof(AST*) * (ast->tests.count ? ast->tests.count : 1));
+        c->tests.count = ast->tests.count;
+        for (int i = 0; i < ast->tests.count; i++)
+            c->tests.assertions[i] = ast_clone(ast->tests.assertions[i]);
+        break;
+
+    case AST_ADDRESS_OF:
+        c->list.items = malloc(sizeof(AST*));
+        c->list.count = ast->list.count;
+        c->list.capacity = ast->list.capacity ? ast->list.capacity : 1;
+        if (ast->list.count > 0)
+            c->list.items[0] = ast_clone(ast->list.items[0]);
+        break;
+
+    case AST_LAYOUT:
+        c->layout.name = ast->layout.name ? strdup(ast->layout.name) : NULL;
+        c->layout.fields = malloc(sizeof(ASTLayoutField) * (ast->layout.field_count ? ast->layout.field_count : 1));
+        c->layout.field_count = ast->layout.field_count;
+        c->layout.packed = ast->layout.packed;
+        c->layout.align = ast->layout.align;
+        for (int i = 0; i < ast->layout.field_count; i++) {
+            c->layout.fields[i] = ast->layout.fields[i];
+            c->layout.fields[i].name = ast->layout.fields[i].name ? strdup(ast->layout.fields[i].name) : NULL;
+            c->layout.fields[i].type_name = ast->layout.fields[i].type_name ? strdup(ast->layout.fields[i].type_name) : NULL;
+            c->layout.fields[i].array_elem = ast->layout.fields[i].array_elem ? strdup(ast->layout.fields[i].array_elem) : NULL;
+        }
+        break;
+
+    case AST_PMATCH:
+        c->pmatch.clauses = malloc(sizeof(ASTPMatchClause) * (ast->pmatch.clause_count ? ast->pmatch.clause_count : 1));
+        c->pmatch.clause_count = ast->pmatch.clause_count;
+        for (int i = 0; i < ast->pmatch.clause_count; i++) {
+            ASTPMatchClause *dst = &c->pmatch.clauses[i];
+            ASTPMatchClause *src = &ast->pmatch.clauses[i];
+            dst->pattern_count = src->pattern_count;
+            dst->patterns = malloc(sizeof(ASTPattern) * (src->pattern_count ? src->pattern_count : 1));
+            for (int j = 0; j < src->pattern_count; j++)
+                dst->patterns[j] = ast_pattern_clone(&src->patterns[j]);
+            dst->body = ast_clone(src->body);
+            dst->guard_count = src->guard_count;
+            dst->guard_conds = malloc(sizeof(AST*) * (src->guard_count ? src->guard_count : 1));
+            dst->guard_bodies = malloc(sizeof(AST*) * (src->guard_count ? src->guard_count : 1));
+            for (int j = 0; j < src->guard_count; j++) {
+                dst->guard_conds[j] = ast_clone(src->guard_conds[j]);
+                dst->guard_bodies[j] = ast_clone(src->guard_bodies[j]);
+            }
+        }
+        break;
+
+    case AST_DATA:
+        c->data.name = ast->data.name ? strdup(ast->data.name) : NULL;
+        c->data.type_params = malloc(sizeof(char*) * (ast->data.type_param_count ? ast->data.type_param_count : 1));
+        c->data.type_param_count = ast->data.type_param_count;
+        for (int i = 0; i < ast->data.type_param_count; i++)
+            c->data.type_params[i] = ast->data.type_params[i] ? strdup(ast->data.type_params[i]) : NULL;
+        c->data.constructors = malloc(sizeof(ASTDataConstructor) * (ast->data.constructor_count ? ast->data.constructor_count : 1));
+        c->data.constructor_count = ast->data.constructor_count;
+        for (int i = 0; i < ast->data.constructor_count; i++) {
+            c->data.constructors[i].name = ast->data.constructors[i].name ? strdup(ast->data.constructors[i].name) : NULL;
+            c->data.constructors[i].field_count = ast->data.constructors[i].field_count;
+            c->data.constructors[i].field_types = malloc(sizeof(char*) * (ast->data.constructors[i].field_count ? ast->data.constructors[i].field_count : 1));
+            for (int j = 0; j < ast->data.constructors[i].field_count; j++)
+                c->data.constructors[i].field_types[j] = ast->data.constructors[i].field_types[j] ? strdup(ast->data.constructors[i].field_types[j]) : NULL;
+        }
+        c->data.deriving = malloc(sizeof(char*) * (ast->data.deriving_count ? ast->data.deriving_count : 1));
+        c->data.deriving_count = ast->data.deriving_count;
+        for (int i = 0; i < ast->data.deriving_count; i++)
+            c->data.deriving[i] = ast->data.deriving[i] ? strdup(ast->data.deriving[i]) : NULL;
+        break;
+
+    case AST_CLASS:
+        c->class_decl.name = ast->class_decl.name ? strdup(ast->class_decl.name) : NULL;
+        c->class_decl.type_var = ast->class_decl.type_var ? strdup(ast->class_decl.type_var) : NULL;
+        c->class_decl.superclass_names = malloc(sizeof(char*) * (ast->class_decl.superclass_count ? ast->class_decl.superclass_count : 1));
+        c->class_decl.superclass_type_vars = malloc(sizeof(char*) * (ast->class_decl.superclass_count ? ast->class_decl.superclass_count : 1));
+        for (int i = 0; i < ast->class_decl.superclass_count; i++) {
+            c->class_decl.superclass_names[i] = ast->class_decl.superclass_names[i] ? strdup(ast->class_decl.superclass_names[i]) : NULL;
+            c->class_decl.superclass_type_vars[i] = ast->class_decl.superclass_type_vars[i] ? strdup(ast->class_decl.superclass_type_vars[i]) : NULL;
+        }
+        c->class_decl.assoc_types = malloc(sizeof(char*) * (ast->class_decl.assoc_count ? ast->class_decl.assoc_count : 1));
+        for (int i = 0; i < ast->class_decl.assoc_count; i++)
+            c->class_decl.assoc_types[i] = ast->class_decl.assoc_types[i] ? strdup(ast->class_decl.assoc_types[i]) : NULL;
+        c->class_decl.method_names = malloc(sizeof(char*) * (ast->class_decl.method_count ? ast->class_decl.method_count : 1));
+        c->class_decl.method_types = malloc(sizeof(char*) * (ast->class_decl.method_count ? ast->class_decl.method_count : 1));
+        for (int i = 0; i < ast->class_decl.method_count; i++) {
+            c->class_decl.method_names[i] = ast->class_decl.method_names[i] ? strdup(ast->class_decl.method_names[i]) : NULL;
+            c->class_decl.method_types[i] = ast->class_decl.method_types[i] ? strdup(ast->class_decl.method_types[i]) : NULL;
+        }
+        c->class_decl.default_names = malloc(sizeof(char*) * (ast->class_decl.default_count ? ast->class_decl.default_count : 1));
+        c->class_decl.default_bodies = malloc(sizeof(AST*) * (ast->class_decl.default_count ? ast->class_decl.default_count : 1));
+        for (int i = 0; i < ast->class_decl.default_count; i++) {
+            c->class_decl.default_names[i] = ast->class_decl.default_names[i] ? strdup(ast->class_decl.default_names[i]) : NULL;
+            c->class_decl.default_bodies[i] = ast_clone(ast->class_decl.default_bodies[i]);
+        }
+        break;
+
+    case AST_INSTANCE:
+        c->instance_decl.class_name = ast->instance_decl.class_name ? strdup(ast->instance_decl.class_name) : NULL;
+        c->instance_decl.type_name = ast->instance_decl.type_name ? strdup(ast->instance_decl.type_name) : NULL;
+        c->instance_decl.assoc_names = malloc(sizeof(char*) * (ast->instance_decl.assoc_count ? ast->instance_decl.assoc_count : 1));
+        c->instance_decl.assoc_values = malloc(sizeof(char*) * (ast->instance_decl.assoc_count ? ast->instance_decl.assoc_count : 1));
+        c->instance_decl.assoc_count = ast->instance_decl.assoc_count;
+        for (int i = 0; i < ast->instance_decl.assoc_count; i++) {
+            c->instance_decl.assoc_names[i] = ast->instance_decl.assoc_names[i] ? strdup(ast->instance_decl.assoc_names[i]) : NULL;
+            c->instance_decl.assoc_values[i] = ast->instance_decl.assoc_values[i] ? strdup(ast->instance_decl.assoc_values[i]) : NULL;
+        }
+        c->instance_decl.method_names = malloc(sizeof(char*) * (ast->instance_decl.method_count ? ast->instance_decl.method_count : 1));
+        c->instance_decl.method_bodies = malloc(sizeof(AST*) * (ast->instance_decl.method_count ? ast->instance_decl.method_count : 1));
+        c->instance_decl.method_count = ast->instance_decl.method_count;
+        for (int i = 0; i < ast->instance_decl.method_count; i++) {
+            c->instance_decl.method_names[i] = ast->instance_decl.method_names[i] ? strdup(ast->instance_decl.method_names[i]) : NULL;
+            c->instance_decl.method_bodies[i] = ast_clone(ast->instance_decl.method_bodies[i]);
+        }
         break;
 
     default:
@@ -848,6 +1205,12 @@ void ast_free(AST *ast) {
     case AST_CLASS:
         free(ast->class_decl.name);
         free(ast->class_decl.type_var);
+        for (int i = 0; i < ast->class_decl.superclass_count; i++) {
+            free(ast->class_decl.superclass_names[i]);
+            free(ast->class_decl.superclass_type_vars[i]);
+        }
+        free(ast->class_decl.superclass_names);
+        free(ast->class_decl.superclass_type_vars);
         for (int i = 0; i < ast->class_decl.assoc_count; i++) free(ast->class_decl.assoc_types[i]);
         free(ast->class_decl.assoc_types);
         for (int i = 0; i < ast->class_decl.method_count; i++) {
@@ -905,6 +1268,12 @@ void ast_free(AST *ast) {
                 ast_pattern_free(&cl->patterns[j]);
             free(cl->patterns);
             ast_free(cl->body);
+            for (int j = 0; j < cl->guard_count; j++) {
+                ast_free(cl->guard_conds[j]);
+                ast_free(cl->guard_bodies[j]);
+            }
+            free(cl->guard_conds);
+            free(cl->guard_bodies);
         }
         free(ast->pmatch.clauses);
         break;
@@ -912,7 +1281,8 @@ void ast_free(AST *ast) {
     default:
         break;
     }
-    free(ast->literal_str);
+    if (ast->type == AST_NUMBER || ast->type == AST_SYMBOL)
+        free(ast->literal_str);
     free(ast);
 }
 
@@ -1140,7 +1510,15 @@ void ast_print(AST *ast) {
         break;
 
     case AST_CLASS:
-        printf("(class %s %s where",
+        printf("(class ");
+        for (int i = 0; i < ast->class_decl.superclass_count; i++) {
+            if (i) printf(", ");
+            printf("%s %s",
+                   ast->class_decl.superclass_names[i] ? ast->class_decl.superclass_names[i] : "?",
+                   ast->class_decl.superclass_type_vars[i] ? ast->class_decl.superclass_type_vars[i] : "?");
+        }
+        if (ast->class_decl.superclass_count > 0) printf(" => ");
+        printf("%s %s where",
                ast->class_decl.name     ? ast->class_decl.name     : "?",
                ast->class_decl.type_var ? ast->class_decl.type_var : "?");
         for (int i = 0; i < ast->class_decl.method_count; i++)
@@ -1353,8 +1731,18 @@ Token lexer_next_token(Lexer *lex) {
     Token tok = {0};
 
     skip_whitespace(lex);
-    while (line_comment_marker_len_at(lex->source + lex->pos) > 0) {
-        skip_line_comment(lex);
+    while (true) {
+        while (line_comment_marker_len_at(lex->source + lex->pos) > 0) {
+            skip_line_comment(lex);
+            skip_whitespace(lex);
+        }
+
+        DrawerSpan *drawer = drawer_map_lookup((int)lex->pos);
+        if (!drawer)
+            break;
+
+        while ((int)lex->pos < drawer->close_end && peek(lex) != '\0')
+            advance(lex);
         skip_whitespace(lex);
     }
 
@@ -1584,11 +1972,18 @@ Token lexer_next_token(Lexer *lex) {
 
     // String
     if (c == '"') {
+        int string_line = lex->line;
+        int string_column = lex->column;
         advance(lex);
         size_t start = lex->pos;
         while (peek(lex) != '"' && peek(lex) != '\0') {
             if (peek(lex) == '\\') advance(lex);
             advance(lex);
+        }
+        if (peek(lex) == '\0') {
+            READER_ERROR(string_line, string_column,
+                         "unterminated string literal\n"
+                         "  - Hint: close the string with a double quote before the end of the file");
         }
         tok.value = decode_string_literal(lex->source + start, lex->pos - start);
         advance(lex);
@@ -1658,8 +2053,16 @@ Token lexer_next_token(Lexer *lex) {
         return tok;
     }
 
-    // Standalone . for rest params (define (f . args) ...)
-    if (c == '.' && peek_ahead(lex, 1) == ' ') {
+    // Standalone . for rest params and plain doc punctuation.
+    if (c == '.' &&
+        (peek_ahead(lex, 1) == ' '  ||
+         peek_ahead(lex, 1) == '\t' ||
+         peek_ahead(lex, 1) == '\n' ||
+         peek_ahead(lex, 1) == '\r' ||
+         peek_ahead(lex, 1) == '\0' ||
+         peek_ahead(lex, 1) == ')'  ||
+         peek_ahead(lex, 1) == ']'  ||
+         peek_ahead(lex, 1) == '}')) {
         advance(lex);
         tok.type  = TOK_SYMBOL;
         tok.value = my_strdup(".");
@@ -2058,9 +2461,15 @@ Token lexer_next_token(Lexer *lex) {
             /* Break on multi-byte UTF-8 characters so they get lexed as standalone tokens (like superscripts) */
             if ((unsigned char)nc > 127) break;
 
-            if (nc == '.') break; // Let TOK_DOT handle it
+            if (nc == '.') {
+                if (is_symbol_dot_continuation(lex)) {
+                    advance(lex);
+                    continue;
+                }
+                break;
+            }
 
-            if (is_symbol_char(nc) && nc != '.') {
+            if (is_symbol_char(nc)) {
                 advance(lex);
             } else {
                 break;
@@ -2079,6 +2488,190 @@ Token lexer_next_token(Lexer *lex) {
 static void parser_init(Parser *p, Lexer *lex) {
     p->lexer   = lex;
     p->current = lexer_next_token(lex);
+}
+
+static bool parser_current_layout_item_is_field(Parser *p) {
+    if (!p || p->current.type != TOK_LBRACKET)
+        return false;
+
+    Lexer peek = *p->lexer;
+    Token name_tok = lexer_next_token(&peek);
+    Token sep_tok  = lexer_next_token(&peek);
+
+    bool is_field =
+        name_tok.type == TOK_SYMBOL &&
+        (sep_tok.type == TOK_ARROW ||
+         (sep_tok.type == TOK_SYMBOL && sep_tok.value &&
+          strcmp(sep_tok.value, "::") == 0));
+
+    free(name_tok.value);
+    free(sep_tok.value);
+    return is_field;
+}
+
+static bool parser_current_is_line_directive(Parser *p) {
+    if (!p || p->current.type != TOK_LPAREN)
+        return false;
+
+    Lexer peek = *p->lexer;
+    Token tok = lexer_next_token(&peek);
+    bool result =
+        tok.type == TOK_SYMBOL &&
+        tok.value &&
+        strcmp(tok.value, "#line") == 0;
+
+    free(tok.value);
+    return result;
+}
+
+static void parser_skip_line_directive(Parser *p) {
+    if (!p || p->current.type != TOK_LPAREN)
+        return;
+
+    int depth = 1;
+    p->current = lexer_next_token(p->lexer);
+
+    while (depth > 0 && p->current.type != TOK_EOF) {
+        if (p->current.type == TOK_LPAREN)
+            depth++;
+        else if (p->current.type == TOK_RPAREN)
+            depth--;
+
+        p->current = lexer_next_token(p->lexer);
+    }
+}
+
+static bool parser_layout_current_is_boundary(Parser *p) {
+    if (!p)
+        return true;
+
+    while (parser_current_is_line_directive(p))
+        parser_skip_line_directive(p);
+
+    if (p->current.type == TOK_EOF ||
+        p->current.type == TOK_RPAREN ||
+        p->current.type == TOK_KEYWORD)
+        return true;
+
+    if (p->current.type == TOK_SYMBOL && p->current.value &&
+        strcmp(p->current.value, "where") == 0)
+        return true;
+
+    if (p->current.type == TOK_LBRACKET &&
+        parser_current_layout_item_is_field(p))
+        return true;
+
+    return false;
+}
+
+static void parser_skip_layout_item(Parser *p) {
+    if (!p || p->current.type == TOK_EOF)
+        return;
+
+    if (parser_current_is_line_directive(p)) {
+        parser_skip_line_directive(p);
+        return;
+    }
+
+    if (p->current.type == TOK_LPAREN ||
+        p->current.type == TOK_LBRACKET ||
+        p->current.type == TOK_LBRACE ||
+        p->current.type == TOK_HASH_LBRACE) {
+        int depth = 1;
+        p->current = lexer_next_token(p->lexer);
+
+        while (depth > 0 && p->current.type != TOK_EOF) {
+            if (p->current.type == TOK_LPAREN ||
+                p->current.type == TOK_LBRACKET ||
+                p->current.type == TOK_LBRACE ||
+                p->current.type == TOK_HASH_LBRACE) {
+                depth++;
+            } else if (p->current.type == TOK_RPAREN ||
+                       p->current.type == TOK_RBRACKET ||
+                       p->current.type == TOK_RBRACE) {
+                depth--;
+            }
+
+            p->current = lexer_next_token(p->lexer);
+        }
+
+        return;
+    }
+
+    p->current = lexer_next_token(p->lexer);
+}
+
+static void parser_skip_layout_until_boundary(Parser *p) {
+    while (!parser_layout_current_is_boundary(p))
+        parser_skip_layout_item(p);
+}
+
+static const char *parser_layout_doc_token_fragment(Token *tok) {
+    if (!tok)
+        return NULL;
+    if (tok->value)
+        return tok->value;
+
+    switch (tok->type) {
+    case TOK_ARROW:    return "->";
+    case TOK_LPAREN:   return "(";
+    case TOK_RPAREN:   return ")";
+    case TOK_LBRACKET: return "[";
+    case TOK_RBRACKET: return "]";
+    case TOK_LBRACE:   return "{";
+    case TOK_RBRACE:   return "}";
+    case TOK_COLON:    return ":";
+    case TOK_PIPE:     return "|";
+    case TOK_DOTDOT:   return "..";
+    default:           return NULL;
+    }
+}
+
+static void parser_layout_doc_append(char *buf, size_t size,
+                                     const char *frag) {
+    if (!buf || size == 0 || !frag || !frag[0])
+        return;
+
+    size_t cur_len = strlen(buf);
+    size_t frag_len = strlen(frag);
+    bool is_punct =
+        frag_len == 1 &&
+        (frag[0] == '.' || frag[0] == ',' || frag[0] == ';' ||
+         frag[0] == ':' || frag[0] == ')' || frag[0] == ']' ||
+         frag[0] == '}');
+    bool prev_open =
+        cur_len > 0 &&
+        (buf[cur_len - 1] == '(' ||
+         buf[cur_len - 1] == '[' ||
+         buf[cur_len - 1] == '{');
+
+    if (cur_len > 0 && !is_punct && !prev_open) {
+        if (cur_len + 1 >= size)
+            return;
+        buf[cur_len++] = ' ';
+        buf[cur_len] = '\0';
+    }
+
+    if (cur_len + frag_len < size)
+        memcpy(buf + cur_len, frag, frag_len + 1);
+}
+
+static char *parser_collect_layout_docstring(Parser *p) {
+    char buf[2048];
+    buf[0] = '\0';
+
+    while (!parser_layout_current_is_boundary(p)) {
+        if (parser_current_is_line_directive(p)) {
+            parser_skip_line_directive(p);
+            continue;
+        }
+
+        const char *frag = parser_layout_doc_token_fragment(&p->current);
+        parser_layout_doc_append(buf, sizeof(buf), frag);
+        parser_skip_layout_item(p);
+    }
+
+    return buf[0] ? my_strdup(buf) : NULL;
 }
 
 static const char *type_token_fragment(const Token *tok) {
@@ -3055,7 +3648,12 @@ static AST *parse_lambda(Parser *p) {
         /* parse_pmatch_clauses stopped at ')' but did NOT consume it.
          * Consume it now — this closes the (lambda ...) form. */
         if (p->current.type == TOK_RPAREN)
+        {
+            int close_col = p->current.column + 1;
             p->current = lexer_next_token(p->lexer);
+            if (desugared)
+                desugared->end_column = close_col;
+        }
     } else {
         while (p->current.type != TOK_RPAREN &&
                p->current.type != TOK_EOF    &&
@@ -3064,8 +3662,14 @@ static AST *parse_lambda(Parser *p) {
             body_exprs[body_count++] = parse_expr(p);
         }
         /* consume the closing ')' of (lambda ...) */
+        int close_col = 0;
         if (p->current.type == TOK_RPAREN)
+        {
+            close_col = p->current.column + 1;
             p->current = lexer_next_token(p->lexer);
+        }
+        if (close_col > 0 && body_count > 0)
+            body_exprs[body_count - 1]->end_column = close_col;
     }
     g_scope_depth--;
 
@@ -3077,6 +3681,8 @@ static AST *parse_lambda(Parser *p) {
 
     AST *result = ast_new_lambda(params, count, ret_type, docstring, NULL, false,
                                   body, body_exprs, body_count);
+    if (body && body->end_column > 0)
+        result->end_column = body->end_column;
     free(docstring);
     free(ret_type);
     return result;
@@ -3667,6 +4273,186 @@ static AST *reader_parse_tuple_element(Parser *p) {
     return call;
 }
 
+static void reader_error_message_trim_space(SB *out) {
+    while (out->len > 0 && out->data[out->len - 1] == ' ')
+        out->len--;
+    out->data[out->len] = '\0';
+}
+
+static void reader_error_message_atom(SB *out,
+                                      bool *need_space,
+                                      const char *text) {
+    if (!text || !text[0])
+        return;
+
+    if (*need_space && out->len > 0)
+        sb_putc(out, ' ');
+
+    sb_puts(out, text);
+    *need_space = true;
+}
+
+static void reader_error_message_open(SB *out,
+                                      bool *need_space,
+                                      const char *text) {
+    if (*need_space && out->len > 0)
+        sb_putc(out, ' ');
+
+    sb_puts(out, text);
+    *need_space = false;
+}
+
+static void reader_error_message_close(SB *out,
+                                       bool *need_space,
+                                       const char *text) {
+    reader_error_message_trim_space(out);
+    sb_puts(out, text);
+    *need_space = true;
+}
+
+static void reader_error_message_append_token(SB *out,
+                                              bool *need_space,
+                                              const Token *tok) {
+    char tmp[16];
+
+    switch (tok->type) {
+    case TOK_LPAREN:
+        reader_error_message_open(out, need_space, "(");
+        break;
+    case TOK_LBRACKET:
+        reader_error_message_open(out, need_space, "[");
+        break;
+    case TOK_LBRACE:
+        reader_error_message_open(out, need_space, "{");
+        break;
+    case TOK_HASH_LBRACE:
+        reader_error_message_open(out, need_space, "#{");
+        break;
+    case TOK_RPAREN:
+        reader_error_message_close(out, need_space, ")");
+        break;
+    case TOK_RBRACKET:
+        reader_error_message_close(out, need_space, "]");
+        break;
+    case TOK_RBRACE:
+        reader_error_message_close(out, need_space, "}");
+        break;
+    case TOK_ARROW:
+        reader_error_message_atom(out, need_space, "->");
+        break;
+    case TOK_DOTDOT:
+        reader_error_message_atom(out, need_space, "..");
+        break;
+    case TOK_DOT:
+        reader_error_message_atom(out, need_space, ".");
+        sb_puts(out, tok->value);
+        break;
+    case TOK_COLON:
+        reader_error_message_atom(out, need_space, ":");
+        break;
+    case TOK_KEYWORD:
+        if (*need_space && out->len > 0)
+            sb_putc(out, ' ');
+        sb_putc(out, ':');
+        sb_puts(out, tok->value);
+        *need_space = true;
+        break;
+    case TOK_SYMBOL:
+        if (tok->value && strcmp(tok->value, ",") == 0) {
+            reader_error_message_trim_space(out);
+            sb_puts(out, ", ");
+            *need_space = false;
+        } else {
+            reader_error_message_atom(out, need_space, tok->value);
+        }
+        break;
+    case TOK_NUMBER:
+    case TOK_STRING:
+    case TOK_PATH:
+        reader_error_message_atom(out, need_space, tok->value);
+        break;
+    case TOK_CHAR:
+        tmp[0] = '\'';
+        tmp[1] = tok->value ? tok->value[0] : '?';
+        tmp[2] = '\'';
+        tmp[3] = '\0';
+        reader_error_message_atom(out, need_space, tmp);
+        break;
+    case TOK_QUOTE:
+        reader_error_message_atom(out, need_space, "'");
+        break;
+    default:
+        if (tok->value)
+            reader_error_message_atom(out, need_space, tok->value);
+        break;
+    }
+}
+
+static AST *reader_parse_error_list(Parser *p, int start_line, int start_column) {
+    p->current = lexer_next_token(p->lexer);
+
+    SB message;
+    sb_init(&message);
+    bool need_space = false;
+    int depth = 0;
+
+    while (p->current.type != TOK_EOF) {
+        if (p->current.type == TOK_RPAREN && depth == 0)
+            break;
+
+        if (p->current.type == TOK_LPAREN ||
+            p->current.type == TOK_LBRACKET ||
+            p->current.type == TOK_LBRACE ||
+            p->current.type == TOK_HASH_LBRACE) {
+            depth++;
+        } else if (p->current.type == TOK_RPAREN ||
+                   p->current.type == TOK_RBRACKET ||
+                   p->current.type == TOK_RBRACE) {
+            if (depth > 0)
+                depth--;
+        }
+
+        reader_error_message_append_token(&message, &need_space, &p->current);
+        p->current = lexer_next_token(p->lexer);
+    }
+
+    if (p->current.type != TOK_RPAREN) {
+        sb_free(&message);
+        compiler_error(p->current.line, p->current.column,
+                       "Expected ')' to close error expression");
+    }
+
+    reader_error_message_trim_space(&message);
+    if (message.len == 0) {
+        sb_free(&message);
+        compiler_error(start_line, start_column,
+                       "error requires a message");
+    }
+
+    int end_column = p->current.column + 1;
+    p->current = lexer_next_token(p->lexer);
+
+    AST *call = ast_new_list();
+    AST *head = ast_new_symbol("error");
+    AST *arg = ast_new_string(message.data);
+
+    head->line = start_line;
+    head->column = start_column + 1;
+    head->end_column = head->column + 5;
+    arg->line = start_line;
+    arg->column = head->end_column + 1;
+    arg->end_column = end_column - 1;
+
+    ast_list_append(call, head);
+    ast_list_append(call, arg);
+    call->line = start_line;
+    call->column = start_column;
+    call->end_column = end_column;
+
+    sb_free(&message);
+    return call;
+}
+
 static AST *parse_list(Parser *p) {
     int start_line = p->current.line;
     int start_column = p->current.column;
@@ -3674,6 +4460,13 @@ static AST *parse_list(Parser *p) {
     AST *list = ast_new_list();
 
     p->current = lexer_next_token(p->lexer);
+
+    if (p->current.type == TOK_SYMBOL &&
+        p->current.value &&
+        strcmp(p->current.value, "error") == 0) {
+        ast_free(list);
+        return reader_parse_error_list(p, start_line, start_column);
+    }
 
     // Detect  (lambda ...)
     if (p->current.type == TOK_SYMBOL &&
@@ -3683,12 +4476,9 @@ static AST *parse_list(Parser *p) {
 
         /* parse_lambda already consumed the closing ')' for both
          * pmatch and normal bodies — do NOT consume it again here. */
-        int end_column = p->current.column;
-
         ast_free(list);
         lam->line       = start_line;
         lam->column     = start_column;
-        lam->end_column = end_column;
         return lam;
     }
 
@@ -4333,13 +5123,75 @@ static AST *parse_list(Parser *p) {
                             p->current = lexer_next_token(p->lexer);
                         }
                     } else {
-                        /* Collect full type annotation (may be multi-token: Arr :: 256 :: U8).
-                         * Accept symbols, numbers, and '::' separators until ']'. */
-                        while (p->current.type != TOK_RBRACKET &&
-                               p->current.type != TOK_EOF) {
+                        /* Collect the full type annotation until the matching
+                         * typed-binding ']'. Types may contain parentheses,
+                         * nested brackets, arrows, numbers, and separators:
+                         *   [x :: (Char)]
+                         *   [x :: Arr :: 256 :: U8]
+                         *   [x :: (a -> b)]
+                         */
+                        int type_depth = 0;
+                        while (p->current.type != TOK_EOF) {
+                            if (p->current.type == TOK_RBRACKET &&
+                                type_depth == 0) {
+                                break;
+                            }
+
+                            if (p->current.type == TOK_LPAREN) {
+                                ast_list_append(bracket_list, ast_new_symbol("("));
+                                type_depth++;
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
+                            if (p->current.type == TOK_RPAREN) {
+                                ast_list_append(bracket_list, ast_new_symbol(")"));
+                                if (type_depth > 0)
+                                    type_depth--;
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
+                            if (p->current.type == TOK_LBRACKET) {
+                                ast_list_append(bracket_list, ast_new_symbol("["));
+                                type_depth++;
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
+                            if (p->current.type == TOK_RBRACKET) {
+                                ast_list_append(bracket_list, ast_new_symbol("]"));
+                                if (type_depth > 0)
+                                    type_depth--;
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
+                            if (p->current.type == TOK_ARROW) {
+                                ast_list_append(bracket_list, ast_new_symbol("->"));
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
+                            if (p->current.type == TOK_COLON) {
+                                ast_list_append(bracket_list, ast_new_symbol("::"));
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
                             if (p->current.type == TOK_SYMBOL) {
-                                ast_list_append(bracket_list, ast_new_symbol(p->current.value));
-                            } else if (p->current.type == TOK_NUMBER) {
+                                if (strcmp(p->current.value, ":") == 0 ||
+                                    strcmp(p->current.value, "::") == 0) {
+                                    ast_list_append(bracket_list, ast_new_symbol("::"));
+                                } else {
+                                    ast_list_append(bracket_list,
+                                                    ast_new_symbol(p->current.value));
+                                }
+                                p->current = lexer_next_token(p->lexer);
+                                continue;
+                            }
+
+                            if (p->current.type == TOK_NUMBER) {
                                 AST *num = ast_new_number(0.0, p->current.value);
                                 const char *v = p->current.value;
                                 if (v[0] == '0' && (v[1] == 'x' || v[1] == 'X')) {
@@ -4354,21 +5206,13 @@ static AST *parse_list(Parser *p) {
                                     num->number = (double)num->raw_int;
                                 }
                                 ast_list_append(bracket_list, num);
-                            } else {
-                                break;
-                            }
-                            p->current = lexer_next_token(p->lexer);
-                            if (p->current.type == TOK_SYMBOL &&
-                                (strcmp(p->current.value, "::") == 0 ||
-                                 strcmp(p->current.value, ":") == 0)) {
-                                ast_list_append(bracket_list, ast_new_symbol("::"));
                                 p->current = lexer_next_token(p->lexer);
-                            } else {
-                                break;
+                                continue;
                             }
+
+                            break;
                         }
                     }
-
                 }
                 if (p->current.type != TOK_RBRACKET)
                     compiler_error(p->current.line, p->current.column,
@@ -4660,18 +5504,48 @@ static AST *parse_list(Parser *p) {
         int cls_line = p->current.line, cls_col = p->current.column;
         p->current = lexer_next_token(p->lexer); // consume 'class'
 
-        bool head_in_parens = false;
+        char **superclass_names = NULL;
+        char **superclass_type_vars = NULL;
+        int superclass_count = 0;
+
         if (p->current.type == TOK_LPAREN) {
-            int depth = 1;
             p->current = lexer_next_token(p->lexer);
-            while (p->current.type != TOK_EOF && depth > 0) {
-                if (p->current.type == TOK_LPAREN) depth++;
-                if (p->current.type == TOK_RPAREN) depth--;
+            while (p->current.type != TOK_RPAREN &&
+                   p->current.type != TOK_EOF) {
+                if (p->current.type == TOK_SYMBOL && p->current.value &&
+                    strcmp(p->current.value, ",") == 0) {
+                    p->current = lexer_next_token(p->lexer);
+                    continue;
+                }
+                if (p->current.type != TOK_SYMBOL)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected superclass name in class constraint");
+                char *super_name = my_strdup(p->current.value);
                 p->current = lexer_next_token(p->lexer);
+
+                if (p->current.type != TOK_SYMBOL)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected type variable after superclass name");
+                char *super_type_var = my_strdup(p->current.value);
+                p->current = lexer_next_token(p->lexer);
+
+                superclass_names = realloc(superclass_names,
+                                           sizeof(char*) * (superclass_count + 1));
+                superclass_type_vars = realloc(superclass_type_vars,
+                                               sizeof(char*) * (superclass_count + 1));
+                superclass_names[superclass_count] = super_name;
+                superclass_type_vars[superclass_count] = super_type_var;
+                superclass_count++;
             }
-            if (p->current.type == TOK_SYMBOL && p->current.value &&
-                strcmp(p->current.value, "=>") == 0)
-                p->current = lexer_next_token(p->lexer);
+            if (p->current.type != TOK_RPAREN)
+                compiler_error(p->current.line, p->current.column,
+                               "Expected ')' after superclass constraints");
+            p->current = lexer_next_token(p->lexer);
+            if (!(p->current.type == TOK_SYMBOL && p->current.value &&
+                  strcmp(p->current.value, "=>") == 0))
+                compiler_error(p->current.line, p->current.column,
+                               "Expected '=>' after superclass constraints");
+            p->current = lexer_next_token(p->lexer);
         }
 
         if (p->current.type != TOK_SYMBOL)
@@ -4688,11 +5562,13 @@ static AST *parse_list(Parser *p) {
 
         if (p->current.type == TOK_SYMBOL && p->current.value &&
             strcmp(p->current.value, "=>") == 0) {
-            free(cls_name);
-            free(type_var);
+            superclass_names = realloc(superclass_names, sizeof(char*) * (superclass_count + 1));
+            superclass_type_vars = realloc(superclass_type_vars, sizeof(char*) * (superclass_count + 1));
+            superclass_names[superclass_count] = cls_name;
+            superclass_type_vars[superclass_count] = type_var;
+            superclass_count++;
             p->current = lexer_next_token(p->lexer);
             if (p->current.type == TOK_LPAREN) {
-                head_in_parens = true;
                 p->current = lexer_next_token(p->lexer);
             }
             if (p->current.type != TOK_SYMBOL)
@@ -4710,8 +5586,6 @@ static AST *parse_list(Parser *p) {
         /* consume 'where' */
         if (p->current.type == TOK_SYMBOL &&
             strcmp(p->current.value, "where") == 0)
-            p->current = lexer_next_token(p->lexer);
-        if (head_in_parens && p->current.type == TOK_RPAREN)
             p->current = lexer_next_token(p->lexer);
 
         char **assoc_types    = NULL;
@@ -5133,6 +6007,8 @@ static AST *parse_list(Parser *p) {
 
         ast_free(list);
         AST *node = ast_new_class(cls_name, type_var,
+                                   superclass_names, superclass_type_vars,
+                                   superclass_count,
                                    assoc_types, assoc_count,
                                    method_names, method_types, method_count,
                                    default_names, default_bodies, default_count);
@@ -5239,6 +6115,7 @@ static AST *parse_list(Parser *p) {
             /* First: detect method name */
             char *method_name = NULL;
             ASTPattern pat1 = {0}, pat2 = {0};
+            bool has_pat1 = true;
             bool has_pat2 = false;
 
             /* Pattern token 1 */
@@ -5251,6 +6128,14 @@ static AST *parse_list(Parser *p) {
             /* Parse first pattern */
             pat1 = parse_single_pattern(&pm_parser);
             p->current = pm_parser.current;
+
+            if (p->current.type == TOK_RPAREN &&
+                pat1.kind == PAT_VAR && pat1.var_name) {
+                method_name = my_strdup(pat1.var_name);
+                free(pat1.var_name);
+                pat1 = (ASTPattern){0};
+                has_pat1 = false;
+            }
 
             if (p->current.type == TOK_SYMBOL && p->current.value) {
                 /* Determine prefix vs infix by checking what token follows pat1.
@@ -5332,9 +6217,11 @@ static AST *parse_list(Parser *p) {
                     method_name = my_strdup(pat1.var_name ? pat1.var_name : "");
                     if (pat1.var_name) free(pat1.var_name);
                     pat1 = (ASTPattern){0};
+                    has_pat1 = false;
                     if (!next_is_arrow && !next_is_rparen) {
                         pm_parser.current = p->current;
                         pat1 = parse_single_pattern(&pm_parser);
+                        has_pat1 = true;
                         p->current = pm_parser.current;
                         if (p->current.type != TOK_RPAREN &&
                             !(p->current.type == TOK_SYMBOL &&
@@ -5396,9 +6283,9 @@ static AST *parse_list(Parser *p) {
                                       sizeof(ASTPMatchClause) * mc->clause_cap);
             }
             ASTPMatchClause *cl = &mc->clauses[mc->clause_count++];
-            int npats = has_pat2 ? 2 : 1;
-            cl->patterns      = malloc(sizeof(ASTPattern) * npats);
-            cl->patterns[0]   = pat1;
+            int npats = has_pat2 ? 2 : (has_pat1 ? 1 : 0);
+            cl->patterns      = malloc(sizeof(ASTPattern) * (npats ? npats : 1));
+            if (has_pat1) cl->patterns[0] = pat1;
             if (has_pat2) cl->patterns[1] = pat2;
             cl->pattern_count = npats;
             cl->body          = body;
@@ -5795,6 +6682,18 @@ static AST *parse_list(Parser *p) {
                 continue;
             }
 
+            if (p->current.type == TOK_KEYWORD) {
+                p->current = lexer_next_token(p->lexer);
+                parser_skip_layout_until_boundary(p);
+                continue;
+            }
+
+            parser_skip_layout_until_boundary(p);
+
+            if (p->current.type == TOK_RPAREN ||
+                p->current.type == TOK_EOF)
+                break;
+
             /* 'where' block: method declarations */
             if (p->current.type == TOK_SYMBOL &&
                 strcmp(p->current.value, "where") == 0) {
@@ -6030,10 +6929,11 @@ static AST *parse_list(Parser *p) {
             }
 
             /* [field :: Type] or [field :: [ElemType Size]] */
-            if (p->current.type != TOK_LBRACKET)
-                compiler_error(p->current.line, p->current.column,
-                               "Expected '[' for layout field, got '%s'",
-                               p->current.value ? p->current.value : "?");
+            if (p->current.type != TOK_LBRACKET ||
+                !parser_current_layout_item_is_field(p)) {
+                parser_skip_layout_item(p);
+                continue;
+            }
             p->current = lexer_next_token(p->lexer); /* consume '[' */
 
             if (p->current.type != TOK_SYMBOL)
@@ -6100,6 +7000,13 @@ static AST *parse_list(Parser *p) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected ']' to close layout field");
             p->current = lexer_next_token(p->lexer);
+
+            char *field_docstring = parser_collect_layout_docstring(p);
+            if (field_docstring) {
+                register_layout_field_docstring(lay_name, field.name,
+                                                field_docstring);
+                free(field_docstring);
+            }
 
             if (nfields >= nfields_cap) {
                 nfields_cap = nfields_cap == 0 ? 8 : nfields_cap * 2;
@@ -6972,6 +7879,7 @@ static AST *parse_list(Parser *p) {
 
             if (!first_is_infix_operator &&
                 p->current.type == TOK_SYMBOL && p->current.value &&
+                strcmp(p->current.value, "__index") != 0 &&
                 (candidate_is_known_fn || candidate_is_infix_operator)) {
                 /* peek: is there a rhs after the candidate? */
                 /* We need at least one more token that isn't ')' */
@@ -8306,21 +9214,34 @@ AST *parse_expr(Parser *p) {
         }
 
         if (is_super) {
-            AST *pow_node = ast_new_list();
-            ast_list_append(pow_node, ast_new_symbol("^"));
-            ast_list_append(pow_node, expr_result);
-            char num_buf[32];
-            snprintf(num_buf, sizeof(num_buf), "%d", power);
-            ast_list_append(pow_node, ast_new_number((double)power, num_buf));
+            if (power > 0) {
+                AST *mul_expr = expr_result;
+                for (int i = 1; i < power; i++) {
+                    AST *mul_node = ast_new_list();
+                    ast_list_append(mul_node, ast_new_symbol("*"));
+                    ast_list_append(mul_node, mul_expr);
+                    ast_list_append(mul_node, ast_clone(expr_result));
+                    mul_node->line = expr_result->line;
+                    mul_node->column = expr_result->column;
+                    mul_node->end_column = end_col;
+                    mul_expr = mul_node;
+                }
+                expr_result = mul_expr;
+            } else {
+                AST *pow_node = ast_new_list();
+                ast_list_append(pow_node, ast_new_symbol("^"));
+                ast_list_append(pow_node, expr_result);
+                ast_list_append(pow_node, ast_new_number(0.0, "0"));
 
-            pow_node->line = expr_result->line;
-            pow_node->column = expr_result->column;
-            pow_node->end_column = end_col;
-            expr_result = pow_node;
+                pow_node->line = expr_result->line;
+                pow_node->column = expr_result->column;
+                pow_node->end_column = end_col;
+                expr_result = pow_node;
+            }
         }
     }
 
-    /* Postfix index: expr[x] -> (expr x), expr[1 2 3] -> (expr 1 2 3) */
+/* Postfix index: expr[x] -> (index expr x), expr[1 2 3] -> (index expr 1 2 3) */
     /* Only when adjacent (no space): arr[0] yes, arr [0] no            */
     while (p->current.type == TOK_LBRACKET &&
            p->current.column == expr_result->end_column &&
@@ -8328,19 +9249,25 @@ AST *parse_expr(Parser *p) {
         int idx_line = p->current.line;
         int idx_col  = p->current.column;
         p->current = lexer_next_token(p->lexer); /* consume '[' */
-        AST *call = ast_new_list();
-        ast_list_append(call, expr_result);
+
+        AST *index_call = ast_new_list();
+        ast_list_append(index_call, ast_new_symbol("index"));
+        ast_list_append(index_call, expr_result);
+
         while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF)
-            ast_list_append(call, parse_expr(p));
+            ast_list_append(index_call, parse_expr(p));
+
         if (p->current.type != TOK_RBRACKET)
             compiler_error(p->current.line, p->current.column,
                            "Expected ']' to close index expression");
+
         int end_col = p->current.column + 1;
         p->current = lexer_next_token(p->lexer); /* consume ']' */
-        call->line       = idx_line;
-        call->column     = idx_col;
-        call->end_column = end_col;
-        expr_result = call;
+
+        index_call->line       = idx_line;
+        index_call->column     = idx_col;
+        index_call->end_column = end_col;
+        expr_result = index_call;
     }
 
 ///// Function-call sugars
@@ -8952,6 +9879,18 @@ static void ast_to_json_sb(SB *b, AST *ast) {
         json_escape(b, ast->class_decl.name ? ast->class_decl.name : "");
         sb_puts(b, ",\"type_var\":");
         json_escape(b, ast->class_decl.type_var ? ast->class_decl.type_var : "");
+        if (ast->class_decl.superclass_count > 0) {
+            sb_puts(b, ",\"superclasses\":[");
+            for (int i = 0; i < ast->class_decl.superclass_count; i++) {
+                if (i) sb_putc(b, ',');
+                sb_puts(b, "{\"name\":");
+                json_escape(b, ast->class_decl.superclass_names[i] ? ast->class_decl.superclass_names[i] : "");
+                sb_puts(b, ",\"type_var\":");
+                json_escape(b, ast->class_decl.superclass_type_vars[i] ? ast->class_decl.superclass_type_vars[i] : "");
+                sb_putc(b, '}');
+            }
+            sb_puts(b, "]");
+        }
         if (ast->class_decl.assoc_count > 0) {
             sb_puts(b, ",\"assoc_types\":[");
             for (int i = 0; i < ast->class_decl.assoc_count; i++) {

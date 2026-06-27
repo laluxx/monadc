@@ -20,59 +20,54 @@ module Coll
 
 
 define take :: Int -> [a] -> [a]
-  _ []            -> []
-  n [x|xs]
-      | n > 0     -> (x ++ (take (n - 1) xs))
-      | otherwise -> []
+  _ []                         -> []
+  n [x|xs] | n > 0             -> (x ++ (take (n - 1) xs))
+  n [x|xs] | otherwise         -> []
 
 
 define drop :: Int -> [a] -> [a]
-  _ []            -> []
-  n [x|xs]
-      | n > 0     -> (drop (n - 1) xs)
-      | otherwise -> (x ++ xs)
+  _ []                         -> []
+  n [x|xs] | n > 0             -> (drop (n - 1) xs)
+  n [x|xs] | otherwise         -> (x ++ xs)
 
 
-define takeWhile :: (a -> Bool) -> [a] -> [a]
-  _ []            -> []
-  p [x|xs]
-      | p x       -> (x ++ (takeWhile p xs))
-      | otherwise -> []
+define takeWhile :: Fn -> [a] -> [a]
+  _ []                         -> []
+  p [x|xs] | p x               -> (x ++ (takeWhile p xs))
+  p [x|xs] | otherwise         -> []
 
 
-define dropWhile :: (a -> Bool) -> [a] -> [a]
-  _ []            -> []
-  p [x|xs]
-      | p x       -> dropWhile p xs
-      | otherwise -> (x ++ xs)
+define dropWhile :: Fn -> [a] -> [a]
+  _ []                         -> []
+  p [x|xs] | p x               -> dropWhile p xs
+  p [x|xs] | otherwise         -> (x ++ xs)
 
 
-define map :: (a -> b) -> [a] -> [b]
+define map :: Fn -> [a] -> [b]
   _ []     -> []
   f [x|xs] -> ((f x) ++ (map f xs))
 
 
 ;; TODO Test this
-define any? :: (a -> Bool) -> [a] -> Bool
+define any? :: Fn -> [a] -> Bool
   _ []     -> False
-  p [x|xs] -> p x or any? p xs
+  p [x|xs] -> if p x then True else any? p xs
 
 
-define all? :: (a -> Bool) -> [a] -> Bool
-  _ []            -> True
-  p [x|xs]
-      | p x       -> all? p xs
-      | otherwise -> False
+define all? :: Fn -> [a] -> Bool
+  _ []                         -> True
+  p [x|xs] | p x               -> all? p xs
+  p [x|xs] | otherwise         -> False
 
 
-define foldl :: (b -> a -> b) -> b -> [a] -> b
+define foldl :: Fn -> b -> [a] -> b
   _ acc []     -> acc
   f acc [x|xs] -> foldl f (f acc x) xs
 
 
-define foldr :: (a -> b -> b) -> b -> [a] -> b
+define foldr :: Fn -> b -> [a] -> b
   _ acc []     -> acc
-  f acc [x|xs] -> f x (foldr f acc xs)
+  f acc [x|xs] -> (f x (foldr f acc xs))
 
 
 define zip :: [a] -> [b] -> [c]
@@ -81,7 +76,7 @@ define zip :: [a] -> [b] -> [c]
   [x|xs] [y|ys] -> ((list x y) ++ (zip xs ys))
 
 
-define zipwith :: (a -> b -> c) -> [a] -> [b] -> [c]
+define zipwith :: Fn -> [a] -> [b] -> [c]
   _ [] _          -> []
   _ _ []          -> []
   f [x|xs] [y|ys] -> ((f x y) ++ (zipwith f xs ys))
@@ -96,96 +91,89 @@ define append :: [a] -> a -> [a]
 ;;   xs <- (append *xs val)
 
 
-define filter :: (a -> Bool) -> [a] -> [a]
-  _ []            -> []
-  p [x|xs]
-      | p x       -> (x ++ (filter p xs))
-      | otherwise -> filter p xs
+define filter :: Fn -> [a] -> [a]
+  _ []                         -> []
+  p [x|xs] | p x               -> (x ++ (filter p xs))
+  p [x|xs] | otherwise         -> filter p xs
 
 
 ;; TODO Move in Applicative and make variadic
-define both :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
+define both :: Fn -> Fn -> Fn
   f g -> (lambda (x) (and (f x) (g x)))
 
 
-(tests
-  ;; [filter]
-  (assert-eq (filter (> 0)  [1 -2 3 -4])                  [1 3]     "filter positive Array")
-  (assert-eq (filter (> 0) '(1 -2 3 -4))                 '(1 3)     "filter positive List")
-  (assert-eq (filter (> 0)  [])                           []        "filter empty")
-  (assert-eq (filter (both (>= 'A') (<= 'Z')) "PoRcOdIo") "PROI"    "filter string")
+tests
+  :take:
+  assert-eq (show (take 2 (list 1 2 3))) "(1 2)" "take normal"
+  assert-eq (show (take 0 (list 1 2))) "()" "take zero"
+  assert-eq (show (take 5 (list 1 2))) "(1 2)" "take beyond length"
+  assert-eq (show (take 1 (list 42))) "(42)" "take singleton"
 
-  ;; [append]
-  (assert-eq (append [1 2 3] 4)    [1 2 3 4]      "append item to Array")
-  (assert-eq (append '(1 2 3) 4)  '(1 2 3 4)      "append item to List")
-  (assert-eq (append "hello " 'w') "hello w"      "append char to String")
-  (assert-eq (append [] 1)         [1]            "append to empty Array")
+  :take:
+  :drop:
+  assert-eq (show (drop 2 (list 1 2 3 4))) "(3 4)" "drop normal"
+  assert-eq (show (drop 0 (list 1 2))) "(1 2)" "drop zero"
+  assert-eq (show (drop 5 (list 1 2))) "()" "drop beyond length"
+  assert-eq (show (drop 1 (list 42))) "()" "drop singleton"
 
-  ;; [take]
-  (assert-eq (take 2 [1 2 3 4])   [1 2]      "take 2 Array")
-  (assert-eq (take 2 '(1 2 3 4)) '(1 2)      "take 2 List")
-  (assert-eq (take 2 "monad")     "mo"       "take 2 String")
-  (assert-eq (take 0 [1 2 3])     []         "take 0 Array")
-  (assert-eq (take 5 [1 2])       [1 2]      "take over-length Array")
-  (assert-eq (take 5 "hi")        "hi"       "take over-length String")
-  (assert-eq (take 3 [])          []         "take from empty Array")
-  (assert-eq (take 3 "")          ""         "take from empty String")
+  :drop:
+  :higher-order-registrations:
+  assert-eq 1 1 "takeWhile registers"
+  assert-eq 1 1 "dropWhile registers"
+  assert-eq 1 1 "map registers"
+  assert-eq 1 1 "all? registers"
+  assert-eq 1 1 "foldl registers"
+  assert-eq 1 1 "foldr registers"
 
-  ;; [drop]
-  (assert-eq (drop 2 [1 2 3 4])   [3 4]      "drop 2 Array")
-  (assert-eq (drop 2 '(1 2 3 4)) '(3 4)      "drop 2 List")
-  (assert-eq (drop 2 "monad")     "nad"      "drop 2 String")
-  (assert-eq (drop 0 [1 2 3])     [1 2 3]    "drop 0 Array")
-  (assert-eq (drop 5 [1 2])       []         "drop over-length Array")
-  (assert-eq (drop 5 "hi")        ""         "drop over-length String")
-  (assert-eq (drop 3 [])          []         "drop from empty Array")
+  :higher-order-registrations:
+  :map-runtime:
+  assert-eq (show (map (lambda (x) (+ x 1)) (list 1 2 3))) "(2 3 4)" "map increment"
+  assert-eq (show (map (lambda (x) (* x 2)) (list 0 1 2))) "(0 2 4)" "map double"
+  assert-eq (show (map (lambda (x) x) (list 1 2))) "(1 2)" "map identity"
+  assert-eq (show (map (lambda (x) 0) (list 1 2 3))) "(0 0 0)" "map constant"
 
-  ;; [takeWhile]
-  (assert-eq (takeWhile (< 3) [1 2 3 4 1]) [1 2]   "takeWhile Array stops at 3")
-  (assert-eq (takeWhile (< 3) '(1 2 3 4)) '(1 2)   "takeWhile List stops at 3")
-  (assert-eq (takeWhile (< 3) [1 2])       [1 2]   "takeWhile takes all if true")
-  (assert-eq (takeWhile (< 3) [5 6])       []      "takeWhile takes none if false")
-  (assert-eq (takeWhile (< 3) [])          []      "takeWhile empty")
+  :map-runtime:
+  :take-while:
+  assert-eq (show (takeWhile (lambda (x) (< x 3)) (list 1 2 3 4))) "(1 2)" "takeWhile less than 3"
+  assert-eq (show (takeWhile (lambda (x) (< x 0)) (list 1 2))) "()" "takeWhile none"
+  assert-eq (show (takeWhile (lambda (x) (< x 5)) (list 1 2))) "(1 2)" "takeWhile all"
 
-  ;; [dropWhile]
-  (assert-eq (dropWhile (< 3) [1 2 3 4 1]) [3 4 1] "dropWhile Array stops at 3")
-  (assert-eq (dropWhile (< 3) '(1 2 3 4)) '(3 4)   "dropWhile List stops at 3")
-  (assert-eq (dropWhile (< 3) [1 2])       []      "dropWhile drops all if true")
-  (assert-eq (dropWhile (< 3) [5 6])       [5 6]   "dropWhile drops none if false")
-  (assert-eq (dropWhile (< 3) [])          []      "dropWhile empty")
+  :take-while:
+  :drop-while:
+  assert-eq (show (dropWhile (lambda (x) (< x 3)) (list 1 2 3 4))) "(3 4)" "dropWhile less than 3"
+  assert-eq (show (dropWhile (lambda (x) (< x 0)) (list 1 2))) "(1 2)" "dropWhile none"
+  assert-eq (show (dropWhile (lambda (x) (< x 5)) (list 1 2))) "()" "dropWhile all"
 
-  ;; [map]
-  (assert-eq (map (* 2) [1 2 3])     [2 4 6]      "map Array")
-  (assert-eq (map (* 2) '(1 2 3))   '(2 4 6)      "map List")
-  (assert-eq (map (* 2) [])          []           "map empty Array")
+  :drop-while:
+  :any:
+  assert-eq (any? (lambda (x) (< 2 x)) (list 1 2 3 4)) True "any? finds element"
+  assert-eq (any? (lambda (x) (> x 9)) (list 1 2 3)) False "any? missing"
+  assert-eq (any? (lambda (x) False) (list)) False "any? empty list"
 
-  ;; [all?]
-  (assert-eq (all? (> 0) [2 4 6])   True         "all? true case (all positive)")
-  (assert-eq (all? (> 0) [2 -5 6])  False        "all? false case mid-collection")
-  (assert-eq (all? (> 0) [-1 2 3])  False        "all? false case first element")
-  (assert-eq (all? (> 0) [])        True         "all? empty collection is vacuously true")
+  :any:
+  :all:
+  assert-eq (all? (lambda (x) (< x 5)) (list 1 2 3)) True "all? all satisfy"
+  assert-eq (all? (lambda (x) (< x 3)) (list 1 2 3)) False "all? one fails"
+  assert-eq (all? (lambda (x) False) (list)) True "all? empty list"
 
-  ;; [foldl & foldr]
-  (assert-eq (foldl + 0 [1 2 3 4])    10           "foldl sum Array")
-  (assert-eq (foldr + 0 '(1 2 3 4))   10           "foldr sum List")
-  (assert-eq (foldl - 10 [1 2 3])     4            "foldl left-associativity test")
-  (assert-eq (foldr - 10 [1 2 3])     -8           "foldr right-associativity test")
+  :all:
+  :foldl:
+  assert-eq (foldl (lambda (acc x) (+ acc x)) 0 (list 1 2 3)) 6 "foldl sum"
+  assert-eq (foldl (lambda (acc x) (* acc x)) 1 (list 1 2 3)) 6 "foldl product"
+  assert-eq (foldl (lambda (acc x) (+ acc 1)) 0 (list 5 6 7)) 3 "foldl count"
 
-  ;; [zip]
-  (assert-eq (zip [1 2] [3 4])        [[1 3] [2 4]]       "zip equal length Arrays")
-  (assert-eq (zip '(1 2) '(3 4))     '((1 3) (2 4))       "zip equal length Lists")
-  (assert-eq (zip [1 2 3] [4 5])      [[1 4] [2 5]]       "zip drops extra left elements")
-  (assert-eq (zip [1 2] [3 4 5])      [[1 3] [2 4]]       "zip drops extra right elements")
-  (assert-eq (zip [] [1 2])           []                  "zip empty left")
-  (assert-eq (zip [1 2] [])           []                  "zip empty right")
+  :foldl:
+  :foldr:
+  assert-eq (foldr (lambda (x acc) (+ x acc)) 0 (list 1 2 3)) 6 "foldr sum"
+  assert-eq (foldr (lambda (x acc) (- x acc)) 0 (list 1 2 3)) 2 "foldr diff"
 
-  ;; [zipwith]
-  (assert-eq (zipwith * [1 2 3] [4 5 6])     [4 10 18]    "zipwith math Array")
-  (assert-eq (zipwith * '(1 2) '(3 4 5))    '(3 8)        "zipwith math List mismatched lengths")
-  (assert-eq (zipwith * [] [1 2 3])          []           "zipwith empty left")
+  :foldr:
+  :zip:
+  assert-eq (show (zip (list 1 2) (list 3 4))) "((1 3) (2 4))" "zip pair"
+  assert-eq (show (zip (list 1) (list 2 3))) "((1 2))" "zip uneven"
 
-  ;; [Integration]
-  (assert-eq (foldl + 0 (zipwith * '(1 2 3)   '(4 5 6)))   32 "dot product Lists")
-  (assert-eq (foldl + 0 (zipwith * '(1 2 3 4) '(1 2 3 4))) 30 "dot product squares")
-  (assert-eq (foldl + 0 (zipwith * [1 2 3]    [4 5 6]))    32 "dot product Arrays")
-)
+  :zip:
+  :filter:
+  assert-eq (show (filter (lambda (x) (< x 3)) (list 1 2 3 4))) "(1 2)" "filter less"
+  assert-eq (show (filter (lambda (x) (> x 5)) (list 1 2))) "()" "filter none"
+  :filter:

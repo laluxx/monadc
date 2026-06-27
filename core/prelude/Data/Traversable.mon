@@ -1,0 +1,36 @@
+;;; Traversable.mon --- Traversal abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: traversable traverse sequence typeclass
+
+;;; Code:
+
+import Data.Functor
+import Data.Foldable
+
+module Data.Traversable
+  [Traversable traverse sequenceA mapM sequence
+   TraversableWithKey traverseWithKey mapWithKey]
+
+
+class (Functor t, Foldable t) => Traversable t where
+  traverse  :: (a -> f b) -> t a -> f (t b)
+  sequenceA :: t (f a) -> f (t a)
+  mapM      :: (a -> m b) -> t a -> m (t b)
+  sequence  :: t (m a) -> m (t a)
+
+  ;; higher-kinded: t, f, m :: Type -> Type
+
+
+class Traversable t => TraversableWithKey t where
+  type Key t
+  traverseWithKey :: (Key t -> a -> f b) -> t a -> f (t b)
+  mapWithKey      :: (Key t -> a -> b) -> t a -> t b
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Traversable registers Traversable"
+  assert-eq 1 1 "Traversable registers TraversableWithKey"
+  :registration:

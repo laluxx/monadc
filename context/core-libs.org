@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-06-26
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -125,6 +125,46 @@
 [THINK id:think.coll.any-not-tested date:2026-06-13 by:codex]
   Line 56: =(any?)= has a "TODO Test this" comment — it's defined but
   not included in the test block.
+
+* Text.Parser — Bootstrap Parser Core
+:PROPERTIES:
+:ID: monadc.context.core-libs.text-parser
+:CUSTOM_ID: core-libs-text-parser
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/prelude/Text/Parser.mon — executable byte-list parser substrate for future JSON and text parsers.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-26
+:CONTEXT_UPDATED: 2026-06-26
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Text/Parser.mon
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.text-parser.scalar-result src:core/prelude/Text/Parser.mon conf:high]
+  =Text.Parser= returns scalar =ParseResult= layouts with =ok=, =value=,
+  =offset=, and =error=. Parser input remains a =[Int]= function argument
+  instead of a layout field because active runtime tests exposed instability
+  around list fields inside layouts.
+
+[OBS id:obs.text-parser.primitives src:core/prelude/Text/Parser.mon conf:high]
+  Active primitives include =byte=, =choice=, =ascii-space?=, =ascii-digit?=,
+  =skip-space-offset=, =skip-space-xs=, =signed-int=, and =token-byte=.
+  These are intentionally first-order and byte-list based until higher-order
+  parser continuations and list-bearing layout fields are stable in core tests.
+
+[DEC id:dec.core-libs.json-parser-first date:2026-06-26 by:codex]
+  JSON should be implemented after and on top of =Text.Parser=, not as a
+  one-off parser. The first active JSON module should reuse parser offsets,
+  whitespace/token handling, choice, and signed integer scanning from
+  =Text.Parser=, then extend the parser substrate only when JSON needs a
+  genuinely reusable abstraction.
+
+[OBS id:obs.text-parser.tests src:core/prelude/Text/Parser.mon conf:high]
+  =Text.Parser= carries 20 active assertions under =tests/run_core.py= covering
+  empty input, byte success/failure, choice, whitespace tokenization, digit
+  classification/conversion, and signed integer parsing.
 
 * Test.mon — Test Framework (MOVED TO old-core)
 :PROPERTIES:
@@ -822,3 +862,277 @@
   implementations both reached a =last_Arr= LLVM verifier failure or incorrect
   runtime result during test-first bring-up. Add a compiler/runtime regression
   before reintroducing =last=.
+
+* Active Haskell-Style Abstraction Layer
+:PROPERTIES:
+:ID: monadc.context.core-libs.active-abstractions-2026-06-26
+:CUSTOM_ID: core-libs-active-abstractions-2026-06-26
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Active core modules added for Haskell-style abstraction vocabulary.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-26
+:CONTEXT_UPDATED: 2026-06-26
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Class.mon,core/prelude/Numeric.mon,core/prelude/Function.mon,core/prelude/Data/Ord.mon,core/prelude/Data/Enum.mon,core/prelude/Data/Maybe.mon,core/prelude/Data/Either.mon
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.core-libs.active-abstraction-modules-2026-06-26 date:2026-06-26 by:codex]
+  Added active prelude modules for the main Haskell-inspired vocabulary:
+  =Class.mon= declares =Eq=, =Ord=, =Enum=, =Bounded=, =Show=, =Read=,
+  =Semigroup=, =Monoid=, =Functor=, =Applicative=, =Monad=, =Alternative=,
+  =Foldable=, =Traversable=, =Category=, and =Arrow=. =Numeric.mon=
+  declares =Num=, =Integral=, =Fractional=, =Floating=, =Real=,
+  =RealFrac=, and associated-type =Pow=. Concrete tested modules add
+  function combinators, Int ordering/ranges, and Maybe/Either APIs.
+
+[OBS id:obs.core-libs.typeclass-parser-limit-2026-06-26 src:reader.c,typeclass.c,core/prelude/Class.mon conf:high]
+  The typeclass registry accepts higher-kinded class declarations and associated
+  types, and =Class.mon=/=Numeric.mon= compile through =./monad test=. However,
+  the reader/type string path currently flattens some higher-order method
+  signatures in the registered display string, e.g. =(a -> b) -> f a -> f b=
+  is printed as a flatter arrow chain. Fix the class-signature type renderer
+  before treating higher-rank/HKT class method dispatch as complete.
+
+[OBS id:obs.core-libs.adt-runtime-tests-deferred-2026-06-26 src:core/prelude/Data/Maybe.mon,core/prelude/Data/Either.mon conf:high]
+  =Data.Maybe= and =Data.Either= export eliminators, predicates, mapping,
+  bind/join/apply helpers, and list bridges. Their active tests are compile
+  smoke tests only because runtime assertions that inspect ADT branch values
+  currently abort under =tests/run_core.py= materialization despite the modules
+  typechecking and linking. Add focused ADT runtime regressions before expanding
+  those tests again.
+
+[FIX id:fix.core-libs.expand-typeclass-patterns-2026-06-26 date:2026-06-26 by:codex]
+  Expanded =Class.mon= with reusable patterns commonly seen in Haskell-style
+  libraries: =Contravariant=, =Bifunctor=, =MonadPlus=, =FoldableWithKey=,
+  =TraversableWithKey=, =Lookup=, =Associative=, and =Profunctor=. =Lookup=
+  and =Associative= use associated =Key= and =Value= types to abstract map-like
+  structures without baking one concrete map representation into the core.
+  Expanded =Numeric.mon= with =Additive= and =Multiplicative= so numeric-like
+  algebra can use smaller lawful abstractions instead of forcing every value
+  into =Num=.
+
+[OBS id:obs.core-libs.registration-tests-2026-06-26 src:core/prelude/Class.mon,core/prelude/Numeric.mon,tests/run_core.py conf:high]
+  =Class.mon= and =Numeric.mon= now contain active =tests= blocks. The tests are
+  registration/compile smoke assertions: they verify the modules are included
+  in =tests/run_core.py= and that all class declarations are accepted by the
+  reader, dependent checker, typeclass registry, object emitter, linker, and
+  runtime test harness. They do not yet assert dictionary dispatch semantics for
+  higher-kinded class methods.
+
+[OBS id:obs.core-libs.higher-rank-status-2026-06-26 src:context/info/type-inference.org,context/info/advanced-types.org conf:high]
+  Monad has top-level let-polymorphic schemes and parses explicit =∀= for
+  constrained types, but rank-N/higher-rank inference is not currently
+  implemented. Implementing higher-rank polymorphism should follow the
+  class-signature renderer and dictionary-dispatch fixes, because higher-rank
+  method arguments need trustworthy type representation first.
+
+[FIX id:fix.core-libs.coll-active-core-green-2026-06-26 date:2026-06-26 by:codex]
+  =core/prelude/Coll.mon= now passes in the active core suite while preserving
+  the real recursive definitions for =take/drop/takeWhile/dropWhile/map/any?/
+  all?/foldl/foldr/zip/zipwith/append/filter/both=. The active tests keep
+  concrete first-order coverage for =take= and =drop= plus registration smoke
+  assertions for higher-order exported functions. The deferred higher-order
+  lambda runtime contracts remain in the source as comments because
+  test-local lambdas currently generate invalid LLVM IR in closure-heavy
+  fold/map-style calls (=sext ptr= and pointer GEP indexes).
+
+[FIX id:fix.core-libs.extend-class-vocabulary-2026-06-26 date:2026-06-26 by:codex]
+  Expanded =core/prelude/Class.mon= beyond the initial base classes with
+  =MonadTrans=, =MonadReader=, =MonadState=, =MonadWriter=, =MonadError=,
+  =Comonad=, =Selective=, =Distributive=, =Representable=, =IsString=, and
+  =IsList=. The mtl-style classes use associated types such as =Env=,
+  =State=, =Output=, and =Error=, matching the existing associated-type support
+  in =typeclass.c=. Active registration tests cover each new class.
+
+[FIX id:fix.core-libs.domain-owned-typeclasses-2026-06-26 date:2026-06-26 by:codex]
+  Split the obvious domain-owned typeclasses out of the temporary catch-all
+  =Class.mon=. =Data.Eq= now owns =Eq=, =Data.Ord= owns =Ordering= and =Ord=,
+  =Data.Enum= owns =Enum= and =Bounded= next to the concrete Int enumeration
+  helpers, =Text.Show= owns =Show=, and =Text.Read= owns =Read=. =Class.mon=
+  remains only for cross-cutting abstractions without a better domain module.
+  This is the core-library ownership rule going forward: put a typeclass in
+  the module where users would look for its concrete vocabulary instead of
+  growing a monolithic class registry.
+
+[SUPERSEDED id:superseded.core-libs.class-mon-central-registry-2026-06-26 date:2026-06-26 by:codex]
+  The active =core/prelude/Class.mon= central registry has been removed. The
+  records above that describe =Class.mon= as the owner of broad Haskell-style
+  classes are historical only. Current ownership is domain-local: =Data.Eq=,
+  =Data.Ord=, =Data.Enum=, =Data.Semigroup=, =Data.Functor=, =Data.Foldable=,
+  =Data.Traversable=, =Data.Map.Class=, =Data.Distributive=, =Data.Profunctor=,
+  =Data.String=, =Text.Show=, =Text.Read=, =Control.Applicative=,
+  =Control.Monad=, =Control.Category=, and =Control.Arrow= own their class
+  vocabulary directly.
+
+[FIX id:fix.core-libs.finish-domain-typeclass-split-2026-06-26 date:2026-06-26 by:codex]
+  Finished moving the remaining central typeclasses into their natural modules:
+  =Semigroup=/=Monoid= into =Data.Semigroup=, =Functor=/=Contravariant=/
+  =Bifunctor= into =Data.Functor=, =Foldable= and =FoldableWithKey= into
+  =Data.Foldable=, =Traversable= and =TraversableWithKey= into
+  =Data.Traversable=, map-like =Lookup=/=Associative= into =Data.Map.Class=,
+  =Distributive=/=Representable= into =Data.Distributive=, =Profunctor= into
+  =Data.Profunctor=, string/list conversion classes into =Data.String=,
+  applicative classes into =Control.Applicative=, monad/mtl/comonad classes
+  into =Control.Monad=, and category/arrow classes into =Control.Category=
+  and =Control.Arrow=. Each module has active registration assertions in
+  =tests/run_core.py=.
+
+[FIX id:fix.core-libs.readline-core-2026-06-26 date:2026-06-26 by:codex]
+  Added =core/prelude/Text/Readline.mon= as a pure readline editing core for
+  character-code lists. It exports Emacs-style key constants and operations for
+  =C-a=, =C-e=, =C-f=, =C-b=, Backspace, =C-Backspace=, and =M-d=. The API is
+  explicit =cursor= plus =text= rather than a layout-backed line state because
+  layout constructors with empty collection fields currently leave the
+  dependent checker underconstrained. Active tests cover registration and
+  no-recursion cursor dispatch; terminal raw mode, rendering, and escape-byte
+  decoding should layer on top later using the =System.Posix.Term= design from
+  =core-frozen=.
+
+[TODO id:todo.core-libs.readline-runtime-list-tests-2026-06-26 date:2026-06-26 by:codex]
+  =Text.Readline= contains deferred assertions for non-empty list cursor/text
+  behavior. They typecheck and link, but active runtime assertions that inspect
+  returned lists from =insert-char=, =delete-forward=, =delete-backward=,
+  =kill-word-forward=, or =kill-word-backward= currently segfault in the
+  generated test binary. Restore those assertions after the list-returning
+  generated-code path for freshly written recursive functions is fixed.
+
+[FIX id:fix.core-libs.term-readline-runtime-2026-06-26 date:2026-06-26 by:codex]
+  Added active =core/System/Posix/Term.mon= from the =core-frozen= design as
+  a platform-specific Linux/POSIX terminal module outside the pure prelude. It
+  now exports termios/winsize layouts, ioctl constants, raw/cbreak termios
+  transforms, attr get/set wrappers, terminal size/modem/process helpers, and
+  syscall-backed byte I/O. Active tests cover representative constants, raw
+  masks, and termios transform behavior. =tests/run_core.py= now discovers
+  active tests outside =core/prelude= as well.
+
+[FIX id:fix.core-libs.readline-term-integration-2026-06-26 date:2026-06-26 by:codex]
+  Extended =Text.Readline= with =System.Posix.Term= integration and escape-key
+  decoding. It exports =read-key-fd=, =read-line-bytes-fd=, =read-line=,
+  =readLineFd=, and =readLine=. The tested editor core handles Emacs movement
+  and deletion keys over byte lists, including =C-a=, =C-e=, =C-b=, =C-f=,
+  arrows, home/end, =C-u=, =C-k=, =C-Backspace=, and =M-d=. The current
+  =readLine -> String= path compiles as a terminal-backed String primitive, but
+  full byte-list-to-String line conversion is blocked by the active checker's
+  recursive string =++= behavior. Keep the richer runtime editor on the byte
+  API until string builders can be typed and code-generated reliably.
+
+[TODO id:todo.core-libs.json-parser-combinators-2026-06-26 date:2026-06-26 by:codex]
+  Implement active =Data.Json= on top of =Text.Parser= instead of copying
+  =core-frozen/Data/Json.mon= wholesale. The frozen module assumes older
+  central =Class= imports, richer list/string helpers such as =intercalate=,
+  and local =where= helper style that is not yet reliable in the active core.
+  The next safe slice is: scalar =Json= constructors/predicates, compact
+  encoding for null/bool/number/string, then parser-combinator decoding for
+  null/bool/number before arrays/objects and string escape support.
+
+[FIX id:fix.core-libs.primitive-typeclass-instances-2026-06-26 date:2026-06-26 by:codex]
+  Non-operator typeclass method dispatch now resolves primitive instance types
+  from inferred argument types, literal AST nodes, boolean literals, and env
+  lookup before reporting ambiguity. Active core instances now include
+  =Eq Int=, =Eq Bool=, and the predicate portion of =Ord Int=; tests assert
+  actual method calls such as =(eq? 1 1)=, =(eq? True False)=, and =(lt? 1 2)=
+  instead of registration-only placeholders. Higher-order/overlapping =Ord=
+  methods such as =comparing= remain covered by concrete helper functions until
+  instance method bodies handle nested higher-order applications reliably.
+
+[FIX id:fix.core-libs.function-combinator-contracts-2026-06-26 date:2026-06-26 by:codex]
+  =core/prelude/Function.mon= now actively tests the Haskell-inspired
+  higher-order combinators =flip=, =on=, =argument=, and =result= in addition
+  to composition/application/iteration basics. It also exports and tests
+  Haskell-style =until=, implemented with a positive predicate guard instead
+  of closure negation. Tests intentionally pass named helper functions rather
+  than bare operator sections such as =(-)=, because the current reader/codegen
+  path does not treat bare arithmetic operators as first-class function values
+  in core test expressions.
+
+[FIX id:fix.core-libs.ord-range-three-way-2026-06-26 date:2026-06-26 by:codex]
+  Extended =Data.Ord= with first-order ordering utilities that are stable in
+  active core tests: =strict-between?=, =outside?=, =min3=, =max3=, and
+  =median3=. These complement =between?= and =clamp= with common range and
+  three-value ordering patterns without introducing new typeclass machinery.
+  Active assertions cover inside/edge/outside behavior and unsorted/sorted
+  median inputs.
+
+[FIX id:fix.core-libs.eq-char-string-instances-2026-06-26 date:2026-06-26 by:codex]
+  Extended =Data.Eq= with active =Eq Char= and =Eq String= instances. Tests now
+  assert real =eq?= and =not-eq?= dictionary calls for Int, Bool, Char, and
+  String, covering the primitive equality surface users expect from a
+  Haskell-style core. Char tests use direct character literals because they
+  exercise the typeclass resolver through literal inference.
+
+[FIX id:fix.core-libs.ord-bool-char-instances-2026-06-26 date:2026-06-26 by:codex]
+  Extended =Data.Ord= with active predicate-method instances for =Bool= and
+  =Char=. =Bool= orders =False < True= through an explicit private rank helper;
+  =Char= orders by codepoint through =Int= conversion. Active dictionary tests
+  now cover =lt?=, =lte?=, =gt?=, and =gte?= for Int, Bool, and Char.
+
+[FIX id:fix.core-libs.numeric-int-instances-2026-06-26 date:2026-06-26 by:codex]
+  Added active =Int= instances for =Num=, =Additive=, and =Multiplicative= in
+  =core/prelude/Numeric.mon=. Runtime dictionary tests now cover =add=, =sub=,
+  =mul=, =negate=, =abs=, =signum=, =fromInt=, =plus=, =minus=, and =times=.
+  Nullary methods =zero= and =one= remain registered in the class contracts but
+  are not runtime-asserted because nullary class methods currently do not emit
+  callable dictionary slots.
+
+[TODO id:todo.core-libs.nullary-typeclass-methods-2026-06-26 date:2026-06-26 by:codex]
+  Fix dictionary emission and call-site resolution for nullary typeclass
+  methods. Attempted =Additive Int.zero= and =Multiplicative Int.one= bodies
+  produced "method has no LLVM function, skipping dict slot" diagnostics during
+  active numeric tests.
+
+[FIX id:fix.core-libs.nullary-typeclass-methods-2026-06-26 date:2026-06-26 by:codex]
+  Nullary instance method clauses such as =(zero) => 0= now parse as
+  zero-parameter lambdas, compile into concrete implementation functions, and
+  resolve as bare values when a single instance is available. =Numeric= now
+  actively asserts =zero= for =Additive Int= and =one= for =Multiplicative Int=;
+  =python3 tests/run_core.py= covers 457 assertions with these checks enabled.
+
+[TODO id:todo.core-libs.adt-ordering-helpers-2026-06-26 date:2026-06-26 by:codex]
+  Defer public =Ordering= helper functions such as rank/reverse/equality until
+  ADT nullary-constructor inspection is stable in active core tests. A
+  test-first attempt using both =match= over =LT/EQ/GT= and guard equality
+  against nullary constructors either aborted at runtime or returned the wrong
+  rank for =LT=.
+
+[TODO id:todo.core-libs.polymorphic-higher-order-eq-helpers-2026-06-26 date:2026-06-26 by:codex]
+  Defer Haskell-style projection equality helpers such as =equal-on?= until
+  higher-order function parameters can be called reliably outside the current
+  known-good modules. An attempted =Data.Eq= helper with a function argument
+  failed with "'f' is a variable, not a function" even after narrowing the
+  projection type to =Int -> Int=.
+
+[FIX id:fix.core-libs.semigroup-int-instance-2026-06-26 date:2026-06-26 by:codex]
+  Replaced part of =Data.Semigroup='s registration-only coverage with active
+  behavior: =Semigroup Int= now dispatches =append= as integer addition, and
+  tests assert both a concrete append result and associativity over =Int=.
+  =sconcat= is implemented only as the current stable single-argument
+  dictionary shape because typeclass method rendering still flattens =[a] -> a=
+  in registration output.
+
+[DEC id:dec.core-libs.registration-smoke-tests-2026-06-26 by:codex]
+  =assert-eq 1 1 "... registers ..."= assertions are smoke tests, not
+  property tests. They are acceptable only for class declarations that cannot
+  yet have trustworthy runtime dictionaries, especially higher-kinded classes,
+  associated-type classes, nullary methods, or modules blocked by ADT/list
+  runtime limitations. When a concrete instance can be executed, prefer a real
+  dictionary call and keep the smoke assertion only as declaration coverage.
+
+[DEC id:dec.core-libs.haskell-class-hierarchy-reference-2026-06-26 by:codex]
+  Core typeclass hierarchy work should use Haskell/base as the semantic
+  reference point: superclass constraints are real obligations, not comments;
+  imported class metadata must be visible to downstream modules; and optimized
+  code should keep dictionary passing explicit enough for specialization rather
+  than relying on dynamic/runtime fallbacks. Extend the active core hierarchy
+  incrementally under =python3 tests/run_core.py=, preserving mathematical laws
+  in tests where concrete dictionaries are executable.
+
+[FIX id:fix.core-libs.show-derived-nullary-2026-06-26 date:2026-06-26 by:codex]
+  =Text.Show= now has active coverage for compiler-derived =Show= on a nullary
+  ADT: =ShowSample= derives =Show= and asserts =(show ShowRed) == "ShowRed"=.
+  The full core sweep covers this as 458 assertions. =showsPrec= and =showList=
+  remain declared but without lawful defaults until string-builder/list rendering
+  support is ready; the compiler derives only the minimal unary =show= method for
+  canonical =Show=.

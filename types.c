@@ -373,6 +373,9 @@ Type *type_from_name(const char *name) {
 
     size_t len = strlen(name);
 
+    if (strcmp(name, "()") == 0 || strcmp(name, "Unit") == 0)
+        return type_unit();
+
     Type *arrow_type = type_parse_arrow_chain(name);
     if (arrow_type) return arrow_type;
 
@@ -593,6 +596,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "F80")     == 0) return type_f80();
     if (strcmp(name, "Path")    == 0) return type_path();
     if (strcmp(name, "Escape")  == 0) return type_escape();
+    if (strcmp(name, "Unit")    == 0) return type_unit();
     if (strcmp(name, "Heap")    == 0) return type_arr_heap(NULL);
 
     /* Arbitrary-width integers: I<n> and U<n> */
@@ -681,6 +685,7 @@ Type *type_u128   (void) { return make_type(TYPE_U128);    }
 Type *type_f80    (void) { return make_type(TYPE_F80);     }
 Type *type_path   (void) { return make_type(TYPE_PATH);    }
 Type *type_escape (void) { return make_type(TYPE_ESCAPE);  }
+Type *type_unit   (void) { return make_type(TYPE_UNIT);    }
 
 Type *type_arr_heap(Type *element_type) {
     Type *t = make_type(TYPE_ARR);
@@ -951,8 +956,7 @@ Type *type_clone(Type *t) {
         }
         case TYPE_PTR:          return type_ptr(type_clone(t->element_type));
         case TYPE_OPTIONAL:     return type_optional(type_clone(t->element_type));
-        case TYPE_NIL:          return type_nil();
-        case TYPE_PATH:         return type_path();
+        case TYPE_UNIT:         return type_unit();
         case TYPE_ESCAPE:       return type_escape();
         case TYPE_APP:          return type_app(t->app_constructor, type_clone(t->app_arg));
         case TYPE_F80:          return type_f80();
@@ -1054,6 +1058,7 @@ const char *type_to_string(Type *t) {
     case TYPE_U128:    return "U128";
     case TYPE_UNKNOWN: return "?";
     case TYPE_NIL:     return "Nil";
+    case TYPE_UNIT:    return "()";
     case TYPE_APP:
         if (t->app_constructor && t->app_arg) {
             snprintf(buf, 512, "%s %s", t->app_constructor, type_to_string(t->app_arg));
@@ -1289,6 +1294,9 @@ static Type *parse_type_node(struct AST *node) {
     }
 
     if (node->type == AST_LIST) {
+        if (node->list.count == 0)
+            return type_unit();
+
         Type **elems = malloc(sizeof(Type*) * node->list.count);
         for (size_t j = 0; j < node->list.count; j++) {
             elems[j] = parse_type_node(node->list.items[j]);

@@ -1,0 +1,28 @@
+;;; Arrow.mon --- Arrow abstraction
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: arrow fanout split typeclass
+
+;;; Code:
+
+import Control.Category
+
+module Control.Arrow
+  [Arrow arr first second split fanout]
+
+
+class Category arr => Arrow arr where
+  arr    :: (a -> b) -> arr a b
+  first  :: arr a b -> arr (a, c) (b, c)
+  second :: arr a b -> arr (c, a) (c, b)
+  split  :: arr a b -> arr c d -> arr (a, c) (b, d)
+  fanout :: arr a b -> arr a c -> arr a (b, c)
+
+  ;; higher-kinded: arr :: Type -> Type -> Type
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Arrow registers Arrow"
+  :registration:

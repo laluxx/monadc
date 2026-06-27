@@ -1,0 +1,44 @@
+;;; Semigroup.mon --- Associative append abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: semigroup monoid append algebra typeclass
+
+;;; Code:
+
+module Data.Semigroup
+  [Semigroup append sconcat
+   Monoid mempty mappend mconcat]
+
+
+class Semigroup a where
+  append  :: a -> a -> a
+  sconcat :: [a] -> a
+
+  ;; law: append is associative
+
+
+class Semigroup a => Monoid a where
+  mempty  :: a
+  mappend :: a -> a -> a
+  mconcat :: [a] -> a
+
+  ;; law: mappend mempty x = x
+  ;; law: mappend x mempty = x
+
+
+instance Semigroup Int
+  (append x y) => x + y
+  (sconcat x)  => x
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Semigroup registers Semigroup"
+  assert-eq 1 1 "Semigroup registers Monoid"
+  :registration:
+
+  :int-semigroup:
+  assert-eq (append 2 3) 5 "Semigroup Int append"
+  assert-eq (append (append 1 2) 3) (append 1 (append 2 3)) "Semigroup Int append associative"
+  :int-semigroup:

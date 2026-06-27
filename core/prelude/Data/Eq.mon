@@ -1,0 +1,73 @@
+;;; Eq.mon --- Equality typeclass
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: eq equality typeclass
+
+;;; Commentary:
+
+;; Equality belongs with data comparison, not in a monolithic class registry.
+;; Concrete equality is still provided by the language/runtime; this module
+;; names the lawful typeclass contract.
+
+;;; Code:
+
+module Data.Eq
+  [Eq eq? not-eq?]
+
+
+class Eq a where
+  eq?     :: a -> a -> Bool
+  not-eq? :: a -> a -> Bool
+
+  ;; law: not-eq? x y = not (eq? x y)
+
+
+instance Eq Int
+  (eq? x y)     => (= x y)
+  (not-eq? x y) => (not (= x y))
+
+
+instance Eq Bool
+  (eq? x y)     => (= x y)
+  (not-eq? x y) => (not (= x y))
+
+
+instance Eq Char
+  (eq? x y)     => (= x y)
+  (not-eq? x y) => (not (= x y))
+
+
+instance Eq String
+  (eq? x y)     => (= x y)
+  (not-eq? x y) => (not (= x y))
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Eq registers Eq"
+  :registration:
+
+  :int-instance:
+  assert-eq (eq? 1 1) True "Eq Int eq? true"
+  assert-eq (eq? 1 2) False "Eq Int eq? false"
+  assert-eq (not-eq? 1 2) True "Eq Int not-eq? true"
+  :int-instance:
+
+  :bool-instance:
+  assert-eq (eq? True True) True "Eq Bool eq? true"
+  assert-eq (eq? True False) False "Eq Bool eq? false"
+  assert-eq (not-eq? True False) True "Eq Bool not-eq? true"
+  :bool-instance:
+
+  :char-instance:
+  assert-eq (eq? 'A' 'A') True "Eq Char eq? true"
+  assert-eq (eq? 'A' 'B') False "Eq Char eq? false"
+  assert-eq (not-eq? 'A' 'B') True "Eq Char not-eq? true"
+  :char-instance:
+
+  :string-instance:
+  assert-eq (eq? "alpha" "alpha") True "Eq String eq? true"
+  assert-eq (eq? "alpha" "beta") False "Eq String eq? false"
+  assert-eq (not-eq? "alpha" "beta") True "Eq String not-eq? true"
+  :string-instance:

@@ -769,3 +769,33 @@ LLVM function with no type tags or dispatch overhead.
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+* Runtime List Values
+:PROPERTIES:
+:ID: monadc.context.codegen.runtime-list-values
+:CUSTOM_ID: runtime-list-values
+:CONTEXT_KIND: regression
+:CONTEXT_DESCRIPTION: Codegen contract for list constructor values and element boxing.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-27
+:CONTEXT_UPDATED: 2026-06-27
+:CONTEXT_STABILITY: active
+:CONTEXT_STATUS: active
+:SOURCE: codegen.c,runtime.c,core/prelude/Coll.mon,core/prelude/Text/Parser.mon,core/prelude/Text/Readline.mon
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.codegen.list-constructor-boxed-runtime-value-2026-06-27 date:2026-06-27 by:codex]
+  The =(list ...)= builtin builds with a raw =RuntimeList*= internally, appends
+  boxed =RuntimeValue*= elements, then returns =rt_value_list(raw)=. This keeps
+  calls such as =rt_coll_is_empty= and =rt_unbox_list= on the boxed collection
+  contract while preserving runtime append construction. =codegen_box= must also
+  box narrow integer values (=Byte=, =U8=, fixed-width ints) before list append;
+  otherwise modules that build byte lists fail LLVM verification with
+  =rt_list_append(ptr, i8)=. Covered by =python3 tests/run_core.py=, including
+  =Coll.mon= higher-order list tests and byte-list tests in =Text.Parser= and
+  =Text.Readline=.

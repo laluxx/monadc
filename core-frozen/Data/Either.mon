@@ -124,3 +124,33 @@ define rights :: [Either e a] -> (a)
 define partitionEithers :: [Either e a] -> ((e), (a))
   :doc "Split a sequence of Either values into all Lefts and all Rights."
   xs -> (lefts xs, rights xs)
+
+
+tests
+  :left?:
+  assert-eq (left? (Left 5))  True  "left? Left"
+  assert-eq (left? (Right 5)) False "left? Right"
+  :right?:
+  assert-eq (right? (Right 5)) True  "right? Right"
+  assert-eq (right? (Left 5))  False "right? Left"
+  :fromLeft:
+  assert-eq (fromLeft 0 (Left 5))  5 "fromLeft picks Left"
+  assert-eq (fromLeft 0 (Right 5)) 0 "fromLeft defaults on Right"
+  :fromRight:
+  assert-eq (fromRight 0 (Right 5)) 5 "fromRight picks Right"
+  assert-eq (fromRight 0 (Left 5))  0 "fromRight defaults on Left"
+  ;; :mapLeft:    -- returns Either; ADT comparison not available in tests
+  ;; assert-eq (mapLeft (+ 1) (Left 5))  (Left 6)  "mapLeft Left"
+  ;; assert-eq (mapLeft (+ 1) (Right 5)) (Right 5) "mapLeft Right"
+  ;; :mapRight:
+  ;; assert-eq (mapRight (+ 1) (Right 5)) (Right 6) "mapRight Right"
+  ;; assert-eq (mapRight (+ 1) (Left 5))  (Left 5)  "mapRight Left"
+  ;; :bimap:
+  ;; assert-eq (bimap (+ 1) (+ 10) (Left 5))  (Left 6)  "bimap Left"
+  ;; assert-eq (bimap (+ 1) (+ 10) (Right 5)) (Right 15) "bimap Right"
+  ;; :either:    -- requires lambda in test expression
+  ;; assert-eq (either (lambda (e) 0) (lambda (a) a) (Right 5)) 5 "either Right"
+  ;; assert-eq (either (lambda (e) e) (lambda (a) 0) (Left 5))  5 "either Left"
+  ;; :lefts:     -- returns a tuple; not directly comparable
+  ;; :rights:
+  ;; :partitionEithers:

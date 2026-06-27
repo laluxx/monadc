@@ -1,0 +1,112 @@
+;;; Enum.mon --- Integer enumeration helpers
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: enum range succ pred list
+
+;;; Commentary:
+
+;; Haskell-style enumeration vocabulary for the active core.  The Enum and
+;; Bounded typeclass contracts live here because this is their domain. The
+;; concrete helpers below are Int-based until dictionary dispatch is ready in
+;; the core path.
+
+;;; Code:
+
+module Data.Enum
+  [Enum succ pred toEnum fromEnum enumFrom enumFromThen enumFromTo enumFromThenTo
+   Bounded minBound maxBound
+   succ pred toEnum fromEnum
+   enumFromTo enumFromThenTo
+   range rangeBy]
+
+
+class Enum a where
+  succ           :: a -> a
+  pred           :: a -> a
+  toEnum         :: Int -> a
+  fromEnum       :: a -> Int
+  enumFrom       :: a -> [a]
+  enumFromThen   :: a -> a -> [a]
+  enumFromTo     :: a -> a -> [a]
+  enumFromThenTo :: a -> a -> a -> [a]
+
+  ;; law: succ x = toEnum (fromEnum x + 1)
+  ;; law: pred x = toEnum (fromEnum x - 1)
+
+
+class Bounded a where
+  minBound :: a
+  maxBound :: a
+
+
+define succ :: Int -> Int
+  x -> x + 1
+
+
+define pred :: Int -> Int
+  x -> x - 1
+
+
+define toEnum :: Int -> Int
+  x -> x
+
+
+define fromEnum :: Int -> Int
+  x -> x
+
+
+define enumFromTo :: Int -> Int -> [Int]
+  start end | start > end -> []
+  start end               -> (start ++ (enumFromTo (start + 1) end))
+
+
+define enumFromThenTo :: Int -> Int -> Int -> [Int]
+  start next end | next >= start -> enumFromThenToUp start (next - start) end
+  start next end                 -> enumFromThenToDown start (start - next) end
+
+
+define enumFromThenToUp :: Int -> Int -> Int -> [Int]
+  start step end | step <= 0   -> error "enumFromThenTo: zero step"
+  start step end | start > end -> []
+  start step end               -> (start ++ (enumFromThenToUp (start + step) step end))
+
+
+define enumFromThenToDown :: Int -> Int -> Int -> [Int]
+  start step end | step <= 0   -> error "enumFromThenTo: zero step"
+  start step end | start < end -> []
+  start step end               -> (start ++ (enumFromThenToDown (start - step) step end))
+
+
+define range :: Int -> Int -> [Int]
+  start end -> enumFromTo start end
+
+
+define rangeBy :: Int -> Int -> Int -> [Int]
+  start step end | step > 0   -> enumFromThenTo start (start + step) end
+  start step end | step < 0   -> enumFromThenTo start (start + step) end
+  start _ _                   -> error "rangeBy: zero step"
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Enum registers Enum"
+  assert-eq 1 1 "Enum registers Bounded"
+  :registration:
+
+  :successor-predecessor:
+  assert-eq (succ 3) 4 "Enum succ"
+  assert-eq (pred 3) 2 "Enum pred"
+  assert-eq (toEnum 9) 9 "Enum toEnum Int"
+  assert-eq (fromEnum 9) 9 "Enum fromEnum Int"
+  :successor-predecessor:
+
+  :ranges:
+  assert-eq (show (enumFromTo 1 4))       "(1 2 3 4)"  "Enum enumFromTo"
+  assert-eq (show (enumFromTo 4 1))       "()"         "Enum enumFromTo empty"
+  assert-eq (show (enumFromThenTo 1 3 7)) "(1 3 5 7)"  "Enum stepped up"
+  assert-eq (show (enumFromThenTo 7 5 1)) "(7 5 3 1)"  "Enum stepped down"
+  assert-eq (show (range 2 5))            "(2 3 4 5)"  "Enum range"
+  assert-eq (show (rangeBy 2 3 11))       "(2 5 8 11)" "Enum rangeBy positive"
+  assert-eq (show (rangeBy 8 -2 2))       "(8 6 4 2)"  "Enum rangeBy negative"
+  :ranges:

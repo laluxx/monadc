@@ -1,0 +1,183 @@
+;;; Numeric.mon --- Numeric typeclasses
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: numeric typeclass num integral fractional floating real power refinement
+
+;;; Commentary:
+
+;; Numeric classes are separate from Class.mon so the non-numeric abstraction
+;; vocabulary stays dependency-light. Concrete arithmetic functions still live
+;; in Numeric.Math; this file names the typeclass contracts.
+;;
+;; Num is a typeclass, not a refinement: it describes an algebra of operations.
+;; Refinements belong on values inside an instance, e.g. a non-zero divisor or a
+;; positive exponent. Keep the algebra in Num/Integral/Fractional and use
+;; refinement types for domain restrictions when the type checker can enforce
+;; them.
+
+;;; Code:
+
+module Numeric
+  [Num add sub mul negate abs signum fromInt
+   Integral quot rem div mod quotRem divMod even? odd? gcd lcm
+   Fractional divide recip fromRatio
+   Floating pi exp log sqrt sin cos tan asin acos atan sinh cosh tanh
+   Real toRational
+   RealFrac properFraction truncate round ceiling floor
+   Additive zero plus minus
+   Multiplicative one times
+   Pow Result power]
+
+
+class Num a where
+  add     :: a -> a -> a
+  sub     :: a -> a -> a
+  mul     :: a -> a -> a
+  negate  :: a -> a
+  abs     :: a -> a
+  signum  :: a -> a
+  fromInt :: Int -> a
+
+  ;; law: add is associative and commutative for ordinary numeric instances.
+  ;; law: sub x y = add x (negate y)
+  ;; law: mul distributes over add.
+
+
+class Num a => Integral a where
+  quot    :: a -> a -> a
+  rem     :: a -> a -> a
+  div     :: a -> a -> a
+  mod     :: a -> a -> a
+  quotRem :: a -> a -> (a, a)
+  divMod  :: a -> a -> (a, a)
+  even?   :: a -> Bool
+  odd?    :: a -> Bool
+  gcd     :: a -> a -> a
+  lcm     :: a -> a -> a
+
+  ;; law: quotRem x y = (quot x y, rem x y)
+  ;; law: divMod x y = (div x y, mod x y)
+
+
+class Num a => Fractional a where
+  divide    :: a -> a -> a
+  recip     :: a -> a
+  fromRatio :: Int -> Int -> a
+
+  ;; law: recip x = divide (fromInt 1) x for non-zero x.
+
+
+class Fractional a => Floating a where
+  pi   :: a
+  exp  :: a -> a
+  log  :: a -> a
+  sqrt :: a -> a
+  sin  :: a -> a
+  cos  :: a -> a
+  tan  :: a -> a
+  asin :: a -> a
+  acos :: a -> a
+  atan :: a -> a
+  sinh :: a -> a
+  cosh :: a -> a
+  tanh :: a -> a
+
+  ;; law: tan x = divide (sin x) (cos x) when cos x is non-zero.
+
+
+class Num a => Real a where
+  toRational :: a -> (Int, Int)
+
+
+class (Real a, Fractional a) => RealFrac a where
+  properFraction :: a -> (Int, a)
+  truncate       :: a -> Int
+  round          :: a -> Int
+  ceiling        :: a -> Int
+  floor          :: a -> Int
+
+
+class Additive a where
+  zero  :: a
+  plus  :: a -> a -> a
+  minus :: a -> a -> a
+
+  ;; Reusable additive monoid/group pattern for scalars, vectors, matrices,
+  ;; durations, points with displacement, and other algebraic structures.
+
+
+class Multiplicative a where
+  one   :: a
+  times :: a -> a -> a
+
+  ;; Reusable multiplicative monoid pattern. Not every Num should be forced to
+  ;; have division or ordering.
+
+
+class Pow a where
+  type Result a
+  power :: a -> Int -> Result a
+
+  ;; Associated Result lets vectors, matrices, and scalars choose the result
+  ;; domain independently. Example: Pow Vec3 can return Float for a norm-like
+  ;; power while Pow Int returns Int.
+
+
+define [numeric-test-neg5 :: Int] 0 - 5
+define [numeric-test-neg1 :: Int] 0 - 1
+
+
+instance Num Int
+  (add x y)     => x + y
+  (sub x y)     => x - y
+  (mul x y)     => x * y
+  (negate x)    => 0 - x
+  (abs x)       => if x < 0 then 0 - x else x
+  (signum x)    => if x < 0 then 0 - 1 else if x > 0 then 1 else 0
+  (fromInt x)   => x
+
+
+instance Additive Int
+  (zero)      => 0
+  (plus x y)  => x + y
+  (minus x y) => x - y
+
+
+instance Multiplicative Int
+  (one)       => 1
+  (times x y) => x * y
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Numeric registers Num"
+  assert-eq 1 1 "Numeric registers Integral"
+  assert-eq 1 1 "Numeric registers Fractional"
+  assert-eq 1 1 "Numeric registers Floating"
+  assert-eq 1 1 "Numeric registers Real"
+  assert-eq 1 1 "Numeric registers RealFrac"
+  assert-eq 1 1 "Numeric registers Additive"
+  assert-eq 1 1 "Numeric registers Multiplicative"
+  assert-eq 1 1 "Numeric registers Pow"
+  :registration:
+
+  :int-num:
+  assert-eq (add 2 3) 5 "Numeric Num Int add"
+  assert-eq (sub 7 4) 3 "Numeric Num Int sub"
+  assert-eq (mul 3 4) 12 "Numeric Num Int mul"
+  assert-eq (negate 5) (0 - 5) "Numeric Num Int negate"
+  assert-eq (abs numeric-test-neg5) 5 "Numeric Num Int abs"
+  assert-eq (signum numeric-test-neg5) numeric-test-neg1 "Numeric Num Int signum negative"
+  assert-eq (signum 0) 0 "Numeric Num Int signum zero"
+  assert-eq (signum 5) 1 "Numeric Num Int signum positive"
+  assert-eq (fromInt 9) 9 "Numeric Num Int fromInt"
+  :int-num:
+
+  :int-additive-multiplicative:
+  assert-eq zero 0 "Numeric Additive Int zero"
+  assert-eq (plus 2 3) 5 "Numeric Additive Int plus"
+  assert-eq (minus 7 4) 3 "Numeric Additive Int minus"
+  assert-eq one 1 "Numeric Multiplicative Int one"
+  assert-eq (times 3 4) 12 "Numeric Multiplicative Int times"
+  :int-additive-multiplicative:

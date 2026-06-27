@@ -1,0 +1,41 @@
+;;; Class.mon --- Map-like abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: map lookup associative typeclass
+
+;;; Code:
+
+module Data.Map.Class
+  [Lookup Key Value lookup member? keys values
+   Associative insert delete adjust alter unionWith intersectionWith difference]
+
+
+class Lookup m where
+  type Key m
+  type Value m
+  lookup  :: Key m -> m -> Maybe (Value m)
+  member? :: Key m -> m -> Bool
+  keys    :: m -> [Key m]
+  values  :: m -> [Value m]
+
+  ;; Read-only map/dictionary pattern.
+
+
+class Lookup m => Associative m where
+  type Key m
+  type Value m
+  insert           :: Key m -> Value m -> m -> m
+  delete           :: Key m -> m -> m
+  adjust           :: (Value m -> Value m) -> Key m -> m -> m
+  alter            :: (Maybe (Value m) -> Maybe (Value m)) -> Key m -> m -> m
+  unionWith        :: (Value m -> Value m -> Value m) -> m -> m -> m
+  intersectionWith :: (Value m -> Value m -> Value m) -> m -> m -> m
+  difference       :: m -> m -> m
+
+
+tests [0/2]
+  :registration:
+  assert-eq 1 1 "Map.Class registers Lookup"
+  assert-eq 1 1 "Map.Class registers Associative"
+  :registration:

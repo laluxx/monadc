@@ -1,0 +1,36 @@
+;;; Show.mon --- Text rendering typeclass
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: show render string typeclass
+
+;;; Commentary:
+
+;; Show is a text/rendering abstraction, not a generic prelude bucket entry.
+;; The builtin `show` remains available for concrete values; this module names
+;; the class contract that instances should satisfy.
+
+;;; Code:
+
+module Text.Show
+  [Show show showsPrec showList]
+
+
+class Show a where
+  show      :: a -> String
+  showsPrec :: Int -> a -> String -> String
+  showList  :: [a] -> String
+
+  ;; law: show x = showsPrec 0 x ""
+
+data ShowSample ShowRed | ShowGreen deriving [Show]
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Show registers Show"
+  :registration:
+
+  :deriving:
+  assert-eq (show ShowRed) "ShowRed" "Show derives nullary constructor name"
+  :deriving:

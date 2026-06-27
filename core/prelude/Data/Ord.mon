@@ -1,0 +1,226 @@
+;;; Ord.mon --- Ordering helpers
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: ord ordering comparison clamp min max
+
+;;; Commentary:
+
+;; Concrete ordering vocabulary for the active core.  The future typeclass
+;; version can keep these names as methods; today these functions give users a
+;; reliable comparison toolkit for Int-heavy core code.
+
+;;; Code:
+
+module Data.Ord
+  [Ordering LT EQ GT
+   Ord lt? lte? gt? gte?
+   compare min max clamp between?
+   strict-between? outside? min3 max3 median3
+   less? less-or-equal? greater? greater-or-equal?
+   comparing compareDown]
+
+
+data Ordering = LT | EQ | GT
+
+
+class Ord a where
+  lt?       :: a -> a -> Bool
+  lte?      :: a -> a -> Bool
+  gt?       :: a -> a -> Bool
+  gte?      :: a -> a -> Bool
+  compare   :: a -> a -> Ordering
+  min       :: a -> a -> a
+  max       :: a -> a -> a
+  comparing :: (a -> Int) -> a -> a -> Ordering
+
+  ;; law: compare x y = LT when lt? x y, EQ when x and y are equal, GT otherwise
+  ;; law: min and max agree with lte?/gte?
+
+
+define ord-bool-rank :: Bool -> Int
+  x | x         -> 1
+    | otherwise -> 0
+
+
+define ord-char-rank :: Char -> Int
+  x -> (Int x)
+
+
+instance Ord Int
+  (lt?  x y) => (<  x y)
+  (lte? x y) => (<= x y)
+  (gt?  x y) => (>  x y)
+  (gte? x y) => (>= x y)
+
+
+instance Ord Bool
+  (lt? x y)       => (<  (ord-bool-rank x) (ord-bool-rank y))
+  (lte? x y)      => (<= (ord-bool-rank x) (ord-bool-rank y))
+  (gt? x y)       => (>  (ord-bool-rank x) (ord-bool-rank y))
+  (gte? x y)      => (>= (ord-bool-rank x) (ord-bool-rank y))
+
+
+instance Ord Char
+  (lt? x y)       => (<  (ord-char-rank x) (ord-char-rank y))
+  (lte? x y)      => (<= (ord-char-rank x) (ord-char-rank y))
+  (gt? x y)       => (>  (ord-char-rank x) (ord-char-rank y))
+  (gte? x y)      => (>= (ord-char-rank x) (ord-char-rank y))
+
+
+define ord-test-negate :: Int -> Int
+  x -> 0 - x
+
+
+define compare :: Int -> Int -> Int
+  :doc "Return -1 when X < Y, 0 when equal, and 1 when X > Y."
+  x y | x < y     -> -1
+      | x > y     -> 1
+      | otherwise -> 0
+
+
+define min :: Int -> Int -> Int
+  :doc "Return the smaller integer."
+  x y | x <= y    -> x
+      | otherwise -> y
+
+
+define max :: Int -> Int -> Int
+  :doc "Return the larger integer."
+  x y | x >= y    -> x
+      | otherwise -> y
+
+
+define clamp :: Int -> Int -> Int -> Int
+  :doc "Clamp X into LO..HI."
+  lo hi x | x < lo    -> lo
+          | x > hi    -> hi
+          | otherwise -> x
+
+
+define between? :: Int -> Int -> Int -> Bool
+  :doc "Return True if X is between LO and HI inclusive."
+  lo hi x -> (lo <= x) and (x <= hi)
+
+
+define strict-between? :: Int -> Int -> Int -> Bool
+  :doc "Return True if X is strictly inside LO..HI."
+  lo hi x -> (lo < x) and (x < hi)
+
+
+define outside? :: Int -> Int -> Int -> Bool
+  :doc "Return True if X is outside LO..HI."
+  lo hi x -> (x < lo) or (x > hi)
+
+
+define min3 :: Int -> Int -> Int -> Int
+  :doc "Return the smallest of three integers."
+  x y z -> min (min x y) z
+
+
+define max3 :: Int -> Int -> Int -> Int
+  :doc "Return the largest of three integers."
+  x y z -> max (max x y) z
+
+
+define median3 :: Int -> Int -> Int -> Int
+  :doc "Return the middle value of three integers."
+  x y z -> (((x + y) + z) - (min3 x y z)) - (max3 x y z)
+
+
+define less? :: Int -> Int -> Bool
+  x y -> x < y
+
+
+define less-or-equal? :: Int -> Int -> Bool
+  x y -> x <= y
+
+
+define greater? :: Int -> Int -> Bool
+  x y -> x > y
+
+
+define greater-or-equal? :: Int -> Int -> Bool
+  x y -> x >= y
+
+
+define comparing :: (a -> Int) -> a -> a -> Int
+  :doc "Compare values after projecting them to Int keys."
+  f x y -> compare (f x) (f y)
+
+
+define compareDown :: Int -> Int -> Int
+  :doc "Compare in descending order."
+  x y -> compare y x
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Ord registers Ord"
+  :registration:
+
+  :compare:
+  assert-eq (compare 1 2)     -1  "Ord compare LT"
+  assert-eq (compare 2 1)      1  "Ord compare GT"
+  assert-eq (compare 2 2)      0  "Ord compare EQ"
+  assert-eq (compareDown 1 2)  1  "Ord compareDown"
+  :compare:
+
+  :min-max:
+  assert-eq (min 3 7) 3 "Ord min first"
+  assert-eq (min 7 3) 3 "Ord min second"
+  assert-eq (max 3 7) 7 "Ord max second"
+  assert-eq (max 7 3) 7 "Ord max first"
+  :min-max:
+
+  :clamp-between:
+  assert-eq (clamp 0 10 5)      5      "Ord clamp inside"
+  assert-eq (clamp 0 10 -5)     0      "Ord clamp below"
+  assert-eq (clamp 0 10 15)     10     "Ord clamp above"
+  assert-eq (between? 0 10 5)   True   "Ord between inside"
+  assert-eq (between? 0 10 -5)  False  "Ord between below"
+  assert-eq (between? 0 10 10)  True   "Ord between edge"
+  assert-eq (strict-between? 0 10 5)   True  "Ord strict-between inside"
+  assert-eq (strict-between? 0 10 0)   False "Ord strict-between low edge"
+  assert-eq (outside? 0 10 -1)         True  "Ord outside below"
+  assert-eq (outside? 0 10 5)          False "Ord outside inside"
+  :clamp-between:
+
+  :three-way:
+  assert-eq (min3 9 3 7)    3 "Ord min3"
+  assert-eq (max3 9 3 7)    9 "Ord max3"
+  assert-eq (median3 9 3 7) 7 "Ord median3 unsorted"
+  assert-eq (median3 1 2 3) 2 "Ord median3 sorted"
+  :three-way:
+
+  :predicates:
+  assert-eq (less? 1 2)             True  "Ord less?"
+  assert-eq (greater? 1 2)          False "Ord greater?"
+  assert-eq (less-or-equal? 2 2)    True  "Ord less-or-equal?"
+  assert-eq (greater-or-equal? 3 2) True  "Ord greater-or-equal?"
+  :predicates:
+
+  :int-instance:
+  assert-eq (lt? 1 2)  True  "Ord Int lt?"
+  assert-eq (lte? 2 2) True  "Ord Int lte?"
+  assert-eq (gt? 2 1)  True  "Ord Int gt?"
+  assert-eq (gte? 2 2) True  "Ord Int gte?"
+  :int-instance:
+
+  :bool-instance:
+  assert-eq (lt? False True)  True  "Ord Bool lt?"
+  assert-eq (lte? True True)  True  "Ord Bool lte?"
+  assert-eq (gt? True False)  True  "Ord Bool gt?"
+  assert-eq (gte? False True) False "Ord Bool gte?"
+  :bool-instance:
+
+  :char-instance:
+  assert-eq (lt? 'A' 'B')  True  "Ord Char lt?"
+  assert-eq (lte? 'A' 'A') True  "Ord Char lte?"
+  assert-eq (gt? 'B' 'A')  True  "Ord Char gt?"
+  assert-eq (gte? 'A' 'B') False "Ord Char gte?"
+  :char-instance:
+
+  :comparing:
+  assert-eq (comparing ord-test-negate 1 2) 1 "Ord comparing projected"
+  :comparing:

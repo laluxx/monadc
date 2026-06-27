@@ -1,0 +1,24 @@
+;;; Category.mon --- Category abstraction
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: category composition typeclass
+
+;;; Code:
+
+module Control.Category
+  [Category idCategory composeCategory pipeCategory]
+
+
+class Category cat where
+  idCategory      :: cat a a
+  composeCategory :: cat b c -> cat a b -> cat a c
+  pipeCategory    :: cat a b -> cat b c -> cat a c
+
+  ;; higher-kinded: cat :: Type -> Type -> Type
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Category registers Category"
+  :registration:

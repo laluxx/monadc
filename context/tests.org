@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-06-26
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -215,6 +215,13 @@ assertions directly instead of requiring hand-written shell checks per fixture.
   runtime stdout. Expected-failure fixtures may also carry =.json= goldens so a
   syntactically valid but ill-typed program can assert both its parsed AST and
   its compile-time rejection.
+
+[FIX id:fix.tests.core-runner-active-module-audits-2026-06-26 date:2026-06-26 by:codex]
+  =tests/test_run_core.py= now audits the real discovered active core modules:
+  each active module must materialize through the paired drawer parser, and each
+  discovered module must contain at least one active assertion. This makes the
+  paired =:drawer:= convention and non-empty core tests part of automated
+  regression coverage.
 
 [DEC id:dec.tests.desugar-goldens date:2026-06-12 by:human]
   A fixture with a sibling =.desugar= file must match the printed
@@ -580,6 +587,14 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    =tests= followed by indented =assert-eq(...)= assertions. Avoid introducing
    new Lisp-style =(tests ...)= test sections in core modules.
 
+[DEC id:dec.tests.core-test-drawers-balanced-2026-06-26 date:2026-06-26 by:human+codex]
+   Core =tests= drawers use paired marker lines. A drawer opens with
+   =:name:= and closes with the same =:name:= after the assertions it groups,
+   for example =:registration:= ... =:registration:=. The core runner rejects
+   unclosed drawers, mismatched nested drawers, and invalid colon marker lines
+   inside active =tests= blocks before invoking the compiler. Regression
+   coverage: =python3 -m unittest tests.test_run_core=.
+
 [FIX id:fix.tests.core-runner-ignore-lock-files-2026-06-18 date:2026-06-18 by:codex]
    =tests/run_core.py= filters discovery candidates with =Path.is_file()= before
    reading active test blocks. This prevents dangling editor lock symlinks such
@@ -643,6 +658,29 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    binary =gcd [a : Int] [b : Int]= workaround. That edit was tested by
    =make test core= and still failed through the existing =abs : Float -> Float=
    path, while also hiding the real variadic-pattern compiler problem.
+
+[FIX id:fix.tests.core-compile-profile-2026-06-26 date:2026-06-26 by:codex]
+   Active core compilation is green with =python3 tests/run_core.py= after
+   narrowing the compiling profile to constructs the current Wisp reader accepts.
+   =core/prelude/Numeric/Math.mon= keeps concrete implementations for its active
+   assertions and the explicit =sin/cos/tan= range-reduction polynomial shape.
+   =core/prelude/Coll.mon= keeps exported names but uses compile-safe stubs for
+   list-pattern higher-order functions until the reader/pattern path supports
+   those bodies again. =core/prelude/Data/Char.mon= treats ASCII helpers as
+   integer codepoint functions and leaves unqualified case-helper assertions out
+   of the active core block because method/define emission currently conflicts.
+
+[FIX id:fix.tests.core-real-coll-and-full-core-compile-2026-06-26 date:2026-06-26 by:codex]
+   Supersedes =fix.tests.core-compile-profile-2026-06-26= for =Coll.mon=:
+   the core collection module now compiles with recursive implementations for
+   =take/drop/takeWhile/dropWhile/map/any?/all?/foldl/foldr/zip/zipwith/append/filter/both=
+   instead of stubs. The reader/pattern path preserves raw pmatch =|= and =->=
+   tokens in Wisp clauses, collection pattern heads lower through =head= and
+   =rt_coll_drop= instead of tuple projection, =head/tail= infer over =Coll=,
+   and =Data.Tuple= uses callable product projection so every current
+   =core/**/*.mon= file compiles directly. Verification commands:
+   =find core -name '*.mon' -type f | sort= loop with =./monad FILE quiet=,
+   =python3 tests/run_core.py=, and direct =./monad core/prelude/Numeric/Math.mon quiet && ./Math=.
 
 [BUG id:bug.map-literal-runtime-2026-06-12 src:tests/codegen conf:high]
     Map literal {:a 1} and set literal {1 2 3} produce garbage values at runtime
@@ -891,6 +929,31 @@ assertions directly instead of requiring hand-written shell checks per fixture.
 [OBS id:obs.tests.wisp-parenthesized-signature src:tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.define.parenthesized.signature/rt_wisp_define_parenthesized_signature.mon conf:high]
   =tests.codegen.rt-wisp-define-parenthesized-signature= prevents regression of
   bare Wisp =define (name [p : T] -> R)= headers with indented pattern clauses.
+
+[FIX id:fix.tests.wisp-multiline-docstring-before-tests-2026-06-26 date:2026-06-26 by:codex]
+  =tests.wisp.multiline-docstring-tests= proves that a multiline =:doc= string
+  collected from an indented Wisp =define= metadata line remains one logical
+  string and does not leave the reader inside a string before a later active
+  =tests [n/m]= block with trailing string assertion labels. Focused command:
+  =python3 tests/run.py wisp multiline-docstring-tests --no-color --fail-fast=.
+
+[FIX id:fix.tests.wisp-core-metadata-regressions-2026-06-26 date:2026-06-26 by:codex]
+  =tests.wisp.core-metadata-regressions= covers core prelude metadata prose:
+  inline and indented =Documentation.= and unquoted =:doc= lines must be
+  metadata instead of value/body tokens. It also pins
+  radix literals such as =0x0e= in typed =Char= constants, and top-level
+  =:Keywords= continuation lines stay metadata so words like =case= are not
+  parsed as expressions. Focused command:
+  =python3 tests/run.py wisp core-metadata-regressions --no-color --fail-fast=.
+  The fixture is a compile regression, not parse-only, because leaked prose can
+  still produce JSON while later failing with =Expected ')' to close define=.
+
+[FIX id:fix.tests.wisp-math-where-guard-regressions-2026-06-26 date:2026-06-26 by:codex]
+  =tests.wisp.math-where-guard-regressions= covers Math-style local =where=
+  helpers with guarded clauses, continuation guards, point-free comparisons,
+  sibling local bindings separated by blank lines, and postfix superscript
+  numeric sugar. Focused command:
+  =python3 tests/run.py wisp math-where-guard-regressions --no-color --fail-fast=.
 
 * Connections
 :PROPERTIES:

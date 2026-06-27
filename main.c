@@ -16,6 +16,7 @@
 #include "runtime.h"
 #include "codegen.h"
 #include "module.h"
+#include "typeclass.h"
 #include "buildsystem.h"
 #include "ffi.h"
 #include "wisp.h"
@@ -59,6 +60,7 @@ typedef struct CompiledModule {
     CompiledLayout *layouts;
     size_t          layout_count;
     size_t          layout_cap;
+    TypeClassRegistry *tc_registry;
     struct CompiledModule *next;
 } CompiledModule;
 
@@ -205,6 +207,7 @@ static CompiledModule *registry_new(const char *name, const char *obj,
     m->exports      = malloc(sizeof(CompiledExport) * 8);
     m->layout_cap   = 8;
     m->layouts      = malloc(sizeof(CompiledLayout) * 8);
+    m->tc_registry  = tc_registry_create();
     m->next         = g_compiled;
     g_compiled      = m;
     return m;
@@ -330,6 +333,7 @@ static void registry_free_all(void) {
             type_free(m->layouts[i].type);
         }
         free(m->layouts);
+        tc_registry_free(m->tc_registry);
         free(m);
         m = next;
     }
@@ -455,6 +459,8 @@ static void declare_externals(CodegenContext *ctx,
             env_insert_layout(ctx->env, dep->layouts[i].name,
                               type_clone(dep->layouts[i].type), NULL);
     }
+
+    tc_registry_merge(ctx->tc_registry, dep->tc_registry);
 
     for (size_t i = 0; i < dep->export_count; i++) {
         CompiledExport *e = &dep->exports[i];
@@ -1621,6 +1627,8 @@ skip_primitive_type_autoload:
     } else {
         cm = registry_new(mod_name, obj_path, false);
     }
+    tc_registry_free(cm->tc_registry);
+    cm->tc_registry = tc_registry_clone(ctx.tc_registry);
     for (size_t bi = 0; bi < ctx.env->size; bi++) {
         EnvEntry *ent = ctx.env->buckets[bi];
         while (ent) {

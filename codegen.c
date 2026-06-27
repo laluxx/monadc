@@ -241,6 +241,199 @@ static Type *arrow_param_at(Type *t, int index) {
     return (t && t->kind == TYPE_ARROW) ? t->arrow_param : NULL;
 }
 
+static Type *lambda_inferred_param_at(AST *lambda, int index) {
+    if (!lambda || lambda->type != AST_LAMBDA)
+        return NULL;
+
+    Type *t = lambda->inferred_type;
+    Type *p = arrow_param_at(t, index);
+    if (!p || p->kind == TYPE_UNKNOWN || p->kind == TYPE_VAR ||
+        p->kind == TYPE_ARROW || p->kind == TYPE_FN) {
+        return NULL;
+    }
+
+    return p;
+}
+
+static bool codegen_type_is_concrete_value(Type *t) {
+    return t && t->kind != TYPE_UNKNOWN && t->kind != TYPE_VAR &&
+           t->kind != TYPE_ARROW && t->kind != TYPE_FN &&
+           t->kind != TYPE_PTR;
+}
+
+static bool codegen_param_type_needs_usage(Type *t) {
+    return !codegen_type_is_concrete_value(t);
+}
+
+static bool ast_contains_symbol(AST *ast, const char *name) {
+    if (!ast || !name)
+        return false;
+
+    switch (ast->type) {
+    case AST_SYMBOL:
+        return ast->symbol && strcmp(ast->symbol, name) == 0;
+    case AST_LIST:
+        for (size_t i = 0; i < ast->list.count; i++)
+            if (ast_contains_symbol(ast->list.items[i], name))
+                return true;
+        return false;
+    case AST_ARRAY:
+        for (size_t i = 0; i < ast->array.element_count; i++)
+            if (ast_contains_symbol(ast->array.elements[i], name))
+                return true;
+        return false;
+    default:
+        return false;
+    }
+}
+
+static Type *ast_find_symbol_inferred_type(AST *ast, const char *name) {
+    if (!ast || !name)
+        return NULL;
+
+    if (ast->type == AST_SYMBOL && ast->symbol &&
+        strcmp(ast->symbol, name) == 0 &&
+        codegen_type_is_concrete_value(ast->inferred_type)) {
+        return ast->inferred_type;
+    }
+
+    if (ast->type == AST_LIST) {
+        for (size_t i = 0; i < ast->list.count; i++) {
+            Type *found = ast_find_symbol_inferred_type(ast->list.items[i], name);
+            if (found)
+                return found;
+        }
+    } else if (ast->type == AST_ARRAY) {
+        for (size_t i = 0; i < ast->array.element_count; i++) {
+            Type *found = ast_find_symbol_inferred_type(ast->array.elements[i], name);
+            if (found)
+                return found;
+        }
+    }
+
+    return NULL;
+}
+
+static bool ast_expr_is_floatish(CodegenContext *ctx, AST *ast) {
+    if (!ast)
+        return false;
+
+    if (ast->inferred_type && type_is_float(ast->inferred_type))
+        return true;
+
+    if (ast->type == AST_NUMBER && ast->literal_str) {
+        bool radix = ast->literal_str[0] == '0' &&
+            (ast->literal_str[1] == 'x' || ast->literal_str[1] == 'X' ||
+             ast->literal_str[1] == 'b' || ast->literal_str[1] == 'B' ||
+             ast->literal_str[1] == 'o' || ast->literal_str[1] == 'O');
+        if (!radix) {
+            for (const char *p = ast->literal_str; *p; p++)
+                if (*p == '.' || *p == 'e' || *p == 'E')
+                    return true;
+        }
+    }
+
+    if (ast->type == AST_SYMBOL && ast->symbol) {
+        if (strcmp(ast->symbol, "pi") == 0 || strcmp(ast->symbol, "π") == 0 ||
+            strcmp(ast->symbol, "tau") == 0 || strcmp(ast->symbol, "τ") == 0 ||
+            strcmp(ast->symbol, "e") == 0 || strcmp(ast->symbol, "ℯ") == 0 ||
+            strcmp(ast->symbol, "phi") == 0 || strcmp(ast->symbol, "ϕ") == 0 ||
+            strcmp(ast->symbol, "epsilon") == 0 || strcmp(ast->symbol, "ε") == 0)
+            return true;
+
+        EnvEntry *e = env_lookup(ctx->env, ast->symbol);
+        if (e && e->type && type_is_float(e->type))
+            return true;
+    }
+
+    if (ast->type == AST_LIST) {
+        for (size_t i = 0; i < ast->list.count; i++)
+            if (ast_expr_is_floatish(ctx, ast->list.items[i]))
+                return true;
+    }
+
+    return false;
+}
+
+static Type *lambda_param_type_from_usage_expr(CodegenContext *ctx, AST *expr,
+                                               const char *param_name) {
+    if (!expr || !param_name)
+        return NULL;
+
+    if (expr->type == AST_LIST && expr->list.count >= 2) {
+        AST *head = expr->list.items[0];
+        if (head && head->type == AST_SYMBOL && head->symbol) {
+            bool arithmetic =
+                strcmp(head->symbol, "+") == 0 ||
+                strcmp(head->symbol, "-") == 0 ||
+                strcmp(head->symbol, "*") == 0 ||
+                strcmp(head->symbol, "/") == 0;
+            bool compare =
+                strcmp(head->symbol, "<") == 0 ||
+                strcmp(head->symbol, ">") == 0 ||
+                strcmp(head->symbol, "<=") == 0 ||
+                strcmp(head->symbol, ">=") == 0 ||
+                strcmp(head->symbol, "=") == 0 ||
+                strcmp(head->symbol, "!=") == 0;
+
+            if (arithmetic || compare) {
+                bool mentions_param = false;
+                bool has_float = false;
+
+                for (size_t i = 1; i < expr->list.count; i++) {
+                    AST *arg = expr->list.items[i];
+                    if (ast_contains_symbol(arg, param_name))
+                        mentions_param = true;
+                    if (ast_expr_is_floatish(ctx, arg))
+                        has_float = true;
+                }
+
+                if (mentions_param) {
+                    if (has_float || (arithmetic && strcmp(head->symbol, "/") == 0))
+                        return type_float();
+                    if (arithmetic || compare)
+                        return type_int();
+                }
+            }
+        }
+
+        for (size_t i = 0; i < expr->list.count; i++) {
+            Type *nested =
+                lambda_param_type_from_usage_expr(ctx, expr->list.items[i], param_name);
+            if (nested)
+                return nested;
+        }
+    } else if (expr->type == AST_ARRAY) {
+        for (size_t i = 0; i < expr->array.element_count; i++) {
+            Type *nested =
+                lambda_param_type_from_usage_expr(ctx, expr->array.elements[i], param_name);
+            if (nested)
+                return nested;
+        }
+    }
+
+    return NULL;
+}
+
+static Type *lambda_param_type_from_usage(CodegenContext *ctx, AST *lambda,
+                                          const char *param_name) {
+    Type *direct = ast_find_symbol_inferred_type(lambda, param_name);
+    if (direct)
+        return direct;
+
+    if (!lambda || lambda->type != AST_LAMBDA || !param_name)
+        return NULL;
+
+    for (int bi = 0; bi < lambda->lambda.body_count; bi++) {
+        Type *from_body = lambda_param_type_from_usage_expr(
+            ctx, lambda->lambda.body_exprs[bi], param_name);
+        if (from_body)
+            return from_body;
+    }
+
+    return NULL;
+}
+
 static void repair_type_app_constructor_from_annotation(Type *t, const char *annotation) {
     if (!t || t->kind != TYPE_APP || !annotation || !*annotation)
         return;
@@ -1042,6 +1235,74 @@ bool type_is_numeric (Type *t) { return t && (t->kind == TYPE_INT   || t->kind =
 bool type_is_integer (Type *t) { return t && (t->kind == TYPE_INT   || t->kind == TYPE_HEX   || t->kind == TYPE_BIN || t->kind == TYPE_OCT || t->kind == TYPE_CHAR || t->kind == TYPE_BYTE || (t->kind >= TYPE_I8 && t->kind <= TYPE_U128) || t->kind == TYPE_INT_ARBITRARY); }
 bool type_is_float   (Type *t) { return t && (t->kind == TYPE_FLOAT || t->kind == TYPE_F32   || t->kind == TYPE_F80); }
 bool type_is_unsigned(Type *t) { return t && (t->kind == TYPE_BYTE  || t->kind == TYPE_U8    || t->kind == TYPE_U16   || t->kind == TYPE_U32 || t->kind == TYPE_U64 || t->kind == TYPE_U128); }
+
+static const char *tc_instance_type_name_from_type(Type *t) {
+    if (!t) return NULL;
+    if (type_is_integer(t)) return "Int";
+    if (type_is_float(t)) return "Float";
+    switch (t->kind) {
+    case TYPE_BOOL:   return "Bool";
+    case TYPE_STRING: return "String";
+    case TYPE_CHAR:   return "Char";
+    case TYPE_LAYOUT: return t->layout_name;
+    case TYPE_APP:    return t->app_constructor;
+    default:          return NULL;
+    }
+}
+
+static const char *tc_instance_type_name_from_ast(CodegenContext *ctx, AST *ast) {
+    if (!ast) return NULL;
+
+    const char *type_name = tc_instance_type_name_from_type(ast->inferred_type);
+    if (type_name) return type_name;
+
+    switch (ast->type) {
+    case AST_NUMBER:
+        return ast_expr_is_floatish(ctx, ast) ? "Float" : "Int";
+    case AST_STRING:
+        return "String";
+    case AST_CHAR:
+        return "Char";
+    case AST_SYMBOL:
+        if (strcmp(ast->symbol, "True") == 0 || strcmp(ast->symbol, "False") == 0)
+            return "Bool";
+        break;
+    default:
+        break;
+    }
+
+    return NULL;
+}
+
+static TCInstance *tc_unique_instance_for_method(TypeClassRegistry *reg,
+                                                 const char *class_name,
+                                                 const char *method_name) {
+    if (!reg || !class_name || !method_name) return NULL;
+
+    TCInstance *found = NULL;
+    for (int i = 0; i < reg->instance_count; i++) {
+        TCInstance *inst = &reg->instances[i];
+        if (!inst->class_name || strcmp(inst->class_name, class_name) != 0)
+            continue;
+
+        bool has_method = false;
+        for (int mi = 0; mi < inst->method_count; mi++) {
+            if (inst->method_names[mi] &&
+                strcmp(inst->method_names[mi], method_name) == 0) {
+                has_method = true;
+                break;
+            }
+        }
+        if (!has_method)
+            continue;
+
+        if (found)
+            return NULL;
+        found = inst;
+    }
+
+    return found;
+}
 
 char *mangle_unicode_name(const char *name) {
     /* Check if name needs mangling — any non-ASCII char OR any ASCII
@@ -1896,8 +2157,18 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
     }
     switch (type->kind) {
         case TYPE_INT: case TYPE_HEX: case TYPE_BIN: case TYPE_OCT:
+        case TYPE_BYTE:
+        case TYPE_I8: case TYPE_I16: case TYPE_I32: case TYPE_I64:
+        case TYPE_U8: case TYPE_U16: case TYPE_U32: case TYPE_U64:
+        case TYPE_I128: case TYPE_U128:
+        case TYPE_INT_ARBITRARY:
             return emit_call_1(ctx, get_rt_value_int(ctx), ptr,
-                LLVMTypeOf(val) != i64 ? LLVMBuildSExtOrBitCast(ctx->builder, val, i64, "box_int") : val, "boxed_int");
+                LLVMTypeOf(val) != i64
+                    ? (type_is_unsigned(type)
+                        ? LLVMBuildZExtOrBitCast(ctx->builder, val, i64, "box_int")
+                        : LLVMBuildSExtOrBitCast(ctx->builder, val, i64, "box_int"))
+                    : val,
+                "boxed_int");
         case TYPE_FLOAT:
             return emit_call_1(ctx, get_rt_value_float(ctx), ptr, val, "boxed_float");
         case TYPE_CHAR:
@@ -2156,6 +2427,76 @@ static int layout_field_byte_size(CodegenContext *ctx, Type *t) {
             return t->layout_total_size > 0 ? t->layout_total_size : 8;
         default:         return 8;
     }
+}
+
+static bool derive_show_method_is_unary_string(TCClass *cls, const char *type_name, int method_index) {
+    if (!cls || method_index < 0 || method_index >= cls->method_count) return false;
+    const char *method_name = cls->methods[method_index].name;
+    if (cls->name && strcmp(cls->name, "Show") == 0 && method_name &&
+        (strcmp(method_name, "showsPrec") == 0 || strcmp(method_name, "showList") == 0)) {
+        return false;
+    }
+    const char *sig = cls->methods[method_index].type_str;
+    if (!sig) return false;
+
+    Type *t = type_from_name(sig);
+    if (!t || t->kind != TYPE_ARROW || !t->arrow_param || !t->arrow_ret) {
+        if (t) type_free(t);
+        return false;
+    }
+
+    const char *param_name = type_to_string(t->arrow_param);
+    bool param_matches = false;
+    if (param_name) {
+        param_matches = (cls->type_var && strcmp(param_name, cls->type_var) == 0) ||
+                        (type_name && strcmp(param_name, type_name) == 0);
+    }
+    bool ret_matches = t->arrow_ret->kind == TYPE_STRING;
+    bool unary = t->arrow_ret->kind != TYPE_ARROW;
+    type_free(t);
+    return unary && param_matches && ret_matches;
+}
+
+static AST *derive_show_nullary_lambda(AST *data_ast, const char *type_name,
+                                       const char *method_name) {
+    int nctors = data_ast->data.constructor_count;
+    ASTPMatchClause *clauses = malloc(sizeof(ASTPMatchClause) * nctors);
+
+    for (int ci = 0; ci < nctors; ci++) {
+        const char *cname = data_ast->data.constructors[ci].name;
+        ASTPattern *pats = malloc(sizeof(ASTPattern));
+        pats[0].kind = PAT_CONSTRUCTOR;
+        pats[0].var_name = strdup(cname);
+        pats[0].lit_value = 0;
+        pats[0].elements = NULL;
+        pats[0].element_count = 0;
+        pats[0].tail = NULL;
+        pats[0].ctor_fields = NULL;
+        pats[0].ctor_field_count = 0;
+
+        clauses[ci].patterns = pats;
+        clauses[ci].pattern_count = 1;
+        clauses[ci].body = ast_new_string(cname);
+        clauses[ci].guard_conds = NULL;
+        clauses[ci].guard_bodies = NULL;
+        clauses[ci].guard_count = 0;
+    }
+
+    ASTParam *params = malloc(sizeof(ASTParam));
+    params[0].name = strdup("__p0");
+    params[0].type_name = strdup(type_name);
+    params[0].is_rest = false;
+    params[0].is_anon = false;
+
+    AST *pm = ast_new_pmatch(clauses, nctors);
+    AST *desugared = pmatch_desugar(pm, params, 1);
+    free(pm);
+
+    AST **body_exprs = malloc(sizeof(AST*));
+    body_exprs[0] = desugared;
+    (void)method_name;
+    return ast_new_lambda(params, 1, "String", NULL, NULL, false,
+                          desugared, body_exprs, 1);
 }
 
 void codegen_data(CodegenContext *ctx, AST *ast) {
@@ -2526,6 +2867,58 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             ast_free(inst_ast);
 
             printf("Derived: instance Eq %s\n", type_name);
+        } else if (strcmp(derive_name, "Show") == 0) {
+            TCClass *cls = tc_find_class(ctx->tc_registry, "Show");
+            if (!cls) {
+                fprintf(stderr, "warning: deriving Show for '%s' but Show class not defined\n", type_name);
+                continue;
+            }
+            if (tc_find_instance(ctx->tc_registry, "Show", type_name)) continue;
+
+            bool all_nullary = true;
+            for (int ci = 0; ci < nctors; ci++) {
+                if (ast->data.constructors[ci].field_count != 0) {
+                    all_nullary = false;
+                    break;
+                }
+            }
+            if (!all_nullary) {
+                fprintf(stderr,
+                        "warning: deriving Show for '%s' currently supports nullary constructors only\n",
+                        type_name);
+                continue;
+            }
+
+            int method_count = 0;
+            for (int mi = 0; mi < cls->method_count; mi++) {
+                if (derive_show_method_is_unary_string(cls, type_name, mi)) {
+                    method_count++;
+                }
+            }
+            if (method_count == 0) {
+                fprintf(stderr,
+                        "warning: deriving Show for '%s' found no unary '%s -> String' method\n",
+                        type_name, cls->type_var ? cls->type_var : type_name);
+                continue;
+            }
+
+            char **method_names = malloc(sizeof(char*) * method_count);
+            AST **method_bodies = malloc(sizeof(AST*) * method_count);
+            int out = 0;
+            for (int mi = 0; mi < cls->method_count; mi++) {
+                if (!derive_show_method_is_unary_string(cls, type_name, mi)) continue;
+                method_names[out] = strdup(cls->methods[mi].name);
+                method_bodies[out] = derive_show_nullary_lambda(ast, type_name,
+                                                                cls->methods[mi].name);
+                out++;
+            }
+
+            AST *inst_ast = ast_new_instance("Show", type_name, NULL, NULL, 0,
+                                             method_names, method_bodies, method_count);
+            tc_register_instance(ctx->tc_registry, inst_ast, ctx);
+            ast_free(inst_ast);
+
+            printf("Derived: instance Show %s\n", type_name);
         } else if (strcmp(derive_name, "Enum") == 0) {
             TCClass *cls = tc_find_class(ctx->tc_registry, "Enum");
             if (!cls) {
@@ -4634,6 +5027,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         // ── Normal variable / module-qualified symbol ────────────────────────
+        if (strcmp(ast->symbol, "undefined") == 0) {
+            result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
+            result.type = type_unknown();
+            return result;
+        }
+
         EnvEntry *entry = resolve_symbol_with_modules(ctx, ast->symbol, ast);
         if (!entry) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unbound variable: %s",
@@ -4644,6 +5043,44 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             fprintf(stderr, "DEBUG [AST_SYMBOL]: Resolving function '%s' but func_ref is NULL. tc_is_method=%d\n",
                     ast->symbol, tc_is_method(ctx->tc_registry, ast->symbol));
             if (tc_is_method(ctx->tc_registry, ast->symbol)) {
+                const char *cls = tc_method_class(ctx->tc_registry, ast->symbol);
+                TCInstance *unique =
+                    tc_unique_instance_for_method(ctx->tc_registry, cls, ast->symbol);
+                if (unique) {
+                    for (int mi = 0; mi < unique->method_count; mi++) {
+                        if (!unique->method_names[mi] ||
+                            strcmp(unique->method_names[mi], ast->symbol) != 0) {
+                            continue;
+                        }
+
+                        const char *impl_name = NULL;
+                        char constructed_name[256];
+                        if (unique->method_funcs[mi]) {
+                            impl_name = LLVMGetValueName(unique->method_funcs[mi]);
+                        } else {
+                            snprintf(constructed_name, sizeof(constructed_name),
+                                     "__impl_%s_%s_%s",
+                                     cls, unique->type_name, ast->symbol);
+                            impl_name = constructed_name;
+                        }
+
+                        EnvEntry *impl_entry = env_lookup(ctx->env, impl_name);
+                        if (impl_entry && impl_entry->kind == ENV_FUNC &&
+                            impl_entry->func_ref && impl_entry->param_count == 0) {
+                            Type *ret_type = impl_entry->return_type
+                                           ? impl_entry->return_type
+                                           : impl_entry->type;
+                            LLVMTypeRef ret_lt = type_to_llvm(ctx, ret_type);
+                            LLVMTypeRef fn_t = LLVMFunctionType(ret_lt, NULL, 0, 0);
+                            result.value = LLVMBuildCall2(ctx->builder, fn_t,
+                                                          impl_entry->func_ref,
+                                                          NULL, 0, ast->symbol);
+                            result.type = ret_type ? type_clone(ret_type)
+                                                   : type_unknown();
+                            return result;
+                        }
+                    }
+                }
                 CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot use generic typeclass method '%s' as a bare value. It must be called directly with arguments so the compiler can resolve the instance.",
                               parser_get_filename(), ast->line, ast->column, ast->symbol);
             } else {
@@ -5483,7 +5920,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                     // Closure ABI only for inner functions with captures.
                     // Top-level polymorphic functions use typed ABI with stub body.
-                    bool use_closure_abi = is_inner || captured_count > 0;
+                    bool use_closure_abi =
+                        is_inner || captured_count > 0 ||
+                        strncmp(var_name, "__anon_", 7) == 0;
 
            ///// Build parameter types
 
@@ -5591,11 +6030,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         env_params[i].name = strdup(param->name);
                         env_params[i].type = param_type;
 
-                        /* closure ABI: param_types[0..2] already set above, skip */
-                        if (use_closure_abi) { continue; }
-
-                        int llvm_idx = i;
-                        if (param_type->kind == TYPE_UNKNOWN && hm_scheme) {
+                        if (codegen_param_type_needs_usage(param_type) && hm_scheme) {
                             // Use HM-inferred concrete param type if available,
                             // but only for simple ground types (Int, Float, Bool, Char).
                             // For function/arrow types, always use ptr since they
@@ -5607,23 +6042,27 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             if (t && t->kind == TYPE_ARROW && t->arrow_param) {
                                 Type *hp = t->arrow_param;
                                 // Only use concrete scalar types — not arrows/vars/unknown
-                                if (hp->kind != TYPE_VAR    &&
-                                    hp->kind != TYPE_UNKNOWN &&
-                                    hp->kind != TYPE_ARROW   &&
-                                    hp->kind != TYPE_FN)
+                                if (codegen_type_is_concrete_value(hp))
                                     hm_param = hp;
                             }
-                            param_types[llvm_idx] = hm_param
-                                                  ? type_to_llvm(ctx, hm_param)
-                                                  : ptr_t;
+                            if (!hm_param)
+                                hm_param = lambda_inferred_param_at(lambda, i);
+                            if (!hm_param)
+                                hm_param = lambda_param_type_from_usage(
+                                    ctx, lambda, lambda->lambda.params[i].name);
                             if (hm_param) {
-                                // Don't free — type_unknown() returns a fresh alloc
-                                // but env_params[i].type may point to a shared type.
-                                // Just replace with clone, old pointer leaks minimally.
+                                param_type = hm_param;
                                 env_params[i].type = type_clone(hm_param);
                                 all_params_unknown = false;
                             }
+                        }
 
+                        /* closure ABI: param_types[0..2] already set above, skip */
+                        if (use_closure_abi) { continue; }
+
+                        int llvm_idx = i;
+                        if (codegen_param_type_needs_usage(param_type)) {
+                            param_types[llvm_idx] = ptr_t;
                         } else {
                             param_types[llvm_idx] = type_to_llvm(ctx, param_type);
                         }
@@ -5633,7 +6072,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     /* Refine use_closure_abi: if all params have known types
                      * and there are no captures, use typed ABI even for inner
                      * functions — this makes let/let* work correctly.        */
-                    if (use_closure_abi && captured_count == 0) {
+                    if (use_closure_abi && captured_count == 0 &&
+                        strncmp(var_name, "__anon_", 7) != 0) {
                         bool all_typed = (total_params > 0);
                         for (int _i = 0; _i < total_params; _i++) {
                             if (!env_params[_i].type ||
@@ -6079,14 +6519,23 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                              * This handles where-clause lambdas whose params have
                              * no annotation but whose types were fully inferred,
                              * e.g. "improve g -> ..." where g :: Float.          */
-                            if ((!param_type || param_type->kind == TYPE_UNKNOWN) && hm_scheme) {
+                            if (codegen_param_type_needs_usage(param_type) && hm_scheme) {
                                 Type *t = hm_scheme->type;
                                 for (int j = 0; j < i && t && t->kind == TYPE_ARROW; j++)
                                     t = t->arrow_ret;
                                 if (t && t->kind == TYPE_ARROW && t->arrow_param &&
-                                    t->arrow_param->kind != TYPE_UNKNOWN &&
-                                    t->arrow_param->kind != TYPE_VAR) {
+                                    codegen_type_is_concrete_value(t->arrow_param)) {
                                     param_type = t->arrow_param;
+                                    env_params[i].type = type_clone(param_type);
+                                }
+                            }
+                            if (codegen_param_type_needs_usage(param_type)) {
+                                Type *inferred_param = lambda_inferred_param_at(lambda, i);
+                                if (!inferred_param)
+                                    inferred_param = lambda_param_type_from_usage(
+                                        ctx, lambda, lambda->lambda.params[i].name);
+                                if (inferred_param) {
+                                    param_type = inferred_param;
                                     env_params[i].type = type_clone(param_type);
                                 }
                             }
@@ -7695,9 +8144,36 @@ if (ast->list.count >= 5) {
             }
 
             if (strcmp(head->symbol, "doc") == 0) {
-                if (ast->list.count != 2) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' requires 1 argument",
+                if (ast->list.count != 2 && ast->list.count != 3) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' requires 1 or 2 arguments",
                             parser_get_filename(), ast->line, ast->column);
+                }
+
+                if (ast->list.count == 3) {
+                    extern const char *layout_get_field_docstring(const char *layout_name,
+                                                                  const char *field_name);
+
+                    AST *layout_arg = ast->list.items[1];
+                    AST *field_arg  = ast->list.items[2];
+
+                    if (layout_arg->type != AST_SYMBOL ||
+                        field_arg->type != AST_SYMBOL) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' field form requires symbols",
+                                parser_get_filename(), ast->line, ast->column);
+                    }
+
+                    const char *docstring =
+                        layout_get_field_docstring(layout_arg->symbol,
+                                                   field_arg->symbol);
+
+                    if (!docstring || strlen(docstring) == 0)
+                        docstring = "(no documentation)";
+
+                    result.type  = type_string();
+                    result.value = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                            docstring,
+                                                            "docstr");
+                    return result;
                 }
 
                 AST *arg = ast->list.items[1];
@@ -7706,17 +8182,46 @@ if (ast->list.count >= 5) {
                             parser_get_filename(), ast->line, ast->column);
                 }
 
+                char *dot = strchr(arg->symbol, '.');
+                if (dot && dot != arg->symbol && dot[1] != '\0') {
+                    extern const char *layout_get_field_docstring(const char *layout_name,
+                                                                  const char *field_name);
+
+                    size_t layout_len = (size_t)(dot - arg->symbol);
+                    char layout_name[256];
+                    char field_name[256];
+
+                    if (layout_len >= sizeof(layout_name)) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' layout name is too long",
+                                parser_get_filename(), ast->line, ast->column);
+                    }
+
+                    snprintf(layout_name, sizeof(layout_name), "%.*s",
+                             (int)layout_len, arg->symbol);
+                    snprintf(field_name, sizeof(field_name), "%s", dot + 1);
+
+                    const char *docstring =
+                        layout_get_field_docstring(layout_name, field_name);
+
+                    if (!docstring || strlen(docstring) == 0)
+                        docstring = "(no documentation)";
+
+                    result.type  = type_string();
+                    result.value = LLVMBuildGlobalStringPtr(ctx->builder,
+                                                            docstring,
+                                                            "docstr");
+                    return result;
+                }
+
                 EnvEntry *entry = env_lookup(ctx->env, arg->symbol);
                 if (!entry) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'doc' unbound variable: %s",
                             parser_get_filename(), ast->line, ast->column, arg->symbol);
                 }
 
-                /* const char *docstring = entry->docstring ? entry->docstring : ""; */
                 const char *docstring = (entry->docstring && strlen(entry->docstring) > 0)
                     ? entry->docstring
                     : "(no documentation)";
-
 
                 result.type  = type_string();
                 result.value = LLVMBuildGlobalStringPtr(ctx->builder, docstring, "docstr");
@@ -8164,8 +8669,23 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef  ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMValueRef fn  = get_rt_list_new(ctx);  // was get_rt_list_empty
                 LLVMTypeRef  ft  = LLVMFunctionType(ptr, NULL, 0, 0);
-                result.value = LLVMBuildCall2(ctx->builder, ft, fn, NULL, 0, "list");
+                LLVMValueRef raw_list = LLVMBuildCall2(ctx->builder, ft, fn, NULL, 0, "list");
                 result.type  = type_list(NULL, 0);
+                LLVMValueRef append_fn = get_rt_list_append(ctx);
+                LLVMTypeRef append_ft = LLVMFunctionType(
+                    LLVMVoidTypeInContext(ctx->context),
+                    (LLVMTypeRef[]){ptr, ptr},
+                    2,
+                    0);
+                for (size_t i = 1; i < ast->list.count; i++) {
+                    CodegenResult item = codegen_expr(ctx, ast->list.items[i]);
+                    LLVMValueRef boxed = codegen_box(ctx, item.value, item.type);
+                    LLVMValueRef append_args[] = {raw_list, boxed};
+                    LLVMBuildCall2(ctx->builder, append_ft, append_fn,
+                                   append_args, 2, "");
+                }
+                result.value = emit_call_1(ctx, get_rt_value_list(ctx), ptr,
+                                           raw_list, "boxed_list");
                 return result;
             }
 
@@ -10718,6 +11238,17 @@ if (ast->list.count >= 5) {
                         strcmp(op, "=")  == 0 ? LLVMRealOEQ : LLVMRealONE;
                     cmp = LLVMBuildFCmp(ctx->builder, pred, lv, rv, "cmptmp");
                 } else {
+                    if (LLVMGetTypeKind(LLVMTypeOf(lv)) == LLVMPointerTypeKind) {
+                        LLVMTypeRef uft = LLVMFunctionType(i64_t, &ptr_t2, 1, 0);
+                        lv = LLVMBuildCall2(ctx->builder, uft,
+                             get_rt_unbox_int(ctx), &lv, 1, "unbox_lhs_cmp");
+                    }
+                    if (LLVMGetTypeKind(LLVMTypeOf(rv)) == LLVMPointerTypeKind) {
+                        LLVMTypeRef uft = LLVMFunctionType(i64_t, &ptr_t2, 1, 0);
+                        rv = LLVMBuildCall2(ctx->builder, uft,
+                             get_rt_unbox_int(ctx), &rv, 1, "unbox_rhs_cmp");
+                    }
+
                     /* Promote integers to the same bit-width before comparing */
                     unsigned lw = LLVMGetIntTypeWidth(LLVMTypeOf(lv));
                     unsigned rw = LLVMGetIntTypeWidth(LLVMTypeOf(rv));
@@ -11102,8 +11633,11 @@ if (ast->list.count >= 5) {
                     bool lhs_is_float = type_is_float(result_type);
                     bool rhs_is_float = type_is_float(rhs.type);
 
-                    // Pointer arithmetic: ptr + int or int + ptr
-                    if ((result_type->kind == TYPE_PTR || LLVMGetTypeKind(LLVMTypeOf(result_value)) == LLVMPointerTypeKind) && !type_is_float(rhs.type)) {
+                    // Pointer arithmetic: ptr + int or int + ptr. LLVM pointers
+                    // also represent boxed RuntimeValue* values, so require an
+                    // explicit language Ptr instead of treating every pointer as
+                    // address arithmetic.
+                    if (result_type->kind == TYPE_PTR && !type_is_float(rhs.type)) {
                         LLVMTypeRef i8_t = LLVMInt8TypeInContext(ctx->context);
                         LLVMValueRef ptr_as_i8 = LLVMBuildBitCast(ctx->builder, result_value,
                                                      LLVMPointerType(i8_t, 0), "ptr_i8");
@@ -11239,19 +11773,27 @@ if (ast->list.count >= 5) {
                 const char *type_name = NULL;
 
                 for (size_t i = 1; i < ast->list.count; i++) {
-                    Type *t = ast->list.items[i]->inferred_type;
-                    if (t && t->kind == TYPE_LAYOUT && t->layout_name) {
-                        type_name = t->layout_name; break;
+                    AST *arg = ast->list.items[i];
+                    const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
+                    if (inferred_type_name) {
+                        type_name = inferred_type_name; break;
                     }
-                    if (ast->list.items[i]->type == AST_SYMBOL) {
-                        EnvEntry *e = env_lookup(ctx->env, ast->list.items[i]->symbol);
-                        if (e && e->type && e->type->kind == TYPE_LAYOUT && e->type->layout_name) {
-                            type_name = e->type->layout_name; break;
+                    if (arg->type == AST_SYMBOL) {
+                        EnvEntry *e = env_lookup(ctx->env, arg->symbol);
+                        const char *env_type_name = e ? tc_instance_type_name_from_type(e->type) : NULL;
+                        if (env_type_name) {
+                            type_name = env_type_name; break;
                         }
                     }
                 }
-                if (!type_name && ast->inferred_type && ast->inferred_type->kind == TYPE_LAYOUT) {
-                    type_name = ast->inferred_type->layout_name;
+                if (!type_name)
+                    type_name = tc_instance_type_name_from_type(ast->inferred_type);
+
+                if (!type_name && ast->list.count == 1) {
+                    TCInstance *unique =
+                        tc_unique_instance_for_method(ctx->tc_registry, cls, op);
+                    if (unique)
+                        type_name = unique->type_name;
                 }
 
                 /* Contextual fallback: derive type from the enclosing function's type.
@@ -12046,19 +12588,27 @@ if (ast->list.count >= 5) {
                     const char *type_name = NULL;
 
                     for (size_t i = 1; i < ast->list.count; i++) {
-                        Type *t       = ast->list.items[i]->inferred_type;
-                        if (t && t->kind == TYPE_LAYOUT && t->layout_name) {
-                            type_name = t->layout_name; break;
+                        AST *arg = ast->list.items[i];
+                        const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
+                        if (inferred_type_name) {
+                            type_name = inferred_type_name; break;
                         }
-                        if (ast->list.items[i]->type == AST_SYMBOL) {
-                            EnvEntry *e   = env_lookup(ctx->env, ast->list.items[i]->symbol);
-                            if (e && e->type && e->type->kind == TYPE_LAYOUT && e->type->layout_name) {
-                                type_name = e->type->layout_name; break;
+                        if (arg->type == AST_SYMBOL) {
+                            EnvEntry *e   = env_lookup(ctx->env, arg->symbol);
+                            const char *env_type_name = e ? tc_instance_type_name_from_type(e->type) : NULL;
+                            if (env_type_name) {
+                                type_name = env_type_name; break;
                             }
                         }
                     }
-                    if (!type_name && ast->inferred_type && ast->inferred_type->kind == TYPE_LAYOUT) {
-                        type_name = ast->inferred_type->layout_name;
+                    if (!type_name)
+                        type_name = tc_instance_type_name_from_type(ast->inferred_type);
+
+                    if (!type_name && ast->list.count == 1) {
+                        TCInstance *unique =
+                            tc_unique_instance_for_method(ctx->tc_registry, cls, op);
+                        if (unique)
+                            type_name = unique->type_name;
                     }
 
                     /* Contextual fallback: if we are inside an instance method, use its type! */
@@ -14930,7 +15480,7 @@ if (ast->list.count >= 5) {
 
             env_insert_func(ctx->env, mname, env_params, param_count, type_unknown(), NULL, NULL, NULL);
         }
-        tc_register_class(ctx->tc_registry, ast);
+        tc_register_class(ctx->tc_registry, ast, ctx);
         result.type  = type_int();
         result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
         return result;
@@ -15122,6 +15672,7 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "String", 1, 0, "Convert value to string", NULL);
     env_insert_builtin(ctx->env, "Hex",    1, 0, "Convert to hexadecimal integer", NULL);
     env_insert_builtin(ctx->env, "Bin",    1, 0, "Convert to binary integer", NULL);
+    env_insert_builtin(ctx->env, "Byte",   1, 0, "Convert to bytes", NULL);
     env_insert_builtin(ctx->env, "Oct",    1, 0, "Convert to octal integer", NULL);
     env_insert_builtin(ctx->env, "F32",    1, 0, "Convert to 32-bit float", NULL);
     env_insert_builtin(ctx->env, "I8",     1, 0, "Convert to signed 8-bit integer", NULL);

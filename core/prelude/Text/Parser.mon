@@ -1,0 +1,174 @@
+;;; Parser.mon --- Bootstrap parser core
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: parser combinator state result byte-list text
+
+;;; Commentary:
+
+;; This is the executable parser substrate for future JSON work.  It keeps
+;; xs lists in function arguments and returns scalar ParseResult layouts,
+;; avoiding current runtime instability around list fields inside layouts.
+
+;;; Code:
+
+module Text.Parser
+  [ParseResult
+   parse-result parse-ok parse-error
+   parse-ok? parse-failed? parse-value parse-offset parse-error-code
+   parser-empty? parser-drop
+   byte choice
+   ascii-space? ascii-digit? digit-value
+   skip-space-offset skip-space-xs signed-int token-byte]
+
+
+layout ParseResult
+  [ok     :: Bool]
+  [value  :: Int]
+  [offset :: Int]
+  [error  :: Int]
+
+
+define parse-result :: Bool -> Int -> Int -> Int -> ParseResult
+  ok value offset error -> (ParseResult ok value offset error)
+
+
+define parse-ok :: Int -> Int -> ParseResult
+  value offset -> (ParseResult True value offset 0)
+
+
+define parse-error :: Int -> Int -> ParseResult
+  code offset -> (ParseResult False 0 offset code)
+
+
+define parse-ok? :: ParseResult -> Bool
+  result -> result.ok
+
+
+define parse-failed? :: ParseResult -> Bool
+  result | result.ok  -> False
+         | otherwise -> True
+
+
+define parse-value :: Int -> ParseResult -> Int
+  default result | result.ok  -> result.value
+                 | otherwise -> default
+
+
+define parse-offset :: ParseResult -> Int
+  result -> result.offset
+
+
+define parse-error-code :: ParseResult -> Int
+  result -> result.error
+
+
+define parser-empty? :: [Int] -> Bool
+  xs -> (= (count xs) 0)
+
+
+define parser-drop :: Int -> [Int] -> [Int]
+  n xs | n <= 0 -> xs
+  n []             -> []
+  n [x|xs]         -> parser-drop (n - 1) xs
+
+
+define byte :: Int -> Int -> [Int] -> ParseResult
+  expected offset [] -> (parse-error 1 offset)
+  expected offset [c|rest] -> byte-got expected offset c
+
+
+define byte-got :: Int -> Int -> Int -> ParseResult
+  expected offset c | (= c expected) -> (parse-ok expected (offset + 1))
+  expected offset c                  -> (parse-error 2 offset)
+
+
+define choice :: ParseResult -> ParseResult -> ParseResult
+  left right | left.ok   -> left
+  left right             -> right
+
+
+define ascii-space? :: Int -> Bool
+  c | c = 0x20   -> True
+  c | c = 0x09   -> True
+  c | c = 0x0a   -> True
+  c | c = 0x0d   -> True
+  c | otherwise  -> False
+
+
+define ascii-digit? :: Int -> Bool
+  c | (and (>= c 0x30) (<= c 0x39)) -> True
+  c | otherwise                     -> False
+
+
+define digit-value :: Int -> Int
+  c -> c - 0x30
+
+
+define skip-space-offset :: Int -> [Int] -> Int
+  offset [] -> offset
+  offset [c|rest] | ascii-space? c -> skip-space-offset (offset + 1) rest
+  offset xs                     -> offset
+
+
+define skip-space-xs :: [Int] -> [Int]
+  [] -> []
+  [c|rest] | ascii-space? c -> skip-space-xs rest
+  xs                     -> xs
+
+
+define signed-int :: Int -> [Int] -> ParseResult
+  offset [0x2d|rest] -> (signed-int-digits offset (0 - 1) 0 False (offset + 1) rest)
+  offset xs          -> (signed-int-digits offset 1 0 False offset xs)
+
+
+define signed-int-digits :: Int -> Int -> Int -> Bool -> Int -> [Int] -> ParseResult
+  start sign acc seen offset [] | seen      -> (parse-ok (sign * acc) offset)
+  start sign acc seen offset []             -> (parse-error 4 start)
+  start sign acc seen offset [c|rest] | ascii-digit? c -> (signed-int-digits start sign ((acc * 10) + (digit-value c)) True (offset + 1) rest)
+  start sign acc seen offset xs | seen   -> (parse-ok (sign * acc) offset)
+  start sign acc seen offset xs          -> (parse-error 4 start)
+
+
+define token-byte :: Int -> Int -> [Int] -> ParseResult
+  expected offset xs -> byte expected (skip-space-offset offset xs) (skip-space-xs xs)
+
+
+tests
+  :xs:
+  assert-eq (parser-empty? []) True "Parser empty xs"
+  assert-eq (parser-empty? (list 0x61)) False "Parser nonempty xs"
+
+  :xs:
+  :byte:
+  assert-eq (parse-ok? (byte 0x61 0 (list 0x61 0x62))) True "Parser byte success"
+  assert-eq (parse-value 0 (byte 0x61 0 (list 0x61 0x62))) 0x61 "Parser byte value"
+  assert-eq (parse-offset (byte 0x61 0 (list 0x61 0x62))) 1 "Parser byte advances offset"
+  assert-eq (parse-failed? (byte 0x62 0 (list 0x61))) True "Parser byte mismatch"
+  assert-eq (parse-error-code (byte 0x62 0 (list 0x61))) 2 "Parser byte mismatch code"
+
+  :byte:
+  :choice:
+  assert-eq (parse-ok? (choice (byte 0x62 0 (list 0x61)) (byte 0x61 0 (list 0x61)))) True "Parser choice second"
+  assert-eq (parse-value 0 (choice (byte 0x62 0 (list 0x61)) (byte 0x61 0 (list 0x61)))) 0x61 "Parser choice value"
+
+  :choice:
+  :space:
+  assert-eq (skip-space-offset 0 (list 0x20 0x09 0x61)) 2 "Parser skip-space offset"
+  assert-eq (parse-ok? (token-byte 0x61 0 (list 0x20 0x61))) True "Parser token-byte skips"
+  assert-eq (parse-offset (token-byte 0x61 0 (list 0x20 0x61))) 2 "Parser token-byte offset"
+
+  :space:
+  :digits:
+  assert-eq (ascii-digit? 0x30) True "Parser digit zero"
+  assert-eq (ascii-digit? 0x39) True "Parser digit nine"
+  assert-eq (ascii-digit? 0x3a) False "Parser digit rejects colon"
+  assert-eq (digit-value 0x37) 7 "Parser digit value"
+
+  :digits:
+  :signed-int:
+  assert-eq (parse-value 0 (signed-int 0 (list 0x34 0x32))) 42 "Parser signed-int positive"
+  assert-eq (parse-value 0 (signed-int 0 (list 0x2d 0x31 0x37))) (0 - 17) "Parser signed-int negative"
+  assert-eq (parse-offset (signed-int 0 (list 0x31 0x32 0x78))) 2 "Parser signed-int stops before non-digit"
+  assert-eq (parse-failed? (signed-int 0 (list 0x2d))) True "Parser signed-int rejects bare minus"
+  :signed-int:

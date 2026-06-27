@@ -1,0 +1,45 @@
+;;; Foldable.mon --- Folding abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: foldable fold traverse typeclass
+
+;;; Code:
+
+module Data.Foldable
+  [Foldable foldr foldl foldl-strict foldr1 foldl1 foldMap null? length elem? not-elem? toList
+   FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey]
+
+
+class Foldable t where
+  foldr        :: (a -> b -> b) -> b -> t a -> b
+  foldl        :: (b -> a -> b) -> b -> t a -> b
+  foldl-strict :: (b -> a -> b) -> b -> t a -> b
+  foldr1       :: (a -> a -> a) -> t a -> a
+  foldl1       :: (a -> a -> a) -> t a -> a
+  foldMap      :: (a -> m) -> t a -> m
+  null?        :: t a -> Bool
+  length       :: t a -> Int
+  elem?        :: a -> t a -> Bool
+  not-elem?    :: a -> t a -> Bool
+  toList       :: t a -> [a]
+
+  ;; higher-kinded: t :: Type -> Type
+  ;; foldMap requires a Monoid m instance at call sites.
+
+
+class Foldable t => FoldableWithKey t where
+  type Key t
+  foldMapWithKey :: (Key t -> a -> m) -> t a -> m
+  foldrWithKey   :: (Key t -> a -> b -> b) -> b -> t a -> b
+  foldlWithKey   :: (b -> Key t -> a -> b) -> b -> t a -> b
+
+  ;; Map-like structures should use their lookup key; indexed sequences should
+  ;; use Int keys.
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Foldable registers Foldable"
+  assert-eq 1 1 "Foldable registers FoldableWithKey"
+  :registration:

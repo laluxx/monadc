@@ -1,0 +1,87 @@
+;;; Monad.mon --- Monad abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: monad transformer reader state writer error comonad typeclass
+
+;;; Code:
+
+import Control.Applicative
+
+module Control.Monad
+  [Monad bind return join then fail
+   MonadPlus mzero mplus
+   MonadTrans lift
+   MonadReader Env ask local reader
+   MonadState State get put state modify
+   MonadWriter Output tell listen pass
+   MonadError Error throwError catchError
+   Comonad extract duplicate extend]
+
+
+class Applicative m => Monad m where
+  bind   :: m a -> (a -> m b) -> m b
+  return :: a -> m a
+  join   :: m (m a) -> m a
+  then   :: m a -> m b -> m b
+  fail   :: String -> m a
+
+  ;; higher-kinded: m :: Type -> Type
+
+
+class Monad m => MonadPlus m where
+  mzero :: m a
+  mplus :: m a -> m a -> m a
+
+
+class MonadTrans t where
+  lift :: m a -> t m a
+
+  ;; higher-kinded: t :: (Type -> Type) -> Type -> Type
+
+
+class Monad m => MonadReader m where
+  type Env m
+  ask    :: m (Env m)
+  local  :: (Env m -> Env m) -> m a -> m a
+  reader :: (Env m -> a) -> m a
+
+
+class Monad m => MonadState m where
+  type State m
+  get    :: m (State m)
+  put    :: State m -> m ()
+  state  :: (State m -> (a, State m)) -> m a
+  modify :: (State m -> State m) -> m ()
+
+
+class Monad m => MonadWriter m where
+  type Output m
+  tell   :: Output m -> m ()
+  listen :: m a -> m (a, Output m)
+  pass   :: m (a, Output m -> Output m) -> m a
+
+
+class Monad m => MonadError m where
+  type Error m
+  throwError :: Error m -> m a
+  catchError :: m a -> (Error m -> m a) -> m a
+
+
+class Comonad w where
+  extract   :: w a -> a
+  duplicate :: w a -> w (w a)
+  extend    :: (w a -> b) -> w a -> w b
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Monad registers Monad"
+  assert-eq 1 1 "Monad registers MonadPlus"
+  assert-eq 1 1 "Monad registers MonadTrans"
+  assert-eq 1 1 "Monad registers MonadReader"
+  assert-eq 1 1 "Monad registers MonadState"
+  assert-eq 1 1 "Monad registers MonadWriter"
+  assert-eq 1 1 "Monad registers MonadError"
+  assert-eq 1 1 "Monad registers Comonad"
+  :registration:

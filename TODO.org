@@ -1,8 +1,23 @@
 #+title: TODO.org
 
-* TODO Tests Cookie [0/2]
-  - [ ] When we test count the number of tests and update the [/] heading
-  - [ ] Make the tests function accept and optional [/] as it's first argument just ignore it.
+* TODO Dependent pattern matching [0/1]
+  - [ ] Do it
+
+* TODO Auto function constant bindings [0/1]
+- [ ] Just do it.
+
+| Variable | Type   | Meaning                                        |
+|----------+--------+------------------------------------------------|
+| domain   | Type   | The input type (or product type for multi-arg) |
+| codomain | Type   | The output type                                |
+| argc     | Nat    | Number of arguments the function takes         |
+| args     | Vector | Types of all arguments                         |
+| name     | String | The function's name                            |
+
+
+* TODO Tests Cookie [1/2]
+  - [X] Make the tests function accept and optional [0/0] as it's first argument just ignore it.
+  - [ ] When we test count the number of tests and update the [0/0] heading
 
 #+begin_src monad
 tests [1/5]
@@ -12,7 +27,6 @@ tests [1/5]
   assert-eq (alpha?    'Q') True "Ascii alpha?"
   assert-eq (hex-digit->int 'f') 15   "Ascii hex-digit->int"
 #+end_src
-
 
 * ByteCode
 
@@ -747,6 +761,7 @@ instance plus with {x : Int} x 3
    Γ ⊢ e ⇒ t ; Expression ⌜e⌝ synthesizes type ⌜t⌝
    Γ ⊢ e ⇐ t ; Expression ⌜e⌝ can be checked to have type ⌜t⌝
    #+end_src
+
 
 
 * TODO Layer modal type theory

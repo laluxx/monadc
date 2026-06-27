@@ -1,0 +1,35 @@
+;;; Distributive.mon --- Distributive and representable functors
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: distributive representable typeclass
+
+;;; Code:
+
+import Data.Functor
+
+module Data.Distributive
+  [Distributive distribute collect
+   Representable Rep tabulate index]
+
+
+class Functor f => Distributive f where
+  distribute :: g (f a) -> f (g a)
+  collect    :: (a -> f b) -> g a -> f (g b)
+
+  ;; higher-kinded: f, g :: Type -> Type
+
+
+class Functor f => Representable f where
+  type Rep f
+  tabulate :: (Rep f -> a) -> f a
+  index    :: f a -> Rep f -> a
+
+  ;; law: index (tabulate f) = f
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Distributive registers Distributive"
+  assert-eq 1 1 "Distributive registers Representable"
+  :registration:

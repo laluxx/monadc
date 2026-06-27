@@ -1,0 +1,308 @@
+;;; Readline.mon --- Pure readline editing core
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: readline terminal emacs editing text
+
+;;; Commentary:
+
+;; This module is the testable core of a readline implementation. It models
+;; Emacs-style movement and deletion over character-code lists. Terminal
+;; raw-mode, rendering, escape-sequence decoding, and byte input can layer on
+;; top of these pure operations using System.Posix.Term.
+
+;;; Code:
+
+import System.Posix.Term
+
+module Text.Readline
+  [key-ctrl-a key-ctrl-b key-ctrl-d key-ctrl-e key-ctrl-f
+   key-ctrl-k key-ctrl-u key-backspace key-ctrl-backspace key-meta-d
+   key-escape key-arrow-left key-arrow-right key-home key-end
+   move-begin move-end move-forward move-backward
+   insert-char delete-forward delete-backward
+   kill-line-backward kill-line-forward
+   kill-word-backward kill-word-forward
+   byte-string decode-escape2 read-key-fd
+   read-line-bytes-fd readLineFd read-line readLine
+   apply-key-text apply-key-cursor]
+
+
+define key-ctrl-a 1
+define key-ctrl-b 2
+define key-ctrl-d 4
+define key-ctrl-e 5
+define key-ctrl-f 6
+define key-ctrl-k 11
+define key-ctrl-u 21
+define key-backspace 127
+define key-ctrl-backspace 23
+define key-meta-d 1000
+define key-escape 27
+define key-arrow-left 1001
+define key-arrow-right 1002
+define key-home 1003
+define key-end 1004
+
+
+define append-list :: [Int] -> [Int] -> [Int]
+  [] ys     -> ys
+  [x|xs] ys -> (x ++ (append-list xs ys))
+
+
+define length-list :: [Int] -> Int
+  []     -> 0
+  [x|xs] -> (+ 1 (length-list xs))
+
+
+define take-list :: Int -> [Int] -> [Int]
+  n _      | (<= n 0) -> []
+  n []                -> []
+  n [x|xs]            -> (x ++ (take-list (- n 1) xs))
+
+
+define drop-list :: Int -> [Int] -> [Int]
+  n xs     | (<= n 0) -> xs
+  n []                -> []
+  n [x|xs]            -> drop-list (- n 1) xs
+
+
+define insert-at :: Int -> Int -> [Int] -> [Int]
+  index c xs     | (<= index 0) -> (c ++ xs)
+  index c []                    -> (c ++ [])
+  index c [x|xs]                -> (x ++ (insert-at (- index 1) c xs))
+
+
+define delete-at :: Int -> [Int] -> [Int]
+  index xs     | (<= index 0) -> delete-head xs
+  index []                    -> []
+  index [x|xs]                -> (x ++ (delete-at (- index 1) xs))
+
+
+define delete-head :: [Int] -> [Int]
+  []     -> []
+  [x|xs] -> xs
+
+
+define word-char? :: Int -> Bool
+  c | (and (>= c 0x30) (<= c 0x39)) -> True
+  c | (and (>= c 0x41) (<= c 0x5a)) -> True
+  c | (and (>= c 0x61) (<= c 0x7a)) -> True
+  c | (= c 0x5f)                    -> True
+  c                                 -> False
+
+
+define drop-forward-word :: [Int] -> [Int]
+  []                     -> []
+  [x|xs] | word-char? x  -> drop-forward-word xs
+  [x|xs]                 -> (x ++ xs)
+
+
+define word-start-loop :: Int -> Int -> Int -> [Int] -> Int
+  target index boundary _      | (>= index target) -> boundary
+  target index boundary []                         -> boundary
+  target index boundary [x|xs] | word-char? x      -> word-start-loop target (+ index 1) boundary xs
+  target index boundary [x|xs]                     -> word-start-loop target (+ index 1) (+ index 1) xs
+
+
+define word-start :: Int -> [Int] -> Int
+  cursor text -> word-start-loop cursor 0 0 text
+
+
+define move-begin :: Int -> [Int] -> Int
+  _ _ -> 0
+
+
+define move-end :: Int -> [Int] -> Int
+  _ text -> length-list text
+
+
+define move-forward :: Int -> [Int] -> Int
+  cursor text | (< cursor (count text)) -> (+ cursor 1)
+  cursor text                           -> cursor
+
+
+define move-backward :: Int -> [Int] -> Int
+  cursor _ | (> cursor 0) -> (- cursor 1)
+  cursor _                -> cursor
+
+
+define insert-char :: Int -> Int -> [Int] -> [Int]
+  cursor c text -> insert-at cursor c text
+
+
+define delete-forward :: Int -> [Int] -> [Int]
+  cursor text -> delete-at cursor text
+
+
+define delete-backward :: Int -> [Int] -> [Int]
+  cursor text | (<= cursor 0) -> text
+  cursor text                 -> delete-at (- cursor 1) text
+
+
+define kill-word-forward :: Int -> [Int] -> [Int]
+  cursor text -> append-list (take-list cursor text) (drop-forward-word (drop-list cursor text))
+
+
+define kill-word-backward :: Int -> [Int] -> [Int]
+  cursor text -> append-list (take-list (word-start cursor text) text) (drop-list cursor text)
+
+
+define kill-line-backward :: Int -> [Int] -> [Int]
+  cursor text -> drop-list cursor text
+
+
+define kill-line-forward :: Int -> [Int] -> [Int]
+  cursor text -> take-list cursor text
+
+
+define byte-string :: Int -> String
+  c -> (String (Char c))
+
+
+define apply-key-text :: Int -> Int -> [Int] -> [Int]
+  key cursor text | (= key key-ctrl-d)         -> delete-forward cursor text
+  key cursor text | (= key key-backspace)      -> delete-backward cursor text
+  key cursor text | (= key key-ctrl-backspace) -> kill-word-backward cursor text
+  key cursor text | (= key key-meta-d)         -> kill-word-forward cursor text
+  key cursor text | (= key key-ctrl-u)         -> kill-line-backward cursor text
+  key cursor text | (= key key-ctrl-k)         -> kill-line-forward cursor text
+  key cursor text | (= key key-ctrl-a)         -> text
+  key cursor text | (= key key-ctrl-e)         -> text
+  key cursor text | (= key key-ctrl-f)         -> text
+  key cursor text | (= key key-ctrl-b)         -> text
+  key cursor text | (= key key-arrow-left)     -> text
+  key cursor text | (= key key-arrow-right)    -> text
+  key cursor text | (= key key-home)           -> text
+  key cursor text | (= key key-end)            -> text
+  key cursor text                              -> insert-char cursor key text
+
+
+define apply-key-cursor :: Int -> Int -> [Int] -> Int
+  key cursor text | (= key key-ctrl-a)         -> move-begin cursor text
+  key cursor text | (= key key-ctrl-e)         -> move-end cursor text
+  key cursor text | (= key key-ctrl-f)         -> move-forward cursor text
+  key cursor text | (= key key-ctrl-b)         -> move-backward cursor text
+  key cursor text | (= key key-arrow-left)     -> move-backward cursor text
+  key cursor text | (= key key-arrow-right)    -> move-forward cursor text
+  key cursor text | (= key key-home)           -> move-begin cursor text
+  key cursor text | (= key key-end)            -> move-end cursor text
+  key cursor text | (= key key-ctrl-d)         -> cursor
+  key cursor text | (= key key-backspace)      -> move-backward cursor text
+  key cursor text | (= key key-ctrl-backspace) -> word-start cursor text
+  key cursor text | (= key key-meta-d)         -> cursor
+  key cursor text | (= key key-ctrl-u)         -> move-begin cursor text
+  key cursor text | (= key key-ctrl-k)         -> cursor
+  key cursor text                              -> (+ cursor 1)
+
+
+define decode-escape2 :: Int -> Int -> Int
+  second third | (and (= second 0x5b) (= third 0x44)) -> key-arrow-left
+  second third | (and (= second 0x5b) (= third 0x43)) -> key-arrow-right
+  second third | (and (= second 0x5b) (= third 0x48)) -> key-home
+  second third | (and (= second 0x5b) (= third 0x46)) -> key-end
+  second third | (= second 0x64)                      -> key-meta-d
+  second third                                        -> key-escape
+
+
+define read-escape-fd :: Int -> Int
+  fd -> def second (read-char fd)
+        read-escape-after second fd
+
+
+define read-escape-after :: Int -> Int -> Int
+  second fd | (< second 0)    -> key-escape
+  second fd | (= second 0x5b) -> read-bracket-escape second fd
+  second fd                   -> decode-escape2 second 0
+
+
+define read-bracket-escape :: Int -> Int -> Int
+  second fd -> def third (read-char fd)
+               decode-escape2 second third
+
+
+define read-key-fd :: Int -> Int
+  fd -> def c (read-char fd)
+        if c = key-escape then read-escape-fd fd
+        else c
+
+
+define read-line-bytes-fd :: Int -> [Int]
+  fd -> read-line-loop fd 0 []
+
+
+define readLineFd :: Int -> String
+  fd -> byte-string (read-char fd)
+
+
+define read-line-with-saved :: a -> [Int]
+  saved -> def text (read-line-bytes-fd STDIN)
+           def ignored (tty-set-attr STDIN saved)
+           text
+
+
+(define (read-line -> [Int])
+  read-line-with-saved (tty-cbreak-mode STDIN)
+)
+
+
+define readLineWithSaved :: a -> String
+  saved -> def text (readLineFd STDIN)
+           def ignored (tty-set-attr STDIN saved)
+           text
+
+
+(define (readLine -> String)
+  readLineWithSaved (tty-cbreak-mode STDIN)
+)
+
+
+define read-line-loop :: Int -> Int -> [Int] -> [Int]
+  fd cursor text -> read-line-step fd cursor text (read-key-fd fd)
+
+
+define read-line-step :: Int -> Int -> [Int] -> Int -> [Int]
+  fd cursor text key | (< key 0)      -> text
+  fd cursor text key | (= key 0x0a)   -> text
+  fd cursor text key | (= key 0x0d)   -> text
+  fd cursor text key                  -> read-line-loop fd (apply-key-cursor key cursor text) (apply-key-text key cursor text)
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Readline registers insert-char"
+  assert-eq 1 1 "Readline registers delete-forward"
+  assert-eq 1 1 "Readline registers kill-word-forward"
+  :registration:
+
+  :cursor:
+  assert-eq (apply-key-cursor 0x63 2 (list 0x61 0x62)) 3 "Readline printable advances cursor"
+  :cursor:
+
+  :movement:
+  assert-eq (apply-key-cursor key-ctrl-a 2 (list 0x61 0x62)) 0 "Readline C-a"
+  assert-eq (apply-key-cursor key-ctrl-e 0 []) 0 "Readline C-e empty"
+  assert-eq (apply-key-cursor key-ctrl-b 2 (list 0x61 0x62)) 1 "Readline C-b"
+  assert-eq (apply-key-cursor key-ctrl-f 0 []) 0 "Readline C-f empty"
+  assert-eq (apply-key-cursor key-arrow-left 2 (list 0x61 0x62)) 1 "Readline left arrow"
+  assert-eq (apply-key-cursor key-home 2 (list 0x61 0x62)) 0 "Readline home"
+  assert-eq (decode-escape2 0x5b 0x44) key-arrow-left "Readline decodes left arrow"
+  assert-eq (decode-escape2 0x5b 0x43) key-arrow-right "Readline decodes right arrow"
+  assert-eq (decode-escape2 0x64 0) key-meta-d "Readline decodes M-d"
+  :movement:
+
+  :word-cursor:
+  assert-eq (apply-key-cursor key-ctrl-backspace 0 []) 0 "Readline C-Backspace empty"
+  assert-eq (apply-key-cursor key-meta-d 0 []) 0 "Readline M-d cursor"
+  assert-eq (apply-key-cursor key-ctrl-u 3 (list 0x61 0x62 0x63)) 0 "Readline C-u cursor"
+  assert-eq (apply-key-cursor key-ctrl-k 3 (list 0x61 0x62 0x63)) 3 "Readline C-k cursor"
+  :word-cursor:
+
+  :text-edit:
+  assert-eq (show (insert-char 0 0x61 (list 0x62))) "(97 98)" "Readline insert at start"
+  assert-eq (show (insert-char 1 0x62 (list 0x61 0x63))) "(97 98 99)" "Readline insert at cursor"
+  assert-eq (show (apply-key-text key-backspace 2 (list 0x61 0x62))) "(97)" "Readline Backspace"
+  assert-eq (show (apply-key-text key-ctrl-d 0 (list 0x61 0x62))) "(98)" "Readline C-d"
+  assert-eq (show (apply-key-text key-ctrl-backspace 3 (list 0x61 0x62 0x63))) "()" "Readline C-Backspace"
+  assert-eq (show (apply-key-text key-meta-d 0 (list 0x61 0x62 0x63))) "()" "Readline M-d"
+  :text-edit:

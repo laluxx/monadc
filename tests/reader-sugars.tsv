@@ -134,6 +134,8 @@ dot_field_expr	monadc.context.reader.sugar.dot-access	Dot field as expression pa
 # ── Feature Conditional Sugar ────────────────────────────────────────────────
 feature_cond_active	monadc.context.reader.sugar.feature-cond	Active #+ feature conditional keeps inner expr.	#+LINUX\n42\n#---	42			regression	passing-baseline-2026-06-15
 feature_cond_inactive	monadc.context.reader.sugar.feature-cond	Inactive #+ feature conditional strips inner expr.	#+WINDOWS\n99\n#---\n42	42			regression	passing-baseline-2026-06-15
+# ── Org-like Drawers ────────────────────────────────────────────────────────
+drawer_round_trips_ignored	monadc.context.reader.drawers	Org-like :Name: drawers are accepted and skipped by the reader.	:Round trips:\nassert-eq (int->digit (digit->int 0x30)) 0x30 "decimal roundtrip 0"\nassert-eq (int->hex-digit (hex-digit->int 0x66)) 0x66 "hex roundtrip f"\n:Round trips:\n42	42			regression	regression-2026-06-26
 # ── Additional Infix Sugar ──────────────────────────────────────────────────
 # NOTE: Infix operators at reader level are handled by the wisp transformer,
 # not by the reader desugarer. These tests verify parsing succeeds (parse-json).

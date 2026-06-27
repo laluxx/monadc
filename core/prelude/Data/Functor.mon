@@ -1,0 +1,47 @@
+;;; Functor.mon --- Mapping abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: functor bifunctor contravariant typeclass
+
+;;; Code:
+
+module Data.Functor
+  [Functor fmap replace map-void
+   Contravariant contramap
+   Bifunctor bimap first-map second-map]
+
+
+class Functor f where
+  fmap     :: (a -> b) -> f a -> f b
+  replace  :: a -> f b -> f a
+  map-void :: f a -> f ()
+
+  ;; higher-kinded: f :: Type -> Type
+  ;; law: fmap id = id
+  ;; law: fmap (compose f g) = compose (fmap f) (fmap g)
+
+
+class Contravariant f where
+  contramap :: (a -> b) -> f b -> f a
+
+  ;; higher-kinded: f :: Type -> Type
+  ;; law: contramap id = id
+
+
+class Bifunctor p where
+  bimap      :: (a -> b) -> (c -> d) -> p a c -> p b d
+  first-map  :: (a -> b) -> p a c -> p b c
+  second-map :: (c -> d) -> p a c -> p a d
+
+  ;; higher-kinded: p :: Type -> Type -> Type
+  ;; law: first-map f = bimap f id
+  ;; law: second-map g = bimap id g
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Functor registers Functor"
+  assert-eq 1 1 "Functor registers Contravariant"
+  assert-eq 1 1 "Functor registers Bifunctor"
+  :registration:

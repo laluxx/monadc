@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-22T00:36:24
+#+DATE: 2026-06-26T23:04:42
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -7,200 +7,1833 @@
   debugging pass can start from the earliest observed failure.
 
 * Failure
-- Test: =sugar.wisp_def_simple=
+- Test: =codegen.rt-superclass-missing=
 - Status: =FAIL=
-- Menu: =sugar=
-- Duration: =[  19.35 ] ms=
-- Reason: =desugared AST mismatch: expected '(define x 42)', got 'define\nx\n42'=
-- Failure kind: =desugar-mismatch=
-- Artifacts: =tests/.last-failures/sugar.wisp_def_simple=
-
-** Materialized Source
-#+BEGIN_SRC monad
-define x 42
-#+END_SRC
+- Menu: =codegen/branches/symbol-env/typeclasses=
+- Duration: =[  28.05 ] ms=
+- Reason: =diagnostic did not contain "superclass constraint requires instance 'Eq Int' before 'Ord Int'"=
+- Failure kind: =diagnostic-mismatch=
+- Fixture: =tests/codegen/branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.superclass.missing/rt_superclass_missing.mon=
+- Artifacts: =tests/.last-failures/codegen.rt-superclass-missing=
 
 ** Metadata
-- =TEST-CLI-TARGET=: sugar
-- =TEST-CONTEXT=: monadc.context.wisp.sugar.def
-- =TEST-EXPECT=: parse-json
-- =TEST-EXPECT-DESUGAR=: (define x 42)
-- =TEST-ID=: tests.sugar.wisp_def_simple
-- =TEST-MENU=: sugar
-- =TEST-MENU-PATH=: sugar
-- =TEST-PURPOSE=: Wisp def shorthand desugars to define.
-- =TEST-STATUS=: passing-baseline-2026-06-15
+- =TEST-ATOM=: Registering an Ord Int instance without an Eq Int instance is a compile-time error.
+- =TEST-ATOM-LEAF=: atom.codegen.05.symbol.env.typeclasses.superclass.missing
+- =TEST-CATEGORY=: 05-symbol-env
+- =TEST-CLI-TARGET=: codegen branches symbol-env typeclasses
+- =TEST-CODEGEN-ATOM=: atom.codegen.05.symbol.env.typeclasses.superclass.missing
+- =TEST-CONTEXT=: monadc.context.typeclass.structs
+- =TEST-COVERAGE=: reader.c AST_CLASS superclass parsing, typeclass.c instance superclass validation
+- =TEST-EXPECT=: fail:compile
+- =TEST-EXPECT-DIAGNOSTIC=: superclass constraint requires instance 'Eq Int' before 'Ord Int'
+- =TEST-ID=: tests.codegen.rt-superclass-missing
+- =TEST-MENU=: branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.superclass.missing
+- =TEST-MENU-PATH=: codegen/branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.superclass.missing
+- =TEST-PURPOSE=: Superclass constraints reject subclass instances that lack the required superclass instance.
+- =TEST-QUALITY=: branch-regression
+- =TEST-SECTION=: codegen
+- =TEST-STATUS=: active
+- =TEST-SUBSET=: typeclasses
 - =TEST-TIER=: regression
+- =TEST-USES-ATOM=: atom.codegen.category.05.symbol.env
 
 ** Context Links
-- =monadc.context.wisp.sugar.def=
+- =monadc.context.typeclass.structs=
 
 ** Output
 #+BEGIN_EXAMPLE
+warning: cannot create config directory '/tmp/monadc-superclass-tests/.config': No such file or directory
+warning: cannot create config directory '/tmp/monadc-superclass-tests/.config/monad': No such file or directory
 
-=== wisp expanded (/usr/local/lib/monad/core/prelude/Coll.mon) ===
+=== wisp expanded (core/prelude/Coll.mon) ===
 (#line 16 1) (module Coll
 [take      drop (#line 18 1) takeWhile dropWhile (#line 19 1) map all?  foldl foldr])
 (#line 22 1) (define (take [__p_0 : Int] [__p_1 : [a]] -> [a]) _ [] 
 (#line 23 1) ->
 (#line 23 1) []
 (#line 24 1) n [x|xs] 
+(#line 24 1) |
+(#line 24 1) (> n 0)
+(#line 24 1) ->
+(#line 24 1) (x ++ (take (n - 1) xs))
+(#line 25 1) n [x|xs] 
 (#line 25 1) |
-(#line 25 1) (> n 0)
+(#line 25 1) otherwise
 (#line 25 1) ->
-(#line 25 1) (x ++ (take (n - 1) xs))
-(#line 26 1) |
-(#line 26 1) otherwise
-(#line 26 1) ->
-(#line 26 1) [])
-(#line 29 1) (define (drop [__p_0 : Int] [__p_1 : [a]] -> [a]) _ [] 
+(#line 25 1) [])
+(#line 28 1) (define (drop [__p_0 : Int] [__p_1 : [a]] -> [a]) _ [] 
+(#line 29 1) ->
+(#line 29 1) []
+(#line 30 1) n [x|xs] 
+(#line 30 1) |
+(#line 30 1) (> n 0)
 (#line 30 1) ->
-(#line 30 1) []
+(#line 30 1) (drop (n - 1) xs)
 (#line 31 1) n [x|xs] 
-(#line 32 1) |
-(#line 32 1) (> n 0)
-(#line 32 1) ->
-(#line 32 1) (drop (n - 1) xs)
-(#line 33 1) |
-(#line 33 1) otherwise
-(#line 33 1) ->
-(#line 33 1) (x ++ xs))
-(#line 36 1) (define (takeWhile [__p_0 : (a -> Bool)] [__p_1 : [a]] -> [a]) _ [] 
+(#line 31 1) |
+(#line 31 1) otherwise
+(#line 31 1) ->
+(#line 31 1) (x ++ xs))
+(#line 34 1) (define (takeWhile [__p_0 : Fn] [__p_1 : [a]] -> [a]) _ [] 
+(#line 35 1) ->
+(#line 35 1) []
+(#line 36 1) p [x|xs] 
+(#line 36 1) |
+(#line 36 1) (p x)
+(#line 36 1) ->
+(#line 36 1) (x ++ (takeWhile p xs))
+(#line 37 1) p [x|xs] 
+(#line 37 1) |
+(#line 37 1) otherwise
 (#line 37 1) ->
-(#line 37 1) []
-(#line 38 1) p [x|xs] 
-(#line 39 1) |
-(#line 39 1) (p x)
-(#line 39 1) ->
-(#line 39 1) (x ++ (takeWhile p xs))
-(#line 40 1) |
-(#line 40 1) otherwise
-(#line 40 1) ->
-(#line 40 1) [])
-(#line 43 1) (define (dropWhile [__p_0 : (a -> Bool)] [__p_1 : [a]] -> [a]) _ [] 
-(#line 44 1) ->
-(#line 44 1) []
-(#line 45 1) p [x|xs] 
-(#line 46 1) |
-(#line 46 1) (p x)
-(#line 46 1) ->
-(#line 46 1) (dropWhile p xs)
-(#line 47 1) |
-(#line 47 1) otherwise
+(#line 37 1) [])
+(#line 40 1) (define (dropWhile [__p_0 : Fn] [__p_1 : [a]] -> [a]) _ [] 
+(#line 41 1) ->
+(#line 41 1) []
+(#line 42 1) p [x|xs] 
+(#line 42 1) |
+(#line 42 1) (p x)
+(#line 42 1) ->
+(#line 42 1) (dropWhile p xs)
+(#line 43 1) p [x|xs] 
+(#line 43 1) |
+(#line 43 1) otherwise
+(#line 43 1) ->
+(#line 43 1) (x ++ xs))
+(#line 46 1) (define (map [__p_0 : Fn] [__p_1 : [a]] -> [b]) _ [] 
 (#line 47 1) ->
-(#line 47 1) (x ++ xs))
-(#line 50 1) (define (map [__p_0 : (a -> b)] [__p_1 : [a]] -> [b]) _ [] 
-(#line 51 1) ->
-(#line 51 1) []
-(#line 52 1) f [x|xs] 
-(#line 52 1) ->
-(#line 52 1) ((f x) ++ (map f xs)))
-(#line 56 1) (define (any? [__p_0 : (a -> Bool)] [__p_1 : [a]] -> Bool) _ [] 
-(#line 57 1) ->
-(#line 57 1) False
-(#line 58 1) p [x|xs] 
+(#line 47 1) []
+(#line 48 1) f [x|xs] 
+(#line 48 1) ->
+(#line 48 1) ((f x) ++ (map f xs)))
+(#line 52 1) (define (any? [__p_0 : Fn] [__p_1 : [a]] -> Bool) _ [] 
+(#line 53 1) ->
+(#line 53 1) False
+(#line 54 1) p [x|xs] 
+(#line 54 1) ->
+(#line 54 1) (or (p x) (any? p xs)))
+(#line 57 1) (define (all? [__p_0 : Fn] [__p_1 : [a]] -> Bool) _ [] 
 (#line 58 1) ->
-(#line 58 1) (or (p x) (any? p xs)))
-(#line 61 1) (define (all? [__p_0 : (a -> Bool)] [__p_1 : [a]] -> Bool) _ [] 
-(#line 62 1) ->
-(#line 62 1) True
-(#line 63 1) p [x|xs] 
-(#line 64 1) |
-(#line 64 1) (p x)
+(#line 58 1) True
+(#line 59 1) p [x|xs] 
+(#line 59 1) |
+(#line 59 1) (p x)
+(#line 59 1) ->
+(#line 59 1) (all? p xs)
+(#line 60 1) p [x|xs] 
+(#line 60 1) |
+(#line 60 1) otherwise
+(#line 60 1) ->
+(#line 60 1) False)
+(#line 63 1) (define (foldl [__p_0 : Fn] [__p_1 : b] [__p_2 : [a]] -> b) _ acc [] 
 (#line 64 1) ->
-(#line 64 1) (all? p xs)
-(#line 65 1) |
-(#line 65 1) otherwise
+(#line 64 1) acc
+(#line 65 1) f acc [x|xs] 
 (#line 65 1) ->
-(#line 65 1) False)
-(#line 68 1) (define (foldl [__p_0 : (b -> a -> b)] [__p_1 : b] [__p_2 : [a]] -> b) _ acc [] 
+(#line 65 1) (foldl f (f acc x) xs))
+(#line 68 1) (define (foldr [__p_0 : Fn] [__p_1 : b] [__p_2 : [a]] -> b) _ acc [] 
 (#line 69 1) ->
 (#line 69 1) acc
 (#line 70 1) f acc [x|xs] 
 (#line 70 1) ->
-(#line 70 1) (foldl f (f acc x) xs))
-(#line 73 1) (define (foldr [__p_0 : (a -> b -> b)] [__p_1 : b] [__p_2 : [a]] -> b) _ acc [] 
+(#line 70 1) (f x (foldr f acc xs)))
+(#line 73 1) (define (zip [__p_0 : [a]] [__p_1 : [b]] -> [c]) [] _ 
 (#line 74 1) ->
-(#line 74 1) acc
-(#line 75 1) f acc [x|xs] 
+(#line 74 1) []
+(#line 75 1) _ [] 
 (#line 75 1) ->
-(#line 75 1) (f x (foldr f acc xs)))
-(#line 78 1) (define (zip [__p_0 : [a]] [__p_1 : [b]] -> [c]) [] _ 
-(#line 79 1) ->
-(#line 79 1) []
-(#line 80 1) _ [] 
+(#line 75 1) []
+(#line 76 1) [x|xs] [y|ys] 
+(#line 76 1) ->
+(#line 76 1) ((list x y) ++ (zip xs ys)))
+(#line 79 1) (define (zipwith [__p_0 : Fn] [__p_1 : [a]] [__p_2 : [b]] -> [c]) _ [] _ 
 (#line 80 1) ->
 (#line 80 1) []
-(#line 81 1) [x|xs] [y|ys] 
+(#line 81 1) _ _ [] 
 (#line 81 1) ->
-(#line 81 1) ((list x y) ++ (zip xs ys)))
-(#line 84 1) (define (zipwith [__p_0 : (a -> b -> c)] [__p_1 : [a]] [__p_2 : [b]] -> [c]) _ [] _ 
-(#line 85 1) ->
-(#line 85 1) []
-(#line 86 1) _ _ [] 
+(#line 81 1) []
+(#line 82 1) f [x|xs] [y|ys] 
+(#line 82 1) ->
+(#line 82 1) ((f x y) ++ (zipwith f xs ys)))
+(#line 85 1) (define (append [__p_0 : [a]] [__p_1 : a] -> [a]) [] val 
 (#line 86 1) ->
-(#line 86 1) []
-(#line 87 1) f [x|xs] [y|ys] 
+(#line 86 1) (val ++ [])
+(#line 87 1) [x|xs] val 
 (#line 87 1) ->
-(#line 87 1) ((f x y) ++ (zipwith f xs ys)))
-(#line 90 1) (define (append [__p_0 : [a]] [__p_1 : a] -> [a]) [] val 
-(#line 91 1) ->
-(#line 91 1) (val ++ [])
-(#line 92 1) [x|xs] val 
-(#line 92 1) ->
-(#line 92 1) (x ++ (append xs val)))
-(#line 99 1) (define (filter [__p_0 : (a -> Bool)] [__p_1 : [a]] -> [a]) _ [] 
-(#line 100 1) ->
-(#line 100 1) []
-(#line 101 1) p [x|xs] 
-(#line 102 1) |
-(#line 102 1) (p x)
-(#line 102 1) ->
-(#line 102 1) (x ++ (filter p xs))
-(#line 103 1) |
-(#line 103 1) otherwise
-(#line 103 1) ->
-(#line 103 1) (filter p xs))
-(#line 107 1) (define (both [f : (a -> Bool)] [g : (a -> Bool)] -> (a -> Bool)) (lambda (x) (and (f x) (g x))))
-(#line 191 1) (tests (#line 113 1) (assert-eq (filter (> 0)  [1 -2 3 -4])                  [1 3]     "filter positive Array") (#line 114 1) (assert-eq (filter (> 0) '(1 -2 3 -4))                 '(1 3)     "filter positive List") (#line 115 1) (assert-eq (filter (> 0)  [])                           []        "filter empty") (#line 116 1) (assert-eq (filter (both (>= 'A') (<= 'Z')) "PoRcOdIo") "PROI"    "filter string") (#line 119 1) (assert-eq (append [1 2 3] 4)    [1 2 3 4]      "append item to Array") (#line 120 1) (assert-eq (append '(1 2 3) 4)  '(1 2 3 4)      "append item to List") (#line 121 1) (assert-eq (append "hello " 'w') "hello w"      "append char to String") (#line 122 1) (assert-eq (append [] 1)         [1]            "append to empty Array") (#line 125 1) (assert-eq (take 2 [1 2 3 4])   [1 2]      "take 2 Array") (#line 126 1) (assert-eq (take 2 '(1 2 3 4)) '(1 2)      "take 2 List") (#line 127 1) (assert-eq (take 2 "monad")     "mo"       "take 2 String") (#line 128 1) (assert-eq (take 0 [1 2 3])     []         "take 0 Array") (#line 129 1) (assert-eq (take 5 [1 2])       [1 2]      "take over-length Array") (#line 130 1) (assert-eq (take 5 "hi")        "hi"       "take over-length String") (#line 131 1) (assert-eq (take 3 [])          []         "take from empty Array") (#line 132 1) (assert-eq (take 3 "")          ""         "take from empty String") (#line 135 1) (assert-eq (drop 2 [1 2 3 4])   [3 4]      "drop 2 Array") (#line 136 1) (assert-eq (drop 2 '(1 2 3 4)) '(3 4)      "drop 2 List") (#line 137 1) (assert-eq (drop 2 "monad")     "nad"      "drop 2 String") (#line 138 1) (assert-eq (drop 0 [1 2 3])     [1 2 3]    "drop 0 Array") (#line 139 1) (assert-eq (drop 5 [1 2])       []         "drop over-length Array") (#line 140 1) (assert-eq (drop 5 "hi")        ""         "drop over-length String") (#line 141 1) (assert-eq (drop 3 [])          []         "drop from empty Array") (#line 144 1) (assert-eq (takeWhile (< 3) [1 2 3 4 1]) [1 2]   "takeWhile Array stops at 3") (#line 145 1) (assert-eq (takeWhile (< 3) '(1 2 3 4)) '(1 2)   "takeWhile List stops at 3") (#line 146 1) (assert-eq (takeWhile (< 3) [1 2])       [1 2]   "takeWhile takes all if true") (#line 147 1) (assert-eq (takeWhile (< 3) [5 6])       []      "takeWhile takes none if false") (#line 148 1) (assert-eq (takeWhile (< 3) [])          []      "takeWhile empty") (#line 151 1) (assert-eq (dropWhile (< 3) [1 2 3 4 1]) [3 4 1] "dropWhile Array stops at 3") (#line 152 1) (assert-eq (dropWhile (< 3) '(1 2 3 4)) '(3 4)   "dropWhile List stops at 3") (#line 153 1) (assert-eq (dropWhile (< 3) [1 2])       []      "dropWhile drops all if true") (#line 154 1) (assert-eq (dropWhile (< 3) [5 6])       [5 6]   "dropWhile drops none if false") (#line 155 1) (assert-eq (dropWhile (< 3) [])          []      "dropWhile empty") (#line 158 1) (assert-eq (map (* 2) [1 2 3])     [2 4 6]      "map Array") (#line 159 1) (assert-eq (map (* 2) '(1 2 3))   '(2 4 6)      "map List") (#line 160 1) (assert-eq (map (* 2) [])          []           "map empty Array") (#line 163 1) (assert-eq (all? (> 0) [2 4 6])   True         "all? true case (all positive)") (#line 164 1) (assert-eq (all? (> 0) [2 -5 6])  False        "all? false case mid-collection") (#line 165 1) (assert-eq (all? (> 0) [-1 2 3])  False        "all? false case first element") (#line 166 1) (assert-eq (all? (> 0) [])        True         "all? empty collection is vacuously true") (#line 169 1) (assert-eq (foldl + 0 [1 2 3 4])    10           "foldl sum Array") (#line 170 1) (assert-eq (foldr + 0 '(1 2 3 4))   10           "foldr sum List") (#line 171 1) (assert-eq (foldl - 10 [1 2 3])     4            "foldl left-associativity test") (#line 172 1) (assert-eq (foldr - 10 [1 2 3])     -8           "foldr right-associativity test") (#line 175 1) (assert-eq (zip [1 2] [3 4])        [[1 3] [2 4]]       "zip equal length Arrays") (#line 176 1) (assert-eq (zip '(1 2) '(3 4))     '((1 3) (2 4))       "zip equal length Lists") (#line 177 1) (assert-eq (zip [1 2 3] [4 5])      [[1 4] [2 5]]       "zip drops extra left elements") (#line 178 1) (assert-eq (zip [1 2] [3 4 5])      [[1 3] [2 4]]       "zip drops extra right elements") (#line 179 1) (assert-eq (zip [] [1 2])           []                  "zip empty left") (#line 180 1) (assert-eq (zip [1 2] [])           []                  "zip empty right") (#line 183 1) (assert-eq (zipwith * [1 2 3] [4 5 6])     [4 10 18]    "zipwith math Array") (#line 184 1) (assert-eq (zipwith * '(1 2) '(3 4 5))    '(3 8)        "zipwith math List mismatched lengths") (#line 185 1) (assert-eq (zipwith * [] [1 2 3])          []           "zipwith empty left") (#line 188 1) (assert-eq (foldl + 0 (zipwith * '(1 2 3)   '(4 5 6)))   32 "dot product Lists") (#line 189 1) (assert-eq (foldl + 0 (zipwith * '(1 2 3 4) '(1 2 3 4))) 30 "dot product squares") (#line 190 1) (assert-eq (foldl + 0 (zipwith * [1 2 3]    [4 5 6]))    32 "dot product Arrays") (#line 191 1) )
+(#line 87 1) (x ++ (append xs val)))
+(#line 94 1) (define (filter [__p_0 : Fn] [__p_1 : [a]] -> [a]) _ [] 
+(#line 95 1) ->
+(#line 95 1) []
+(#line 96 1) p [x|xs] 
+(#line 96 1) |
+(#line 96 1) (p x)
+(#line 96 1) ->
+(#line 96 1) (x ++ (filter p xs))
+(#line 97 1) p [x|xs] 
+(#line 97 1) |
+(#line 97 1) otherwise
+(#line 97 1) ->
+(#line 97 1) (filter p xs))
+(#line 101 1) (define (both [f : Fn] [g : Fn] -> Fn) (lambda (x) (and (f x) (g x))))
+(#line 105 1) (tests)
 === end ===
 
 
-=== desugared AST (/usr/local/lib/monad/core/prelude/Coll.mon) ===
-[compile] /tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.mon
-[skip]    /usr/local/lib/monad/core/prelude/Coll.mon (.o is up to date)
+=== desugared AST (core/prelude/Coll.mon) ===
+[compile] <repo>/tests/codegen/branches/symbol-env/typeclasses/atom.codegen.05.symbol.env.typeclasses.superclass.missing/rt_superclass_missing.mon
+[compile] core/prelude/Coll.mon
 (module Coll [take drop takeWhile dropWhile map all? foldl foldr])
-(define take (lambda ([__p_0 :: Int] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (> __p_0 0)) (++ (__p_1 0) (take (- __p_0 1) (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (rt_coll_empty __p_1) (undefined))))))
-(define drop (lambda ([__p_0 :: Int] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (> __p_0 0)) (drop (- __p_0 1) (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_1 0) (rt_coll_drop __p_1 1)) (undefined))))))
-(define takeWhile (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (++ (__p_1 0) (takeWhile __p_0 (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (rt_coll_empty __p_1) (undefined))))))
-(define dropWhile (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (dropWhile __p_0 (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_1 0) (rt_coll_drop __p_1 1)) (undefined))))))
-(define map (lambda ([__p_0 :: (( a -> b ))] [__p_1 :: ([ a ])] -> [b]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_0 (__p_1 0)) (map __p_0 (rt_coll_drop __p_1 1))) (undefined)))))
-(define any? (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) (if (rt_coll_is_empty __p_1) False (if (if (rt_coll_is_empty __p_1) False True) (or (__p_0 (__p_1 0)) (any? __p_0 (rt_coll_drop __p_1 1))) (undefined)))))
-(define all? (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> Bool) (if (rt_coll_is_empty __p_1) True (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (all? __p_0 (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) False (undefined))))))
-(define foldl (lambda ([__p_0 :: (( b -> a -> b ))] [__p_1 :: b] [__p_2 :: ([ a ])] -> b) (if (rt_coll_is_empty __p_2) __p_1 (if (if (rt_coll_is_empty __p_2) False True) (foldl __p_0 (__p_0 __p_1 (__p_2 0)) (rt_coll_drop __p_2 1)) (undefined)))))
-(define foldr (lambda ([__p_0 :: (( a -> b -> b ))] [__p_1 :: b] [__p_2 :: ([ a ])] -> b) (if (rt_coll_is_empty __p_2) __p_1 (if (if (rt_coll_is_empty __p_2) False True) (__p_0 (__p_2 0) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) (undefined)))))
-(define zip (lambda ([__p_0 :: ([ a ])] [__p_1 :: ([ b ])] -> [c]) (if (rt_coll_is_empty __p_0) (rt_coll_empty __p_0) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_0) False True) (if (rt_coll_is_empty __p_1) False True)) (++ (list (__p_0 0) (__p_1 0)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) (undefined))))))
-(define zipwith (lambda ([__p_0 :: (( a -> b -> c ))] [__p_1 :: ([ a ])] [__p_2 :: ([ b ])] -> [c]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (rt_coll_is_empty __p_2) (rt_coll_empty __p_2) (if (and (if (rt_coll_is_empty __p_1) False True) (if (rt_coll_is_empty __p_2) False True)) (++ (__p_0 (__p_1 0) (__p_2 0)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) (undefined))))))
-(define append (lambda ([__p_0 :: ([ a ])] [__p_1 :: a] -> [a]) (if (rt_coll_is_empty __p_0) (++ __p_1 []) (if (if (rt_coll_is_empty __p_0) False True) (++ (__p_0 0) (append (rt_coll_drop __p_0 1) __p_1)) (undefined)))))
-(define filter (lambda ([__p_0 :: (( a -> Bool ))] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (__p_1 0))) (++ (__p_1 0) (filter __p_0 (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (filter __p_0 (rt_coll_drop __p_1 1)) (undefined))))))
-(define both (lambda ([f :: (( a -> Bool ))] [g :: (( a -> Bool ))] -> Fn :: (a -> Bool)) (lambda ([x :: a]) (and (f x) (g x)))))
+(define take (lambda ([__p_0 :: Int] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (> __p_0 0)) (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (rt_coll_empty __p_1) (undefined))))))
+(define drop (lambda ([__p_0 :: Int] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (> __p_0 0)) (drop (- __p_0 1) (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) (++ (head __p_1) (rt_coll_drop __p_1 1)) (undefined))))))
+(define takeWhile (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (head __p_1))) (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (rt_coll_empty __p_1) (undefined))))))
+(define dropWhile (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (head __p_1))) (dropWhile __p_0 (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) (++ (head __p_1) (rt_coll_drop __p_1 1)) (undefined))))))
+(define map (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] -> [b]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (if (rt_coll_is_empty __p_1) False True) (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) (undefined)))))
+(define any? (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] -> Bool) (if (rt_coll_is_empty __p_1) False (if (if (rt_coll_is_empty __p_1) False True) (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) (undefined)))))
+(define all? (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] -> Bool) (if (rt_coll_is_empty __p_1) True (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (head __p_1))) (all? __p_0 (rt_coll_drop __p_1 1)) (if (if (rt_coll_is_empty __p_1) False True) False (undefined))))))
+(define foldl (lambda ([__p_0 :: Fn] [__p_1 :: b] [__p_2 :: ([ a ])] -> b) (if (rt_coll_is_empty __p_2) __p_1 (if (if (rt_coll_is_empty __p_2) False True) (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) (undefined)))))
+(define foldr (lambda ([__p_0 :: Fn] [__p_1 :: b] [__p_2 :: ([ a ])] -> b) (if (rt_coll_is_empty __p_2) __p_1 (if (if (rt_coll_is_empty __p_2) False True) (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) (undefined)))))
+(define zip (lambda ([__p_0 :: ([ a ])] [__p_1 :: ([ b ])] -> [c]) (if (rt_coll_is_empty __p_0) (rt_coll_empty __p_0) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_0) False True) (if (rt_coll_is_empty __p_1) False True)) (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) (undefined))))))
+(define zipwith (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] [__p_2 :: ([ b ])] -> [c]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (rt_coll_is_empty __p_2) (rt_coll_empty __p_2) (if (and (if (rt_coll_is_empty __p_1) False True) (if (rt_coll_is_empty __p_2) False True)) (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) (undefined))))))
+(define append (lambda ([__p_0 :: ([ a ])] [__p_1 :: a] -> [a]) (if (rt_coll_is_empty __p_0) (++ __p_1 []) (if (if (rt_coll_is_empty __p_0) False True) (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) (undefined)))))
+(define filter (lambda ([__p_0 :: Fn] [__p_1 :: ([ a ])] -> [a]) (if (rt_coll_is_empty __p_1) (rt_coll_empty __p_1) (if (and (if (rt_coll_is_empty __p_1) False True) (__p_0 (head __p_1))) (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) (if (if (rt_coll_is_empty __p_1) False True) (filter __p_0 (rt_coll_drop __p_1 1)) (undefined))))))
+(define both (lambda ([f :: Fn] [g :: Fn] -> Fn) (lambda ([x :: a]) (and (f x) (g x)))))
 
 === end desugared AST ===
 
+├─ Infer (λ(__p_0 : Int). λ(__p_1 : ?0). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) : Π(__p_0 : Int). Π(__p_1 : ?0). Coll :: ?)
+│   ├─ Check λ(__p_0 : Int). λ(__p_1 : ?0). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Π(__p_0 : Int). Π(__p_1 : ?0). Coll :: ?
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?0). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Π(__p_1 : ?0). Coll :: ?
+│   │   │   ├─ Conv  ?0 ≡ ?0
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?1
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?2
+│   │   │   │   │   ├─ Conv  ?2 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?3
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?4
+│   │   │   │   │   ├─ Conv  ?4 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0))
+│   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?5
+│   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?6
+│   │   │   │   │   │   │   │   │   ├─ Conv  ?6 ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (> __p_0 0) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (> __p_0 0)
+│   │   │   │   │   │   │   │   │   ├─ Infer >
+│   │   │   │   │   │   │   │   │   └─ OK: > : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   │   │   │   │   ├─ Check __p_0 ⇐ ?7
+│   │   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   │   └─ OK: __p_0 : Int
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Int ≡ ?7
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check 0 ⇐ Int
+│   │   │   │   │   │   │   │   │   │   ├─ Infer 0
+│   │   │   │   │   │   │   │   │   │   └─ OK: 0 : Nat
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Nat ≡ Int
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK: (> __p_0 0) : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1)))
+│   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   └─ OK: ++ : ?8
+│   │   │   │   │   │   └─ OK: (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) : ?10
+│   │   │   │   │   │   ├─ Conv  ?10 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?11
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?12
+│   │   │   │   │   │   │   │   ├─ Conv  ?12 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_empty : ?13
+│   │   │   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?14
+│   │   │   │   │   │   │   ├─ Conv  ?14 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?15
+│   │   │   │   │   │   │   └─ OK: (_) : ?15
+│   │   │   │   │   │   │   ├─ Conv  ?15 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : Int). λ(__p_1 : ?0). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (++ (head __p_1) (take (- __p_0 1) (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) : Π(__p_0 : Int). Π(__p_1 : ?0). Coll :: ?) : Π(__p_0 : Int). Π(__p_1 : ?0). Coll :: ?
+├─ Infer (λ(__p_0 : Int). λ(__p_1 : ?16). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (drop (- __p_0 1) (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) : Π(__p_0 : Int). Π(__p_1 : ?16). Coll :: ?)
+│   ├─ Check λ(__p_0 : Int). λ(__p_1 : ?16). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (drop (- __p_0 1) (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Π(__p_0 : Int). Π(__p_1 : ?16). Coll :: ?
+│   │   ├─ Conv  Int ≡ Int
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?16). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (drop (- __p_0 1) (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Π(__p_1 : ?16). Coll :: ?
+│   │   │   ├─ Conv  ?16 ≡ ?16
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (drop (- __p_0 1) (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?17
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?18
+│   │   │   │   │   ├─ Conv  ?18 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?19
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?20
+│   │   │   │   │   ├─ Conv  ?20 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (drop (- __p_0 1) (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0))
+│   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?21
+│   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?22
+│   │   │   │   │   │   │   │   │   ├─ Conv  ?22 ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (> __p_0 0) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (> __p_0 0)
+│   │   │   │   │   │   │   │   │   ├─ Infer >
+│   │   │   │   │   │   │   │   │   └─ OK: > : Π(A : Type 0). Π(_ : #0). Π(_ : #1). Bool
+│   │   │   │   │   │   │   │   │   ├─ Check __p_0 ⇐ ?23
+│   │   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   │   └─ OK: __p_0 : Int
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Int ≡ ?23
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check 0 ⇐ Int
+│   │   │   │   │   │   │   │   │   │   ├─ Infer 0
+│   │   │   │   │   │   │   │   │   │   └─ OK: 0 : Nat
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Nat ≡ Int
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK: (> __p_0 0) : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (drop (- __p_0 1) (rt_coll_drop __p_1 1)) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (drop (- __p_0 1) (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   ├─ Infer drop
+│   │   │   │   │   │   │   └─ OK: drop : ?24
+│   │   │   │   │   │   └─ OK: (drop (- __p_0 1) (rt_coll_drop __p_1 1)) : ?26
+│   │   │   │   │   │   ├─ Conv  ?26 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?27
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?28
+│   │   │   │   │   │   │   │   ├─ Conv  ?28 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (++ (head __p_1) (rt_coll_drop __p_1 1)) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (++ (head __p_1) (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   │   └─ OK: ++ : ?29
+│   │   │   │   │   │   │   └─ OK: (++ (head __p_1) (rt_coll_drop __p_1 1)) : ?31
+│   │   │   │   │   │   │   ├─ Conv  ?31 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?32
+│   │   │   │   │   │   │   └─ OK: (_) : ?32
+│   │   │   │   │   │   │   ├─ Conv  ?32 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : Int). λ(__p_1 : ?16). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (> __p_0 0)) then (drop (- __p_0 1) (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) : Π(__p_0 : Int). Π(__p_1 : ?16). Coll :: ?) : Π(__p_0 : Int). Π(__p_1 : ?16). Coll :: ?
+├─ Infer (λ(__p_0 : ?34). λ(__p_1 : ?33). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) : Π(__p_0 : ?34). Π(__p_1 : ?33). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?34). λ(__p_1 : ?33). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Π(__p_0 : ?34). Π(__p_1 : ?33). Coll :: ?
+│   │   ├─ Conv  ?34 ≡ ?34
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?33). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Π(__p_1 : ?33). Coll :: ?
+│   │   │   ├─ Conv  ?33 ≡ ?33
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?35
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?36
+│   │   │   │   │   ├─ Conv  ?36 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?37
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?38
+│   │   │   │   │   ├─ Conv  ?38 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1)))
+│   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?39
+│   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?40
+│   │   │   │   │   │   │   │   │   ├─ Conv  ?40 ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (__p_0 (head __p_1)) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (__p_0 (head __p_1))
+│   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   └─ OK: __p_0 : ?34
+│   │   │   │   │   │   │   │   └─ OK: (__p_0 (head __p_1)) : ?41
+│   │   │   │   │   │   │   │   ├─ Conv  ?41 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1)))
+│   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   └─ OK: ++ : ?42
+│   │   │   │   │   │   └─ OK: (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) : ?44
+│   │   │   │   │   │   ├─ Conv  ?44 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?45
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?46
+│   │   │   │   │   │   │   │   ├─ Conv  ?46 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_empty : ?47
+│   │   │   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?48
+│   │   │   │   │   │   │   ├─ Conv  ?48 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?49
+│   │   │   │   │   │   │   └─ OK: (_) : ?49
+│   │   │   │   │   │   │   ├─ Conv  ?49 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?34). λ(__p_1 : ?33). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (takeWhile __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (rt_coll_empty __p_1) else (_) : Π(__p_0 : ?34). Π(__p_1 : ?33). Coll :: ?) : Π(__p_0 : ?34). Π(__p_1 : ?33). Coll :: ?
+├─ Infer (λ(__p_0 : ?51). λ(__p_1 : ?50). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (dropWhile __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) : Π(__p_0 : ?51). Π(__p_1 : ?50). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?51). λ(__p_1 : ?50). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (dropWhile __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Π(__p_0 : ?51). Π(__p_1 : ?50). Coll :: ?
+│   │   ├─ Conv  ?51 ≡ ?51
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?50). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (dropWhile __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Π(__p_1 : ?50). Coll :: ?
+│   │   │   ├─ Conv  ?50 ≡ ?50
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (dropWhile __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?52
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?53
+│   │   │   │   │   ├─ Conv  ?53 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?54
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?55
+│   │   │   │   │   ├─ Conv  ?55 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (dropWhile __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1)))
+│   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?56
+│   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?57
+│   │   │   │   │   │   │   │   │   ├─ Conv  ?57 ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (__p_0 (head __p_1)) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (__p_0 (head __p_1))
+│   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   └─ OK: __p_0 : ?51
+│   │   │   │   │   │   │   │   └─ OK: (__p_0 (head __p_1)) : ?58
+│   │   │   │   │   │   │   │   ├─ Conv  ?58 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (dropWhile __p_0 (rt_coll_drop __p_1 1)) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (dropWhile __p_0 (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   ├─ Infer dropWhile
+│   │   │   │   │   │   │   └─ OK: dropWhile : ?59
+│   │   │   │   │   │   └─ OK: (dropWhile __p_0 (rt_coll_drop __p_1 1)) : ?61
+│   │   │   │   │   │   ├─ Conv  ?61 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?62
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?63
+│   │   │   │   │   │   │   │   ├─ Conv  ?63 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (++ (head __p_1) (rt_coll_drop __p_1 1)) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (++ (head __p_1) (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   │   └─ OK: ++ : ?64
+│   │   │   │   │   │   │   └─ OK: (++ (head __p_1) (rt_coll_drop __p_1 1)) : ?66
+│   │   │   │   │   │   │   ├─ Conv  ?66 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?67
+│   │   │   │   │   │   │   └─ OK: (_) : ?67
+│   │   │   │   │   │   │   ├─ Conv  ?67 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?51). λ(__p_1 : ?50). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (dropWhile __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then (++ (head __p_1) (rt_coll_drop __p_1 1)) else (_) : Π(__p_0 : ?51). Π(__p_1 : ?50). Coll :: ?) : Π(__p_0 : ?51). Π(__p_1 : ?50). Coll :: ?
+├─ Infer (λ(__p_0 : ?69). λ(__p_1 : ?68). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if if (rt_coll_is_empty __p_1) then False else True then (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) else (_) : Π(__p_0 : ?69). Π(__p_1 : ?68). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?69). λ(__p_1 : ?68). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if if (rt_coll_is_empty __p_1) then False else True then (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Π(__p_0 : ?69). Π(__p_1 : ?68). Coll :: ?
+│   │   ├─ Conv  ?69 ≡ ?69
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?68). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if if (rt_coll_is_empty __p_1) then False else True then (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Π(__p_1 : ?68). Coll :: ?
+│   │   │   ├─ Conv  ?68 ≡ ?68
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if if (rt_coll_is_empty __p_1) then False else True then (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?70
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?71
+│   │   │   │   │   ├─ Conv  ?71 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?72
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?73
+│   │   │   │   │   ├─ Conv  ?73 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?74
+│   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?75
+│   │   │   │   │   │   │   ├─ Conv  ?75 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1)))
+│   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   └─ OK: ++ : ?76
+│   │   │   │   │   │   └─ OK: (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) : ?78
+│   │   │   │   │   │   ├─ Conv  ?78 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   └─ OK: _ : ?79
+│   │   │   │   │   │   └─ OK: (_) : ?79
+│   │   │   │   │   │   ├─ Conv  ?79 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?69). λ(__p_1 : ?68). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if if (rt_coll_is_empty __p_1) then False else True then (++ (__p_0 (head __p_1)) (map __p_0 (rt_coll_drop __p_1 1))) else (_) : Π(__p_0 : ?69). Π(__p_1 : ?68). Coll :: ?) : Π(__p_0 : ?69). Π(__p_1 : ?68). Coll :: ?
+├─ Infer (λ(__p_0 : ?81). λ(__p_1 : ?80). if (rt_coll_is_empty __p_1) then False else if if (rt_coll_is_empty __p_1) then False else True then (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) else (_) : Π(__p_0 : ?81). Π(__p_1 : ?80). Bool)
+│   ├─ Check λ(__p_0 : ?81). λ(__p_1 : ?80). if (rt_coll_is_empty __p_1) then False else if if (rt_coll_is_empty __p_1) then False else True then (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Π(__p_0 : ?81). Π(__p_1 : ?80). Bool
+│   │   ├─ Conv  ?81 ≡ ?81
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?80). if (rt_coll_is_empty __p_1) then False else if if (rt_coll_is_empty __p_1) then False else True then (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Π(__p_1 : ?80). Bool
+│   │   │   ├─ Conv  ?80 ≡ ?80
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else if if (rt_coll_is_empty __p_1) then False else True then (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Bool
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?82
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?83
+│   │   │   │   │   ├─ Conv  ?83 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   ├─ Infer False
+│   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) else (_) ⇐ Bool
+│   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?84
+│   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?85
+│   │   │   │   │   │   │   ├─ Conv  ?85 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1)))
+│   │   │   │   │   │   │   ├─ Infer or
+│   │   │   │   │   │   │   └─ OK: or : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check (__p_0 (head __p_1)) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (__p_0 (head __p_1))
+│   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   └─ OK: __p_0 : ?81
+│   │   │   │   │   │   │   │   └─ OK: (__p_0 (head __p_1)) : ?86
+│   │   │   │   │   │   │   │   ├─ Conv  ?86 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (any? __p_0 (rt_coll_drop __p_1 1)) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (any? __p_0 (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   │   │   ├─ Infer any?
+│   │   │   │   │   │   │   │   │   └─ OK: any? : ?87
+│   │   │   │   │   │   │   │   └─ OK: (any? __p_0 (rt_coll_drop __p_1 1)) : ?89
+│   │   │   │   │   │   │   │   ├─ Conv  ?89 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (_) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   └─ OK: _ : ?90
+│   │   │   │   │   │   └─ OK: (_) : ?90
+│   │   │   │   │   │   ├─ Conv  ?90 ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?81). λ(__p_1 : ?80). if (rt_coll_is_empty __p_1) then False else if if (rt_coll_is_empty __p_1) then False else True then (or (__p_0 (head __p_1)) (any? __p_0 (rt_coll_drop __p_1 1))) else (_) : Π(__p_0 : ?81). Π(__p_1 : ?80). Bool) : Π(__p_0 : ?81). Π(__p_1 : ?80). Bool
+├─ Infer (λ(__p_0 : ?92). λ(__p_1 : ?91). if (rt_coll_is_empty __p_1) then True else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (all? __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then False else (_) : Π(__p_0 : ?92). Π(__p_1 : ?91). Bool)
+│   ├─ Check λ(__p_0 : ?92). λ(__p_1 : ?91). if (rt_coll_is_empty __p_1) then True else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (all? __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then False else (_) ⇐ Π(__p_0 : ?92). Π(__p_1 : ?91). Bool
+│   │   ├─ Conv  ?92 ≡ ?92
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?91). if (rt_coll_is_empty __p_1) then True else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (all? __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then False else (_) ⇐ Π(__p_1 : ?91). Bool
+│   │   │   ├─ Conv  ?91 ≡ ?91
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then True else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (all? __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then False else (_) ⇐ Bool
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?93
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?94
+│   │   │   │   │   ├─ Conv  ?94 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   ├─ Infer True
+│   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (all? __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then False else (_) ⇐ Bool
+│   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1)))
+│   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?95
+│   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?96
+│   │   │   │   │   │   │   │   │   ├─ Conv  ?96 ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (__p_0 (head __p_1)) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (__p_0 (head __p_1))
+│   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   └─ OK: __p_0 : ?92
+│   │   │   │   │   │   │   │   └─ OK: (__p_0 (head __p_1)) : ?97
+│   │   │   │   │   │   │   │   ├─ Conv  ?97 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (all? __p_0 (rt_coll_drop __p_1 1)) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (all? __p_0 (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   ├─ Infer all?
+│   │   │   │   │   │   │   └─ OK: all? : ?98
+│   │   │   │   │   │   └─ OK: (all? __p_0 (rt_coll_drop __p_1 1)) : ?100
+│   │   │   │   │   │   ├─ Conv  ?100 ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then False else (_) ⇐ Bool
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?101
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?102
+│   │   │   │   │   │   │   │   ├─ Conv  ?102 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?103
+│   │   │   │   │   │   │   └─ OK: (_) : ?103
+│   │   │   │   │   │   │   ├─ Conv  ?103 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?92). λ(__p_1 : ?91). if (rt_coll_is_empty __p_1) then True else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (all? __p_0 (rt_coll_drop __p_1 1)) else if if (rt_coll_is_empty __p_1) then False else True then False else (_) : Π(__p_0 : ?92). Π(__p_1 : ?91). Bool) : Π(__p_0 : ?92). Π(__p_1 : ?91). Bool
+├─ Infer (λ(__p_0 : ?107). λ(__p_1 : ?106). λ(__p_2 : ?105). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) : Π(__p_0 : ?107). Π(__p_1 : ?106). Π(__p_2 : ?105). ?104)
+│   ├─ Check λ(__p_0 : ?107). λ(__p_1 : ?106). λ(__p_2 : ?105). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) ⇐ Π(__p_0 : ?107). Π(__p_1 : ?106). Π(__p_2 : ?105). ?104
+│   │   ├─ Conv  ?107 ≡ ?107
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?106). λ(__p_2 : ?105). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) ⇐ Π(__p_1 : ?106). Π(__p_2 : ?105). ?104
+│   │   │   ├─ Conv  ?106 ≡ ?106
+│   │   │   └─ OK
+│   │   │   ├─ Check λ(__p_2 : ?105). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) ⇐ Π(__p_2 : ?105). ?104
+│   │   │   │   ├─ Conv  ?105 ≡ ?105
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) ⇐ ?104
+│   │   │   │   │   ├─ Check (rt_coll_is_empty __p_2) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_2)
+│   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?108
+│   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_2) : ?109
+│   │   │   │   │   │   ├─ Conv  ?109 ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check __p_1 ⇐ ?104
+│   │   │   │   │   │   ├─ Infer __p_1
+│   │   │   │   │   │   └─ OK: __p_1 : ?106
+│   │   │   │   │   │   ├─ Conv  ?106 ≡ ?104
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) ⇐ ?104
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_2) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_2) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_2)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?110
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_2) : ?111
+│   │   │   │   │   │   │   │   ├─ Conv  ?111 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) ⇐ ?104
+│   │   │   │   │   │   │   ├─ Infer (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1))
+│   │   │   │   │   │   │   │   ├─ Infer foldl
+│   │   │   │   │   │   │   │   └─ OK: foldl : ?112
+│   │   │   │   │   │   │   └─ OK: (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) : ?115
+│   │   │   │   │   │   │   ├─ Conv  ?115 ≡ ?104
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ ?104
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?116
+│   │   │   │   │   │   │   └─ OK: (_) : ?116
+│   │   │   │   │   │   │   ├─ Conv  ?116 ≡ ?104
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?107). λ(__p_1 : ?106). λ(__p_2 : ?105). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (foldl __p_0 (__p_0 __p_1 (head __p_2)) (rt_coll_drop __p_2 1)) else (_) : Π(__p_0 : ?107). Π(__p_1 : ?106). Π(__p_2 : ?105). ?104) : Π(__p_0 : ?107). Π(__p_1 : ?104). Π(__p_2 : ?105). ?104
+├─ Infer (λ(__p_0 : ?120). λ(__p_1 : ?119). λ(__p_2 : ?118). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) : Π(__p_0 : ?120). Π(__p_1 : ?119). Π(__p_2 : ?118). ?117)
+│   ├─ Check λ(__p_0 : ?120). λ(__p_1 : ?119). λ(__p_2 : ?118). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) ⇐ Π(__p_0 : ?120). Π(__p_1 : ?119). Π(__p_2 : ?118). ?117
+│   │   ├─ Conv  ?120 ≡ ?120
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?119). λ(__p_2 : ?118). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) ⇐ Π(__p_1 : ?119). Π(__p_2 : ?118). ?117
+│   │   │   ├─ Conv  ?119 ≡ ?119
+│   │   │   └─ OK
+│   │   │   ├─ Check λ(__p_2 : ?118). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) ⇐ Π(__p_2 : ?118). ?117
+│   │   │   │   ├─ Conv  ?118 ≡ ?118
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) ⇐ ?117
+│   │   │   │   │   ├─ Check (rt_coll_is_empty __p_2) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_2)
+│   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?121
+│   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_2) : ?122
+│   │   │   │   │   │   ├─ Conv  ?122 ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check __p_1 ⇐ ?117
+│   │   │   │   │   │   ├─ Infer __p_1
+│   │   │   │   │   │   └─ OK: __p_1 : ?119
+│   │   │   │   │   │   ├─ Conv  ?119 ≡ ?117
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) ⇐ ?117
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_2) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_2) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_2)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?123
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_2) : ?124
+│   │   │   │   │   │   │   │   ├─ Conv  ?124 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) ⇐ ?117
+│   │   │   │   │   │   │   ├─ Infer (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1)))
+│   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   └─ OK: __p_0 : ?120
+│   │   │   │   │   │   │   └─ OK: (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) : ?126
+│   │   │   │   │   │   │   ├─ Conv  ?126 ≡ ?117
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ ?117
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?127
+│   │   │   │   │   │   │   └─ OK: (_) : ?127
+│   │   │   │   │   │   │   ├─ Conv  ?127 ≡ ?117
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?120). λ(__p_1 : ?119). λ(__p_2 : ?118). if (rt_coll_is_empty __p_2) then __p_1 else if if (rt_coll_is_empty __p_2) then False else True then (__p_0 (head __p_2) (foldr __p_0 __p_1 (rt_coll_drop __p_2 1))) else (_) : Π(__p_0 : ?120). Π(__p_1 : ?119). Π(__p_2 : ?118). ?117) : Π(__p_0 : ?120). Π(__p_1 : ?117). Π(__p_2 : ?118). ?117
+├─ Infer (λ(__p_0 : ?129). λ(__p_1 : ?128). if (rt_coll_is_empty __p_0) then (rt_coll_empty __p_0) else if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) : Π(__p_0 : ?129). Π(__p_1 : ?128). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?129). λ(__p_1 : ?128). if (rt_coll_is_empty __p_0) then (rt_coll_empty __p_0) else if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) ⇐ Π(__p_0 : ?129). Π(__p_1 : ?128). Coll :: ?
+│   │   ├─ Conv  ?129 ≡ ?129
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?128). if (rt_coll_is_empty __p_0) then (rt_coll_empty __p_0) else if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) ⇐ Π(__p_1 : ?128). Coll :: ?
+│   │   │   ├─ Conv  ?128 ≡ ?128
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_0) then (rt_coll_empty __p_0) else if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_0) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_0)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?130
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_0) : ?131
+│   │   │   │   │   ├─ Conv  ?131 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_0) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_0)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?132
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_0) : ?133
+│   │   │   │   │   ├─ Conv  ?133 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?134
+│   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?135
+│   │   │   │   │   │   ├─ Conv  ?135 ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   │   └─ OK: rt_coll_empty : ?136
+│   │   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?137
+│   │   │   │   │   │   ├─ Conv  ?137 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True)
+│   │   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_0) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_0) ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_0)
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?138
+│   │   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_0) : ?139
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  ?139 ≡ Bool
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?140
+│   │   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?141
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  ?141 ≡ Bool
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1)))
+│   │   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   │   └─ OK: ++ : ?142
+│   │   │   │   │   │   │   └─ OK: (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) : ?144
+│   │   │   │   │   │   │   ├─ Conv  ?144 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?145
+│   │   │   │   │   │   │   └─ OK: (_) : ?145
+│   │   │   │   │   │   │   ├─ Conv  ?145 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?129). λ(__p_1 : ?128). if (rt_coll_is_empty __p_0) then (rt_coll_empty __p_0) else if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_0) then False else True if (rt_coll_is_empty __p_1) then False else True) then (++ (list (head __p_0) (head __p_1)) (zip (rt_coll_drop __p_0 1) (rt_coll_drop __p_1 1))) else (_) : Π(__p_0 : ?129). Π(__p_1 : ?128). Coll :: ?) : Π(__p_0 : ?129). Π(__p_1 : ?128). Coll :: ?
+├─ Infer (λ(__p_0 : ?148). λ(__p_1 : ?147). λ(__p_2 : ?146). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) : Π(__p_0 : ?148). Π(__p_1 : ?147). Π(__p_2 : ?146). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?148). λ(__p_1 : ?147). λ(__p_2 : ?146). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) ⇐ Π(__p_0 : ?148). Π(__p_1 : ?147). Π(__p_2 : ?146). Coll :: ?
+│   │   ├─ Conv  ?148 ≡ ?148
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?147). λ(__p_2 : ?146). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) ⇐ Π(__p_1 : ?147). Π(__p_2 : ?146). Coll :: ?
+│   │   │   ├─ Conv  ?147 ≡ ?147
+│   │   │   └─ OK
+│   │   │   ├─ Check λ(__p_2 : ?146). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) ⇐ Π(__p_2 : ?146). Coll :: ?
+│   │   │   │   ├─ Conv  ?146 ≡ ?146
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?149
+│   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?150
+│   │   │   │   │   │   ├─ Conv  ?150 ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   │   └─ OK: rt_coll_empty : ?151
+│   │   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?152
+│   │   │   │   │   │   ├─ Conv  ?152 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_2) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_2)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?153
+│   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_2) : ?154
+│   │   │   │   │   │   │   ├─ Conv  ?154 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (rt_coll_empty __p_2) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_empty __p_2)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_empty : ?155
+│   │   │   │   │   │   │   └─ OK: (rt_coll_empty __p_2) : ?156
+│   │   │   │   │   │   │   ├─ Conv  ?156 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True)
+│   │   │   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?157
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?158
+│   │   │   │   │   │   │   │   │   │   │   ├─ Conv  ?158 ≡ Bool
+│   │   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_2) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_2) ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_2)
+│   │   │   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?159
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_2) : ?160
+│   │   │   │   │   │   │   │   │   │   │   ├─ Conv  ?160 ≡ Bool
+│   │   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) ⇐ Coll :: ?
+│   │   │   │   │   │   │   │   ├─ Infer (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1)))
+│   │   │   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   │   │   └─ OK: ++ : ?161
+│   │   │   │   │   │   │   │   └─ OK: (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) : ?163
+│   │   │   │   │   │   │   │   ├─ Conv  ?163 ≡ Coll :: ?
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   │   └─ OK: _ : ?164
+│   │   │   │   │   │   │   │   └─ OK: (_) : ?164
+│   │   │   │   │   │   │   │   ├─ Conv  ?164 ≡ Coll :: ?
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?148). λ(__p_1 : ?147). λ(__p_2 : ?146). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (rt_coll_is_empty __p_2) then (rt_coll_empty __p_2) else if (and if (rt_coll_is_empty __p_1) then False else True if (rt_coll_is_empty __p_2) then False else True) then (++ (__p_0 (head __p_1) (head __p_2)) (zipwith __p_0 (rt_coll_drop __p_1 1) (rt_coll_drop __p_2 1))) else (_) : Π(__p_0 : ?148). Π(__p_1 : ?147). Π(__p_2 : ?146). Coll :: ?) : Π(__p_0 : ?148). Π(__p_1 : ?147). Π(__p_2 : ?146). Coll :: ?
+├─ Infer (λ(__p_0 : ?166). λ(__p_1 : ?165). if (rt_coll_is_empty __p_0) then (++ __p_1 _) else if if (rt_coll_is_empty __p_0) then False else True then (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) else (_) : Π(__p_0 : ?166). Π(__p_1 : ?165). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?166). λ(__p_1 : ?165). if (rt_coll_is_empty __p_0) then (++ __p_1 _) else if if (rt_coll_is_empty __p_0) then False else True then (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) else (_) ⇐ Π(__p_0 : ?166). Π(__p_1 : ?165). Coll :: ?
+│   │   ├─ Conv  ?166 ≡ ?166
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?165). if (rt_coll_is_empty __p_0) then (++ __p_1 _) else if if (rt_coll_is_empty __p_0) then False else True then (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) else (_) ⇐ Π(__p_1 : ?165). Coll :: ?
+│   │   │   ├─ Conv  ?165 ≡ ?165
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_0) then (++ __p_1 _) else if if (rt_coll_is_empty __p_0) then False else True then (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_0) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_0)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?167
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_0) : ?168
+│   │   │   │   │   ├─ Conv  ?168 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (++ __p_1 _) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (++ __p_1 _)
+│   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   └─ OK: ++ : ?169
+│   │   │   │   │   └─ OK: (++ __p_1 _) : ?171
+│   │   │   │   │   ├─ Conv  ?171 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if if (rt_coll_is_empty __p_0) then False else True then (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_0) then False else True ⇐ Bool
+│   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_0) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_0)
+│   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?172
+│   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_0) : ?173
+│   │   │   │   │   │   │   ├─ Conv  ?173 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1))
+│   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   └─ OK: ++ : ?174
+│   │   │   │   │   │   └─ OK: (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) : ?176
+│   │   │   │   │   │   ├─ Conv  ?176 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   └─ OK: _ : ?177
+│   │   │   │   │   │   └─ OK: (_) : ?177
+│   │   │   │   │   │   ├─ Conv  ?177 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?166). λ(__p_1 : ?165). if (rt_coll_is_empty __p_0) then (++ __p_1 _) else if if (rt_coll_is_empty __p_0) then False else True then (++ (head __p_0) (append (rt_coll_drop __p_0 1) __p_1)) else (_) : Π(__p_0 : ?166). Π(__p_1 : ?165). Coll :: ?) : Π(__p_0 : ?166). Π(__p_1 : ?165). Coll :: ?
+├─ Infer (λ(__p_0 : ?179). λ(__p_1 : ?178). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) : Π(__p_0 : ?179). Π(__p_1 : ?178). Coll :: ?)
+│   ├─ Check λ(__p_0 : ?179). λ(__p_1 : ?178). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) ⇐ Π(__p_0 : ?179). Π(__p_1 : ?178). Coll :: ?
+│   │   ├─ Conv  ?179 ≡ ?179
+│   │   └─ OK
+│   │   ├─ Check λ(__p_1 : ?178). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) ⇐ Π(__p_1 : ?178). Coll :: ?
+│   │   │   ├─ Conv  ?178 ≡ ?178
+│   │   │   └─ OK
+│   │   │   ├─ Check if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?180
+│   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?181
+│   │   │   │   │   ├─ Conv  ?181 ≡ Bool
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check (rt_coll_empty __p_1) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Infer (rt_coll_empty __p_1)
+│   │   │   │   │   │   ├─ Infer rt_coll_empty
+│   │   │   │   │   │   └─ OK: rt_coll_empty : ?182
+│   │   │   │   │   └─ OK: (rt_coll_empty __p_1) : ?183
+│   │   │   │   │   ├─ Conv  ?183 ≡ Coll :: ?
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   │   ├─ Check if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   ├─ Check (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) ⇐ Bool
+│   │   │   │   │   │   ├─ Infer (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1)))
+│   │   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?184
+│   │   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?185
+│   │   │   │   │   │   │   │   │   ├─ Conv  ?185 ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check (__p_0 (head __p_1)) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (__p_0 (head __p_1))
+│   │   │   │   │   │   │   │   │   ├─ Infer __p_0
+│   │   │   │   │   │   │   │   │   └─ OK: __p_0 : ?179
+│   │   │   │   │   │   │   │   └─ OK: (__p_0 (head __p_1)) : ?186
+│   │   │   │   │   │   │   │   ├─ Conv  ?186 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK: (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) : Bool
+│   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Infer (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1)))
+│   │   │   │   │   │   │   ├─ Infer ++
+│   │   │   │   │   │   │   └─ OK: ++ : ?187
+│   │   │   │   │   │   └─ OK: (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) : ?189
+│   │   │   │   │   │   ├─ Conv  ?189 ≡ Coll :: ?
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   │   ├─ Check if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) ⇐ Coll :: ?
+│   │   │   │   │   │   ├─ Check if (rt_coll_is_empty __p_1) then False else True ⇐ Bool
+│   │   │   │   │   │   │   ├─ Check (rt_coll_is_empty __p_1) ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer (rt_coll_is_empty __p_1)
+│   │   │   │   │   │   │   │   │   ├─ Infer rt_coll_is_empty
+│   │   │   │   │   │   │   │   │   └─ OK: rt_coll_is_empty : ?190
+│   │   │   │   │   │   │   │   └─ OK: (rt_coll_is_empty __p_1) : ?191
+│   │   │   │   │   │   │   │   ├─ Conv  ?191 ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check False ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer False
+│   │   │   │   │   │   │   │   └─ OK: False : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   ├─ Check True ⇐ Bool
+│   │   │   │   │   │   │   │   ├─ Infer True
+│   │   │   │   │   │   │   │   └─ OK: True : Bool
+│   │   │   │   │   │   │   │   ├─ Conv  Bool ≡ Bool
+│   │   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (filter __p_0 (rt_coll_drop __p_1 1)) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (filter __p_0 (rt_coll_drop __p_1 1))
+│   │   │   │   │   │   │   │   ├─ Infer filter
+│   │   │   │   │   │   │   │   └─ OK: filter : ?192
+│   │   │   │   │   │   │   └─ OK: (filter __p_0 (rt_coll_drop __p_1 1)) : ?194
+│   │   │   │   │   │   │   ├─ Conv  ?194 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (_) ⇐ Coll :: ?
+│   │   │   │   │   │   │   ├─ Infer (_)
+│   │   │   │   │   │   │   │   ├─ Infer _
+│   │   │   │   │   │   │   │   └─ OK: _ : ?195
+│   │   │   │   │   │   │   └─ OK: (_) : ?195
+│   │   │   │   │   │   │   ├─ Conv  ?195 ≡ Coll :: ?
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(__p_0 : ?179). λ(__p_1 : ?178). if (rt_coll_is_empty __p_1) then (rt_coll_empty __p_1) else if (and if (rt_coll_is_empty __p_1) then False else True (__p_0 (head __p_1))) then (++ (head __p_1) (filter __p_0 (rt_coll_drop __p_1 1))) else if if (rt_coll_is_empty __p_1) then False else True then (filter __p_0 (rt_coll_drop __p_1 1)) else (_) : Π(__p_0 : ?179). Π(__p_1 : ?178). Coll :: ?) : Π(__p_0 : ?179). Π(__p_1 : ?178). Coll :: ?
+├─ Infer (λ(f : ?199). λ(g : ?198). λ(x : ?196). (and (f x) (g x)) : Π(f : ?199). Π(g : ?198). ?197)
+│   ├─ Check λ(f : ?199). λ(g : ?198). λ(x : ?196). (and (f x) (g x)) ⇐ Π(f : ?199). Π(g : ?198). ?197
+│   │   ├─ Conv  ?199 ≡ ?199
+│   │   └─ OK
+│   │   ├─ Check λ(g : ?198). λ(x : ?196). (and (f x) (g x)) ⇐ Π(g : ?198). ?197
+│   │   │   ├─ Conv  ?198 ≡ ?198
+│   │   │   └─ OK
+│   │   │   ├─ Check λ(x : ?196). (and (f x) (g x)) ⇐ ?197
+│   │   │   │   ├─ Infer λ(x : ?196). (and (f x) (g x))
+│   │   │   │   │   ├─ Infer (and (f x) (g x))
+│   │   │   │   │   │   ├─ Infer and
+│   │   │   │   │   │   └─ OK: and : Π(_ : Bool). Π(_ : Bool). Bool
+│   │   │   │   │   │   ├─ Check (f x) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (f x)
+│   │   │   │   │   │   │   │   ├─ Infer f
+│   │   │   │   │   │   │   │   └─ OK: f : ?199
+│   │   │   │   │   │   │   └─ OK: (f x) : ?200
+│   │   │   │   │   │   │   ├─ Conv  ?200 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   ├─ Check (g x) ⇐ Bool
+│   │   │   │   │   │   │   ├─ Infer (g x)
+│   │   │   │   │   │   │   │   ├─ Infer g
+│   │   │   │   │   │   │   │   └─ OK: g : ?198
+│   │   │   │   │   │   │   └─ OK: (g x) : ?201
+│   │   │   │   │   │   │   ├─ Conv  ?201 ≡ Bool
+│   │   │   │   │   │   │   └─ OK
+│   │   │   │   │   │   └─ OK
+│   │   │   │   │   └─ OK: (and (f x) (g x)) : Bool
+│   │   │   │   └─ OK: λ(x : ?196). (and (f x) (g x)) : Π(x : ?196). Bool
+│   │   │   │   ├─ Conv  Π(x : ?196). Bool ≡ ?197
+│   │   │   │   └─ OK
+│   │   │   └─ OK
+│   │   └─ OK
+│   └─ OK
+└─ OK: (λ(f : ?199). λ(g : ?198). λ(x : ?196). (and (f x) (g x)) : Π(f : ?199). Π(g : ?198). ?197) : Π(f : ?199). Π(g : ?198). Π(x : ?196). Bool
+├─ Infer True
+└─ OK: True : Bool
 
-=== wisp expanded (/tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.mon) ===
-(#line 1 1) define
-(#line 1 1) x
-(#line 1 1) 42
-=== end ===
+  [dep] Warning: 112 unsolved metavariable(s) remain
+    • ?0 [?ty] at depth 0
+      Expected type: Type 0
+    • ?1 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?3 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?5 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?8 [++] at depth 2
+      Expected type: Type 0
+    • ?9 [?ret] at depth 2
+      Expected type: Type 0
+    • ?11 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?13 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?16 [?ty] at depth 0
+      Expected type: Type 0
+    • ?17 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?19 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?21 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?24 [drop] at depth 2
+      Expected type: Type 0
+    • ?25 [?ret] at depth 2
+      Expected type: Type 0
+    • ?27 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?29 [++] at depth 2
+      Expected type: Type 0
+    • ?30 [?ret] at depth 2
+      Expected type: Type 0
+    • ?33 [?ty] at depth 0
+      Expected type: Type 0
+    • ?34 [?fn] at depth 0
+      Expected type: Type 0
+    • ?35 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?37 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?39 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?42 [++] at depth 2
+      Expected type: Type 0
+    • ?43 [?ret] at depth 2
+      Expected type: Type 0
+    • ?45 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?47 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?50 [?ty] at depth 0
+      Expected type: Type 0
+    • ?51 [?fn] at depth 0
+      Expected type: Type 0
+    • ?52 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?54 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?56 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?59 [dropWhile] at depth 2
+      Expected type: Type 0
+    • ?60 [?ret] at depth 2
+      Expected type: Type 0
+    • ?62 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?64 [++] at depth 2
+      Expected type: Type 0
+    • ?65 [?ret] at depth 2
+      Expected type: Type 0
+    • ?68 [?ty] at depth 0
+      Expected type: Type 0
+    • ?69 [?fn] at depth 0
+      Expected type: Type 0
+    • ?70 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?72 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?74 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?76 [++] at depth 2
+      Expected type: Type 0
+    • ?77 [?ret] at depth 2
+      Expected type: Type 0
+    • ?80 [?ty] at depth 0
+      Expected type: Type 0
+    • ?81 [?fn] at depth 0
+      Expected type: Type 0
+    • ?82 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?84 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?87 [any?] at depth 2
+      Expected type: Type 0
+    • ?88 [?ret] at depth 2
+      Expected type: Type 0
+    • ?91 [?ty] at depth 0
+      Expected type: Type 0
+    • ?92 [?fn] at depth 0
+      Expected type: Type 0
+    • ?93 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?95 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?98 [all?] at depth 2
+      Expected type: Type 0
+    • ?99 [?ret] at depth 2
+      Expected type: Type 0
+    • ?101 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?104 [b] at depth 0
+      Expected type: Type 0
+    • ?105 [?ty] at depth 0
+      Expected type: Type 0
+    • ?107 [?fn] at depth 0
+      Expected type: Type 0
+    • ?108 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?110 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?112 [foldl] at depth 3
+      Expected type: Type 0
+    • ?113 [?ret] at depth 3
+      Expected type: Type 0
+    • ?114 [?ret] at depth 3
+      Expected type: Type 0
+    • ?117 [b] at depth 0
+      Expected type: Type 0
+    • ?118 [?ty] at depth 0
+      Expected type: Type 0
+    • ?120 [?fn] at depth 0
+      Expected type: Type 0
+    • ?121 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?123 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?125 [?ret] at depth 3
+      Expected type: Type 0
+    • ?128 [?ty] at depth 0
+      Expected type: Type 0
+    • ?129 [?ty] at depth 0
+      Expected type: Type 0
+    • ?130 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?132 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?134 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?136 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?138 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?140 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?142 [++] at depth 2
+      Expected type: Type 0
+    • ?143 [?ret] at depth 2
+      Expected type: Type 0
+    • ?146 [?ty] at depth 0
+      Expected type: Type 0
+    • ?147 [?ty] at depth 0
+      Expected type: Type 0
+    • ?148 [?fn] at depth 0
+      Expected type: Type 0
+    • ?149 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?151 [rt_coll_empty] at depth 3
+      Expected type: Type 0
+    • ?153 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?155 [rt_coll_empty] at depth 3
+      Expected type: Type 0
+    • ?157 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?159 [rt_coll_is_empty] at depth 3
+      Expected type: Type 0
+    • ?161 [++] at depth 3
+      Expected type: Type 0
+    • ?162 [?ret] at depth 3
+      Expected type: Type 0
+    • ?165 [a] at depth 0
+      Expected type: Type 0
+    • ?166 [?ty] at depth 0
+      Expected type: Type 0
+    • ?167 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?169 [++] at depth 2
+      Expected type: Type 0
+    • ?170 [?ret] at depth 2
+      Expected type: Type 0
+    • ?172 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?174 [++] at depth 2
+      Expected type: Type 0
+    • ?175 [?ret] at depth 2
+      Expected type: Type 0
+    • ?178 [?ty] at depth 0
+      Expected type: Type 0
+    • ?179 [?fn] at depth 0
+      Expected type: Type 0
+    • ?180 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?182 [rt_coll_empty] at depth 2
+      Expected type: Type 0
+    • ?184 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?187 [++] at depth 2
+      Expected type: Type 0
+    • ?188 [?ret] at depth 2
+      Expected type: Type 0
+    • ?190 [rt_coll_is_empty] at depth 2
+      Expected type: Type 0
+    • ?192 [filter] at depth 2
+      Expected type: Type 0
+    • ?193 [?ret] at depth 2
+      Expected type: Type 0
+    • ?196 [a] at depth 0
+      Expected type: Type 0
+    • ?198 [?fn] at depth 0
+      Expected type: Type 0
+    • ?199 [?fn] at depth 0
+      Expected type: Type 0
+  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.
 
-
-=== desugared AST (/tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.mon) ===
-  wrote json: /tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.json
-define
-x
-42
-=== end desugared AST ===
-
-  wrote json: /tmp/monadc-tests-gttz4y5f/sugar.wisp_def_simple/sugar.wisp_def_simple.json
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: Int
+├─ Interop HM unifies with prior Dependent Type check: ?
+├─ Interop HM unifies with prior Dependent Type check: ?
+├─ Interop HM unifies with prior Dependent Type check: Coll :: ?
+├─ HM Unify Coll :: b ~ Coll
+│   ├─ HM Unify 'b ~ ?
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Coll :: b ~ Coll
+│   ├─ HM Unify 'b ~ ?
+│   └─ OK
+└─ OK
+├─ HM Unify Coll :: b ~ Coll
+│   ├─ HM Unify 'b ~ ?
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify Int ~ Int
+└─ OK
+├─ HM Unify ('f → ('f → Bool)) ~ (Int → (Int → 'g))
+│   ├─ HM Unify 'f ~ Int
+│   └─ OK
+│   ├─ HM Unify (Int → Bool) ~ (Int → 'g)
+│   │   ├─ HM Unify Int ~ Int
+│   │   └─ OK
+│   │   ├─ HM Unify Bool ~ 'g
+│   │   └─ OK
+│   └─ OK
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify Bool ~ Bool
+└─ OK
+├─ HM Unify (Coll :: j → 'j) ~ (Coll :: b → 'k)
+│   ├─ HM Unify Coll :: j ~ Coll :: b
+│   │   ├─ HM Unify 'j ~ 'b
+│   │   └─ OK
+│   └─ OK
+│   ├─ HM Unify 'j ~ 'k
+│   └─ OK
+└─ OK
+├─ HM Unify Int ~ ?
+└─ FAIL
+core/prelude/Coll.mon:0:0: error: 
+    • Type inference failed for function ‘take’
+    • Expected signature :: Int -> Coll :: a -> Coll :: a
+    • Provided signature :: Int -> Coll :: r -> Coll :: r
+   - Hint: cannot unify Int with ?
+  module: Coll
+[dep] running bidirectional type checker...
 #+END_EXAMPLE

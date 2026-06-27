@@ -51,22 +51,22 @@ therefore reader.tokenization -> compiler-phase
 :CONFIDENCE: high
 :END:
 
-| Concept | Refines | Owns |
-|---------+---------+------|
-| compiler-phase | root | any phase-local contract |
-| frontend | compiler-phase | syntax and source-shape preservation |
-| reader | frontend | tokens, AST construction, source spans |
-| wisp | frontend | indentation sugar, Wisp-to-Lisp shape |
-| macro | frontend | expansion before type/codegen contracts |
-| middle-end | compiler-phase | inference, desugar, dependency analysis |
-| infer | middle-end | type constraints and diagnostics |
-| dep | middle-end | dependent checking and NBE |
-| module | middle-end | imports, exports, symbol visibility |
-| backend | compiler-phase | lowering to executable target |
-| codegen | backend | LLVM/value lowering and runtime calls |
-| runtime | backend | heap objects, printing, collections, FFI boundary |
-| test-system | meta | verification artifacts and triage |
-| context-system | meta | durable design memory and navigation |
+| Concept        | Refines        | Owns                                              |
+|----------------+----------------+---------------------------------------------------|
+| compiler-phase | root           | any phase-local contract                          |
+| frontend       | compiler-phase | syntax and source-shape preservation              |
+| reader         | frontend       | tokens, AST construction, source spans            |
+| wisp           | frontend       | indentation sugar, Wisp-to-Lisp shape             |
+| macro          | frontend       | expansion before type/codegen contracts           |
+| middle-end     | compiler-phase | inference, desugar, dependency analysis           |
+| infer          | middle-end     | type constraints and diagnostics                  |
+| dep            | middle-end     | dependent checking and NBE                        |
+| module         | middle-end     | imports, exports, symbol visibility               |
+| backend        | compiler-phase | lowering to executable target                     |
+| codegen        | backend        | LLVM/value lowering and runtime calls             |
+| runtime        | backend        | heap objects, printing, collections, FFI boundary |
+| test-system    | meta           | verification artifacts and triage                 |
+| context-system | meta           | durable design memory and navigation              |
 
 * Formal Concept Analysis Hook
 :PROPERTIES:

@@ -1,0 +1,166 @@
+;;; Function.mon --- Core function combinators
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: function combinator composition prelude
+
+;;; Commentary:
+
+;; Small, law-obvious function combinators.  These are the vocabulary that lets
+;; the rest of core read like a functional library instead of open-coded calls.
+
+;;; Code:
+
+module Function
+  [id identity const always flip compose pipe apply applyTo
+   before after on argument result
+   twice thrice times repeatApply until]
+
+
+define function-test-inc :: Int -> Int
+  x -> x + 1
+
+
+define function-test-add2 :: Int -> Int
+  x -> x + 2
+
+
+define function-test-double :: Int -> Int
+  x -> x * 2
+
+
+define function-test-sub :: Int -> Int -> Int
+  x y -> x - y
+
+
+define function-test-at-least-10? :: Int -> Bool
+  x -> x >= 10
+
+
+define id :: a -> a
+  x -> x
+  :alias identity
+  :doc "Return X unchanged."
+
+
+define const :: a -> b -> a
+  :doc "Return X and ignore the second argument."
+  x _ -> x
+
+
+define always :: a -> b -> a
+  :doc "Alias for const."
+  x y -> const x y
+
+
+define flip :: (a -> b -> c) -> b -> a -> c
+  :doc "Reverse the first two arguments of F."
+  f y x -> f x y
+
+
+define compose :: (b -> c) -> (a -> b) -> a -> c
+  :doc "Right-to-left function composition."
+  f g x -> f (g x)
+
+
+define pipe :: (a -> b) -> (b -> c) -> a -> c
+  :doc "Left-to-right function composition."
+  f g x -> g (f x)
+
+
+define apply :: (a -> b) -> a -> b
+  :doc "Apply F to X."
+  f x -> f x
+
+
+define applyTo :: a -> (a -> b) -> b
+  :doc "Apply X to F. Useful for left-to-right pipelines."
+  x f -> f x
+
+
+define before :: (a -> b) -> (b -> c) -> a -> c
+  :doc "Run F before G. Equivalent to pipe."
+  f g x -> pipe f g x
+
+
+define after :: (b -> c) -> (a -> b) -> a -> c
+  :doc "Run F after G. Equivalent to compose."
+  f g x -> compose f g x
+
+
+define on :: (b -> b -> c) -> (a -> b) -> a -> a -> c
+  :doc "Transform both inputs with F, then combine with OP."
+  op f x y -> op (f x) (f y)
+
+
+define argument :: (b -> c) -> (a -> b) -> a -> c
+  :doc "Transform a function argument before applying the function."
+  f g x -> f (g x)
+
+
+define result :: (b -> c) -> (a -> b) -> a -> c
+  :doc "Transform the result of a function. Equivalent to compose."
+  f g x -> f (g x)
+
+
+define twice :: (a -> a) -> a -> a
+  :doc "Apply F twice."
+  f x -> f (f x)
+
+
+define thrice :: (a -> a) -> a -> a
+  :doc "Apply F three times."
+  f x -> f (f (f x))
+
+
+define times :: Int -> (a -> a) -> a -> a
+  n _ x | n <= 0    -> x
+  n f x | otherwise -> times (n - 1) f (f x)
+
+
+define repeatApply :: Int -> (a -> a) -> a -> a
+  n f x -> times n f x
+
+
+define until :: (a -> Bool) -> (a -> a) -> a -> a
+  p _ x | p x       -> x
+  p f x | otherwise -> until p f (f x)
+
+
+tests
+  :identity:
+  assert-eq (id 42) 42 "Function id Int"
+  assert-eq (identity True) True "Function identity alias"
+
+  :identity:
+  :constant:
+  assert-eq (const 7 99) 7 "Function const"
+  assert-eq (always 3 False) 3 "Function always alias"
+
+  :constant:
+  :composition:
+  assert-eq (compose function-test-double function-test-inc 3) 8 "Function compose"
+  assert-eq (pipe function-test-inc function-test-double 3) 8 "Function pipe"
+  assert-eq (before function-test-inc function-test-double 3) 8 "Function before"
+  assert-eq (after function-test-double function-test-inc 3) 8 "Function after"
+
+  :composition:
+  :application:
+  assert-eq (apply function-test-inc 4) 5 "Function apply"
+  assert-eq (applyTo 4 function-test-inc) 5 "Function applyTo"
+
+  :application:
+  :transform:
+  assert-eq (flip function-test-sub 3 10) 7 "Function flip"
+  assert-eq (on function-test-sub function-test-double 10 3) 14 "Function on"
+  assert-eq (argument function-test-double function-test-inc 3) 8 "Function argument"
+  assert-eq (result function-test-double function-test-inc 3) 8 "Function result"
+
+  :transform:
+  :iteration:
+  assert-eq (twice function-test-add2 10) 14 "Function twice"
+  assert-eq (thrice function-test-add2 10) 16 "Function thrice"
+  assert-eq (times 4 function-test-inc 0) 4 "Function times"
+  assert-eq (repeatApply 3 function-test-double 1) 8 "Function repeatApply"
+  assert-eq (until function-test-at-least-10? function-test-add2 1) 11 "Function until"
+  :iteration:

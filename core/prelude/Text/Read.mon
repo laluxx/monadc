@@ -1,0 +1,27 @@
+;;; Read.mon --- Text parsing typeclass
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: read parse string typeclass
+
+;;; Commentary:
+
+;; Read is the inverse text parsing contract for types that can be recovered
+;; from strings. Concrete parsers should live in focused text modules; this file
+;; owns the typeclass vocabulary.
+
+;;; Code:
+
+module Text.Read
+  [Read read readsPrec]
+
+
+class Read a where
+  read      :: String -> a
+  readsPrec :: Int -> String -> [(a, String)]
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Read registers Read"
+  :registration:

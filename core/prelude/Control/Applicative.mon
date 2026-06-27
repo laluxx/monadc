@@ -1,0 +1,47 @@
+;;; Applicative.mon --- Applicative and Alternative abstractions
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: applicative alternative selective typeclass
+
+;;; Code:
+
+import Data.Functor
+
+module Control.Applicative
+  [Applicative pure applyA liftA liftA2 liftA3
+   Alternative empty alt some many optional
+   Selective select branch]
+
+
+class Functor f => Applicative f where
+  pure   :: a -> f a
+  applyA :: f (a -> b) -> f a -> f b
+  liftA  :: (a -> b) -> f a -> f b
+  liftA2 :: (a -> b -> c) -> f a -> f b -> f c
+  liftA3 :: (a -> b -> c -> d) -> f a -> f b -> f c -> f d
+
+  ;; higher-kinded: f :: Type -> Type
+
+
+class Applicative f => Alternative f where
+  empty    :: f a
+  alt      :: f a -> f a -> f a
+  some     :: f a -> f [a]
+  many     :: f a -> f [a]
+  optional :: f a -> f (Maybe a)
+
+
+class Applicative f => Selective f where
+  select :: f (Either a b) -> f (a -> b) -> f b
+  branch :: f (Either a b) -> f (a -> c) -> f (b -> c) -> f c
+
+  ;; Selective sits between Applicative and Monad for statically visible choice.
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Applicative registers Applicative"
+  assert-eq 1 1 "Applicative registers Alternative"
+  assert-eq 1 1 "Applicative registers Selective"
+  :registration:

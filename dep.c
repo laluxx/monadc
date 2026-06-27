@@ -2117,7 +2117,7 @@ void dep_ctx_free(DepCtx *ctx) {
     }
     eval_env_free(ctx->env);
     // globals and mctx are either shared or freed by the caller
-    // free(ctx); // Intentional leak to prevent use-after-free segfault in HM codegen phase
+    free(ctx);
 }
 
 void dep_ctx_push(DepCtx *ctx, const char *name, Value *type) {
@@ -3008,10 +3008,17 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
              * Negative integers also go through as embedded Int.           */
             bool is_float = false;
             if (ast->literal_str) {
-                for (const char *_p = ast->literal_str; *_p; _p++) {
-                    if (*_p == '.' || *_p == 'e' || *_p == 'E') {
-                        is_float = true;
-                        break;
+                bool radix_literal =
+                    ast->literal_str[0] == '0' &&
+                    (ast->literal_str[1] == 'x' || ast->literal_str[1] == 'X' ||
+                     ast->literal_str[1] == 'b' || ast->literal_str[1] == 'B' ||
+                     ast->literal_str[1] == 'o' || ast->literal_str[1] == 'O');
+                if (!radix_literal) {
+                    for (const char *_p = ast->literal_str; *_p; _p++) {
+                        if (*_p == '.' || *_p == 'e' || *_p == 'E') {
+                            is_float = true;
+                            break;
+                        }
                     }
                 }
             } else {
@@ -3039,8 +3046,8 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     }
     case AST_KEYWORD: return term_ann(term_hole(), term_embed(type_keyword()));
     case AST_SYMBOL:
-        // Explicit hole — ? in any position
-        if (strcmp(ast->symbol, "?") == 0) {
+        // Explicit hole — ? and generated undefined sentinels in any position
+        if (strcmp(ast->symbol, "?") == 0 || strcmp(ast->symbol, "undefined") == 0) {
             Term *h = term_hole();
             h->line = ast->line;
             h->col  = ast->column;

@@ -4,7 +4,21 @@
 #include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
+
+static void tc_codegen_error(CodegenContext *ctx, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(ctx->error_msg, sizeof(ctx->error_msg), fmt, args);
+    va_end(args);
+    fprintf(stderr, "%s\n", ctx->error_msg);
+    if (ctx->error_jmp_set) {
+        ctx->error_jmp_set = false;
+        longjmp(ctx->error_jmp, 1);
+    }
+    exit(1);
+}
 
 /// Lifecycle
 
@@ -24,6 +38,12 @@ void tc_registry_free(TypeClassRegistry *reg) {
         TCClass *c = &reg->classes[i];
         free(c->name);
         free(c->type_var);
+        for (int j = 0; j < c->superclass_count; j++) {
+            free(c->superclass_names[j]);
+            free(c->superclass_type_vars[j]);
+        }
+        free(c->superclass_names);
+        free(c->superclass_type_vars);
         for (int j = 0; j < c->assoc_count; j++) free(c->assoc_types[j]);
         if (c->assoc_types) free(c->assoc_types);
         for (int j = 0; j < c->method_count; j++) {
@@ -57,6 +77,105 @@ void tc_registry_free(TypeClassRegistry *reg) {
     }
     free(reg->instances);
     free(reg);
+}
+
+static void tc_registry_ensure_class_cap(TypeClassRegistry *reg) {
+    if (reg->class_count < reg->class_cap) return;
+    reg->class_cap *= 2;
+    reg->classes = realloc(reg->classes, sizeof(TCClass) * reg->class_cap);
+}
+
+static void tc_registry_ensure_instance_cap(TypeClassRegistry *reg) {
+    if (reg->instance_count < reg->instance_cap) return;
+    reg->instance_cap *= 2;
+    reg->instances = realloc(reg->instances,
+                             sizeof(TCInstance) * reg->instance_cap);
+}
+
+static void tc_copy_class_into(TypeClassRegistry *dst, const TCClass *src) {
+    if (tc_find_class(dst, src->name))
+        return;
+
+    tc_registry_ensure_class_cap(dst);
+    TCClass *c = &dst->classes[dst->class_count++];
+    memset(c, 0, sizeof(*c));
+
+    c->name = src->name ? strdup(src->name) : NULL;
+    c->type_var = src->type_var ? strdup(src->type_var) : NULL;
+
+    c->superclass_count = src->superclass_count;
+    c->superclass_names = malloc(sizeof(char*) * (src->superclass_count ? src->superclass_count : 1));
+    c->superclass_type_vars = malloc(sizeof(char*) * (src->superclass_count ? src->superclass_count : 1));
+    for (int i = 0; i < src->superclass_count; i++) {
+        c->superclass_names[i] = src->superclass_names[i] ? strdup(src->superclass_names[i]) : NULL;
+        c->superclass_type_vars[i] = src->superclass_type_vars[i] ? strdup(src->superclass_type_vars[i]) : NULL;
+    }
+
+    c->assoc_count = src->assoc_count;
+    c->assoc_types = malloc(sizeof(char*) * (src->assoc_count ? src->assoc_count : 1));
+    for (int i = 0; i < src->assoc_count; i++)
+        c->assoc_types[i] = src->assoc_types[i] ? strdup(src->assoc_types[i]) : NULL;
+
+    c->method_count = src->method_count;
+    c->methods = malloc(sizeof(TCMethod) * (src->method_count ? src->method_count : 1));
+    for (int i = 0; i < src->method_count; i++) {
+        c->methods[i].name = src->methods[i].name ? strdup(src->methods[i].name) : NULL;
+        c->methods[i].type_str = src->methods[i].type_str ? strdup(src->methods[i].type_str) : NULL;
+    }
+
+    c->default_count = src->default_count;
+    c->default_names = malloc(sizeof(char*) * (src->default_count ? src->default_count : 1));
+    c->default_bodies = malloc(sizeof(AST*) * (src->default_count ? src->default_count : 1));
+    for (int i = 0; i < src->default_count; i++) {
+        c->default_names[i] = src->default_names[i] ? strdup(src->default_names[i]) : NULL;
+        c->default_bodies[i] = ast_clone(src->default_bodies[i]);
+    }
+}
+
+static void tc_copy_instance_into(TypeClassRegistry *dst,
+                                  const TCInstance *src) {
+    if (tc_find_instance(dst, src->class_name, src->type_name))
+        return;
+
+    tc_registry_ensure_instance_cap(dst);
+    TCInstance *inst = &dst->instances[dst->instance_count++];
+    memset(inst, 0, sizeof(*inst));
+
+    inst->class_name = src->class_name ? strdup(src->class_name) : NULL;
+    inst->type_name = src->type_name ? strdup(src->type_name) : NULL;
+    inst->dict_global = src->dict_global;
+
+    inst->assoc_count = src->assoc_count;
+    inst->assoc_names = malloc(sizeof(char*) * (src->assoc_count ? src->assoc_count : 1));
+    inst->assoc_values = malloc(sizeof(char*) * (src->assoc_count ? src->assoc_count : 1));
+    for (int i = 0; i < src->assoc_count; i++) {
+        inst->assoc_names[i] = src->assoc_names[i] ? strdup(src->assoc_names[i]) : NULL;
+        inst->assoc_values[i] = src->assoc_values[i] ? strdup(src->assoc_values[i]) : NULL;
+    }
+
+    inst->method_count = src->method_count;
+    inst->method_names = malloc(sizeof(char*) * (src->method_count ? src->method_count : 1));
+    inst->method_funcs = malloc(sizeof(LLVMValueRef) * (src->method_count ? src->method_count : 1));
+    for (int i = 0; i < src->method_count; i++) {
+        inst->method_names[i] = src->method_names[i] ? strdup(src->method_names[i]) : NULL;
+        inst->method_funcs[i] = src->method_funcs[i];
+    }
+}
+
+TypeClassRegistry *tc_registry_clone(TypeClassRegistry *reg) {
+    TypeClassRegistry *copy = tc_registry_create();
+    tc_registry_merge(copy, reg);
+    return copy;
+}
+
+void tc_registry_merge(TypeClassRegistry *dst, TypeClassRegistry *src) {
+    if (!dst || !src) return;
+
+    for (int i = 0; i < src->class_count; i++)
+        tc_copy_class_into(dst, &src->classes[i]);
+
+    for (int i = 0; i < src->instance_count; i++)
+        tc_copy_instance_into(dst, &src->instances[i]);
 }
 
 /// Name helpers
@@ -147,8 +266,27 @@ LLVMTypeRef tc_dict_type(TypeClassRegistry *reg, const char *class_name,
 // in the HM type environment so inference knows about them.
 //
 //
-void tc_register_class(TypeClassRegistry *reg, AST *ast) {
+void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
     if (!ast || ast->type != AST_CLASS) return;
+
+    for (int si = 0; si < ast->class_decl.superclass_count; si++) {
+        const char *super_name = ast->class_decl.superclass_names[si];
+        const char *super_var = ast->class_decl.superclass_type_vars[si];
+        if (!tc_find_class(reg, super_name)) {
+            tc_codegen_error(ctx,
+                "%s:%d:%d: error: superclass constraint references unknown class '%s' in class '%s'",
+                parser_get_filename(), ast->line, ast->column,
+                super_name, ast->class_decl.name);
+        }
+        if (super_var && ast->class_decl.type_var &&
+            strcmp(super_var, ast->class_decl.type_var) != 0) {
+            tc_codegen_error(ctx,
+                "%s:%d:%d: error: unsupported superclass constraint '%s %s' for class '%s %s'; only constraints over the head type variable are currently supported",
+                parser_get_filename(), ast->line, ast->column,
+                super_name, super_var, ast->class_decl.name,
+                ast->class_decl.type_var);
+        }
+    }
 
     /* Grow registry if needed */
     if (reg->class_count >= reg->class_cap) {
@@ -160,6 +298,14 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast) {
     TCClass *c = &reg->classes[reg->class_count++];
     c->name       = strdup(ast->class_decl.name);
     c->type_var   = strdup(ast->class_decl.type_var);
+
+    c->superclass_count = ast->class_decl.superclass_count;
+    c->superclass_names = malloc(sizeof(char*) * (c->superclass_count ? c->superclass_count : 1));
+    c->superclass_type_vars = malloc(sizeof(char*) * (c->superclass_count ? c->superclass_count : 1));
+    for (int i = 0; i < c->superclass_count; i++) {
+        c->superclass_names[i] = strdup(ast->class_decl.superclass_names[i]);
+        c->superclass_type_vars[i] = strdup(ast->class_decl.superclass_type_vars[i]);
+    }
 
     /* Connect associated types */
     c->assoc_count = ast->class_decl.assoc_count;
@@ -187,6 +333,9 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast) {
 
     printf("Class: %s %s (%d methods, %d defaults)\n",
            c->name, c->type_var, c->method_count, c->default_count);
+    for (int i = 0; i < c->superclass_count; i++)
+        printf("  superclass: %s %s\n",
+               c->superclass_names[i], c->superclass_type_vars[i]);
     for (int i = 0; i < c->method_count; i++)
         printf("  method: %s :: %s\n", c->methods[i].name, c->methods[i].type_str);
     for (int i = 0; i < c->default_count; i++)
@@ -272,6 +421,16 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     if (!c) {
         fprintf(stderr, "instance: unknown class '%s'\n", class_name);
         return;
+    }
+
+    for (int si = 0; si < c->superclass_count; si++) {
+        const char *super_name = c->superclass_names[si];
+        if (!tc_find_instance(reg, super_name, type_name)) {
+            tc_codegen_error(ctx,
+                "%s:%d:%d: error: superclass constraint requires instance '%s %s' before '%s %s'",
+                parser_get_filename(), ast->line, ast->column,
+                super_name, type_name, class_name, type_name);
+        }
     }
 
     /* Grow instance registry if needed */

@@ -9,23 +9,23 @@
 ;;   (x != y) => not x = y   ; Default implementation(s)
 
 
-;; class Enum a where
-;;   succ     :: a -> a
-;;   pred     :: a -> a
-;;   toEnum   :: Int -> a
-;;   fromEnum :: a -> Int
-;;   (succ x) => toEnum ((fromEnum x) + 1)
-;;   (pred x) => toEnum ((fromEnum x) - 1)
+class Enum a where
+  succ     :: a -> a
+  pred     :: a -> a
+  toEnum   :: Int -> a
+  fromEnum :: a -> Int
+  (succ x) => toEnum ((fromEnum x) + 1)
+  (pred x) => toEnum ((fromEnum x) - 1)
 
 
-;; data TrafficLight Red | Yellow | Green
-;;   deriving [Eq Enum]
+data TrafficLight Red | Yellow | Green
+  deriving [Eq Enum]
 
 
-;; show Red = Red
-;; show Red = Green
-;; show Red != Green
-;; show Red != Red
+show Red = Red
+show Red = Green
+show Red != Green
+show Red != Red
 
 ;; show fromEnum Red
 ;; show fromEnum Yellow

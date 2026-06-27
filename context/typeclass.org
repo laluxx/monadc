@@ -411,3 +411,21 @@
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+[FIX id:fix.typeclass.derive-show-nullary-2026-06-26 date:2026-06-26 by:codex]
+  =deriving [Show]= now synthesizes a concrete =Show T= instance for ADTs whose
+  constructors are all nullary. The generated method compiles through the normal
+  =tc_register_instance= path and pattern-matches each constructor to its
+  constructor-name string. The compiler intentionally does not derive fielded
+  constructor rendering yet, because correct Haskell-style output needs recursive
+  =Show= constraints for fields and stable string concatenation/show-builder
+  support.
+
+[INF id:inf.typeclass.current-compiler-support-2026-06-26 from:fix.typeclass.derive-show-nullary-2026-06-26 conf:high]
+  The old feature-gap note is partially superseded: superclass constraints,
+  imported class metadata, nullary instance methods, and nullary-ADT =Show=
+  deriving are implemented. Remaining compiler gaps include structural =Eq=
+  over constructor fields aligned with the core =eq?/not-eq?= names, =Ord=
+  deriving, recursive =Show= deriving for fielded constructors, lawful
+  =showsPrec/showList= defaults, and parser preservation of list method
+  signatures such as =[a] -> String=.

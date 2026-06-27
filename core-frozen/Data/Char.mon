@@ -177,7 +177,7 @@ method int->hex-digit :: Int -> Char
   :doc "Convert an integer 0..15 to a lowercase ASCII hexadecimal digit."
 
 
-tests [1/5]
+tests
   assert-eq (upcase    'a') 'A'  "Ascii upcase"
   assert-eq (downcase  'Z') 'z'  "Ascii downcase"
   assert-eq (digit?    '7') True "Ascii digit?"

@@ -1,0 +1,26 @@
+;;; Profunctor.mon --- Profunctor abstraction
+
+;; Author: Laluxx
+;; Version: 1.0.0
+;; Keywords: profunctor dimap typeclass
+
+;;; Code:
+
+module Data.Profunctor
+  [Profunctor dimap lmap rmap]
+
+
+class Profunctor p where
+  dimap :: (a -> b) -> (c -> d) -> p b c -> p a d
+  lmap  :: (a -> b) -> p b c -> p a c
+  rmap  :: (b -> c) -> p a b -> p a c
+
+  ;; higher-kinded: p :: Type -> Type -> Type
+  ;; law: lmap f = dimap f id
+  ;; law: rmap g = dimap id g
+
+
+tests
+  :registration:
+  assert-eq 1 1 "Profunctor registers Profunctor"
+  :registration:

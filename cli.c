@@ -9,6 +9,7 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <time.h>
 #include <dirent.h>
@@ -224,6 +225,43 @@ static bool parse_optimization_flag(const char *arg, int *level)
     return false;
 }
 
+static void trace_set_all(CompilerFlags *flags, bool enabled)
+{
+    flags->trace_ast = enabled;
+    flags->trace_semantic = enabled;
+    flags->trace_dep = enabled;
+    flags->trace_codegen = enabled;
+}
+
+static bool trace_apply_item(const char *item, CompilerFlags *flags)
+{
+    if (strcmp(item, "all") == 0) {
+        trace_set_all(flags, true);
+        return true;
+    }
+    if (strcmp(item, "none") == 0 || strcmp(item, "off") == 0) {
+        trace_set_all(flags, false);
+        return true;
+    }
+    if (strcmp(item, "ast") == 0 || strcmp(item, "reader") == 0) {
+        flags->trace_ast = true;
+        return true;
+    }
+    if (strcmp(item, "semantic") == 0 || strcmp(item, "opt") == 0) {
+        flags->trace_semantic = true;
+        return true;
+    }
+    if (strcmp(item, "dep") == 0 || strcmp(item, "type") == 0) {
+        flags->trace_dep = true;
+        return true;
+    }
+    if (strcmp(item, "codegen") == 0 || strcmp(item, "ir") == 0) {
+        flags->trace_codegen = true;
+        return true;
+    }
+    return false;
+}
+
 static bool parse_trace_flag(const char *arg, CompilerFlags *flags)
 {
     if (strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0 ||
@@ -231,16 +269,44 @@ static bool parse_trace_flag(const char *arg, CompilerFlags *flags)
         flags->verbose_level++;
         return true;
     }
-    if (strcmp(arg, "-vv") == 0) {
+    if (strcmp(arg, "-vv") == 0 || strcmp(arg, "--very-verbose") == 0) {
         flags->verbose_level += 2;
         return true;
     }
-    if (strcmp(arg, "--quiet") == 0 || strcmp(arg, "quiet") == 0) {
+    if (strncmp(arg, "--verbose=", 10) == 0 &&
+        arg[10] >= '0' && arg[10] <= '9' && arg[11] == '\0') {
+        flags->verbose_level = arg[10] - '0';
+        return true;
+    }
+    if (strcmp(arg, "-q") == 0 || strcmp(arg, "--quiet") == 0 ||
+        strcmp(arg, "quiet") == 0) {
         flags->verbose_level = 0;
-        flags->trace_ast = false;
-        flags->trace_semantic = false;
-        flags->trace_dep = false;
-        flags->trace_codegen = false;
+        trace_set_all(flags, false);
+        return true;
+    }
+    if (strcmp(arg, "--trace-all") == 0 || strcmp(arg, "trace-all") == 0) {
+        trace_set_all(flags, true);
+        return true;
+    }
+    if (strcmp(arg, "--trace-off") == 0 || strcmp(arg, "--no-trace") == 0 ||
+        strcmp(arg, "trace-off") == 0 || strcmp(arg, "trace-none") == 0) {
+        trace_set_all(flags, false);
+        return true;
+    }
+    if (strcmp(arg, "--trace-ast") == 0 || strcmp(arg, "--trace-reader") == 0) {
+        flags->trace_ast = true;
+        return true;
+    }
+    if (strcmp(arg, "--trace-semantic") == 0 || strcmp(arg, "--trace-opt") == 0) {
+        flags->trace_semantic = true;
+        return true;
+    }
+    if (strcmp(arg, "--trace-dep") == 0 || strcmp(arg, "--trace-type") == 0) {
+        flags->trace_dep = true;
+        return true;
+    }
+    if (strcmp(arg, "--trace-codegen") == 0 || strcmp(arg, "--trace-ir") == 0) {
+        flags->trace_codegen = true;
         return true;
     }
     if (strncmp(arg, "--trace=", 8) != 0) return false;
@@ -254,25 +320,7 @@ static bool parse_trace_flag(const char *arg, CompilerFlags *flags)
         memcpy(item, p, copy_n);
         item[copy_n] = '\0';
 
-        if (strcmp(item, "all") == 0) {
-            flags->trace_ast = true;
-            flags->trace_semantic = true;
-            flags->trace_dep = true;
-            flags->trace_codegen = true;
-        } else if (strcmp(item, "ast") == 0 || strcmp(item, "reader") == 0) {
-            flags->trace_ast = true;
-        } else if (strcmp(item, "semantic") == 0 || strcmp(item, "opt") == 0) {
-            flags->trace_semantic = true;
-        } else if (strcmp(item, "dep") == 0 || strcmp(item, "type") == 0) {
-            flags->trace_dep = true;
-        } else if (strcmp(item, "codegen") == 0 || strcmp(item, "ir") == 0) {
-            flags->trace_codegen = true;
-        } else if (strcmp(item, "none") == 0 || strcmp(item, "off") == 0) {
-            flags->trace_ast = false;
-            flags->trace_semantic = false;
-            flags->trace_dep = false;
-            flags->trace_codegen = false;
-        } else {
+        if (!trace_apply_item(item, flags)) {
             fprintf(stderr, "Unknown trace pass: %s\n", item);
             exit(1);
         }
@@ -433,11 +481,6 @@ static void suggest_subcommand(const char *unknown)
 CompilerFlags parse_flags(int argc, char **argv) {
     CompilerFlags flags = {0};
     flags.mode = CMD_COMPILE;
-    flags.verbose_level = 2;     /* TEMP: force full debug while fixing core */
-    flags.trace_ast = true;      /* TEMP: force full debug while fixing core */
-    flags.trace_semantic = true; /* TEMP: force full debug while fixing core */
-    flags.trace_dep = true;      /* TEMP: force full debug while fixing core */
-    flags.trace_codegen = true;  /* TEMP: force full debug while fixing core */
     config_apply_default_flags(&flags);
 
     if (argc < 2) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
@@ -1146,35 +1189,40 @@ void cmd_test(const char *input_file) {
         if (n > 0) strncpy(self, buf, sizeof(self) - 1);
     }
 
-    // Build the test binary (--test-run appends _test to the name)
     char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "%s --test-run %s", self, input_file);
+    snprintf(cmd, sizeof(cmd), "%s --test-run %s --quiet", self, input_file);
     int build_rc = system(cmd);
     if (!WIFEXITED(build_rc) || WEXITSTATUS(build_rc) != 0) {
         fprintf(stderr, "test build failed\n");
         exit(1);
     }
 
-    // Derive and run the _test binary
     char *base = get_base_executable_name(input_file);
     char test_bin[1024];
     snprintf(test_bin, sizeof(test_bin), "./%s_test", base);
+
     printf("\n");
     int run_rc = system(test_bin);
 
-    // Clean up before exiting
-    remove(test_bin + 2);  // skip "./"
+    remove(test_bin + 2);
+
     char obj[1024];
     snprintf(obj, sizeof(obj), "%s_test.o", base);
     remove(obj);
-    free(base);
 
-    // Only failure is SIGABRT from __monad_assert_fail calling abort().
-    // Normal exit with any code (including 1 from last assert-eq i1 result)
-    // is a pass — we only care about signals.
-    if (WIFSIGNALED(run_rc)) {
-        fprintf(stderr, "test failed (signal %d)\n", WTERMSIG(run_rc));
+    if (!WIFEXITED(run_rc) || WEXITSTATUS(run_rc) != 0) {
+        if (WIFEXITED(run_rc))
+            fprintf(stderr, "test failed with exit code %d\n", WEXITSTATUS(run_rc));
+        else if (WIFSIGNALED(run_rc))
+            fprintf(stderr, "test failed with signal %d\n", WTERMSIG(run_rc));
+        else
+            fprintf(stderr, "test failed\n");
+
+        free(base);
         exit(1);
     }
+
+    printf("\n\x1b[32m✓\x1b[0m %s tests passed\n", base);
+    free(base);
     exit(0);
 }

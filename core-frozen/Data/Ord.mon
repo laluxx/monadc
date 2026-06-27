@@ -52,3 +52,24 @@ define between :: Ord a => a -> a -> a -> Bool
 define sortKey :: Ord b => (a -> b) -> [a] -> [a]
   :doc "Sort by a projected key."
   f xs -> sortBy (comparing f) xs
+
+
+tests
+  :clamp:
+  assert-eq (clamp 0 10 5)    5  "clamp inside range"
+  assert-eq (clamp 0 10 (-5)) 0  "clamp below lo"
+  assert-eq (clamp 0 10 15)   10 "clamp above hi"
+  assert-eq (clamp 0 0 0)     0  "clamp zero-width range"
+  :between:
+  assert-eq (between 0 10 5)   True  "between inside"
+  assert-eq (between 0 10 (-5)) False "between below lo"
+  assert-eq (between 0 10 15)  False "between above hi"
+  assert-eq (between 0 10 0)   True  "between at lo edge"
+  assert-eq (between 0 10 10)  True  "between at hi edge"
+  ;; :compareDown:  -- returns Ordering ADT; not comparable in tests
+  ;; assert-eq (compareDown 1 2) Greater "compareDown 1 2"
+  ;; assert-eq (compareDown 2 1) Less    "compareDown 2 1"
+  ;; :comparing:    -- requires lambda in test expression
+  ;; assert-eq (comparing (lambda (x) x) 1 2) Less "comparing id 1 2"
+  ;; :sortKey:      -- depends on sortBy (not in this module)
+  ;; assert-eq (sortKey (lambda (x) (- x)) [1 2 3]) [3 2 1] "sortKey reverse"

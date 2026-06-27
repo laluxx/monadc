@@ -1,0 +1,104 @@
+;;; Bool.mon --- Boolean operations
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: Data.Bool bool boolean logic predicate
+
+;;; Commentary:
+
+;; Core boolean functions.  No dependencies on Maybe or ADTs — every function
+;; returns Bool or a polymorphic value, making these tests foundational.
+
+;;; Code:
+
+module Data.Bool
+  [bool not? and? or? xor? implies? iff?]
+
+
+define bool :: a -> a -> Bool -> a
+  :doc "Choose the first value for False and the second for True."
+  false_val true_val c | c         -> true_val
+                       | otherwise -> false_val
+
+
+define not? :: Bool -> Bool
+  :doc "Boolean negation."
+  x | x       -> False
+    | otherwise -> True
+
+
+define and? :: Bool -> Bool -> Bool
+  :doc "Boolean conjunction."
+  x y | x       -> y
+      | otherwise -> False
+
+
+define or? :: Bool -> Bool -> Bool
+  :doc "Boolean disjunction."
+  x y | x       -> True
+      | otherwise -> y
+
+
+define xor? :: Bool -> Bool -> Bool
+  :doc "Exclusive or."
+  x y | x       -> not? y
+      | otherwise -> y
+
+
+define implies? :: Bool -> Bool -> Bool
+  :doc "Logical implication."
+  x y | x       -> y
+      | otherwise -> True
+
+
+define iff? :: Bool -> Bool -> Bool
+  :doc "Logical equivalence."
+  x y | x       -> y
+      | otherwise -> not? y
+
+
+tests
+  :bool:
+  assert-eq (bool 0 1 True)  1 "bool True"
+  assert-eq (bool 0 1 False) 0 "bool False"
+
+  :bool:
+  :not?:
+  assert-eq (not? True)  False "not? True"
+  assert-eq (not? False) True  "not? False"
+
+  :not?:
+  :and?:
+  assert-eq (and? True True)   True  "and? True True"
+  assert-eq (and? True False)  False "and? True False"
+  assert-eq (and? False True)  False "and? False True"
+  assert-eq (and? False False) False "and? False False"
+
+  :and?:
+  :or?:
+  assert-eq (or? True True)   True  "or? True True"
+  assert-eq (or? True False)  True  "or? True False"
+  assert-eq (or? False True)  True  "or? False True"
+  assert-eq (or? False False) False "or? False False"
+
+  :or?:
+  :xor?:
+  assert-eq (xor? True False)  True  "xor? True False"
+  assert-eq (xor? False True)  True  "xor? False True"
+  assert-eq (xor? True True)   False "xor? True True"
+  assert-eq (xor? False False) False "xor? False False"
+
+  :xor?:
+  :implies?:
+  assert-eq (implies? True True)   True  "implies? True True"
+  assert-eq (implies? True False)  False "implies? True False"
+  assert-eq (implies? False True)  True  "implies? False True"
+  assert-eq (implies? False False) True  "implies? False False"
+
+  :implies?:
+  :iff?:
+  assert-eq (iff? True True)   True  "iff? True True"
+  assert-eq (iff? True False)  False "iff? True False"
+  assert-eq (iff? False True)  False "iff? False True"
+  assert-eq (iff? False False) True  "iff? False False"
+  :iff?:

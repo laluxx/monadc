@@ -27,6 +27,9 @@ typedef struct TCMethod {
 typedef struct TCClass {
     char      *name;             // "Eq"
     char      *type_var;         // "a"
+    char     **superclass_names;     // Required parent classes, e.g. ["Eq"] for Ord
+    char     **superclass_type_vars; // Usually the same variable as type_var
+    int        superclass_count;
     char     **assoc_types;      // Associated types e.g. ["Result"]
     int        assoc_count;      // Number of associated types
     TCMethod  *methods;          // method signatures
@@ -74,13 +77,17 @@ typedef struct TypeClassRegistry {
 
 TypeClassRegistry *tc_registry_create(void);
 void               tc_registry_free(TypeClassRegistry *reg);
+TypeClassRegistry *tc_registry_clone(TypeClassRegistry *reg);
+void               tc_registry_merge(TypeClassRegistry *dst,
+                                      TypeClassRegistry *src);
 
 /// Class registration
 //
 // Called when an AST_CLASS node is encountered during codegen.
 // Records the class, its methods, and any default implementations.
 //
-void tc_register_class(TypeClassRegistry *reg, AST *class_decl);
+void tc_register_class(TypeClassRegistry *reg, AST *class_decl,
+                       CodegenContext *ctx);
 
 /// Instance registration
 //
