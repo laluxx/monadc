@@ -899,7 +899,6 @@ static CompiledModule *compile_one(const char *source_path,
             "U8",  "U16", "U32", "U64", "U128",
             "Float", "F32", "F80",
             "Bool", "String", "Char",
-            "Tuple", "List", "Arr", "Array",
             NULL
         };
 
@@ -922,69 +921,90 @@ static CompiledModule *compile_one(const char *source_path,
             if (env_core) {
                 snprintf(data_dir, sizeof(data_dir), "%s/Data", env_core);
                 in_core_data_dir = strcmp(src_dir, data_dir) == 0;
+                if (!in_core_data_dir) {
+                    snprintf(data_dir, sizeof(data_dir), "%s/prelude/Data", env_core);
+                    in_core_data_dir = strcmp(src_dir, data_dir) == 0;
+                }
             }
             if (!in_core_data_dir)
                 in_core_data_dir = strcmp(src_dir, "/usr/local/lib/monad/core/Data") == 0;
+            if (!in_core_data_dir)
+                in_core_data_dir = strcmp(src_dir, "/usr/local/lib/monad/core/prelude/Data") == 0;
         }
-        if (in_core_data_dir)
+        if (in_core_data_dir || source_is_prelude_file(my_source_path))
             goto skip_primitive_type_autoload;
 
         for (int _ti = 0; k_primitive_type_stems[_ti]; _ti++) {
             const char *stem = k_primitive_type_stems[_ti];
 
-            /* Build the candidate path: src_dir/Stem.mon */
-            char type_path[1024];
-            snprintf(type_path, sizeof(type_path), "%s/%s.mon", src_dir, stem);
-
-            /* Only proceed if the file actually exists */
-            if (!file_exists(type_path)) continue;
-
-            /* Do not auto-load ourselves.
-             * Use both realpath and stem comparison. The realpath check can
-             * miss relative spelling differences during recursive core loads,
-             * so the stem check prevents Tuple.mon from loading ./Tuple.mon
-             * while it is already being compiled. */
-            if (path_is_current_source(type_path, my_source_path)) continue;
-
+            char type_paths[3][1024];
+            int type_path_count = 0;
+            snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
+                     "%s/%s.mon", src_dir, stem);
             {
-                char *current_base = base_no_ext(my_source_path);
-                const char *slash = strrchr(current_base, '/');
-                const char *current_stem = slash ? slash + 1 : current_base;
+                const char *env_core = getenv("MONAD_CORE");
+                if (env_core) {
+                    snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
+                             "%s/prelude/Data/%s.mon", env_core, stem);
+                } else {
+                    snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
+                             "/usr/local/lib/monad/core/prelude/Data/%s.mon", stem);
+                }
+            }
 
-                if (strcmp(current_stem, stem) == 0) {
-                    if (flags->verbose_level > 0 || flags->trace_codegen) {
-                        fprintf(stderr,
-                                "[type-debug] skip self type module stem=%s current=%s candidate=%s\n",
-                                stem, my_source_path, type_path);
+            for (int _pi = 0; _pi < type_path_count; _pi++) {
+                const char *type_path = type_paths[_pi];
+
+                /* Only proceed if the file actually exists */
+                if (!file_exists(type_path)) continue;
+
+                /* Do not auto-load ourselves.
+                 * Use both realpath and stem comparison. The realpath check can
+                 * miss relative spelling differences during recursive core loads,
+                 * so the stem check prevents Tuple.mon from loading ./Tuple.mon
+                 * while it is already being compiled. */
+                if (path_is_current_source(type_path, my_source_path)) continue;
+
+                {
+                    char *current_base = base_no_ext(my_source_path);
+                    const char *slash = strrchr(current_base, '/');
+                    const char *current_stem = slash ? slash + 1 : current_base;
+
+                    if (strcmp(current_stem, stem) == 0) {
+                        if (flags->verbose_level > 0 || flags->trace_codegen) {
+                            fprintf(stderr,
+                                    "[type-debug] skip self type module stem=%s current=%s candidate=%s\n",
+                                    stem, my_source_path, type_path);
+                        }
+                        free(current_base);
+                        continue;
                     }
+
                     free(current_base);
-                    continue;
                 }
 
-                free(current_base);
+                /* Skip if already in the registry under any path tail matching stem */
+                bool already_done = false;
+                for (CompiledModule *_cm = g_compiled; _cm && !already_done; _cm = _cm->next) {
+                    const char *mn = _cm->module_name;
+                    const char *dot   = strrchr(mn, '.');
+                    const char *slash = strrchr(mn, '/');
+                    const char *tail_dot   = dot   ? dot   + 1 : mn;
+                    const char *tail_slash = slash ? slash + 1 : mn;
+                    if (strcmp(mn,         stem) == 0) already_done = true;
+                    if (strcmp(tail_dot,   stem) == 0) already_done = true;
+                    if (strcmp(tail_slash, stem) == 0) already_done = true;
+                }
+
+                if (already_done) continue;
+
+                /* Compile the type method file as a dependency */
+                if (flags->verbose_level > 0 || flags->trace_codegen)
+                    printf("[type]    %s\n", type_path);
+                CompiledModule *type_cm = compile_one(type_path, flags, false);
+                register_compiled_module_wisp_arities(type_cm);
+                parser_set_context(my_source_path, source);
             }
-
-            /* Skip if already in the registry under any path tail matching stem */
-            bool already_done = false;
-            for (CompiledModule *_cm = g_compiled; _cm && !already_done; _cm = _cm->next) {
-                const char *mn = _cm->module_name;
-                const char *dot   = strrchr(mn, '.');
-                const char *slash = strrchr(mn, '/');
-                const char *tail_dot   = dot   ? dot   + 1 : mn;
-                const char *tail_slash = slash ? slash + 1 : mn;
-                if (strcmp(mn,         stem) == 0) already_done = true;
-                if (strcmp(tail_dot,   stem) == 0) already_done = true;
-                if (strcmp(tail_slash, stem) == 0) already_done = true;
-            }
-
-            if (already_done) continue;
-
-            /* Compile the type method file as a dependency */
-            if (flags->verbose_level > 0 || flags->trace_codegen)
-                printf("[type]    %s\n", type_path);
-            CompiledModule *type_cm = compile_one(type_path, flags, false);
-            register_compiled_module_wisp_arities(type_cm);
-            parser_set_context(my_source_path, source);
         }
 skip_primitive_type_autoload:
         ;
@@ -1379,7 +1399,6 @@ skip_primitive_type_autoload:
             "U8",  "U16", "U32", "U64", "U128",
             "Float", "F32", "F80",
             "Bool", "String", "Char",
-            "Tuple", "List", "Arr", "Array",
             NULL
         };
 
@@ -1538,6 +1557,9 @@ skip_primitive_type_autoload:
 /// Phase 7: Codegen top-level expressions
 
     PHASE_START();
+    codegen_predeclare_toplevel_functions(&ctx, exprs.exprs, exprs.count,
+                                           first_code);
+
     // For the main module: call each imported library's init function first
     // so their top-level variable stores (e.g. phi = 3.14) run before we use them.
     if (is_main_module) {
@@ -2017,7 +2039,7 @@ int main(int argc, char **argv) {
     case CMD_RUN:     cmd_run(&flags);                   return 0;
     case CMD_CLEAN:   cmd_clean();                       return 0;
     case CMD_INSTALL: cmd_install();                     return 0;
-    case CMD_TEST:    cmd_test(flags.input_file);        return 0;
+    case CMD_TEST:    cmd_test(&flags);                  return 0;
     case CMD_CHECK:   cmd_check(flags.input_file);       return 0;
     case CMD_LSP:     cmd_lsp();                         return 0;
     case CMD_EVAL:    cmd_eval(flags.eval_code);         return 0;

@@ -16,7 +16,8 @@
 module Coll
  [take      drop
   takeWhile dropWhile
-  map all?  foldl foldr]
+  map any? all? foldl foldr
+  zip zipwith append filter both]
 
 
 define take :: Int -> [a] -> [a]
@@ -48,7 +49,6 @@ define map :: Fn -> [a] -> [b]
   f [x|xs] -> ((f x) ++ (map f xs))
 
 
-;; TODO Test this
 define any? :: Fn -> [a] -> Bool
   _ []     -> False
   p [x|xs] -> if p x then True else any? p xs
@@ -83,7 +83,7 @@ define zipwith :: Fn -> [a] -> [b] -> [c]
 
 
 define append :: [a] -> a -> [a]
-  [] val     -> (val ++ [])
+  [] val     -> (list val)
   [x|xs] val -> (x ++ (append xs val))
 
 ;; TODO unit type () pointer *dereferencing and fix wisp
@@ -173,7 +173,22 @@ tests
   assert-eq (show (zip (list 1) (list 2 3))) "((1 2))" "zip uneven"
 
   :zip:
+  :zipwith:
+  assert-eq (show (zipwith (lambda (x y) (+ x y)) (list 1 2) (list 3 4))) "(4 6)" "zipwith sum"
+  assert-eq (show (zipwith (lambda (x y) (* x y)) (list 2 3) (list 4))) "(8)" "zipwith uneven"
+
+  :zipwith:
+  :append:
+  assert-eq (show (append (list 1 2) 3)) "(1 2 3)" "append nonempty"
+  assert-eq (show (append [] 3)) "(3)" "append empty"
+
+  :append:
   :filter:
   assert-eq (show (filter (lambda (x) (< x 3)) (list 1 2 3 4))) "(1 2)" "filter less"
   assert-eq (show (filter (lambda (x) (> x 5)) (list 1 2))) "()" "filter none"
   :filter:
+
+  :both:
+  assert-eq ((both (lambda (x) (< 0 x)) (lambda (x) (< x 4))) 3) True "both true"
+  assert-eq ((both (lambda (x) (< 0 x)) (lambda (x) (< x 4))) 5) False "both false"
+  :both:

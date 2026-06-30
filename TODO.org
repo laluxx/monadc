@@ -1,5 +1,106 @@
 #+title: TODO.org
 
+
+• Here is the next-session list I’d follow, in priority order.
+
+  1. Finish = Through Eq
+
+  - Add a failing regression where a custom Eq instance changes equality behavior.
+  - Make (= x y) dispatch to Eq.eq? when an applicable instance exists.
+  - Keep primitive optimized lowering for built-in Int, Bool, Char, String, floats, etc.
+  - Avoid infinite recursion in Data.Eq, since Eq Int.eq? currently defines itself using (= x y).
+  - Likely solution: introduce an internal primitive equality op for core implementations, then make public = semantic sugar over Eq.
+
+  2. Fix Data.Eq Core Ownership
+
+  - Change Data.Eq instances to call an internal primitive, not public =.
+  - Add explicit Eq instances for Float, maybe fixed/arbitrary integer subtypes through inheritance.
+  - Add tests proving U4, U8, etc. use inherited Eq Int.
+
+  3. Derive Eq Correctly
+
+  - Existing deriving support appears partial and may still use "=" as the method name instead of eq?.
+  - Make data Color Red | Blue deriving [Eq] generate an Eq Color instance.
+  - Test nullary ADTs first.
+  - Then test ADTs with fields, where equality recursively calls Eq on fields.
+
+  4. Derive Enum / Bounded For Simple ADTs
+
+  - For data Color Red | Green | Blue deriving [Enum, Bounded]:
+      - fromEnum Red == 0
+      - toEnum 1 == Green
+      - minBound == Red
+      - maxBound == Blue
+
+  - Keep this limited to nullary enum-like ADTs first.
+
+  5. Split Primitive Equality From User Equality
+
+  - Add an internal compiler/core primitive name, maybe prim-eq? / prim-not-eq?.
+  - Public = should become the typeclass-aware operator.
+  - Core modules can use primitive equality where needed to define base instances safely.
+
+  6. Move More Builtins Into Core Modules
+  Obvious remaining hardcoded surface candidates:
+
+  - Set?, set, conj, disj, contains? -> Data.Set
+  - Map?, assoc, dissoc, keys, vals, merge -> Data.Map
+  - string helpers like substring, starts-with?, ends-with? -> Data.String
+  - list helpers still hardcoded: car, cdr, head, tail, cons, maybe empty?
+
+  7. Start Data.Set As Lazy Set Protocol
+
+  - Define the core-facing idea first:
+      - membership
+      - union/intersection/difference
+      - map/filter
+      - finite prefix enumeration
+
+  - Do not implement infinite refinement enumeration by brute force.
+  - Runtime C should only provide minimal iterator/thunk machinery.
+
+  8. Refinement Types As Lazy Sets
+
+  - Make a refinement type carry:
+      - base type
+      - predicate
+      - optional generator/enumerator
+
+  - Bare Email in REPL should eventually print a stream/prefix view.
+  - First implementation should probably work for finite/simple numeric refinements before strings/emails.
+
+  9. Subtype-Aware Method Lookup Beyond Int
+
+  - We did U4.abs -> Int.abs.
+  - Extend and test:
+      - F32.foo -> Float.foo
+      - refinement Positive.abs -> Int.abs
+      - aliases/refinement chains.
+
+  - Ensure Type.method and value.method behave the same.
+
+  10. Context/Test Hygiene
+
+  - Add each completed behavior to context/typeclass.org, context/types.org, or context/core-libs.org.
+  - Keep regression tests narrow.
+  - Run at minimum:
+      - make
+      - python3 -m unittest tests.test_typeclass_superclasses
+      - python3 tests/run_core.py
+
+
+
+
+
+
+
+
+
+
+* TODO Dependent pattern matching [0/1]
+  - [ ] The formal name of collection of atoms test is Pleroma
+        Everything beyond the Pleroma is caos the kenoma
+
 * TODO Dependent pattern matching [0/1]
   - [ ] Do it
 

@@ -1,0 +1,6 @@
+;; TEST-CONTEXT: monadc.context.core-libs.data-string, monadc.context.module.path-resolution
+
+import Data.String
+
+tests
+  assert-eq (show (concat "ab" "cd")) "abcd" "Data.String import exposes concat"

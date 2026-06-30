@@ -209,13 +209,13 @@ See [[file:patterns.org][Pattern Matching]] for match syntax details.
 
 * 5. Known Wisp Bugs
 
-| Issue                                | Description                                                                                                                                    | Workaround                                              |
-|--------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------|
-| Multi-line =define= with =->=        | Wisp-style =define name :: T -> T= with body on next line creates incorrect lambda bindings (simple-clause heuristic misclassifies parameters) | Use S-expression form                                   |
-| Guards with arrows                   | =n | > 0 -> body= in Wisp =define= may not desugar correctly                                                                                       | Use S-expression                                        |
-| Metadata in Wisp =define=            | =:alias=, =:doc= keywords emitted as separate top-level forms instead of being inside the =define=                                             | Use S-expression                                        |
-| Char escape in Wisp                  | ='\n'= and similar char escapes may not parse correctly in Wisp mode (wisp expands =\\n= to a real newline, splitting the literal)                 | Use S-expression for char literals with escapes         |
-| Sugar interference with untyped vars | =conj! s 3= becomes =(s conj! 3)= when =s= is untyped                                                                                            | Type-annotate the variable: =define [s :: Set]=           |
+| Issue                                | Description                                                                                                                                  | Workaround                                            |                  |
+|--------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------+------------------|
+| Multi-line =define= with =->=            | Wisp-style =define name :: T -> T= with body on next line creates incorrect lambda bindings (simple-clause heuristic misclassifies parameters) | Use S-expression form                                 |                  |
+| Guards with arrows                   | =n                                                                                                                                           | > 0 -> body= in Wisp =define= may not desugar correctly | Use S-expression |
+| Metadata in Wisp =define=              | =:alias=, =:doc= keywords emitted as separate top-level forms instead of being inside the =define=                                                 | Use S-expression                                      |                  |
+| Char escape in Wisp                  | ='\n'= and similar char escapes may not parse correctly in Wisp mode (wisp expands =\\n= to a real newline, splitting the literal)               | Use S-expression for char literals with escapes       |                  |
+| Sugar interference with untyped vars | =conj! s 3= becomes =(s conj! 3)= when =s= is untyped                                                                                              | Type-annotate the variable: =define [s :: Set]=         |                  |
 
 * 6. Mixing Wisp and S-expressions
 

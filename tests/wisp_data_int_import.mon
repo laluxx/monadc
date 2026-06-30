@@ -1,0 +1,13 @@
+;; TEST-CONTEXT: monadc.context.core-libs.data-int-float, monadc.context.module.path-resolution
+
+import Data.Int
+
+tests
+  assert-eq (zero? 0) True "Data.Int import exposes zero?"
+  assert-eq (zero? 7) False "Data.Int import exposes zero? false"
+  assert-eq (positive? 9) True "Data.Int import exposes positive?"
+  assert-eq (negative? -3) True "Data.Int import exposes negative?"
+  assert-eq (abs -42) 42 "Data.Int import exposes abs"
+  assert-eq (signum -10) -1 "Data.Int import exposes signum negative"
+  assert-eq (clamp 0 10 12) 10 "Data.Int import exposes clamp high"
+  assert-eq (between? 0 10 7) True "Data.Int import exposes between?"

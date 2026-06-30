@@ -1,0 +1,114 @@
+;;; Int.mon --- Int primitive contract and helpers
+
+;; Author: Laluxx
+;; Version: 0.1.0
+;; Keywords: int integer primitive numeric core
+
+;;; Commentary:
+
+;; Int remains a compiler primitive for representation and lowering, but its
+;; ordinary user-facing vocabulary belongs in core.  These methods are the
+;; first migration layer: simple, law-like operations implemented in Monad
+;; while codegen remains free to optimize them as primitive intrinsics later.
+
+;;; Code:
+
+module Data.Int
+  [zero? nonzero? positive? negative?
+   abs signum min max clamp between?
+   strict-between? even? odd?]
+
+
+method zero? :: Self -> Bool
+  x | (= x 0)   -> True
+    | otherwise -> False
+
+
+method nonzero? :: Self -> Bool
+  x | (= x 0)   -> False
+    | otherwise -> True
+
+
+method positive? :: Self -> Bool
+  x | (> x 0)   -> True
+    | otherwise -> False
+
+
+method negative? :: Self -> Bool
+  x | (< x 0)   -> True
+    | otherwise -> False
+
+
+method abs :: Self -> Self
+  x | (< x 0)   -> 0 - x
+    | otherwise -> x
+
+
+method signum :: Self -> Self
+  x | (< x 0)   -> 0 - 1
+    | (> x 0)   -> 1
+    | otherwise -> 0
+
+
+method min :: Self -> Self -> Self
+  x y | (<= x y)  -> x
+      | otherwise -> y
+
+
+method max :: Self -> Self -> Self
+  x y | (>= x y)  -> x
+      | otherwise -> y
+
+
+method clamp :: Self -> Self -> Self -> Self
+  lo hi x | (< x lo)  -> lo
+          | (> x hi)  -> hi
+          | otherwise -> x
+
+
+method between? :: Self -> Self -> Self -> Bool
+  lo hi x -> (lo <= x) and (x <= hi)
+
+
+method strict-between? :: Self -> Self -> Self -> Bool
+  lo hi x -> (lo < x) and (x < hi)
+
+
+method even? :: Self -> Bool
+  x | (= (% x 2) 0) -> True
+    | otherwise     -> False
+
+
+method odd? :: Self -> Bool
+  x | (= (% x 2) 0) -> False
+    | otherwise     -> True
+
+
+tests
+  :predicates:
+  assert-eq (Int.zero? 0) True "Data.Int zero? true"
+  assert-eq (Int.zero? 3) False "Data.Int zero? false"
+  assert-eq (Int.nonzero? 3) True "Data.Int nonzero?"
+  assert-eq (Int.positive? 7) True "Data.Int positive?"
+  assert-eq (Int.negative? -7) True "Data.Int negative?"
+  :predicates:
+
+  :ordering:
+  assert-eq (Int.min 2 5) 2 "Data.Int min"
+  assert-eq (Int.max 2 5) 5 "Data.Int max"
+  assert-eq (Int.clamp 0 10 -3) 0 "Data.Int clamp low"
+  assert-eq (Int.clamp 0 10 12) 10 "Data.Int clamp high"
+  assert-eq (Int.clamp 0 10 7) 7 "Data.Int clamp inside"
+  assert-eq (Int.between? 0 10 7) True "Data.Int between?"
+  assert-eq (Int.strict-between? 0 10 0) False "Data.Int strict-between? edge"
+  :ordering:
+
+  :numeric:
+  assert-eq (Int.abs -42) 42 "Data.Int abs negative"
+  assert-eq (Int.abs 42) 42 "Data.Int abs positive"
+  assert-eq (Int.signum -5) -1 "Data.Int signum negative"
+  assert-eq (Int.signum 0) 0 "Data.Int signum zero"
+  assert-eq (Int.signum 5) 1 "Data.Int signum positive"
+  assert-eq (Int.even? 8) True "Data.Int even?"
+  assert-eq (Int.odd? 9) True "Data.Int odd?"
+  :numeric:

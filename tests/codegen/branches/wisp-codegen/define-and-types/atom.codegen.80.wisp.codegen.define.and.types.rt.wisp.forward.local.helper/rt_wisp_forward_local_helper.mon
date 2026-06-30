@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.rt-wisp-forward-local-helper
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.forward.local.helper
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.module.local-forward-declarations
+;; TEST-PURPOSE: Top-level functions may call a local helper defined later even when imports are in scope.
+;; TEST-ATOM: forward calls later-helper before later-helper is defined and should not be rewritten as an imported symbol.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:toplevel function predeclaration and imported-call fallback
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.forward.local.helper
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.forward.local.helper
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.forward.local.helper
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+module Main
+
+import Data.Bool
+
+define forward :: Int -> Int
+  x -> later-helper x
+
+define later-helper :: Int -> Int
+  x -> x + 7
+
+show (forward 35)

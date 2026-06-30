@@ -30,6 +30,13 @@ ASTPattern parse_single_pattern(Parser *p);
 
 void pmatch_rename_anon_params(AST *pm, ASTParam *params, int param_count);
 
+// Enforce `_` in a function signature as an ignored-argument contract.
+// Any parameter whose type_name is "_" must be matched with `_` in every
+// pmatch clause, so it cannot later be renamed or used as a binder.
+void pmatch_validate_ignored_signature_params(AST *pm,
+                                              ASTParam *params,
+                                              int param_count);
+
 // Transform an AST_PMATCH node into an equivalent conditional AST
 // given the function's parameter list.
 //

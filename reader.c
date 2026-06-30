@@ -3632,6 +3632,9 @@ static AST *parse_lambda(Parser *p) {
     if (lambda_has_pmatch && count > 0) {
         /* Parse clauses using the same param count as the lambda */
         AST *pm = parse_pmatch_clauses(p, count);
+        pm->line = p->current.line;
+        pm->column = p->current.column;
+        pmatch_validate_ignored_signature_params(pm, params, count);
         pmatch_rename_anon_params(pm, params, count);
         AST *desugared = pmatch_desugar(pm, params, count);
         for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
@@ -4507,6 +4510,10 @@ static AST *parse_list(Parser *p) {
         p->current = lexer_next_token(p->lexer);
 
         AST *pm = parse_pmatch_clauses(p, 1);
+        if (!pm || pm->type != AST_PMATCH || pm->pmatch.clause_count == 0) {
+            compiler_error(start_line, start_column,
+                           "match expression requires at least one clause");
+        }
 
         ASTParam *pm_params = malloc(sizeof(ASTParam));
         pm_params[0].name = my_strdup("__match_target");
@@ -4894,6 +4901,8 @@ static AST *parse_list(Parser *p) {
             if (count > 0) {
                 meta = parse_define_metadata(p);
             }
+            while (parser_current_is_line_directive(p))
+                parser_skip_line_directive(p);
 
             // Body
             AST **body_exprs = NULL;
@@ -4974,6 +4983,9 @@ static AST *parse_list(Parser *p) {
                 }
                 if (body_has_arrow) {
                     AST *pm = parse_pmatch_clauses(p, count);
+                    pm->line = fname->line;
+                    pm->column = fname->column;
+                    pmatch_validate_ignored_signature_params(pm, params, count);
                     pmatch_rename_anon_params(pm, params, count);
                     ASTParam *pm_params = params;
                     AST *desugared = pmatch_desugar(pm, pm_params, count);
@@ -4999,6 +5011,8 @@ static AST *parse_list(Parser *p) {
             }
             /* Fall-through: parse remaining body expressions if not already
              * handled by pmatch (body_count == 0 means nothing parsed yet). */
+            while (parser_current_is_line_directive(p))
+                parser_skip_line_directive(p);
             while (p->current.type != TOK_RPAREN &&
                    p->current.type != TOK_EOF    &&
                    p->current.type != TOK_KEYWORD) {
@@ -6117,6 +6131,8 @@ static AST *parse_list(Parser *p) {
             ASTPattern pat1 = {0}, pat2 = {0};
             bool has_pat1 = true;
             bool has_pat2 = false;
+            ASTPattern *extra_pats = NULL;
+            int extra_pat_count = 0;
 
             /* Pattern token 1 */
             /* Re-use parse_single_pattern from pmatch via the Parser    */
@@ -6231,6 +6247,18 @@ static AST *parse_list(Parser *p) {
                             p->current = pm_parser.current;
                             has_pat2 = true;
                         }
+                        while (p->current.type != TOK_RPAREN &&
+                               !(p->current.type == TOK_SYMBOL &&
+                                 strcmp(p->current.value, "=>") == 0) &&
+                               p->current.type != TOK_EOF) {
+                            pm_parser.current = p->current;
+                            ASTPattern extra = parse_single_pattern(&pm_parser);
+                            p->current = pm_parser.current;
+                            extra_pats = realloc(extra_pats,
+                                                 sizeof(ASTPattern) *
+                                                 (extra_pat_count + 1));
+                            extra_pats[extra_pat_count++] = extra;
+                        }
                     }
                 } else {
                     /* infix: pat1 method pat2 */
@@ -6283,10 +6311,15 @@ static AST *parse_list(Parser *p) {
                                       sizeof(ASTPMatchClause) * mc->clause_cap);
             }
             ASTPMatchClause *cl = &mc->clauses[mc->clause_count++];
-            int npats = has_pat2 ? 2 : (has_pat1 ? 1 : 0);
+            int npats = (has_pat2 ? 2 : (has_pat1 ? 1 : 0)) + extra_pat_count;
             cl->patterns      = malloc(sizeof(ASTPattern) * (npats ? npats : 1));
             if (has_pat1) cl->patterns[0] = pat1;
             if (has_pat2) cl->patterns[1] = pat2;
+            for (int epi = 0; epi < extra_pat_count; epi++) {
+                cl->patterns[(has_pat2 ? 2 : (has_pat1 ? 1 : 0)) + epi] =
+                    extra_pats[epi];
+            }
+            free(extra_pats);
             cl->pattern_count = npats;
             cl->body          = body;
             cl->guard_conds   = NULL;
@@ -7406,6 +7439,9 @@ static AST *parse_list(Parser *p) {
         AST *body_expr = NULL;
         if (method_has_pmatch && mparam_count > 0) {
             AST *pm = parse_pmatch_clauses(p, mparam_count);
+            pm->line = meth_line;
+            pm->column = meth_col;
+            pmatch_validate_ignored_signature_params(pm, mparams, mparam_count);
             pmatch_rename_anon_params(pm, mparams, mparam_count);
             body_expr = pmatch_desugar(pm, mparams, mparam_count);
 

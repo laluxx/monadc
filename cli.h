@@ -61,7 +61,7 @@ void cmd_build(const CompilerFlags *flags);
 void cmd_run(const CompilerFlags *flags);
 void cmd_clean(void);
 void cmd_install(void);
-void cmd_test(const char *input_file);
+void cmd_test(const CompilerFlags *flags);
 void cmd_check(const char *input_file);
 void cmd_lsp(void);
 void cmd_eval(const char *code);

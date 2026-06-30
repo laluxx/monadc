@@ -60,6 +60,18 @@ class CliFlagDualityTests(unittest.TestCase):
                 self.assertIn(flag, config_c)
                 self.assertIn(word, config_c)
 
+    def test_cli_common_options_can_prefix_real_subcommands(self):
+        cli_c = read("cli.c")
+        main_c = read("main.c")
+
+        self.assertIn("is_dispatch_word", cli_c)
+        self.assertIn("monad verbose test file.mon", cli_c)
+        self.assertIn("normalized_argv[0] = argv[0];", cli_c)
+        self.assertIn('strcmp(argv[1], "test") == 0', cli_c)
+        self.assertIn("Unknown test flag", cli_c)
+        self.assertIn('system("python3 tests/run.py")', cli_c)
+        self.assertIn("cmd_test(&flags);", main_c)
+
     def test_usage_menu_lists_flag_word_duality_and_eval_help(self):
         completion_c = read("completion.c")
 

@@ -8,7 +8,8 @@
 
 module Data.String
   [IsString fromString
-   IsList Item fromList fromListN]
+   IsList Item fromList fromListN
+   concat]
 
 
 class IsString a where
@@ -25,8 +26,15 @@ class IsList l where
   ;; Conversion pattern for sequence literals and collection builders.
 
 
+define concat :: String -> String -> String
+  a b -> (++ a b)
+
 tests
   :registration:
   assert-eq 1 1 "String registers IsString"
   assert-eq 1 1 "String registers IsList"
   :registration:
+
+  :concat:
+  assert-eq (show (concat "ab" "cd")) "abcd" "Data.String concat"
+  :concat:

@@ -299,6 +299,28 @@
   non-prelude core modules, including =Data.List= and =Control.Arrow=, still
   require explicit imports.
 
+[DEC id:dec.module.nested-prelude-explicit-import-2026-06-30 date:2026-06-30 by:codex]
+  Nested modules under =core/prelude= remain explicit-import modules rather
+  than recursive unqualified prelude imports. A recursive auto-import experiment
+  compiled every nested prelude module before user code and exposed name/global
+  compiler-state collisions such as =Coll.both= versus =Data.Tuple.both=.
+  The safe contract is: flat =core/prelude/*.mon= modules are auto-imported;
+  dotted modules such as =Data.List= resolve through
+  =$MONAD_CORE/prelude/Data/List.mon= when imported explicitly.
+
+[FIX id:fix.module.primitive-type-module-resolution-2026-06-30 date:2026-06-30 by:codex]
+  Primitive type-module lookup now also resolves =Int=, =Float=, and future
+  primitive type modules through =core/prelude/Data/<Type>.mon=. This lets a
+  primitive keep compiler-owned representation while user-facing methods live
+  in the same dotted core module path as ordinary imports.
+
+[FIX id:fix.module.scalar-primitive-autoload-only-2026-06-30 date:2026-06-30 by:codex]
+  Primitive type-module autoload is limited to scalar primitive type modules
+  such as =Int=, fixed-width ints, =Float=, =Bool=, =String=, and =Char=.
+  =Data.Tuple=, =Data.List=, =Arr=, and =Array= remain explicit imports because
+  autoloading them as primitive modules can collide with flat prelude names
+  such as =Coll.both=.
+
 * Parse Module/Import from AST
 :PROPERTIES:
 :ID: monadc.context.module.parse-ast
@@ -530,3 +552,16 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   layout dot-access base. Namespace marker entries with no value type are not
   passed into layout dot-chain codegen. This prevents qualified calls within a
   type module, including =Char.upcase=, from crashing in =codegen_dot_chain=.
+
+[FIX id:fix.module.forward-local-predeclare-2026-06-27 src:main.c,codegen.c,codegen.h,tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.forward.local.helper/rt_wisp_forward_local_helper.mon conf:high]
+  Before top-level codegen, the compiler predeclares local top-level functions
+  from =define=/=def= lambda forms. This lets a function body call a helper
+  defined later in the same module without falling through to imported-module
+  fallback resolution.
+
+[FIX id:fix.module.mono-specializations-linkonce-2026-06-27 src:codegen.c,core/prelude/Data/Bool.mon,core/prelude/Data/Tuple.mon conf:high]
+  Monomorphized specialization functions are emitted with =linkonce_odr=
+  linkage. Test builds may link both a main test object and the corresponding
+  module object; mergeable specialization symbols prevent duplicate definitions
+  such as =bool_Int= or =pair_Int_Int= while preserving required module-mangled
+  exports for self-tests.

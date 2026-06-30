@@ -43,7 +43,7 @@ define id :: a -> a
   :doc "Return X unchanged."
 
 
-define const :: a -> b -> a
+define const :: a -> _ -> a
   :doc "Return X and ignore the second argument."
   x _ -> x
 

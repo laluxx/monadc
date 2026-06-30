@@ -211,6 +211,8 @@ Type       *type_clone(Type *t);
 void        type_free(Type *t);
 const char *type_to_string(Type *t);
 bool        types_equal(Type *a, Type *b);  // structural equality
+bool        type_is_subtype(Type *sub, Type *sup);
+bool        type_name_is_subtype(const char *sub_name, const char *sup_name);
 
 
 /// Utilities

@@ -1,0 +1,11 @@
+;; TEST-CONTEXT: monadc.context.core-libs.data-list, monadc.context.module.path-resolution
+
+import Data.List
+
+tests
+  assert-eq (list-null? []) True "Data.List import exposes list-null?"
+  assert-eq (show (list-drop 2 (list 1 2 3 4))) "(3 4)" "Data.List import exposes list-drop"
+  assert-eq (length (list 1 2 3 4 5)) 5 "Data.List import exposes length"
+  assert-eq (show (reverse (list 1 2 3))) "(3 2 1)" "Data.List import exposes reverse"
+  assert-eq (nth (list 5 6 7) 1) 6 "Data.List import exposes nth"
+  assert-eq (reduce (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)) 10 "Data.List import exposes reduce"

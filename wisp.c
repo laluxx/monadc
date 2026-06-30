@@ -884,6 +884,36 @@ static char *wisp_rewrite_postfix_index_token(const char *text) {
     if (!text)
         return strdup("");
 
+    {
+        const char *close = strrchr(text, ')');
+        if (close) {
+            const char *p = close + 1;
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p == '.') {
+                const char *field = p + 1;
+                if (wisp_index_ident_start_char(*field)) {
+                    const char *end = field + 1;
+                    while (wisp_index_ident_char(*end)) end++;
+                    while (*end == ' ' || *end == '\t') end++;
+                    if (*end == '\0') {
+                        SB dot;
+                        sb_init(&dot);
+                        sb_puts(&dot, "(__dot ");
+                        char *expr = strndup(text, (size_t)(close - text + 1));
+                        sb_puts(&dot, expr);
+                        free(expr);
+                        sb_putc(&dot, ' ');
+                        char *fname = strndup(field, (size_t)(end - field));
+                        sb_puts(&dot, fname);
+                        free(fname);
+                        sb_putc(&dot, ')');
+                        return sb_take(&dot);
+                    }
+                }
+            }
+        }
+    }
+
     SB out;
     sb_init(&out);
 
@@ -1500,6 +1530,28 @@ static bool wisp_split_arrow_signature(const char *sig, int expected_params,
         return false;
     }
     return true;
+}
+
+static bool wisp_type_segment_is_ignored(const char *type) {
+    if (!type) return false;
+    while (*type == ' ' || *type == '\t') type++;
+    const char *end = type + strlen(type);
+    while (end > type && (end[-1] == ' ' || end[-1] == '\t')) end--;
+    return (end - type) == 1 && type[0] == '_';
+}
+
+static void wisp_validate_ignored_signature_names(char **param_types,
+                                                  char **names,
+                                                  int count,
+                                                  int line) {
+    for (int i = 0; i < count; i++) {
+        if (wisp_type_segment_is_ignored(param_types[i]) &&
+            (!names[i] || strcmp(names[i], "_") != 0)) {
+            READER_ERROR(line, 1,
+                         "ignored signature parameter %d must use '_' in every clause",
+                         i + 1);
+        }
+    }
 }
 
 static int wisp_function_type_arity(const char *type) {
@@ -8142,6 +8194,10 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                             if (wisp_split_arrow_signature(sig_rest, arr_count,
                                                                            param_types,
                                                                            &ret_type)) {
+                                                wisp_validate_ignored_signature_names(param_types,
+                                                                                      names,
+                                                                                      arr_count,
+                                                                                      lineno);
                                                 for (int i = 0; i < arr_count; i++)
                                                     arity_set(at, names[i], 0);
 
@@ -8256,6 +8312,10 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                     char *ret_type = NULL;
                                     if (wisp_split_arrow_signature(sig_rest, arr_count,
                                                                    param_types, &ret_type)) {
+                                        wisp_validate_ignored_signature_names(param_types,
+                                                                              names,
+                                                                              arr_count,
+                                                                              lineno);
                                         for (int i = 0; i < arr_count; i++) {
                                             int fn_arity = wisp_function_type_arity(param_types[i]);
                                             if (fn_arity > 0) arity_set(at, names[i], fn_arity);
@@ -8549,6 +8609,12 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             sb_init(&hdr);
                             sb_putc(&hdr, '(');
                             sb_puts(&hdr, fname);
+                            if (have_body_param_names) {
+                                wisp_validate_ignored_signature_names(param_types,
+                                                                      body_param_names,
+                                                                      arr_count,
+                                                                      lineno);
+                            }
                             for (int i = 0; i < arr_count; i++) {
                                 char pname[32];
                                 snprintf(pname, sizeof(pname), "__p_%d", i);

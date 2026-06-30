@@ -8,8 +8,8 @@
 ;; TEST-CATEGORY: 60-reflection-quote
 ;; TEST-SECTION: codegen
 ;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Quoted list length computation works.
-;; TEST-ATOM: (length '(1 2 3 4 5)) returns 5.
+;; TEST-PURPOSE: Data.List length over quoted list input works through core.
+;; TEST-ATOM: Data.List owns length; count remains the compiler primitive.
 ;; TEST-EXPECT: compile, run
 
 ;; TEST-COVERAGE: codegen.c:60-reflection-quote/quote-symbols branch family
@@ -19,4 +19,5 @@
 ;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
 ;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
 (module Main)
+(import Data.List)
 (show (length '(1 2 3 4 5)))

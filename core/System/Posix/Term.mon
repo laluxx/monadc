@@ -1,13 +1,13 @@
 ;;; Term.mon --- POSIX terminal and termios bindings
 
-;; Author: Laluxx
-;; Version: 0.7.0
-;; Keywords: system posix terminal termios ioctl
+:Author   Laluxx
+:Version  0.7.0
+:Keywords system posix terminal termios ioctl
 
 ;;; Commentary:
 
-;; Canonical home: System.Posix.Term. This module is platform-specific and is
-;; intentionally not part of the pure prelude.
+ Canonical home: System.Posix.Term. This module is platform-specific and is
+ intentionally not part of the pure prelude.
 
 ;;; Code:
 
@@ -394,30 +394,28 @@ define read-buf :: Int -> *U8 -> Int -> Int
   fd buf len -> (sys-read fd buf len)
 
 
-define term-test-raw-iflag :: Int -> Int
+define term-test-raw-iflag :: _ -> Int
   _ -> (tty-raw-termios (Termios raw-iflag-mask OPOST 0 raw-lflag-mask 0 0 0 0)).c_iflag
 
 
-define term-test-cbreak-lflag :: Int -> Int
+define term-test-cbreak-lflag :: _ -> Int
   _ -> (tty-cbreak-termios (Termios 0 0 0 cbreak-lflag-mask 0 0 0 0)).c_lflag
 
 
 tests
   :constants:
-  assert-eq TCGETS 0x5401 "Term TCGETS"
+  assert-eq TCGETS     0x5401 "Term TCGETS"
   assert-eq TIOCGWINSZ 0x5413 "Term TIOCGWINSZ"
-  assert-eq STDIN 0 "Term STDIN"
-  assert-eq STDOUT 1 "Term STDOUT"
-  assert-eq STDERR 2 "Term STDERR"
+  assert-eq STDIN      0      "Term STDIN"
+  assert-eq STDOUT     1      "Term STDOUT"
+  assert-eq STDERR     2      "Term STDERR"
   :constants:
-
   :masks:
-  assert-eq raw-iflag-mask (term-or5 BRKINT ICRNL INPCK ISTRIP IXON) "Term raw iflag mask"
-  assert-eq raw-lflag-mask (term-or4 ECHO ICANON IEXTEN ISIG) "Term raw lflag mask"
-  assert-eq cbreak-lflag-mask (bit-or ECHO ICANON) "Term cbreak lflag mask"
-
+  assert-eq raw-iflag-mask    (term-or5 BRKINT ICRNL INPCK ISTRIP IXON) "Term raw iflag mask"
+  assert-eq raw-lflag-mask    (term-or4 ECHO ICANON IEXTEN ISIG)        "Term raw lflag mask"
+  assert-eq cbreak-lflag-mask (bit-or ECHO ICANON)                      "Term cbreak lflag mask"
   :masks:
   :layouts:
-  assert-eq (term-test-raw-iflag 0) 0 "Term raw clears input flags"
+  assert-eq (term-test-raw-iflag 0)    0 "Term raw clears input flags"
   assert-eq (term-test-cbreak-lflag 0) 0 "Term cbreak clears local flags"
   :layouts:

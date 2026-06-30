@@ -222,6 +222,13 @@
   =rt_equal_p= for boxing-aware deep equality on any type. Ordering
   ops unbox to i64 or use LLVM =icmp/fcmp= on raw values.
 
+[FIX id:fix.codegen-ops.eq-via-eq-typeclass-2026-06-30 src:codegen.c,tests/test_typeclass_superclasses.py conf:high]
+  The public equality operators now bridge to typeclass vocabulary even though
+  the operator names differ from the core method names: === maps to =Eq.eq?=
+  and =!== maps to =Eq.not-eq?=. Primitive comparison remains the fallback and
+  the implementation explicitly bypasses this bridge inside generated =Eq=
+  instance functions to avoid self-recursion in base instances.
+
 * Logic
 :PROPERTIES:
 :ID: monadc.context.codegen-ops.logic
@@ -967,7 +974,7 @@
   *Registered-only (no strcmp)*: These are =register_builtins=-only
   — reachable only from wisp-mode or when the reader maps symbol to
   defined function, not from paren-mode:
-  - =concat=, =substring=, =reverse=, =nth=, =length=, =reduce=
+  - =substring=
   - =fn=, =lambda=, =->=, =→=, =λ=, =defn=
   - =cond=, =let=, =let*=, =letrec=
   - =import=, =module=, =export=
@@ -1050,10 +1057,31 @@
 [INF id:inf.codegen-ops.wisp-effects from:obs.codegen-ops.arch.layer2,obs.codegen-ops.gaps.registered-only conf:high]
   connects-to -> `monadc.context.wisp.symbol-resolution` (wisp-mode
   symbols resolve through env lookup = register_builtins, bypassing
-  the strcmp dispatch; this is why =concat=, =substring=, =reverse=,
-  =nth=, =length=, =reduce= work in wisp but not paren-mode) ·
+  the strcmp dispatch; this is why =substring=
+  works in wisp but not paren-mode; =length=, =reverse=, =nth=, and
+  =reduce= have moved out of the compiler registry into =Data.List=, while
+  =concat= has moved into =Data.String=) ·
   `monadc.context.wisp.bang-sugar` (conj!/disj!/assoc!/dissoc!/
   append! all have strcmp handlers and also work through wisp !-sugar)
+
+[FIX id:fix.codegen-ops.length-core-owned-2026-06-30 date:2026-06-30 by:codex]
+  Removed =length= from the compiler builtin registry, HM runtime collection
+  helper special case, and direct codegen =count= alias path. =count= remains
+  the representation primitive; =Data.List.length= is the user-facing list
+  operation.
+
+[FIX id:fix.codegen-ops.reverse-nth-core-owned-2026-06-30 date:2026-06-30 by:codex]
+  Removed =reverse= and =nth= from the compiler builtin registry. They were
+  registered-only names with no direct strcmp dispatch; the user-facing list
+  operations now live in =Data.List.reverse= and =Data.List.nth=. Runtime
+  =rt_list_nth= remains an internal helper for indexing/lowering paths.
+
+[FIX id:fix.codegen-ops.reduce-concat-core-owned-2026-06-30 date:2026-06-30 by:codex]
+  Removed =reduce= and =concat= from the compiler builtin registry.
+  =Data.List.reduce= owns list reduction as ordinary core recursion.
+  =Data.String.concat= owns string concatenation as a wrapper over the working
+  =++= primitive. =substring= remains the last registered-only collection/text
+  name in this gap set.
 
 [INF id:inf.codegen-ops.philosophy from:obs.codegen-ops.arch.layer1,obs.codegen-ops.gaps.closures conf:high]
   connects-to -> `monadc.context.philosophy.purity-is-practical`

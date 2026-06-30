@@ -712,7 +712,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
     [quoted-list indexing] [show] [equal?] [list-empty?]
 
     NOT working / aspirational (71 remaining failures in test suite):
-    - concat, substring, reverse, nth, length, reduce — register_builtins-only, no strcmp handler
+    - substring — register_builtins-only, no strcmp handler
     - fn, lambda, defn — closure construction broken
     - cond, when, let, let*, letrec — no strcmp handler
     - assoc, dissoc, merge, keys, vals, find — map runtime broken
@@ -771,7 +771,7 @@ assertions directly instead of requiring hand-written shell checks per fixture.
     - 17 type_preds[] entries handled at codegen.c:5458-5488
     - ~60 register_builtins entries at codegen.c:12960-13119
     - Functions with strcmp handlers ARE callable; register_builtins-only functions
-      (concat, substring, reverse, nth, length, reduce, fn/lambda, cond, when, let, etc.)
+      (substring, fn/lambda, cond, when, let, etc.)
       have NO working dispatch path in paren mode despite being registered
     - Dep phase (dep.c:3398-3529) only registers a small subset of functions —
       unknowns pass as holes but codegen rejects them at line 12492
@@ -1182,3 +1182,12 @@ Test-driven observations and failure records for the corresponding subsystem.
   The return-function fixture is a bug witness for returned closures. It
   compiles after Wisp lowers function returns to Fn, but the runtime behavior is
   still wrong for a false predicate combination.
+
+[FIX id:fix.tests.core-maybe-either-runtime-contracts-2026-06-27 date:2026-06-27 by:codex]
+  =core/prelude/Data/Maybe.mon= and =core/prelude/Data/Either.mon= now use
+  active runtime assertions for their exported ADT helper APIs instead of
+  compile-only sentinel tests. The contracts cover eliminators, predicates,
+  mapping/binding, constructor-preserving transforms, list conversions for
+  =Maybe=, and =Either= bimap behavior. Verification: direct
+  =./monad test core/prelude/Data/Maybe.mon= and
+  =./monad test core/prelude/Data/Either.mon=, plus =python3 tests/run_core.py=.

@@ -23,6 +23,46 @@ module Data.Either
 data Either e a = Left e | Right a
 
 
+define either :: (e -> c) -> (a -> c) -> Either e a -> c
+  f g value -> (match value with | (Left e) -> (f e) | (Right x) -> (g x))
+
+
+define left? :: Either e a -> Bool
+  value -> (match value with | (Left e) -> True | (Right x) -> False)
+
+
+define right? :: Either e a -> Bool
+  value -> (match value with | (Right x) -> True | (Left e) -> False)
+
+
+define fromLeft :: e -> Either e a -> e
+  default value -> (match value with | (Left e) -> e | (Right x) -> default)
+
+
+define fromRight :: a -> Either e a -> a
+  default value -> (match value with | (Right x) -> x | (Left e) -> default)
+
+
+define mapLeft :: (e -> f) -> Either e a -> Either f a
+  f value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right x))
+
+
+define mapRight :: (a -> b) -> Either e a -> Either e b
+  f value -> (match value with | (Left e) -> (Left e) | (Right x) -> (Right (f x)))
+
+
+define either-map :: (a -> b) -> Either e a -> Either e b
+  f value -> mapRight f value
+
+
+define either-bind :: Either e a -> (a -> Either e b) -> Either e b
+  value f -> (match value with | (Left e) -> (Left e) | (Right x) -> (f x))
+
+
+define either-bimap :: (e -> f) -> (a -> b) -> Either e a -> Either f b
+  f g value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right (g x)))
+
+
 define either-test-negate :: Int -> Int
   x -> 0 - x
 
@@ -31,61 +71,71 @@ define either-test-inc :: Int -> Int
   x -> x + 1
 
 
-define either :: (e -> c) -> (a -> c) -> Either e a -> c
-  :doc "Eliminate Either by handling Left and Right."
-  f g value -> (match value with | (Left e) -> (f e) | (Right x) -> (g x))
+define either-test-eliminate-left :: _ -> Int
+  _ -> either either-test-negate either-test-inc (Left 5)
 
 
-define left? :: Either e a -> Bool
-  :doc "Return True if the value is Left."
-  value -> (match value with | (Left e) -> True | (Right x) -> False)
+define either-test-eliminate-right :: _ -> Int
+  _ -> either either-test-negate either-test-inc (Right 41)
 
 
-define right? :: Either e a -> Bool
-  :doc "Return True if the value is Right."
-  value -> (match value with | (Right x) -> True | (Left e) -> False)
+define either-test-map-left-left :: _ -> Either Int Int
+  _ -> mapLeft either-test-negate (Left 5)
 
 
-define fromLeft :: e -> Either e a -> e
-  :doc "Extract a Left value or return DEFAULT."
-  default value -> (match value with | (Left e) -> e | (Right x) -> default)
+define either-test-map-left-right :: _ -> Either Int Int
+  _ -> mapLeft either-test-negate (Right 41)
 
 
-define fromRight :: a -> Either e a -> a
-  :doc "Extract a Right value or return DEFAULT."
-  default value -> (match value with | (Right x) -> x | (Left e) -> default)
+define either-test-map-right-right :: _ -> Either Int Int
+  _ -> mapRight either-test-inc (Right 41)
 
 
-define mapLeft :: (e -> f) -> Either e a -> Either f a
-  :doc "Map a function over the Left side."
-  f value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right x))
+define either-test-map-right-left :: _ -> Either Int Int
+  _ -> mapRight either-test-inc (Left 5)
 
 
-define mapRight :: (a -> b) -> Either e a -> Either e b
-  :doc "Map a function over the Right side."
-  f value -> (match value with | (Left e) -> (Left e) | (Right x) -> (Right (f x)))
+define either-test-bind-right :: _ -> Either Int Int
+  _ -> either-bind (Right 41) (lambda (x) (Right (either-test-inc x)))
 
 
-define either-map :: (a -> b) -> Either e a -> Either e b
-  :doc "Functor map for Either e."
-  f value -> mapRight f value
+define either-test-bind-left :: _ -> Either Int Int
+  _ -> either-bind (Left 5) (lambda (x) (Right (either-test-inc x)))
 
 
-define either-bind :: Either e a -> (a -> Either e b) -> Either e b
-  :doc "Monad bind for Either e."
-  value f -> (match value with | (Left e) -> (Left e) | (Right x) -> (f x))
+define either-test-bimap-left :: _ -> Either Int Int
+  _ -> either-bimap either-test-negate either-test-inc (Left 5)
 
 
-define either-bimap :: (e -> f) -> (a -> b) -> Either e a -> Either f b
-  :doc "Map both sides of Either."
-  f g value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right (g x)))
+define either-test-bimap-right :: _ -> Either Int Int
+  _ -> either-bimap either-test-negate either-test-inc (Right 41)
 
 
 tests
-  :compile:
-  assert-eq 1 1 "Either module compiles"
+  :eliminate:
+  assert-eq (either-test-eliminate-left 0) -5 "Either either Left"
+  assert-eq (either-test-eliminate-right 0) 42 "Either either Right"
+  assert-eq (fromLeft 0 (Left 5)) 5 "Either fromLeft Left"
+  assert-eq (fromLeft 0 (Right 9)) 0 "Either fromLeft Right"
+  assert-eq (fromRight 0 (Right 9)) 9 "Either fromRight Right"
+  assert-eq (fromRight 0 (Left 5)) 0 "Either fromRight Left"
+  :eliminate:
 
-  ;; Mapping and binding return Either values. Keep their API active, but avoid
-  ;; direct ADT equality assertions until constructor equality is stable across
-  ;; all monomorphized paths.
-  :compile:
+  :predicates:
+  assert-eq (left? (Left 1)) True "Either left? Left"
+  assert-eq (left? (Right 1)) False "Either left? Right"
+  assert-eq (right? (Right 1)) True "Either right? Right"
+  assert-eq (right? (Left 1)) False "Either right? Left"
+  :predicates:
+
+  :transform:
+  assert-eq (show (either-test-map-left-left 0)) "(Left -5)" "Either mapLeft Left"
+  assert-eq (show (either-test-map-left-right 0)) "(Right 41)" "Either mapLeft Right"
+  assert-eq (show (either-test-map-right-right 0)) "(Right 42)" "Either mapRight Right"
+  assert-eq (show (either-test-map-right-left 0)) "(Left 5)" "Either mapRight Left"
+  assert-eq (show (either-test-map-right-right 0)) "(Right 42)" "Either map alias"
+  assert-eq (show (either-test-bind-right 0)) "(Right 42)" "Either bind Right"
+  assert-eq (show (either-test-bind-left 0)) "(Left 5)" "Either bind Left"
+  assert-eq (show (either-test-bimap-left 0)) "(Left -5)" "Either bimap Left"
+  assert-eq (show (either-test-bimap-right 0)) "(Right 42)" "Either bimap Right"
+  :transform:

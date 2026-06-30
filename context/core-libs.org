@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-26
+#+LAST_MODIFIED: 2026-06-30
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -62,11 +62,11 @@
 :ID: monadc.context.core-libs.coll
 :CUSTOM_ID: core-libs-coll
 :CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: core/prelude/Coll.mon — 192 lines. Coll typeclass with sequence operations, Functor/Applicative/Monad instances.
+:CONTEXT_DESCRIPTION: core/prelude/Coll.mon — 194 lines. Core collection utilities with executable runtime coverage.
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
-:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-27
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: core/prelude/Coll.mon
@@ -74,7 +74,8 @@
 :END:
 
 [OBS id:obs.coll.export-list src:core/prelude/Coll.mon:16-19 conf:high]
-  Module Coll exports: take, drop, takeWhile, dropWhile, map, all?, foldl, foldr.
+  Module Coll exports: take, drop, takeWhile, dropWhile, map, any?, all?,
+  foldl, foldr, zip, zipwith, append, filter, and both.
 
 [OBS id:obs.coll.define-syntax src:core/prelude/Coll.mon:23-105 conf:high]
   Uses alternative define syntax =(define fn :: Type ...)= with pattern
@@ -113,18 +114,18 @@
   =(any? p list)= — True if any element satisfies p. =(all? p list)= —
   True if all elements satisfy p.
 
-[OBS id:obs.coll.tests src:core/prelude/Coll.mon:112-176 conf:high]
-  78 test assertions covering filter, append, take, drop, takeWhile,
-  dropWhile, map, all?, foldl, foldr, zip, zipwith, dot product pipeline.
-  Tests cover Array, List, and String as Coll instances.
+[OBS id:obs.coll.tests src:core/prelude/Coll.mon:106-194 conf:high]
+  45 active assertions cover take, drop, takeWhile, dropWhile, map, any?,
+  all?, foldl, foldr, zip, zipwith, append, filter, and both through
+  executable module tests.
 
 [THINK id:think.coll.append-bang date:2026-06-13 by:codex]
   Line 95-97: =(append! xs val)= is commented out — mutation form not
   yet working. Requires pointer dereferencing and wisp fix.
 
-[THINK id:think.coll.any-not-tested date:2026-06-13 by:codex]
-  Line 56: =(any?)= has a "TODO Test this" comment — it's defined but
-  not included in the test block.
+[FIX id:fix.coll.any-tested-2026-06-27 date:2026-06-27 by:codex]
+  =any?= now has active runtime tests for success, miss, and empty-list
+  behavior in =core/prelude/Coll.mon=.
 
 * Text.Parser — Bootstrap Parser Core
 :PROPERTIES:
@@ -135,7 +136,7 @@
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-26
-:CONTEXT_UPDATED: 2026-06-26
+:CONTEXT_UPDATED: 2026-06-27
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: core/prelude/Text/Parser.mon
@@ -153,6 +154,17 @@
   =skip-space-offset=, =skip-space-xs=, =signed-int=, and =token-byte=.
   These are intentionally first-order and byte-list based until higher-order
   parser continuations and list-bearing layout fields are stable in core tests.
+
+[FIX id:fix.text-parser-data-list-empty-2026-06-27 date:2026-06-27 by:codex]
+  =parser-empty?= now imports =Data.List= and delegates to =list-null?= instead
+  of spelling emptiness as =(= (count xs) 0)=. This is the first active consumer
+  migration from compiler collection builtins toward ordinary core list
+  semantics.
+
+[FIX id:fix.text-parser-data-list-drop-2026-06-27 date:2026-06-27 by:codex]
+  =parser-drop= now delegates to =Data.List.list-drop= instead of owning a
+  parser-local list recursion. The parser keeps its public wrapper while list
+  traversal semantics move into the reusable core list module.
 
 [DEC id:dec.core-libs.json-parser-first date:2026-06-26 by:codex]
   JSON should be implemented after and on top of =Text.Parser=, not as a
@@ -554,6 +566,29 @@
   Line 80: TODO comment — string-append should accept both String and
   Char as the second argument (not just String).
 
+* Data.String Status
+:PROPERTIES:
+:ID: monadc.context.core-libs.data-string
+:CUSTOM_ID: core-libs-data-string
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/prelude/Data/String.mon — active string/list conversion classes and string helpers.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-30
+:CONTEXT_UPDATED: 2026-06-30
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Data/String.mon
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.core-libs.concat-moved-to-data-string-2026-06-30 date:2026-06-30 by:codex]
+  =concat= is now a core-owned =Data.String= operation instead of a stale
+  compiler builtin registry entry. It wraps the working =++= primitive for
+  binary string concatenation. Verified by
+  =./monad test core/prelude/Data/String.mon= and
+  =./monad test tests/wisp_data_string_import.mon=.
+
 * Assert.mon — Assertion Stubs (MOVED TO old-core)
 :PROPERTIES:
 :ID: monadc.context.core-libs.assert
@@ -745,7 +780,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-17
-:CONTEXT_UPDATED: 2026-06-17
+:CONTEXT_UPDATED: 2026-06-27
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: core/prelude/Coll.mon
@@ -755,13 +790,10 @@
 [OBS id:obs.core.prelude-coll.working-subset src:core/prelude/Coll.mon conf:high]
   The active prelude collection subset is written in old-core Wisp define
   style and passes its module-local tests: take, drop, takeWhile, dropWhile,
-  map, any?, all?, filter, foldl, foldr, zip, and zipwith.
+  map, any?, all?, filter, foldl, foldr, zip, zipwith, append, and both.
 
 [OBS id:obs.core.prelude-coll.deferred src:core/prelude/Coll.mon conf:high]
-  append and both are intentionally not in the active Coll module yet. append
-  exposes a singleton/element-vs-collection inference problem when a scalar
-  element is consed through `++`; both exposes a returned-closure runtime bug.
-  Keep bug witnesses in tests while the prelude starts from the stable subset.
+  =append!= remains deferred pending unit type/pointer dereferencing support.
 
 [OBS id:obs.core.int-placeholder-removed src:user-report conf:high]
   core/Int.mon was removed because it was only a test placeholder, not part of
@@ -774,19 +806,58 @@
   fix. make test core still stops in Math.mon at floor: inference expects
   Float -> a while the provided signature is Float -> Int.
 
+* Data.Int and Data.Float Status
+:PROPERTIES:
+:ID: monadc.context.core-libs.data-int-float
+:CUSTOM_ID: core-libs-data-int-float
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: core/prelude/Data/Int.mon and Data/Float.mon — primitive type vocabulary moved into core modules.
+:CONTEXT_VERSION: 1
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-06-30
+:CONTEXT_UPDATED: 2026-06-30
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: core/prelude/Data/Int.mon,core/prelude/Data/Float.mon,main.c,tests/wisp_data_int_import.mon,tests/wisp_data_float_import.mon
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.core-libs.data-int-float-core-phase1-2026-06-30 date:2026-06-30 by:codex]
+  Added active =Data.Int= and =Data.Float= modules under =core/prelude/Data=.
+  They define ordinary core methods for primitive numeric vocabulary such as
+  =zero?=, =nonzero?=, =positive?=, =negative?=, =abs=, =signum=, =min=,
+  =max=, =clamp=, and range predicates. Method names are intentionally not
+  prefixed with the type name: the receiver/module path supplies ownership, so
+  users should see surfaces like =3.zero?= rather than =3.int-zero?=.
+
+[FIX id:fix.core-libs.primitive-type-module-autoload-2026-06-30 date:2026-06-30 by:codex]
+  Primitive type-module autoload in =main.c= now searches
+  =$MONAD_CORE/prelude/Data/<Type>.mon= and the installed
+  =core/prelude/Data= path, in addition to sibling source files. Prelude files
+  skip this autoload to avoid bootstrapping loops while compiling the core
+  modules themselves. Import fixtures verify explicit =import Data.Int= and
+  =import Data.Float= expose the core methods to user code.
+
+[DEC id:dec.core-libs.primitive-core-ownership-2026-06-30 date:2026-06-30 by:codex]
+  Direction for primitive types: keep representation and low-level lowering in
+  the compiler/runtime, but make user-visible semantics traceable through core
+  modules. Codegen may later recognize and inline core-owned methods as
+  intrinsics, but the source of truth for the surface vocabulary should live in
+  =Data.Int=, =Data.Float=, =Data.Char=, and related type modules.
+
 * Data.List Status
 :PROPERTIES:
 :ID: monadc.context.core-libs.data-list
 :CUSTOM_ID: core-libs-data-list
 :CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: core/Data/List.mon — Haskell-style pure list and sequence functions.
+:CONTEXT_DESCRIPTION: core/prelude/Data/List.mon — active core list helpers.
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-18
-:CONTEXT_UPDATED: 2026-06-18
+:CONTEXT_UPDATED: 2026-06-27
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: core/Data/List.mon
+:SOURCE: core/prelude/Data/List.mon
 :CONFIDENCE: high
 :END:
 
@@ -803,6 +874,60 @@
   Quoted-list emptiness also behaved differently from array/list-literal
   emptiness during bring-up, so executable tests currently cover the supported
   list-literal path.
+
+[FIX id:fix.core-libs.data-list-active-prelude-2026-06-27 date:2026-06-27 by:codex]
+  Reintroduced active =core/prelude/Data/List.mon= with executable tests for
+  =list-null?=, =list-length=, =list-drop=, =list-take=, =list-append=, and
+  =list-reverse=. The module is deliberately small and uses ordinary Wisp
+  recursion over =[x|xs]= so callers can move away from direct
+  =count=/=empty?= builtin dependence one operation at a time. Covered by
+  =python3 tests/run_core.py=: 29 modules, 555 assertions.
+
+[FIX id:fix.core-libs.data-list-restored-2026-06-30 date:2026-06-30 by:codex]
+  Restored =core/prelude/Data/List.mon= after it was absent from the active
+  core tree while =core/prelude/Text/Parser.mon= still imported =Data.List=.
+  The active surface is intentionally list-prefixed
+  (=list-null?=, =list-length=, =list-drop=, =list-take=, =list-append=,
+  =list-reverse=) to avoid conflicts with always-available builtins and other
+  prelude modules. =Text.Parser= now resolves =import Data.List= through the
+  existing =$MONAD_CORE/prelude/Data/List.mon= path rule. Verified by
+  =./monad test tests/wisp_data_list_import.mon=,
+  =./monad test core/prelude/Data/List.mon=,
+  =./monad test core/prelude/Text/Parser.mon=, and
+  =python3 tests/run_core.py= (29 modules, 555 assertions).
+
+[FIX id:fix.core-libs.length-moved-to-data-list-2026-06-30 date:2026-06-30 by:codex]
+  =length= is now core-owned list vocabulary, not an always-available compiler
+  builtin alias for =count=. =core/prelude/Data/List.mon= exports =length= as
+  an ordinary wrapper over =list-length=; callers must =import Data.List= to
+  use it. The compiler still owns =count= as the representation primitive for
+  arrays, strings, maps, lists, and lowering paths. Removed =length= from
+  =register_builtins=, the HM collection-helper special case, and direct
+  count/length codegen dispatch. Verified by
+  =./monad test core/prelude/Data/List.mon=,
+  =./monad test tests/wisp_data_list_import.mon=,
+  =./monad test core/prelude/Text/Parser.mon=,
+  =python3 tests/run_core.py= (29 modules, 556 assertions), and a negative
+  temporary compile check where bare =length= fails as an unknown function.
+
+[FIX id:fix.core-libs.reverse-nth-moved-to-data-list-2026-06-30 date:2026-06-30 by:codex]
+  =reverse= and =nth= are now core-owned =Data.List= operations instead of
+  stale compiler builtin registry entries. =reverse= wraps =list-reverse=;
+  =nth= is a recursive list function with an =error= branch for out-of-bounds
+  input. Callers must =import Data.List=. Verified by
+  =./monad test core/prelude/Data/List.mon=,
+  =./monad test tests/wisp_data_list_import.mon=,
+  =python3 tests/run_core.py= (29 modules, 559 assertions), and temporary
+  negative checks where bare =reverse= and bare =nth= fail as unknown
+  functions.
+
+[FIX id:fix.core-libs.reduce-moved-to-data-list-2026-06-30 date:2026-06-30 by:codex]
+  =reduce= is now a core-owned =Data.List= operation instead of a stale
+  compiler builtin registry entry. The implementation is ordinary Wisp
+  recursion over =[x|xs]= and mirrors a left fold with an explicit accumulator.
+  Verified by =./monad test core/prelude/Data/List.mon=,
+  =./monad test tests/wisp_data_list_import.mon=, and a temporary negative
+  check where bare =reduce= fails as an unknown function.
 
 [FIX id:fix.core-libs.expand-coll-prelude-2026-06-18 date:2026-06-18 by:codex]
   Expanded =core/prelude/Coll.mon= as the owner of collection-wide Haskell-style
@@ -938,6 +1063,14 @@
   lambda runtime contracts remain in the source as comments because
   test-local lambdas currently generate invalid LLVM IR in closure-heavy
   fold/map-style calls (=sext ptr= and pointer GEP indexes).
+
+[FIX id:fix.core-libs.coll-expanded-runtime-coverage-2026-06-27 date:2026-06-27 by:codex]
+  =core/prelude/Coll.mon= exports the full active utility surface and keeps
+  executable tests for =zipwith=, =append=, =filter=, and =both=. =append [] val=
+  must construct =(list val)=; using =(val ++ [])= routes a scalar through
+  collection concatenation in materialized specialization and can crash the
+  generated =append_Int= code. Verified by =python3 tests/run_core.py=:
+  28 modules, 541 assertions.
 
 [FIX id:fix.core-libs.extend-class-vocabulary-2026-06-26 date:2026-06-26 by:codex]
   Expanded =core/prelude/Class.mon= beyond the initial base classes with
@@ -1136,3 +1269,18 @@
   remain declared but without lawful defaults until string-builder/list rendering
   support is ready; the compiler derives only the minimal unary =show= method for
   canonical =Show=.
+
+[FIX id:fix.core-libs.maybe-either-active-polymorphic-tests-2026-06-27 date:2026-06-27 by:codex]
+  =Data.Maybe= and =Data.Either= now carry active runtime tests for eliminators,
+  map/bind, bimap/lift helpers, and list conversion helpers. =maybeToList= must
+  construct singleton lists with =(list x)= rather than =x ++ []= because
+  collection concat expects collection operands, not an unboxed element. Covered
+  by =python3 tests/run_core.py= with 535 active core assertions.
+
+[FIX id:fix.core-libs.int-methods-inherited-by-subtypes-2026-06-30 src:codegen.c,tests/wisp_data_int_subtype_methods.mon conf:high]
+  Primitive type-method lookup now falls back through the subtype lattice.
+  Arbitrary integer subtypes such as =U4= can call methods owned by =Data.Int=:
+  =(U4 7).abs= via a bound value and =(U4.abs 7)= both resolve to =Int.abs=,
+  with codegen widening the narrow receiver to the inherited method ABI. This
+  keeps the method definition traceable to =core/prelude/Data/Int.mon= while
+  preserving an optimized direct call.

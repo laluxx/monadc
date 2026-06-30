@@ -33,7 +33,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-13
 :CONTEXT_DESCRIPTION: HM type inference engine — constraint gen, unification, zonking
-:CONTEXT_UPDATED: 2026-06-13
+:CONTEXT_UPDATED: 2026-06-27
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
 :SOURCE: infer.h,infer.c
@@ -900,6 +900,13 @@
 :CONFIDENCE: high
 :END:
 
+[FIX id:fix.infer.legacy-collection-builtin-boundary-2026-06-27 date:2026-06-27 by:codex]
+  Collection/list/set HM schemes are now grouped in
+  =infer_register_legacy_collection_builtins= and called from
+  =infer_register_builtins=. This mirrors codegen's legacy collection grouping:
+  behavior is unchanged, but the remaining hardcoded collection surface is
+  isolated for migration into core modules.
+
 [OBS id:obs.infer.builtins-set-conj-disj src:infer.c:1614-1625 conf:high]
   Set operations: `set :: ∀a. a → Set`, `conj/conj!/disj/disj! :: ∀a. Set → a → Set`.
   The same scheme is registered for both mutable and immutable variants.
@@ -1505,3 +1512,16 @@
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+[FIX id:fix.infer.collection-head-tail-typed-builtins-2026-06-27 src:infer.c,core/prelude/Text/Parser.mon conf:high]
+  HM inference has explicit rules for =(head xs)= and =(tail xs)=. The element
+  type is recovered from Coll, Arr, single-element List, list_elem, or String
+  inputs, and unknown inputs are constrained to =Coll elem=. This keeps
+  pattern-lowered bindings such as =[c|rest]= from leaking generic call
+  variables into guard and recursive-return constraints.
+
+[OBS id:obs.infer.constraint-debug-env-2026-06-27 src:infer.c conf:high]
+  =MONAD_INFER_CONSTRAINT_DEBUG= prints each generated HM constraint with
+  filename, line, column, and both type sides. It is intentionally env-gated and
+  useful for tracing mismatches where the final unification error reports only
+  the solved conflict.

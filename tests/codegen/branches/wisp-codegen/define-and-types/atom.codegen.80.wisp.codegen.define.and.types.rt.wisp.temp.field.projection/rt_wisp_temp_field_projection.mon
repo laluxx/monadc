@@ -1,0 +1,31 @@
+;; TEST-ID: tests.codegen.rt-wisp-temp-field-projection
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.temp.field.projection
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.codegen.expression-field-projection
+;; TEST-PURPOSE: Wisp expression field projection may project a layout field from a temporary expression.
+;; TEST-ATOM: (make-pair 20 22).right lowers as expression projection and returns 22.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: codegen.c:expression-level layout field projection
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.temp.field.projection
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.temp.field.projection
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.temp.field.projection
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+module Main
+
+layout Pair
+  [left :: Int]
+  [right :: Int]
+
+define make-pair :: Int -> Int -> Pair
+  left right -> Pair left right
+
+define pick-right :: _ -> Int
+  _ -> (make-pair 20 22).right
+
+show (pick-right 0)

@@ -206,13 +206,18 @@ TCInstance *tc_find_instance(TypeClassRegistry *reg, const char *class_name,
                              const char *type_name) {
     if (!reg || !class_name || !type_name) return NULL;
 
+    TCInstance *subtype_match = NULL;
     for (int i = 0; i < reg->instance_count; i++) {
         TCInstance *inst = &reg->instances[i];
         if (strcmp(inst->class_name, class_name) == 0 &&
             strcmp(inst->type_name,  type_name)  == 0)
             return inst;
+        if (!subtype_match &&
+            strcmp(inst->class_name, class_name) == 0 &&
+            type_name_is_subtype(type_name, inst->type_name))
+            subtype_match = inst;
     }
-    return NULL;
+    return subtype_match;
 }
 
 bool tc_is_method(TypeClassRegistry *reg, const char *method_name) {

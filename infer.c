@@ -439,6 +439,11 @@ void infer_constrain(InferCtx *ctx, Type *a, Type *b, int line, int col) {
         ctx->constraints = realloc(ctx->constraints,
                                    sizeof(TypeConstraint) * ctx->constraint_cap);
     }
+    if (getenv("MONAD_INFER_CONSTRAINT_DEBUG")) {
+        fprintf(stderr, "[infer-constraint] %s:%d:%d %s ~ %s\n",
+                ctx && ctx->filename ? ctx->filename : "<unknown>",
+                line, col, type_to_string(a), type_to_string(b));
+    }
     ctx->constraints[ctx->constraint_count++] = (TypeConstraint){a, b, line, col};
 }
 
@@ -1650,13 +1655,21 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         /* ---- if ------------------------------------------------------ */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "if") == 0) {
             if (ast->list.count >= 3) {
-                Type *cond_t = infer_expr(ctx, ast->list.items[1]);
+                bool infix_subtype_cond =
+                    ast->list.count >= 5 &&
+                    ast->list.items[2]->type == AST_SYMBOL &&
+                    strcmp(ast->list.items[2]->symbol, "<:") == 0;
+                Type *cond_t = infix_subtype_cond ? type_bool() : infer_expr(ctx, ast->list.items[1]);
                 infer_constrain(ctx, cond_t, type_bool(),
                                 ast->list.items[1]->line,
                                 ast->list.items[1]->column);
-                Type *then_t = infer_expr(ctx, ast->list.items[2]);
-                if (ast->list.count == 4) {
-                    Type *else_t = infer_expr(ctx, ast->list.items[3]);
+                size_t then_idx = infix_subtype_cond ? 4 : 2;
+                size_t else_idx = infix_subtype_cond ? 5 : 3;
+                Type *then_t = ast->list.count > then_idx
+                    ? infer_expr(ctx, ast->list.items[then_idx])
+                    : infer_fresh(ctx);
+                if (ast->list.count > else_idx) {
+                    Type *else_t = infer_expr(ctx, ast->list.items[else_idx]);
 
                     /* Smart Optional Promotion for Branches */
                     bool then_opt = (then_t->kind == TYPE_OPTIONAL || then_t->kind == TYPE_NIL);
@@ -1676,6 +1689,11 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             } else {
                 result = infer_fresh(ctx);
             }
+            break;
+        }
+
+        if (head->type == AST_SYMBOL && strcmp(head->symbol, "<:") == 0 && ast->list.count == 3) {
+            result = type_bool();
             break;
         }
 
@@ -1751,8 +1769,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         if (head->type == AST_SYMBOL &&
-            (strcmp(head->symbol, "count") == 0 ||
-             strcmp(head->symbol, "length") == 0) &&
+            strcmp(head->symbol, "count") == 0 &&
             ast->list.count == 2) {
             Type *arg_t = infer_expr(ctx, ast->list.items[1]);
             infer_constrain(ctx, arg_t, type_coll(), ast->line, ast->column);
@@ -1794,6 +1811,78 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
             result = type_coll();
             result->element_type = infer_fresh(ctx);
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "head") == 0 &&
+            ast->list.count == 2) {
+            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
+            Type *arg_applied = subst_apply(ctx->subst, arg_t);
+            Type *elem_t = NULL;
+
+            if (arg_applied) {
+                if (arg_applied->kind == TYPE_COLL)
+                    elem_t = arg_applied->element_type;
+                else if (arg_applied->kind == TYPE_ARR)
+                    elem_t = arg_applied->arr_element_type;
+                else if (arg_applied->kind == TYPE_LIST) {
+                    if (arg_applied->list_elem)
+                        elem_t = arg_applied->list_elem;
+                    else if (arg_applied->list_count == 1 && arg_applied->list_types)
+                        elem_t = arg_applied->list_types[0];
+                } else if (arg_applied->kind == TYPE_STRING) {
+                    elem_t = type_char();
+                }
+            }
+
+            if (!elem_t) elem_t = infer_fresh(ctx);
+            if (!arg_applied || (arg_applied->kind != TYPE_STRING &&
+                                 arg_applied->kind != TYPE_LIST &&
+                                 arg_applied->kind != TYPE_COLL &&
+                                 arg_applied->kind != TYPE_ARR)) {
+                Type *expected_coll = type_coll();
+                expected_coll->element_type = type_clone(elem_t);
+                infer_constrain(ctx, arg_t, expected_coll, ast->line, ast->column);
+            }
+            result = elem_t;
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "tail") == 0 &&
+            ast->list.count == 2) {
+            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
+            Type *arg_applied = subst_apply(ctx->subst, arg_t);
+            Type *elem_t = NULL;
+
+            if (arg_applied) {
+                if (arg_applied->kind == TYPE_COLL)
+                    elem_t = arg_applied->element_type;
+                else if (arg_applied->kind == TYPE_ARR)
+                    elem_t = arg_applied->arr_element_type;
+                else if (arg_applied->kind == TYPE_LIST) {
+                    if (arg_applied->list_elem)
+                        elem_t = arg_applied->list_elem;
+                    else if (arg_applied->list_count == 1 && arg_applied->list_types)
+                        elem_t = arg_applied->list_types[0];
+                } else if (arg_applied->kind == TYPE_STRING) {
+                    elem_t = type_char();
+                }
+            }
+
+            if (!elem_t) elem_t = infer_fresh(ctx);
+            Type *out_t = type_coll();
+            out_t->element_type = type_clone(elem_t);
+            if (!arg_applied || (arg_applied->kind != TYPE_STRING &&
+                                 arg_applied->kind != TYPE_LIST &&
+                                 arg_applied->kind != TYPE_COLL &&
+                                 arg_applied->kind != TYPE_ARR)) {
+                Type *expected_coll = type_coll();
+                expected_coll->element_type = type_clone(elem_t);
+                infer_constrain(ctx, arg_t, expected_coll, ast->line, ast->column);
+            }
+            result = out_t;
             break;
         }
 
@@ -2360,7 +2449,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
 /// Primitives Bootstrap
 
-void infer_register_builtins(InferCtx *ctx) {
+static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     /* ∀a. a → Set */
     Type *a  = infer_fresh(ctx);
     TypeScheme *set_sc = infer_generalise(ctx,
@@ -2388,17 +2477,6 @@ void infer_register_builtins(InferCtx *ctx) {
     TypeScheme *contains_sc = infer_generalise(ctx,
         type_arrow(a3_col, type_arrow(a3_key, type_bool())), ctx->env);
     infer_env_insert(ctx->env, "contains?", contains_sc);
-
-    /* Core ADT constructors used across the prelude.  The dependent checker
-     * owns full ADT validation; these HM schemes keep imported constructors
-     * from collapsing to their payload types during core bootstrap. */
-    Type *maybe_a = infer_fresh(ctx);
-    Type *maybe_app = type_app("Maybe", type_clone(maybe_a));
-    TypeScheme *nothing_sc = infer_generalise(ctx, type_clone(maybe_app), ctx->env);
-    TypeScheme *just_sc = infer_generalise(ctx,
-        type_arrow(maybe_a, maybe_app), ctx->env);
-    infer_env_insert(ctx->env, "Nothing", nothing_sc);
-    infer_env_insert(ctx->env, "Just", just_sc);
 
     /* ∀a. Coll → Int  (count works on sets, maps, lists, arrays, strings) */
     TypeScheme *count_sc = scheme_mono(type_arrow(type_coll(), type_int()));
@@ -2503,6 +2581,21 @@ void infer_register_builtins(InferCtx *ctx) {
     TypeScheme *tail_sc = infer_generalise(ctx,
         type_arrow(tail_in, tail_out), ctx->env);
     infer_env_insert(ctx->env, "tail", tail_sc);
+}
+
+void infer_register_builtins(InferCtx *ctx) {
+    infer_register_legacy_collection_builtins(ctx);
+
+    /* Core ADT constructors used across the prelude.  The dependent checker
+     * owns full ADT validation; these HM schemes keep imported constructors
+     * from collapsing to their payload types during core bootstrap. */
+    Type *maybe_a = infer_fresh(ctx);
+    Type *maybe_app = type_app("Maybe", type_clone(maybe_a));
+    TypeScheme *nothing_sc = infer_generalise(ctx, type_clone(maybe_app), ctx->env);
+    TypeScheme *just_sc = infer_generalise(ctx,
+        type_arrow(maybe_a, maybe_app), ctx->env);
+    infer_env_insert(ctx->env, "Nothing", nothing_sc);
+    infer_env_insert(ctx->env, "Just", just_sc);
 
     // Arithmetic: ∀a. a -> List a -> a
     // The first arg is the accumulator, rest args come as a list.

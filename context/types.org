@@ -1441,6 +1441,21 @@ finds a =RefinementEntry= with a predicate AST, then invokes
 Frees the entire =g_refinements= linked list: entry names, pred_name, base_type,
 var, predicate_ast, and the entry structs. Sets =g_refinements= to NULL.
 
+[FIX id:fix.types.subtype-lattice-refinement-numeric-2026-06-30 date:2026-06-30 by:codex]
+  Added the first explicit subtype relation through =type_is_subtype= and
+  =type_name_is_subtype=. It covers identity, refinement/alias base chains,
+  unsigned and signed fixed-width widening, and fixed-width integer subtypes
+  to =Int=, e.g. =U8 <: U16 <: Int=. This is now a shared compiler query
+  rather than a one-off codegen rule.
+
+[FIX id:fix.types.subtype-operator-2026-06-30 date:2026-06-30 by:codex]
+  Added the compile-time subtype predicate operator =<:= for prefix
+  =(<: A B)= and Wisp-style infix conditions such as
+  =if U8 <: U16 ...=. Dependent checking and HM inference treat the expression
+  as =Bool=; codegen lowers it to a constant boolean using
+  =type_name_is_subtype=. Regression coverage lives in
+  =tests.test_typeclass_superclasses=.
+
 * Type Aliases
 :PROPERTIES:
 :ID: monadc.context.types.type-aliases
@@ -1822,3 +1837,17 @@ connects-to ->
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+[FIX id:fix.types.arbitrary-width-subtype-chain-2026-06-30 src:types.c,codegen.c,tests/test_typeclass_superclasses.py conf:high]
+  Arbitrary-width integer names participate in the shared subtype lattice:
+  =U4 <: U8=, =U4 <: U16=, and =U4 <: Int= are true while =U8 <: U4= is false.
+  The =<:= regression lives in
+  =tests.test_typeclass_superclasses.TypeclassSuperclassTests.test_subtype_operator_arbitrary_width_chain=.
+
+[DEC id:dec.types.refinement-types-as-lazy-sets-2026-06-30 by:codex conf:medium]
+  Refinement/subset types should be modeled as lazy inhabitant sets, not eager
+  enumerations. A bare refinement type in the REPL, such as =Email=, should
+  eventually display a finite prefix/stream view of the possibly infinite set of
+  valid inhabitants. This requires a real lazy set core/runtime protocol and
+  optimizer support; do not satisfy it with a placeholder printer that cannot
+  compose with membership, subset, or refinement predicates.

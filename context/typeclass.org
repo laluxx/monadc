@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-06-30
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -207,6 +207,37 @@
   =tc_get_dict(reg, class_name, type_name, ctx)= → =LLVMValueRef= — Returns
   the =__dict_Class_Type= global from the registry. Re-declares in the current
   LLVM module if not yet present (for REPL cross-module use).
+
+[FIX id:fix.typeclass.reader-prefix-instance-arity-2026-06-27 date:2026-06-27 by:codex]
+  Prefix instance method clauses may have more than two arguments. The reader
+  now collects every prefix pattern until the closing paren or ~=>~ body marker,
+  so clauses such as =(tri x y z) => ...= lower to a three-argument method
+  lambda instead of leaving trailing tokens for the body parser. Regression
+  coverage: =python3 -m unittest tests.test_typeclass_superclasses= includes
+  =test_prefix_instance_method_accepts_more_than_two_arguments=.
+
+[FIX id:fix.typeclass.subtype-instance-inheritance-2026-06-30 date:2026-06-30 by:codex]
+  =tc_find_instance= now falls back through =type_name_is_subtype= when no
+  exact instance exists. An =instance Eq Int= can therefore satisfy fixed-width
+  integer subtypes such as =U8= and refinement aliases whose base chain reaches
+  =Int=. Regression coverage asserts a =U8=-annotated value can use =eq?=
+  through the parent =Eq Int= instance.
+
+[TODO id:todo.typeclass.eq-operator-dispatch-2026-06-30 date:2026-06-30 by:codex]
+  Equality syntax should converge on the =Eq= class: the === operator may keep
+  primitive lowering for optimized codegen, but semantically it should resolve
+  through =Eq= when a user-defined or inherited instance exists. This is the
+  path for derivable enum/layout equality and for avoiding hardcoded equality
+  behavior in =codegen.c=.
+
+[FIX id:fix.typeclass.eq-operator-dispatch-2026-06-30 src:codegen.c,tests/test_typeclass_superclasses.py conf:high]
+  Public === and =!== now dispatch through =Eq.eq?= and =Eq.not-eq?= when the
+  corresponding class methods and an applicable instance exist. Codegen keeps
+  the primitive comparison path as the fallback and also bypasses typeclass
+  dispatch inside generated =__impl_Eq_*= functions so base =Eq= instances can
+  define themselves in terms of primitive equality without recursive calls.
+  Regression coverage uses a custom =Eq Int= instance where === returns false
+  and =!== returns true for equal literals.
 
 [OBS id:obs.typeclass.lookup.is-method src:typeclass.c:95-97 conf:high]
   =tc_is_method(reg, method_name)= → =bool= — Returns true if =method_name= is

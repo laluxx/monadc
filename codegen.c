@@ -41,6 +41,19 @@ static bool codegen_import_debug_enabled(void) {
     return v && v[0] && strcmp(v, "0") != 0;
 }
 
+static bool codegen_ast_is_undefined_expr(AST *ast) {
+    if (!ast)
+        return false;
+    if (ast->type == AST_SYMBOL)
+        return ast->symbol && strcmp(ast->symbol, "undefined") == 0;
+    return ast->type == AST_LIST &&
+           ast->list.count == 1 &&
+           ast->list.items[0] &&
+           ast->list.items[0]->type == AST_SYMBOL &&
+           ast->list.items[0]->symbol &&
+           strcmp(ast->list.items[0]->symbol, "undefined") == 0;
+}
+
 static void emit_bounds_check(CodegenContext *ctx, AST *ast, LLVMValueRef idx, LLVMValueRef size, const char *err_msg) {
     LLVMValueRef ge_zero = LLVMBuildICmp(ctx->builder, LLVMIntSGE, idx, LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0), "ge_z");
     LLVMValueRef lt_size = LLVMBuildICmp(ctx->builder, LLVMIntSLT, idx, size, "lt_s");
@@ -233,6 +246,135 @@ static Type *mono_apply_subst(Type *t, TypeSubst *ts) {
     default:
         return t;
     }
+}
+
+static bool mono_type_is_concrete_arg(Type *t) {
+    if (!t) return false;
+    return t->kind != TYPE_UNKNOWN && t->kind != TYPE_VAR;
+}
+
+static Type *mono_fn_param_as_arrow(Type *t, int index) {
+    if (!t) return NULL;
+    if (t->kind == TYPE_ARROW) {
+        for (int i = 0; i < index && t && t->kind == TYPE_ARROW; i++)
+            t = t->arrow_ret;
+        return (t && t->kind == TYPE_ARROW) ? t->arrow_param : NULL;
+    }
+    if (t->kind == TYPE_FN && index >= 0 && index < t->param_count)
+        return t->params[index].type;
+    return NULL;
+}
+
+static Type *mono_fn_return_as_arrow(Type *t) {
+    if (!t) return NULL;
+    while (t && t->kind == TYPE_ARROW)
+        t = t->arrow_ret;
+    if (t && t->kind == TYPE_FN)
+        return t->return_type;
+    return t;
+}
+
+static void mono_bind_type_var(TypeSubst *ts, int var_id, Type *actual) {
+    if (!ts || !mono_type_is_concrete_arg(actual))
+        return;
+
+    for (int i = 0; i < ts->count; i++) {
+        if (ts->from[i] != var_id)
+            continue;
+        if (!mono_type_is_concrete_arg(ts->to[i]) ||
+            ts->to[i]->kind == TYPE_FN ||
+            ts->to[i]->kind == TYPE_ARROW) {
+            ts->to[i] = type_clone(actual);
+        }
+        return;
+    }
+}
+
+static void mono_unify_formal_actual(Type *formal, Type *actual, TypeSubst *ts) {
+    if (!formal || !actual || !ts)
+        return;
+
+    if (formal->kind == TYPE_VAR) {
+        mono_bind_type_var(ts, formal->var_id, actual);
+        return;
+    }
+
+    if (formal->kind == TYPE_ARROW) {
+        Type *actual_param = mono_fn_param_as_arrow(actual, 0);
+        Type *actual_ret   = mono_fn_return_as_arrow(actual);
+        if (actual_param)
+            mono_unify_formal_actual(formal->arrow_param, actual_param, ts);
+        if (actual_ret)
+            mono_unify_formal_actual(formal->arrow_ret, actual_ret, ts);
+        return;
+    }
+
+    if (formal->kind == TYPE_FN) {
+        for (int i = 0; i < formal->param_count; i++) {
+            Type *actual_param = mono_fn_param_as_arrow(actual, i);
+            if (actual_param)
+                mono_unify_formal_actual(formal->params[i].type, actual_param, ts);
+        }
+        mono_unify_formal_actual(formal->return_type,
+                                 mono_fn_return_as_arrow(actual), ts);
+        return;
+    }
+
+    if (formal->kind == TYPE_APP && actual->kind == TYPE_APP) {
+        if ((!formal->app_constructor && !actual->app_constructor) ||
+            (formal->app_constructor && actual->app_constructor &&
+             strcmp(formal->app_constructor, actual->app_constructor) == 0)) {
+            mono_unify_formal_actual(formal->app_arg, actual->app_arg, ts);
+        }
+        return;
+    }
+
+    if (formal->kind == TYPE_COLL && formal->element_type) {
+        if (actual->kind == TYPE_COLL && actual->element_type)
+            mono_unify_formal_actual(formal->element_type, actual->element_type, ts);
+        else if (actual->kind == TYPE_ARR && actual->arr_element_type)
+            mono_unify_formal_actual(formal->element_type, actual->arr_element_type, ts);
+        return;
+    }
+
+    if (formal->kind == TYPE_ARR && actual->kind == TYPE_ARR)
+        mono_unify_formal_actual(formal->arr_element_type, actual->arr_element_type, ts);
+}
+
+static Type *codegen_call_arg_static_type(CodegenContext *ctx, AST *arg_ast) {
+    if (!arg_ast) return type_unknown();
+
+    if (arg_ast->type == AST_NUMBER) {
+        bool is_float = false;
+        if (arg_ast->literal_str) {
+            for (const char *p = arg_ast->literal_str; *p; p++) {
+                if (*p == '.' || *p == 'e' || *p == 'E') {
+                    is_float = true;
+                    break;
+                }
+            }
+        } else {
+            is_float = (arg_ast->number != (double)(long long)arg_ast->number);
+        }
+        return is_float ? type_float() : type_int();
+    }
+    if (arg_ast->type == AST_STRING)  return type_string();
+    if (arg_ast->type == AST_CHAR)    return type_char();
+    if (arg_ast->type == AST_KEYWORD) return type_keyword();
+    if (arg_ast->type == AST_ARRAY)   return type_arr(NULL, -1);
+
+    if (arg_ast->type == AST_SYMBOL) {
+        EnvEntry *ae = env_lookup(ctx->env, arg_ast->symbol);
+        if (ae && ae->kind == ENV_FUNC && ae->scheme && ae->scheme->type)
+            return ae->scheme->type;
+        if (ae && ae->type && ae->type->kind != TYPE_UNKNOWN &&
+            ae->type->kind != TYPE_VAR)
+            return ae->type;
+        if (ae && ae->scheme && ae->scheme->type)
+            return ae->scheme->type;
+    }
+
+    return arg_ast->inferred_type ? arg_ast->inferred_type : type_unknown();
 }
 
 static Type *arrow_param_at(Type *t, int index) {
@@ -455,6 +597,234 @@ static void repair_type_app_constructor_from_annotation(Type *t, const char *ann
     t->app_constructor = strndup(p, (size_t)(end - p));
 }
 
+static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx,
+                                             const char *symbol_name,
+                                             AST *ast);
+static EnvEntry *codegen_lookup_type_method(CodegenContext *ctx,
+                                            const char *receiver_type,
+                                            const char *method_name,
+                                            char *resolved_name,
+                                            size_t resolved_name_size);
+
+static CodegenResult codegen_project_field_value(CodegenContext *ctx,
+                                                 LLVMValueRef base_value,
+                                                 Type *base_type,
+                                                 const char *field_symbol,
+                                                 AST *ast) {
+    CodegenResult out = {NULL, NULL};
+    if (!ctx || !base_value || !base_type || !field_symbol) {
+        return out;
+    }
+
+    const char *field_name = field_symbol[0] == '.'
+        ? field_symbol + 1
+        : field_symbol;
+    if (!*field_name)
+        return out;
+
+    Type *layout_type = base_type;
+    if (layout_type->kind == TYPE_APP && layout_type->app_constructor) {
+        Type *resolved = env_lookup_layout(ctx->env, layout_type->app_constructor);
+        if (resolved) layout_type = resolved;
+    }
+    if (layout_type->kind == TYPE_LAYOUT &&
+        layout_type->layout_field_count == 0 && layout_type->layout_name) {
+        Type *resolved = env_lookup_layout(ctx->env, layout_type->layout_name);
+        if (resolved) layout_type = resolved;
+    }
+    if (layout_type->kind == TYPE_PTR && layout_type->element_type) {
+        Type *inner = layout_type->element_type;
+        if (inner->kind == TYPE_LAYOUT &&
+            inner->layout_field_count == 0 && inner->layout_name) {
+            Type *resolved = env_lookup_layout(ctx->env, inner->layout_name);
+            if (resolved) inner = resolved;
+        }
+        if (inner->kind == TYPE_LAYOUT)
+            layout_type = inner;
+    }
+
+    if (layout_type->kind != TYPE_LAYOUT ||
+        layout_type->layout_field_count <= 0) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: cannot project field '%s' from non-layout expression of type '%s'",
+                      parser_get_filename(), ast ? ast->line : 0,
+                      ast ? ast->column : 0, field_name,
+                      type_to_string(base_type));
+        return out;
+    }
+
+    int field_idx = -1;
+    for (int i = 0; i < layout_type->layout_field_count; i++) {
+        if (strcmp(layout_type->layout_fields[i].name, field_name) == 0) {
+            field_idx = i;
+            break;
+        }
+    }
+    if (field_idx < 0) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: layout '%s' has no field '%s'",
+                      parser_get_filename(), ast ? ast->line : 0,
+                      ast ? ast->column : 0,
+                      layout_type->layout_name ? layout_type->layout_name : "?",
+                      field_name);
+        return out;
+    }
+
+    char sname[256];
+    snprintf(sname, sizeof(sname), "layout.%s", layout_type->layout_name);
+    LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+    if (!struct_llvm) {
+        snprintf(sname, sizeof(sname), "data.%s", layout_type->layout_name);
+        struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+    }
+    if (!struct_llvm) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                      parser_get_filename(), ast ? ast->line : 0,
+                      ast ? ast->column : 0,
+                      layout_type->layout_name ? layout_type->layout_name : "?");
+        return out;
+    }
+
+    if (LLVMGetTypeKind(LLVMTypeOf(base_value)) != LLVMPointerTypeKind) {
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: field projection base is not addressable",
+                      parser_get_filename(), ast ? ast->line : 0,
+                      ast ? ast->column : 0);
+        return out;
+    }
+
+    LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+    LLVMValueRef fidx = LLVMConstInt(LLVMInt32TypeInContext(ctx->context),
+                                     field_idx, 0);
+    LLVMValueRef indices[] = {zero, fidx};
+    LLVMValueRef field_ptr = LLVMBuildGEP2(ctx->builder, struct_llvm,
+                                           base_value, indices, 2,
+                                           "expr_fld_ptr");
+    Type *field_type = layout_type->layout_fields[field_idx].type;
+    out.type = type_clone(field_type);
+    out.value = LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, field_type),
+                               field_ptr, "expr_fld");
+    return out;
+}
+
+static bool codegen_type_has_field(CodegenContext *ctx, Type *base_type,
+                                   const char *field_symbol) {
+    if (!ctx || !base_type || !field_symbol)
+        return false;
+
+    const char *field_name = field_symbol[0] == '.'
+        ? field_symbol + 1
+        : field_symbol;
+    if (!*field_name)
+        return false;
+
+    Type *layout_type = base_type;
+    if (layout_type->kind == TYPE_APP && layout_type->app_constructor) {
+        Type *resolved = env_lookup_layout(ctx->env, layout_type->app_constructor);
+        if (resolved) layout_type = resolved;
+    }
+    if (layout_type->kind == TYPE_LAYOUT &&
+        layout_type->layout_field_count == 0 && layout_type->layout_name) {
+        Type *resolved = env_lookup_layout(ctx->env, layout_type->layout_name);
+        if (resolved) layout_type = resolved;
+    }
+    if (layout_type->kind == TYPE_PTR && layout_type->element_type) {
+        Type *inner = layout_type->element_type;
+        if (inner->kind == TYPE_LAYOUT &&
+            inner->layout_field_count == 0 && inner->layout_name) {
+            Type *resolved = env_lookup_layout(ctx->env, inner->layout_name);
+            if (resolved) inner = resolved;
+        }
+        if (inner->kind == TYPE_LAYOUT)
+            layout_type = inner;
+    }
+    if (layout_type->kind != TYPE_LAYOUT ||
+        layout_type->layout_field_count <= 0)
+        return false;
+
+    for (int i = 0; i < layout_type->layout_field_count; i++) {
+        if (strcmp(layout_type->layout_fields[i].name, field_name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static CodegenResult codegen_body_expr_after(CodegenContext *ctx,
+                                             CodegenResult previous,
+                                             AST *expr) {
+    if (expr && expr->type == AST_SYMBOL && expr->symbol &&
+        previous.value && previous.type &&
+        (expr->symbol[0] == '.' ||
+         codegen_type_has_field(ctx, previous.type, expr->symbol))) {
+        return codegen_project_field_value(ctx, previous.value, previous.type,
+                                           expr->symbol, expr);
+    }
+    if (expr && expr->type == AST_LIST && expr->list.count == 1 &&
+        expr->list.items[0] && expr->list.items[0]->type == AST_SYMBOL &&
+        expr->list.items[0]->symbol && previous.value && previous.type &&
+        codegen_type_has_field(ctx, previous.type,
+                               expr->list.items[0]->symbol)) {
+        return codegen_project_field_value(ctx, previous.value, previous.type,
+                                           expr->list.items[0]->symbol, expr);
+    }
+    return codegen_expr(ctx, expr);
+}
+
+static Type *codegen_static_result_type(CodegenContext *ctx, AST *expr) {
+    if (!ctx || !expr)
+        return NULL;
+
+    if (expr->inferred_type && expr->inferred_type->kind != TYPE_UNKNOWN)
+        return expr->inferred_type;
+
+    if (expr->type == AST_SYMBOL) {
+        EnvEntry *entry = resolve_symbol_with_modules(ctx, expr->symbol, expr);
+        if (entry) {
+            if (entry->return_type)
+                return entry->return_type;
+            return entry->type;
+        }
+    }
+
+    if (expr->type == AST_LIST && expr->list.count > 0 &&
+        expr->list.items[0] &&
+        expr->list.items[0]->type == AST_SYMBOL) {
+        EnvEntry *entry = resolve_symbol_with_modules(
+            ctx, expr->list.items[0]->symbol, expr->list.items[0]);
+        if (entry) {
+            if (entry->return_type)
+                return entry->return_type;
+            return entry->type;
+        }
+    }
+
+    return NULL;
+}
+
+static Type *codegen_entry_result_type(CodegenContext *ctx, EnvEntry *entry) {
+    if (!entry)
+        return NULL;
+    if (entry->return_type && entry->return_type->kind != TYPE_UNKNOWN)
+        return entry->return_type;
+    if (entry->source_ast && entry->source_ast->type == AST_LAMBDA &&
+        entry->source_ast->lambda.return_type) {
+        const char *name = entry->source_ast->lambda.return_type;
+        Type *layout = env_lookup_layout(ctx->env, name);
+        if (layout)
+            return layout;
+    }
+    return entry->type;
+}
+
+static const char *codegen_projection_symbol(AST *expr) {
+    if (!expr)
+        return NULL;
+    if (expr->type == AST_SYMBOL)
+        return expr->symbol;
+    if (expr->type == AST_LIST && expr->list.count == 1 &&
+        expr->list.items[0] &&
+        expr->list.items[0]->type == AST_SYMBOL)
+        return expr->list.items[0]->symbol;
+    return NULL;
+}
+
 //// Specialization
 
 // Recompile a polymorphic function with concrete types substituted in.
@@ -648,6 +1018,7 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
     LLVMTypeRef func_type = LLVMFunctionType(ret_llvm, param_types,
                                               total_params, 0);
     LLVMValueRef func     = LLVMAddFunction(ctx->module, spec_name, func_type);
+    LLVMSetLinkage(func, LLVMLinkOnceODRLinkage);
 
     // Create the child env FIRST before any insertions.
     // spec_name goes into the OUTER env so the call site can find it
@@ -728,8 +1099,13 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
         free(param_values);
         free_asm_instructions(asm_instructions, asm_inst_count);
     } else {
-        for (int i = 0; i < lambda->lambda.body_count; i++)
-            body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+        for (int i = 0; i < lambda->lambda.body_count; i++) {
+            if (lambda->lambda.body_count > 1 &&
+                codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
+                continue;
+            body = codegen_body_expr_after(ctx, body,
+                                           lambda->lambda.body_exprs[i]);
+        }
     }
     ctx->current_function_name = prev;
 
@@ -1274,6 +1650,54 @@ static const char *tc_instance_type_name_from_ast(CodegenContext *ctx, AST *ast)
     return NULL;
 }
 
+static bool codegen_is_cast_target_name(const char *name, Type **out_type) {
+    if (out_type) *out_type = NULL;
+    if (!name || !*name) return false;
+
+    const char *types[] = {
+        "Int", "Float", "Char", "Byte", "String", "Hex", "Bin", "Oct",
+        "Path", "F32", "I8", "U8", "I16", "U16", "I32", "U32",
+        "I64", "U64", "I128", "U128", NULL
+    };
+    for (int i = 0; types[i]; i++) {
+        if (strcmp(name, types[i]) == 0) {
+            if (out_type) *out_type = type_from_name(name);
+            return true;
+        }
+    }
+
+    Type *t = type_from_name(name);
+    if (t && t->kind == TYPE_INT_ARBITRARY) {
+        if (out_type) *out_type = t;
+        return true;
+    }
+    return false;
+}
+
+static const char *codegen_type_name_from_ast(AST *ast) {
+    if (!ast) return NULL;
+    if (ast->type == AST_SYMBOL && ast->symbol)
+        return ast->symbol;
+    if (ast->inferred_type)
+        return type_to_string(ast->inferred_type);
+    return NULL;
+}
+
+static CodegenResult codegen_subtype_predicate(CodegenContext *ctx,
+                                               AST *lhs_ast,
+                                               AST *rhs_ast) {
+    const char *lhs_name = codegen_type_name_from_ast(lhs_ast);
+    const char *rhs_name = codegen_type_name_from_ast(rhs_ast);
+    bool is_subtype = lhs_name && rhs_name &&
+        type_name_is_subtype(lhs_name, rhs_name);
+
+    CodegenResult result = {0};
+    result.value = LLVMConstInt(LLVMInt1TypeInContext(ctx->context),
+                                is_subtype ? 1 : 0, 0);
+    result.type = type_bool();
+    return result;
+}
+
 static TCInstance *tc_unique_instance_for_method(TypeClassRegistry *reg,
                                                  const char *class_name,
                                                  const char *method_name) {
@@ -1586,6 +2010,15 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
         module_prefix[prefix_len] = '\0';
 
         const char *local_symbol = dot + 1;
+
+        char inherited_method_name[512];
+        entry = codegen_lookup_type_method(ctx, module_prefix, local_symbol,
+                                           inherited_method_name,
+                                           sizeof(inherited_method_name));
+        if (entry) {
+            free(module_prefix);
+            return entry;
+        }
 
         if (!ctx->module_ctx) {
             free(module_prefix);
@@ -3983,11 +4416,11 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
 
         /* Build the fully-qualified method name and look it up */
         const char *rest_of_chain = first_dot + 1;
-        char method_key[512];
-        snprintf(method_key, sizeof(method_key), "%s.%s",
-                 type_name_str, rest_of_chain);
-
-        EnvEntry *mentry = env_lookup(ctx->env, method_key);
+        char resolved_method_key[512];
+        EnvEntry *mentry =
+            codegen_lookup_type_method(ctx, type_name_str, rest_of_chain,
+                                       resolved_method_key,
+                                       sizeof(resolved_method_key));
         if (!mentry || !mentry->func_ref) {
             char predicate_key[512];
             snprintf(predicate_key, sizeof(predicate_key), "%s.%s?",
@@ -4320,6 +4753,186 @@ static bool codegen_import_prefix_matches(ImportDecl *import,
     return false;
 }
 
+static bool codegen_define_lambda_parts(AST *ast, const char **out_name,
+                                        AST **out_lambda) {
+    if (!ast || ast->type != AST_LIST || ast->list.count < 3)
+        return false;
+    AST *head = ast->list.items[0];
+    if (!head || head->type != AST_SYMBOL ||
+        (strcmp(head->symbol, "define") != 0 &&
+         strcmp(head->symbol, "def") != 0))
+        return false;
+
+    AST *name_expr = ast->list.items[1];
+    AST *value_expr = ast->list.items[2];
+    if (!value_expr || value_expr->type != AST_LAMBDA)
+        return false;
+
+    const char *name = NULL;
+    if (name_expr && name_expr->type == AST_SYMBOL) {
+        name = name_expr->symbol;
+    } else if (name_expr && name_expr->type == AST_LIST &&
+               name_expr->list.count > 0 &&
+               name_expr->list.items[0]->type == AST_SYMBOL) {
+        name = name_expr->list.items[0]->symbol;
+    }
+
+    if (!name || !*name)
+        return false;
+
+    if (out_name) *out_name = name;
+    if (out_lambda) *out_lambda = value_expr;
+    return true;
+}
+
+static Type *codegen_type_from_annotation_soft(CodegenContext *ctx,
+                                               const char *type_name) {
+    if (!type_name)
+        return type_unknown();
+
+    const char *tname = type_name;
+    char tname_buf[256];
+    size_t len = strlen(type_name);
+    if (len >= 2 && type_name[0] == '(' && type_name[len - 1] == ')' &&
+        len - 2 < sizeof(tname_buf)) {
+        memcpy(tname_buf, type_name + 1, len - 2);
+        tname_buf[len - 2] = '\0';
+        tname = tname_buf;
+    }
+
+    bool is_type_var = strlen(tname) == 1 &&
+                       tname[0] >= 'a' && tname[0] <= 'z';
+    if (is_type_var)
+        return type_unknown();
+
+    Type *t = type_from_name(tname);
+    if (t && t->kind != TYPE_UNKNOWN)
+        return t;
+    if (t) type_free(t);
+
+    Type *lay = env_lookup_layout(ctx->env, tname);
+    if (lay)
+        return type_clone(lay);
+
+    for (TypeAlias *a = g_aliases; a; a = a->next) {
+        if (strcmp(a->alias_name, tname) == 0) {
+            Type *alias_t = type_from_name(a->target_name);
+            if (alias_t)
+                return alias_t;
+            break;
+        }
+    }
+
+    return type_unknown();
+}
+
+void codegen_predeclare_toplevel_functions(CodegenContext *ctx, AST **exprs,
+                                           size_t count, size_t first_code) {
+    if (!ctx || !exprs)
+        return;
+
+    for (size_t i = first_code; i < count; i++) {
+        const char *name = NULL;
+        AST *lambda = NULL;
+        if (!codegen_define_lambda_parts(exprs[i], &name, &lambda))
+            continue;
+
+        if (env_lookup(ctx->env, name) &&
+            env_lookup(ctx->env, name)->module_name == NULL)
+            continue;
+
+        TypeScheme *hm_scheme =
+            env_hm_infer_define(ctx->env, name, lambda, parser_get_filename());
+
+        int total_params = lambda->lambda.param_count;
+        LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) *
+                                          (total_params ? total_params : 1));
+        EnvParam *env_params = malloc(sizeof(EnvParam) *
+                                      (total_params ? total_params : 1));
+
+        bool all_params_unknown = (total_params > 0);
+        for (int p = 0; p < total_params; p++) {
+            ASTParam *param = &lambda->lambda.params[p];
+            Type *ptype = NULL;
+            if (param->is_rest) {
+                ptype = type_list(NULL, 0);
+            } else if (param->type_name) {
+                ptype = codegen_type_from_annotation_soft(ctx,
+                                                          param->type_name);
+            } else {
+                ptype = type_unknown();
+            }
+
+            if (codegen_param_type_needs_usage(ptype) && hm_scheme) {
+                Type *t = hm_scheme->type;
+                for (int j = 0; j < p && t && t->kind == TYPE_ARROW; j++)
+                    t = t->arrow_ret;
+                if (t && t->kind == TYPE_ARROW && t->arrow_param &&
+                    codegen_type_is_concrete_value(t->arrow_param)) {
+                    type_free(ptype);
+                    ptype = type_clone(t->arrow_param);
+                }
+            }
+
+            if (!codegen_param_type_needs_usage(ptype))
+                all_params_unknown = false;
+
+            env_params[p].name = strdup(param->name ? param->name : "_");
+            env_params[p].type = ptype;
+            param_types[p] = codegen_param_type_needs_usage(ptype)
+                ? ptr_t
+                : type_to_llvm(ctx, ptype);
+        }
+
+        Type *ret_type = lambda->lambda.return_type
+            ? codegen_type_from_annotation_soft(ctx, lambda->lambda.return_type)
+            : type_unknown();
+        bool ret_was_explicit_var =
+            lambda->lambda.return_type &&
+            strlen(lambda->lambda.return_type) == 1 &&
+            lambda->lambda.return_type[0] >= 'a' &&
+            lambda->lambda.return_type[0] <= 'z';
+        if (ret_type->kind == TYPE_UNKNOWN && hm_scheme && !ret_was_explicit_var) {
+            Type *t = hm_scheme->type;
+            while (t && t->kind == TYPE_ARROW)
+                t = t->arrow_ret;
+            if (t && t->kind != TYPE_VAR && t->kind != TYPE_UNKNOWN) {
+                type_free(ret_type);
+                ret_type = type_clone(t);
+            }
+        }
+
+        bool has_type_vars = hm_scheme && hm_scheme->quantified_count > 0;
+        bool is_poly_stub = all_params_unknown && has_type_vars;
+        LLVMTypeRef ret_llvm = (is_poly_stub ||
+                                ret_type->kind == TYPE_VAR ||
+                                ret_type->kind == TYPE_UNKNOWN)
+            ? ptr_t
+            : type_to_llvm(ctx, ret_type);
+
+        LLVMTypeRef fn_type = LLVMFunctionType(ret_llvm, param_types,
+                                               total_params, 0);
+        LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, name);
+        if (!fn)
+            fn = LLVMAddFunction(ctx->module, name, fn_type);
+
+        env_insert_func(ctx->env, name, env_params, total_params,
+                        ret_type, fn, NULL, NULL);
+        if (hm_scheme)
+            env_set_scheme(ctx->env, name, hm_scheme);
+        EnvEntry *entry = env_lookup(ctx->env, name);
+        if (entry) {
+            entry->llvm_name = strdup(LLVMGetValueName(fn));
+            entry->lifted_count = 0;
+            entry->is_closure_abi = false;
+            entry->source_ast = ast_clone(lambda);
+        }
+
+        free(param_types);
+    }
+}
+
 static char *codegen_imported_call_name(CodegenContext *ctx,
                                         const char *symbol_name) {
     bool dbg = codegen_import_debug_enabled();
@@ -4388,6 +5001,16 @@ static char *codegen_imported_call_name(CodegenContext *ctx,
                 fprintf(stderr,
                         "[import-debug] imported-call result=%s\n",
                         symbol_name);
+            }
+
+            if (!env_lookup(ctx->env, symbol_name)) {
+                if (dbg) {
+                    fprintf(stderr,
+                            "[import-debug] imported-call reject: %s not declared by manifest\n",
+                            symbol_name);
+                }
+                free(prefix);
+                return NULL;
             }
 
             free(prefix);
@@ -4459,6 +5082,15 @@ static char *codegen_imported_call_name(CodegenContext *ctx,
             fprintf(stderr,
                     "[import-debug] imported-call result=%s\n",
                     qualified_name);
+        }
+
+        if (!env_lookup(ctx->env, qualified_name)) {
+            if (dbg) {
+                fprintf(stderr,
+                        "[import-debug] imported-call reject: %s not declared by manifest\n",
+                        qualified_name);
+            }
+            continue;
         }
 
         return strdup(qualified_name);
@@ -4557,6 +5189,48 @@ static const char *codegen_type_method_receiver_name_from_ast(CodegenContext *ct
     }
 }
 
+static EnvEntry *codegen_lookup_type_method(CodegenContext *ctx,
+                                            const char *receiver_type,
+                                            const char *method_name,
+                                            char *resolved_name,
+                                            size_t resolved_name_size) {
+    if (!ctx || !receiver_type || !*receiver_type || !method_name || !*method_name)
+        return NULL;
+
+    char candidate[512];
+    snprintf(candidate, sizeof(candidate), "%s.%s", receiver_type, method_name);
+    EnvEntry *entry = env_lookup(ctx->env, candidate);
+    if (entry && entry->kind == ENV_FUNC) {
+        if (resolved_name && resolved_name_size > 0) {
+            snprintf(resolved_name, resolved_name_size, "%s", candidate);
+        }
+        return entry;
+    }
+
+    const char *supertypes[] = {
+        "Int", "Float", "Bool", "String", "Char", "Path", "Symbol",
+        "Keyword", "List", "Arr", "Set", "Map", "Coll", NULL
+    };
+    for (int i = 0; supertypes[i]; i++) {
+        const char *supertype = supertypes[i];
+        if (strcmp(receiver_type, supertype) == 0)
+            continue;
+        if (!type_name_is_subtype(receiver_type, supertype))
+            continue;
+
+        snprintf(candidate, sizeof(candidate), "%s.%s", supertype, method_name);
+        entry = env_lookup(ctx->env, candidate);
+        if (entry && entry->kind == ENV_FUNC) {
+            if (resolved_name && resolved_name_size > 0) {
+                snprintf(resolved_name, resolved_name_size, "%s", candidate);
+            }
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
 static char *codegen_type_method_call_name(CodegenContext *ctx,
                                            AST *ast,
                                            const char *method_name) {
@@ -4578,9 +5252,12 @@ static char *codegen_type_method_call_name(CodegenContext *ctx,
     char candidate[512];
     snprintf(candidate, sizeof(candidate), "%s.%s", type_name, method_name);
 
-    EnvEntry *entry = env_lookup(ctx->env, candidate);
-    if (entry && entry->kind == ENV_FUNC)
-        return strdup(candidate);
+    char resolved[512];
+    EnvEntry *entry =
+        codegen_lookup_type_method(ctx, type_name, method_name,
+                                   resolved, sizeof(resolved));
+    if (entry)
+        return strdup(resolved);
 
     return codegen_imported_call_name(ctx, candidate);
 }
@@ -5002,6 +5679,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             if (dot_self_sym) {
                 Type *ret_type = dot_type;
                 LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                if (LLVMTypeOf(dot_self_sym) != i64_t &&
+                    LLVMGetTypeKind(LLVMTypeOf(dot_self_sym)) == LLVMIntegerTypeKind) {
+                    dot_self_sym = LLVMBuildIntCast2(ctx->builder, dot_self_sym,
+                                                     i64_t, 0, "method_self_cast");
+                }
                 LLVMTypeRef ret_lt = (ret_type && ret_type->kind == TYPE_FLOAT)
                     ? LLVMDoubleTypeInContext(ctx->context) : i64_t;
                 LLVMTypeRef fn_t = LLVMFunctionType(ret_lt, &i64_t, 1, 0);
@@ -5639,6 +6321,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         AST *head = ast->list.items[0];
+        if (getenv("MONAD_CODEGEN_AST_DEBUG")) {
+            fprintf(stderr, "[codegen-ast] ");
+            codegen_print_ast(ctx, ast);
+            fprintf(stderr, "\n");
+        }
 
         if (ast_list_is_tuple_expr(ast)) {
             LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -5667,6 +6354,42 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             result.type = type_list(elem_types, elem_count);
             free(elem_types);
             return result;
+        }
+
+        if (ast->list.count == 2 &&
+            ast->list.items[1] &&
+            ast->list.items[1]->type == AST_SYMBOL &&
+            ast->list.items[1]->symbol) {
+            Type *head_type = codegen_static_result_type(ctx, head);
+            if (head_type &&
+                codegen_type_has_field(ctx, head_type,
+                                       ast->list.items[1]->symbol)) {
+                CodegenResult base = codegen_expr(ctx, head);
+                return codegen_project_field_value(
+                    ctx, base.value, base.type ? base.type : head_type,
+                    ast->list.items[1]->symbol, ast->list.items[1]);
+            }
+        }
+
+        if (ast->list.count >= 2 &&
+            head->type == AST_SYMBOL) {
+            const char *field_symbol = codegen_projection_symbol(
+                ast->list.items[ast->list.count - 1]);
+            EnvEntry *head_entry =
+                resolve_symbol_with_modules(ctx, head->symbol, head);
+            Type *head_ret = codegen_entry_result_type(ctx, head_entry);
+            size_t supplied_without_field = ast->list.count - 2;
+            if (field_symbol && head_entry && head_ret &&
+                head_entry->param_count == (int)supplied_without_field &&
+                codegen_type_has_field(ctx, head_ret, field_symbol)) {
+                AST call_ast = *ast;
+                call_ast.list.count = ast->list.count - 1;
+                CodegenResult base = codegen_expr(ctx, &call_ast);
+                return codegen_project_field_value(
+                    ctx, base.value, base.type ? base.type : head_ret,
+                    field_symbol,
+                    ast->list.items[ast->list.count - 1]);
+            }
         }
 
         // Handle ("string" i) — inline string indexing
@@ -5773,6 +6496,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         if (head->type == AST_SYMBOL) {
+            if (strcmp(head->symbol, "__dot") == 0) {
+                if (ast->list.count != 3 ||
+                    !ast->list.items[2] ||
+                    ast->list.items[2]->type != AST_SYMBOL) {
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: __dot requires an expression and field name",
+                                  parser_get_filename(), ast->line, ast->column);
+                }
+                CodegenResult base = codegen_expr(ctx, ast->list.items[1]);
+                return codegen_project_field_value(ctx, base.value, base.type,
+                                                   ast->list.items[2]->symbol,
+                                                   ast->list.items[2]);
+            }
+
             if (strcmp(head->symbol, "__index") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx,
@@ -6723,8 +7459,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         const char *prev_fn = ctx->current_function_name;
                         ctx->current_function_name = var_name;
                         CodegenResult stub_body = {NULL, NULL};
-                        for (int i = 0; i < lambda->lambda.body_count; i++)
-                            stub_body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+                        for (int i = 0; i < lambda->lambda.body_count; i++) {
+                            if (lambda->lambda.body_count > 1 &&
+                                codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
+                                continue;
+                            stub_body = codegen_body_expr_after(
+                                ctx, stub_body, lambda->lambda.body_exprs[i]);
+                        }
                         ctx->current_function_name = prev_fn;
                         ctx->env = prev_env;
                         env_free(stub_env);
@@ -6794,8 +7535,13 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         } else {
                             const char *prev_fn   = ctx->current_function_name;
                             ctx->current_function_name = var_name;
-                            for (int i = 0; i < lambda->lambda.body_count; i++)
-                                body_result = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+                            for (int i = 0; i < lambda->lambda.body_count; i++) {
+                                if (lambda->lambda.body_count > 1 &&
+                                    codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
+                                    continue;
+                                body_result = codegen_body_expr_after(
+                                    ctx, body_result, lambda->lambda.body_exprs[i]);
+                            }
 
 
                             ctx->current_function_name = prev_fn;
@@ -9452,9 +10198,10 @@ if (ast->list.count >= 5) {
                     result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
                     return result;
                 }
-                for (size_t i = 1; i < ast->list.count - 1; i++)
-                    codegen_expr(ctx, ast->list.items[i]);
-                return codegen_expr(ctx, ast->list.items[ast->list.count - 1]);
+                CodegenResult last = {0};
+                for (size_t i = 1; i < ast->list.count; i++)
+                    last = codegen_body_expr_after(ctx, last, ast->list.items[i]);
+                return last;
             }
 
             if (strcmp(head->symbol, "if") == 0) {
@@ -9472,15 +10219,26 @@ if (ast->list.count >= 5) {
                 bool switch_handled = false;
                 (void)switch_handled;
 
-                if (ast->list.count < 3 || ast->list.count > 4) {
+                bool infix_subtype_cond =
+                    ast->list.count >= 5 &&
+                    ast->list.items[2]->type == AST_SYMBOL &&
+                    strcmp(ast->list.items[2]->symbol, "<:") == 0;
+
+                if ((!infix_subtype_cond && (ast->list.count < 3 || ast->list.count > 4)) ||
+                    (infix_subtype_cond && (ast->list.count < 5 || ast->list.count > 6))) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'if' requires 2 or 3 arguments",
                                   parser_get_filename(), ast->line, ast->column);
                 }
+                size_t cond_idx = 1;
+                size_t then_idx = infix_subtype_cond ? 4 : 2;
+                size_t else_idx = infix_subtype_cond ? 5 : 3;
 
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 
                 /* Condition */
-                CodegenResult cond_result = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult cond_result = infix_subtype_cond
+                    ? codegen_subtype_predicate(ctx, ast->list.items[1], ast->list.items[3])
+                    : codegen_expr(ctx, ast->list.items[cond_idx]);
                 LLVMValueRef cond_val;
                 if (type_is_float(cond_result.type)) {
                     LLVMTypeRef float_t = LLVMTypeOf(cond_result.value);
@@ -9513,18 +10271,18 @@ if (ast->list.count >= 5) {
 
                 /* Then branch */
                 LLVMPositionBuilderAtEnd(ctx->builder, then_bb);
-                CodegenResult then_result = codegen_expr(ctx, ast->list.items[2]);
+                CodegenResult then_result = codegen_expr(ctx, ast->list.items[then_idx]);
                 LLVMBasicBlockRef then_end_bb = LLVMGetInsertBlock(ctx->builder);
 
                 /* Else branch */
                 LLVMPositionBuilderAtEnd(ctx->builder, else_bb);
                 CodegenResult else_result = {NULL, NULL};
-                if (ast->list.count == 4)
-                    else_result = codegen_expr(ctx, ast->list.items[3]);
+                if (ast->list.count > else_idx)
+                    else_result = codegen_expr(ctx, ast->list.items[else_idx]);
                 LLVMBasicBlockRef else_end_bb = LLVMGetInsertBlock(ctx->builder);
 
                 /* No else or missing values — branch both to merge, return dummy */
-                if (ast->list.count != 4 || !then_result.value || !else_result.value
+                if (ast->list.count <= else_idx || !then_result.value || !else_result.value
                     || !then_result.type || !else_result.type) {
                     LLVMPositionBuilderAtEnd(ctx->builder, then_end_bb);
                     build_br_if_no_terminator(ctx->builder, merge_bb);
@@ -9740,7 +10498,7 @@ if (ast->list.count >= 5) {
                 }
                 CodegenResult last = {0};
                 for (size_t bi = 1; bi < ast->list.count; bi++)
-                    last = codegen_expr(ctx, ast->list.items[bi]);
+                    last = codegen_body_expr_after(ctx, last, ast->list.items[bi]);
                 return last;
             }
 
@@ -9775,7 +10533,7 @@ if (ast->list.count >= 5) {
 
                 CodegenResult last = {0};
                 for (size_t bi = 2; bi < ast->list.count; bi++)
-                    last = codegen_expr(ctx, ast->list.items[bi]);
+                    last = codegen_body_expr_after(ctx, last, ast->list.items[bi]);
 
                 env_free(ctx->env);
                 ctx->env = saved_env;
@@ -10646,8 +11404,7 @@ if (ast->list.count >= 5) {
                 }
             }
 
-            if (strcmp(head->symbol, "count") == 0 ||
-                strcmp(head->symbol, "length") == 0) {
+            if (strcmp(head->symbol, "count") == 0) {
                 if (ast->list.count != 2) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: '%s' requires 1 argument",
                                   parser_get_filename(), ast->line, ast->column,
@@ -10733,7 +11490,16 @@ if (ast->list.count >= 5) {
 
             if (strcmp(head->symbol, "<")  == 0 || strcmp(head->symbol, ">")  == 0 ||
                 strcmp(head->symbol, "<=") == 0 || strcmp(head->symbol, ">=") == 0 ||
-                strcmp(head->symbol, "=")  == 0 || strcmp(head->symbol, "!=") == 0) {
+                strcmp(head->symbol, "=")  == 0 || strcmp(head->symbol, "!=") == 0 ||
+                strcmp(head->symbol, "<:") == 0) {
+
+                if (strcmp(head->symbol, "<:") == 0) {
+                    if (ast->list.count != 3) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: '<:' requires 2 type arguments",
+                                      parser_get_filename(), ast->line, ast->column);
+                    }
+                    return codegen_subtype_predicate(ctx, ast->list.items[1], ast->list.items[2]);
+                }
 
                 if (ast->list.count == 2) {
                     /* Partial application: (< 5) => lambda y -> (< 5 y) */
@@ -10877,8 +11643,25 @@ if (ast->list.count >= 5) {
 
         /// Typeclass dispatch
 
-                if (tc_is_method(ctx->tc_registry, op)) {
-                    const char *cls = tc_method_class(ctx->tc_registry, op);
+                bool in_eq_impl =
+                    ctx->current_function_name &&
+                    strncmp(ctx->current_function_name, "__impl_Eq_", 10) == 0;
+                const char *tc_op = op;
+                const char *cls = tc_is_method(ctx->tc_registry, op)
+                    ? tc_method_class(ctx->tc_registry, op)
+                    : NULL;
+
+                if (!cls && !in_eq_impl && strcmp(op, "=") == 0 &&
+                    tc_method_class(ctx->tc_registry, "eq?")) {
+                    cls = "Eq";
+                    tc_op = "eq?";
+                } else if (!cls && !in_eq_impl && strcmp(op, "!=") == 0 &&
+                           tc_method_class(ctx->tc_registry, "not-eq?")) {
+                    cls = "Eq";
+                    tc_op = "not-eq?";
+                }
+
+                if (cls) {
 
                     CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
                     CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
@@ -10956,7 +11739,7 @@ if (ast->list.count >= 5) {
                             "  - Hint: add ‘deriving %s’ to the ‘%s’ data declaration,\n"
                             "  - or define it manually: (instance %s %s where ...)",
                             parser_get_filename(), ast->line, ast->column,
-                            cls, type_name, op,
+                            cls, type_name, tc_op,
                             op,
                             ast->list.items[1]->type == AST_SYMBOL ? ast->list.items[1]->symbol : "?",
                             ast->list.items[2]->type == AST_SYMBOL ? ast->list.items[2]->symbol : "?",
@@ -10967,7 +11750,7 @@ if (ast->list.count >= 5) {
                     /* Find method in instance */
                     LLVMValueRef method_fn = NULL;
                     for (int _mi = 0; _mi < inst->method_count; _mi++) {
-                        if (strcmp(inst->method_names[_mi], op) == 0) {
+                        if (strcmp(inst->method_names[_mi], tc_op) == 0) {
                             method_fn = inst->method_funcs[_mi];
                             break;
                         }
@@ -10975,7 +11758,8 @@ if (ast->list.count >= 5) {
 
                     if (!method_fn) {
                         char constructed_name[256];
-                        snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
+                        snprintf(constructed_name, sizeof(constructed_name),
+                                 "__impl_%s_%s_%s", cls, type_name, tc_op);
                         EnvEntry *impl_entry = env_lookup(ctx->env, constructed_name);
                         if (impl_entry && impl_entry->func_ref) {
                             method_fn = impl_entry->func_ref;
@@ -10986,7 +11770,7 @@ if (ast->list.count >= 5) {
                         CODEGEN_ERROR(ctx,
                             "%s:%d:%d: error: instance ‘%s %s’ has no implementation for ‘%s’",
                             parser_get_filename(), ast->line, ast->column,
-                            cls, type_name, op);
+                            cls, type_name, tc_op);
                     }
 
                     /* Re-declare in current module if needed */
@@ -13022,72 +13806,31 @@ if (ast->list.count >= 5) {
                 if (!has_rest && !has_arr_param &&
                     entry->scheme && entry->scheme->quantified_count > 0
                     && entry->source_ast) {
-                    // Collect concrete argument types from call site
+                    // Collect concrete argument types from call site and
+                    // structurally unify them with the polymorphic parameter
+                    // shapes. Positional mapping is insufficient for higher-
+                    // order functions such as Maybe.maybe:
+                    //   b -> (a -> b) -> Maybe a -> b
                     int                                nq = entry->scheme->quantified_count;
                     TypeSubst                          ts;
                     ts.count                              = nq;
                     ts.from                               = malloc(sizeof(int)   *  nq);
                     ts.to                                 = malloc(sizeof(Type*)  * nq);
 
-                    // Map each quantified var to the concrete type of the
-                    // corresponding argument. We derive the type directly from
-                    // the argument AST/env rather than trusting  inferred_type,
-                    // which is a mutable field that may have been stamped by a
-                    // previous call site (the entire bug we are fixing here).
-                    for (int i = 0; i < nq && i < declared_params; i++) {
-                        ts.from[i]                                         = entry->scheme->quantified[i];
-                        AST                                      *arg_ast  = ast->list.items[i + 1];
-                        Type                                     *arg_type = NULL;
-
-                        // Derive type from the argument itself, not inferred_type.
-                        // Priority: literal kind > env lookup > inferred_type fallback.
-                        if (arg_ast->type == AST_NUMBER) {
-                            bool                         is_float = false;
-                            if (arg_ast->literal_str) {
-                                for (const char *_p = arg_ast->literal_str; *_p; _p++) {
-                                    if (*_p == '.' || *_p == 'e' || *_p == 'E') {
-                                        is_float                  = true; break;
-                                    }
-                                }
-                            } else {
-                                is_float = (arg_ast->number != (double)(long long)arg_ast->number);
-                            }
-                            arg_type                              = is_float ? type_float() : type_int();
-                        } else if (arg_ast->type == AST_STRING) {
-                            arg_type                              = type_string();
-                        } else if (arg_ast->type == AST_CHAR) {
-                            arg_type                              = type_char();
-                        } else if (arg_ast->type == AST_KEYWORD) {
-                            arg_type                              = type_keyword();
-                        } else if (arg_ast->type == AST_SYMBOL) {
-                            // For    symbols, look up the env entry for the freshest type.
-                            EnvEntry *ae                          = env_lookup(ctx->env, arg_ast->symbol);
-                            if (ae && ae->type && ae->type->kind != TYPE_UNKNOWN &&
-                                ae->type->kind                   != TYPE_VAR) {
-                                arg_type                          = ae->type;
-                            } else if (ae && ae->scheme && ae->scheme->type) {
-                                arg_type                          = ae->scheme->type;
-                            } else {
-                                arg_type                          = arg_ast->inferred_type
-                                         ? arg_ast->inferred_type : type_unknown();
-                            }
-                        } else if (arg_ast->type == AST_ARRAY) {
-                            arg_type = type_arr(NULL, -1);
-                        } else {
-                            // For complex expressions (nested calls etc.), fall back
-                            // to inferred_type. This is less reliable but unavoidable
-                            // without running a full codegen pass on the subexpression.
-                            arg_type = arg_ast->inferred_type
-                                     ? arg_ast->inferred_type : type_unknown();
-                        }
-
-                        ts.to[i] = arg_type ? arg_type : type_unknown();
-                    }
-
-                    // Fill remaining type vars with unknown if fewer args
-                    for (int i = declared_params; i < nq; i++) {
+                    for (int i = 0; i < nq; i++) {
                         ts.from[i] = entry->scheme->quantified[i];
                         ts.to[i]   = type_unknown();
+                    }
+
+                    for (int i = 0; i < declared_params; i++) {
+                        AST  *arg_ast  = ast->list.items[i + 1];
+                        Type *arg_type = codegen_call_arg_static_type(ctx, arg_ast);
+                        Type *formal   = entry->scheme
+                                       ? arrow_param_at(entry->scheme->type, i)
+                                       : NULL;
+                        if (!formal && i < entry->param_count)
+                            formal = entry->params[i].type;
+                        mono_unify_formal_actual(formal, arg_type, &ts);
                     }
 
                     // Check if all type vars are concrete
@@ -13096,8 +13839,7 @@ if (ast->list.count >= 5) {
                         if (!ts.to[i] || ts.to[i]->kind == TYPE_VAR ||
                             ts.to[i]->kind              == TYPE_UNKNOWN ||
                             ts.to[i]->kind              == TYPE_FN ||
-                            ts.to[i]->kind              == TYPE_ARROW ||
-                            ts.to[i]->kind              == TYPE_LIST) {
+                            ts.to[i]->kind              == TYPE_ARROW) {
                             all_concrete                 = false;
                             break;
                         }
@@ -14248,8 +14990,9 @@ if (ast->list.count >= 5) {
 
             // Type cast: (TypeName expr)
             const char *cast_target = NULL;
-            const char *types[] = {"Int", "Float", "Char", "Byte", "String", "Hex", "Bin", "Oct", "Path", "F32", "I8", "U8", "I16", "U16", "I32", "U32", "I64", "U64", "I128", "U128", NULL};
-            for (int i = 0; types[i]; i++) if (strcmp(head->symbol, types[i]) == 0) { cast_target = types[i]; break; }
+            Type *cast_target_type = NULL;
+            if (codegen_is_cast_target_name(head->symbol, &cast_target_type))
+                cast_target = head->symbol;
 
             if (cast_target) {
 
@@ -14649,6 +15392,18 @@ if (ast->list.count >= 5) {
                 } else if (strcmp(cast_target, "U64") == 0) { result.type = type_u64();  result.value = as_i64;
                 } else if (strcmp(cast_target, "I128")== 0) { result.type = type_i128(); result.value = LLVMBuildSExt(ctx->builder, as_i64, LLVMInt128TypeInContext(ctx->context), "to_i128");
                 } else if (strcmp(cast_target, "U128")== 0) { result.type = type_u128(); result.value = LLVMBuildZExt(ctx->builder, as_i64, LLVMInt128TypeInContext(ctx->context), "to_u128");
+                } else if (cast_target_type && cast_target_type->kind == TYPE_INT_ARBITRARY) {
+                    unsigned width = cast_target_type->numeric_width > 0
+                        ? (unsigned)cast_target_type->numeric_width
+                        : 64;
+                    if (width > 128) width = 128;
+                    result.type = type_int_arbitrary((int)width,
+                                                     cast_target_type->numeric_signed);
+                    result.value = LLVMBuildIntCast2(
+                        ctx->builder, as_i64,
+                        LLVMIntTypeInContext(ctx->context, width),
+                        cast_target_type->numeric_signed ? 1 : 0,
+                        cast_target_type->numeric_signed ? "to_iN" : "to_uN");
                 }
 
                 return result;
@@ -15232,8 +15987,12 @@ if (ast->list.count >= 5) {
             }
 
             CodegenResult body_result = {0};
-            for (int i = 0; i < head->lambda.body_count; i++)
+            for (int i = 0; i < head->lambda.body_count; i++) {
+                if (head->lambda.body_count > 1 &&
+                    codegen_ast_is_undefined_expr(head->lambda.body_exprs[i]))
+                    continue;
                 body_result = codegen_expr(ctx, head->lambda.body_exprs[i]);
+            }
 
             ctx->env = saved_env;
             return body_result;
@@ -15562,6 +16321,45 @@ void codegen_declare_external_func(CodegenContext *ctx,
     free(ptypes);
 }
 
+static void register_legacy_collection_builtins(CodegenContext *ctx) {
+    /* Transitional library surface: these names still lower through codegen
+     * handlers, but their semantics should migrate into core modules. */
+    env_insert_builtin(ctx->env, "Map?",     1, 0, "Test if value is a map", NULL);
+    env_insert_builtin(ctx->env, "assoc",    3, 0, "Add or update a key-value pair in a map (immutable)", NULL);
+    env_insert_builtin(ctx->env, "assoc!",   3, 0, "Add or update a key-value pair in a map in place", NULL);
+    env_insert_builtin(ctx->env, "dissoc",   2, 0, "Remove a key from a map (immutable)", NULL);
+    env_insert_builtin(ctx->env, "dissoc!",  2, 0, "Remove a key from a map in place", NULL);
+    env_insert_builtin(ctx->env, "find",     2, 0, "Return (key val) pair for key in map, or nil", NULL);
+    env_insert_builtin(ctx->env, "keys",     1, 0, "Return a list of all keys in a map", NULL);
+    env_insert_builtin(ctx->env, "vals",     1, 0, "Return a list of all values in a map", NULL);
+    env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict", NULL);
+
+    env_insert_builtin(ctx->env, "set",          0, -1, "Create a set from arguments or convert a collection", NULL);
+    env_insert_builtin(ctx->env, "Set?",         1,  0, "Test if value is a set", NULL);
+    env_insert_builtin(ctx->env, "collection?",  1,  0, "Test if value is a List, Set, or Arr", NULL);
+    env_insert_builtin(ctx->env, "conj",         2,  0, "Add an element to a set", NULL);
+    env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set", NULL);
+    env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place", NULL);
+    env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place", NULL);
+    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a collection contains an element", NULL);
+    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a collection ends with a suffix", NULL);
+    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a collection starts with a prefix", NULL);
+    env_insert_builtin(ctx->env, "substring",    3,  0, "Return a substring from start index to end index", NULL);
+    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a collection", NULL);
+
+    env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments", NULL);
+    env_insert_builtin(ctx->env, "cons",    2,  0, "Cons an element onto a list", NULL);
+    env_insert_builtin(ctx->env, ".",       2,  0, "Cons an element onto a list", NULL);
+    env_insert_builtin(ctx->env, "car",     1,  0, "Get first element of list", NULL);
+    env_insert_builtin(ctx->env, "cdr",     1,  0, "Get rest of list", NULL);
+    env_insert_builtin(ctx->env, "head",    1,  0, "Get first element of any collection (List, Array, String)", NULL);
+    env_insert_builtin(ctx->env, "tail",    1,  0, "Get all but first element of any collection (List, Array, String)", NULL);
+    env_insert_builtin(ctx->env, "++",      2,  0, "Concatenate two collections", NULL);
+    env_insert_builtin(ctx->env, "empty?",  1,  0, "Test if list is empty", NULL);
+    env_insert_builtin(ctx->env, "pair?",   1,  0, "Test if a list is a dotted pair (tail is an atom)", NULL);
+    env_insert_builtin(ctx->env, "append!", 2,  0, "Destructively append a value to a list in place: (append! xs val)", NULL);
+}
+
 void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "??",        2,  0, "Null coalescing operator: (?? expr default)", NULL);
     // Arithmetic operators
@@ -15592,47 +16390,7 @@ void register_builtins(CodegenContext *ctx) {
 
     env_insert_builtin(ctx->env, "code", 1, 0, "Return the source AST of a defined function", NULL);
 
-    // Map
-    env_insert_builtin(ctx->env, "Map?",     1, 0, "Test if value is a map", NULL);
-    env_insert_builtin(ctx->env, "assoc",    3, 0, "Add or update a key-value pair in a map (immutable)", NULL);
-    env_insert_builtin(ctx->env, "assoc!",   3, 0, "Add or update a key-value pair in a map in place", NULL);
-    env_insert_builtin(ctx->env, "dissoc",   2, 0, "Remove a key from a map (immutable)", NULL);
-    env_insert_builtin(ctx->env, "dissoc!",  2, 0, "Remove a key from a map in place", NULL);
-    env_insert_builtin(ctx->env, "find",     2, 0, "Return (key val) pair for key in map, or nil", NULL);
-    env_insert_builtin(ctx->env, "keys",     1, 0, "Return a list of all keys in a map", NULL);
-    env_insert_builtin(ctx->env, "vals",     1, 0, "Return a list of all values in a map", NULL);
-    env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict", NULL);
-
-    // Set
-    env_insert_builtin(ctx->env, "set",          0, -1, "Create a set from arguments or convert a collection", NULL);
-    env_insert_builtin(ctx->env, "Set?",         1,  0, "Test if value is a set", NULL);
-    env_insert_builtin(ctx->env, "collection?",  1,  0, "Test if value is a List, Set, or Arr", NULL);
-    env_insert_builtin(ctx->env, "conj",         2,  0, "Add an element to a set", NULL);
-    env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set", NULL);
-    env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place", NULL);
-    env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place", NULL);
-    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a collection contains an element", NULL);
-    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a collection ends with a suffix", NULL);
-    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a collection starts with a prefix", NULL);
-    env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a collection", NULL);
-
-    // List operations
-    env_insert_builtin(ctx->env, "list",    0, -1, "Create a list from arguments", NULL);
-    env_insert_builtin(ctx->env, "cons",    2,  0, "Cons an element onto a list", NULL);
-    env_insert_builtin(ctx->env, ".",       2,  0, "Cons an element onto a list", NULL);
-    env_insert_builtin(ctx->env, "car",     1,  0, "Get first element of list", NULL);
-    env_insert_builtin(ctx->env, "cdr",     1,  0, "Get rest of list", NULL);
-    env_insert_builtin(ctx->env, "head",    1,  0, "Get first element of any collection (List, Array, String)", NULL);
-    env_insert_builtin(ctx->env, "tail",    1,  0, "Get all but first element of any collection (List, Array, String)", NULL);
-    env_insert_builtin(ctx->env, "length",  1,  0, "Get length of list or string", NULL);
-    env_insert_builtin(ctx->env, "++",      2,  0, "Concatenate two collections", NULL);
-    env_insert_builtin(ctx->env, "reverse", 1,  0, "Reverse a list", NULL);
-    env_insert_builtin(ctx->env, "nth",     2,  0, "Get nth element of list (0-indexed)", NULL);
-    { static const ParamKind pk[] = {PARAM_FUNC, PARAM_VALUE, PARAM_VALUE};
-      env_insert_builtin(ctx->env, "reduce", 3, 0, "Reduce list with function and initial value", pk); }
-    env_insert_builtin(ctx->env, "empty?",  1,  0, "Test if list is empty", NULL);
-    env_insert_builtin(ctx->env, "pair?",   1,  0, "Test if a list is a dotted pair (tail is an atom)", NULL);
-    env_insert_builtin(ctx->env, "append!", 2,  0, "Destructively append a value to a list in place: (append! xs val)", NULL);
+    register_legacy_collection_builtins(ctx);
 
     // Logic operators
     env_insert_builtin(ctx->env, "and", 2, -1, "Logical AND (short-circuit)", NULL);
@@ -15708,8 +16466,6 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "Oct?",     1, 0, "Return True if value is an Oct", NULL);
 
     // String operations
-    env_insert_builtin(ctx->env, "concat",      2, -1, "Concatenate strings", NULL);
-    env_insert_builtin(ctx->env, "substring",   3,  0, "Get substring (str start end)", NULL);
     env_insert_builtin(ctx->env, "make-string", 2,  0, "Create a string of length n filled with char c", NULL);
 
     env_insert_builtin(ctx->env, "layout",   1, -1, "Define a struct layout", NULL);

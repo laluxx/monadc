@@ -129,6 +129,101 @@ static Type *type_parse_comma_tuple(const char *name) {
     return t;
 }
 
+static bool type_name_is_builtin_constructor(const char *name) {
+    return strcmp(name, "Int") == 0 || strcmp(name, "Float") == 0 ||
+           strcmp(name, "Char") == 0 || strcmp(name, "Byte") == 0 ||
+           strcmp(name, "String") == 0 || strcmp(name, "Bool") == 0 ||
+           strcmp(name, "Hex") == 0 || strcmp(name, "Bin") == 0 ||
+           strcmp(name, "Oct") == 0 || strcmp(name, "Keyword") == 0 ||
+           strcmp(name, "Ratio") == 0 || strcmp(name, "List") == 0 ||
+           strcmp(name, "Arr") == 0 || strcmp(name, "Set") == 0 ||
+           strcmp(name, "Map") == 0 || strcmp(name, "Coll") == 0 ||
+           strcmp(name, "Fn") == 0 || strcmp(name, "Pointer") == 0 ||
+           strcmp(name, "Path") == 0 || strcmp(name, "Escape") == 0 ||
+           strcmp(name, "Unit") == 0 || strcmp(name, "Heap") == 0;
+}
+
+static char **type_split_top_level_space(const char *name, int *out_count) {
+    *out_count = 0;
+    char **parts = NULL;
+    const char *p = name;
+
+    while (p && *p) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+
+        const char *start = p;
+        int depth = 0;
+        while (*p) {
+            if (*p == '(' || *p == '[' || *p == '{') {
+                depth++;
+            } else if (*p == ')' || *p == ']' || *p == '}') {
+                if (depth > 0) depth--;
+            } else if (depth == 0 && (*p == ' ' || *p == '\t')) {
+                break;
+            }
+            p++;
+        }
+
+        char *raw = strndup(start, (size_t)(p - start));
+        char *part = type_trim_copy(raw);
+        free(raw);
+        if (part[0]) {
+            parts = realloc(parts, sizeof(char *) * ((size_t)*out_count + 1));
+            parts[*out_count] = part;
+            (*out_count)++;
+        } else {
+            free(part);
+        }
+    }
+
+    return parts;
+}
+
+static void type_free_split_parts(char **parts, int count) {
+    for (int i = 0; i < count; i++)
+        free(parts[i]);
+    free(parts);
+}
+
+static Type *type_parse_type_application(const char *name) {
+    int count = 0;
+    char **parts = type_split_top_level_space(name, &count);
+    if (count < 2) {
+        type_free_split_parts(parts, count);
+        return NULL;
+    }
+
+    const char *constructor = parts[0];
+    if (!(constructor[0] >= 'A' && constructor[0] <= 'Z') ||
+        type_name_is_builtin_constructor(constructor)) {
+        type_free_split_parts(parts, count);
+        return NULL;
+    }
+
+    Type *arg = NULL;
+    if (count == 2) {
+        arg = type_from_name(parts[1]);
+        if (!arg) arg = type_unknown();
+    } else {
+        arg = make_type(TYPE_LIST);
+        arg->list_count = 0;
+        arg->list_types = NULL;
+        for (int i = 1; i < count; i++) {
+            Type *elem = type_from_name(parts[i]);
+            if (!elem) elem = type_unknown();
+            arg->list_count++;
+            arg->list_types = realloc(arg->list_types,
+                                      sizeof(Type *) * arg->list_count);
+            arg->list_types[arg->list_count - 1] = elem;
+        }
+    }
+
+    Type *app = type_app(constructor, arg);
+    type_free_split_parts(parts, count);
+    return app;
+}
+
 /// Type alias
 
 TypeAlias *g_aliases = NULL;
@@ -182,6 +277,120 @@ const char *refinement_pred_name(const char *type_name) {
     for (RefinementEntry *e = g_refinements; e; e = e->next)
         if (strcmp(e->name, type_name) == 0) return e->pred_name;
     return NULL;
+}
+
+static const char *type_alias_target_name(const char *type_name) {
+    if (!type_name) return NULL;
+    for (TypeAlias *a = g_aliases; a; a = a->next)
+        if (a->alias_name && strcmp(a->alias_name, type_name) == 0)
+            return a->target_name;
+    return NULL;
+}
+
+static const char *refinement_base_name(const char *type_name) {
+    if (!type_name) return NULL;
+    for (RefinementEntry *e = g_refinements; e; e = e->next)
+        if (e->name && strcmp(e->name, type_name) == 0)
+            return e->base_type;
+    return NULL;
+}
+
+static bool numeric_type_info(const char *name, bool *is_int,
+                              bool *is_unsigned, int *width,
+                              bool *is_float) {
+    if (!name) return false;
+    *is_int = false;
+    *is_unsigned = false;
+    *width = 0;
+    *is_float = false;
+
+    if (strcmp(name, "Int") == 0) {
+        *is_int = true;
+        *width = 64;
+        return true;
+    }
+    if (strcmp(name, "Byte") == 0 || strcmp(name, "U8") == 0) {
+        *is_int = true;
+        *is_unsigned = true;
+        *width = 8;
+        return true;
+    }
+    if (strcmp(name, "Hex") == 0 || strcmp(name, "Bin") == 0 ||
+        strcmp(name, "Oct") == 0) {
+        *is_int = true;
+        *width = 64;
+        return true;
+    }
+    if ((name[0] == 'U' || name[0] == 'I') &&
+        name[1] >= '1' && name[1] <= '9') {
+        char *end = NULL;
+        long parsed = strtol(name + 1, &end, 10);
+        if (end && *end == '\0' && parsed > 0 && parsed <= 128) {
+            *is_int = true;
+            *is_unsigned = name[0] == 'U';
+            *width = (int)parsed;
+            return true;
+        }
+    }
+    if (strcmp(name, "Float") == 0) {
+        *is_float = true;
+        *width = 64;
+        return true;
+    }
+    if (strcmp(name, "F32") == 0) {
+        *is_float = true;
+        *width = 32;
+        return true;
+    }
+    if (strcmp(name, "F80") == 0) {
+        *is_float = true;
+        *width = 80;
+        return true;
+    }
+
+    return false;
+}
+
+bool type_name_is_subtype(const char *sub_name, const char *sup_name) {
+    if (!sub_name || !sup_name) return false;
+    if (strcmp(sub_name, sup_name) == 0) return true;
+
+    const char *base = refinement_base_name(sub_name);
+    if (base && type_name_is_subtype(base, sup_name))
+        return true;
+
+    const char *alias = type_alias_target_name(sub_name);
+    if (alias && strcmp(alias, sub_name) != 0 &&
+        type_name_is_subtype(alias, sup_name))
+        return true;
+
+    bool sub_int, sub_unsigned, sub_float;
+    bool sup_int, sup_unsigned, sup_float;
+    int sub_width, sup_width;
+    if (numeric_type_info(sub_name, &sub_int, &sub_unsigned,
+                          &sub_width, &sub_float) &&
+        numeric_type_info(sup_name, &sup_int, &sup_unsigned,
+                          &sup_width, &sup_float)) {
+        if (sub_float || sup_float) {
+            if (sub_float && sup_float)
+                return sub_width <= sup_width || strcmp(sup_name, "Float") == 0;
+            return false;
+        }
+        if (sub_int && sup_int) {
+            if (strcmp(sup_name, "Int") == 0)
+                return true;
+            if (sub_unsigned == sup_unsigned)
+                return sub_width <= sup_width;
+        }
+    }
+
+    return false;
+}
+
+bool type_is_subtype(Type *sub, Type *sup) {
+    if (!sub || !sup) return false;
+    if (types_equal(sub, sup)) return true;
+    return type_name_is_subtype(type_to_string(sub), type_to_string(sup));
 }
 
 void refinement_free_all(void) {
@@ -381,6 +590,9 @@ Type *type_from_name(const char *name) {
 
     Type *comma_tuple = type_parse_comma_tuple(name);
     if (comma_tuple) return comma_tuple;
+
+    Type *type_app = type_parse_type_application(name);
+    if (type_app) return type_app;
 
     if (len > 1 && name[0] == '*') {
         const char *inner_name = name + 1;
@@ -621,26 +833,6 @@ Type *type_from_name(const char *name) {
         }
         break;  // not found in aliases
         next_iteration:;
-    }
-
-    /* Type application: "Maybe Float", "Maybe a" etc.
-     * If the arg is an unknown type variable, use TYPE_UNKNOWN as
-     * the arg — codegen treats all ADT fields as opaque pointers anyway. */
-    {
-        const char *space = strchr(name, ' ');
-        if (space && space > name) {
-            char constructor[256];
-            size_t clen = space - name;
-            if (clen < sizeof(constructor)) {
-                memcpy(constructor, name, clen);
-                constructor[clen] = '\0';
-                const char *arg_str = space + 1;
-                while (*arg_str == ' ') arg_str++;
-                Type *arg = type_from_name(arg_str);
-                if (!arg) arg = type_unknown();
-                return type_app(constructor, arg);
-            }
-        }
     }
 
     return NULL;  // unknown type

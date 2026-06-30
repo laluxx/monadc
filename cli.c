@@ -197,7 +197,8 @@ static int levenshtein(const char *a, const char *b)
 
 static const char *SUBCOMMANDS[] = {
     "new", "build", "run", "clean", "install",
-    "test", "check", "trace", "debug", "lsp", "eval", "repl", "jit", "help", NULL
+    "test", "check", "trace", "debug", "lsp", "eval",
+    "repl", "jit", "menu", "flags", "help", NULL
 };
 
 static bool parse_optimization_flag(const char *arg, int *level)
@@ -466,6 +467,60 @@ static bool parse_common_flag(int argc, char **argv, int *index, CompilerFlags *
     return true;
 }
 
+static bool is_dispatch_word(const char *arg)
+{
+    if (!arg) return false;
+    if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0 ||
+        strcmp(arg, "-d") == 0 || strcmp(arg, "--debug") == 0 ||
+        strcmp(arg, "-jit") == 0 || strcmp(arg, "--jit") == 0 ||
+        strcmp(arg, "-i") == 0 ||
+        strcmp(arg, "-e") == 0 || strcmp(arg, "--eval") == 0 ||
+        strcmp(arg, "--test") == 0 || strcmp(arg, "--test-run") == 0)
+        return true;
+    for (int i = 0; SUBCOMMANDS[i]; i++)
+        if (strcmp(arg, SUBCOMMANDS[i]) == 0)
+            return true;
+    return false;
+}
+
+static bool is_common_option_word(const char *arg)
+{
+    if (!arg) return false;
+    return arg[0] == '-' ||
+           strcmp(arg, "verbose") == 0 ||
+           strcmp(arg, "quiet") == 0 ||
+           strcmp(arg, "trace") == 0 ||
+           strcmp(arg, "trace-all") == 0 ||
+           strcmp(arg, "trace-off") == 0 ||
+           strcmp(arg, "trace-none") == 0 ||
+           strcmp(arg, "optimize") == 0 ||
+           strncmp(arg, "optimize=", 9) == 0 ||
+           strcmp(arg, "output") == 0 ||
+           strcmp(arg, "emit-ir") == 0 ||
+           strcmp(arg, "emit-llvm") == 0 ||
+           strcmp(arg, "emit-bc") == 0 ||
+           strcmp(arg, "bitcode") == 0 ||
+           strcmp(arg, "emit-asm") == 0 ||
+           strcmp(arg, "asm") == 0 ||
+           strcmp(arg, "emit-obj") == 0 ||
+           strcmp(arg, "obj") == 0 ||
+           strcmp(arg, "emit-json") == 0 ||
+           strcmp(arg, "emit-typst") == 0 ||
+           strcmp(arg, "emit-bytecode") == 0 ||
+           strcmp(arg, "bytecode") == 0 ||
+           strcmp(arg, "bytecode-verify") == 0 ||
+           strcmp(arg, "bytecode-disassemble") == 0 ||
+           strcmp(arg, "bytecode-dump") == 0 ||
+           strcmp(arg, "bytecode-decompile") == 0 ||
+           strcmp(arg, "bytecode-sections") == 0 ||
+           strcmp(arg, "bytecode-trace") == 0 ||
+           strcmp(arg, "bytecode-baseline-jit") == 0 ||
+           strcmp(arg, "Wall") == 0 ||
+           strcmp(arg, "warnings") == 0 ||
+           strcmp(arg, "Wextra") == 0 ||
+           strcmp(arg, "extra-warnings") == 0;
+}
+
 static void suggest_subcommand(const char *unknown)
 {
     const char *best  = NULL;
@@ -484,6 +539,38 @@ CompilerFlags parse_flags(int argc, char **argv) {
     config_apply_default_flags(&flags);
 
     if (argc < 2) { flags.mode = CMD_REPL; flags.start_repl = true; return flags; }
+
+    /* Accept common options before the subcommand, e.g.
+     *   monad verbose test file.mon
+     *   monad -v test file.mon
+     * The rest of the parser is intentionally subcommand-first, so normalize
+     * leading option words/flags by applying them, then dispatching from the
+     * first real command or input path. */
+    char **normalized_argv = NULL;
+    int first = 1;
+    while (first < argc && !is_dispatch_word(argv[first])) {
+        int before = first;
+        if (!parse_common_flag(argc, argv, &first, &flags))
+            break;
+        first++;
+        if (first <= before)
+            break;
+    }
+    if (first >= argc) {
+        flags.mode = CMD_REPL;
+        flags.start_repl = true;
+        return flags;
+    }
+    if (first > 1) {
+        int normalized_argc = argc - first + 1;
+        normalized_argv = malloc(sizeof(char *) * (normalized_argc + 1));
+        normalized_argv[0] = argv[0];
+        for (int i = first; i < argc; i++)
+            normalized_argv[i - first + 1] = argv[i];
+        normalized_argv[normalized_argc] = NULL;
+        argv = normalized_argv;
+        argc = normalized_argc;
+    }
 
     if (strcmp(argv[1], "trace") == 0) {
         if (argc < 3) {
@@ -516,6 +603,9 @@ CompilerFlags parse_flags(int argc, char **argv) {
         else
             print_usage(argv[0]);
         exit(0);
+    }
+    if (strcmp(argv[1], "menu") == 0 || strcmp(argv[1], "flags") == 0) {
+        exit(completion_menu_main(argv[0]));
     }
 
     if (strcmp(argv[1], "-d") == 0 || strcmp(argv[1], "--debug") == 0 ||
@@ -570,6 +660,12 @@ CompilerFlags parse_flags(int argc, char **argv) {
     if (strcmp(argv[1], "check")   == 0) {
         flags.mode = CMD_CHECK;
         if (argc >= 3) flags.input_file = argv[2];
+        for (int i = 3; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown check flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
         return flags;
     }
     if (strcmp(argv[1], "-i") == 0 || strcmp(argv[1], "repl") == 0) {
@@ -586,11 +682,20 @@ CompilerFlags parse_flags(int argc, char **argv) {
 
     // monad test <file.mon>  ->  compile with tests, run _test binary, delete it
     if (strcmp(argv[1], "test") == 0) {
-        if (argc < 3) { fprintf(stderr, "Usage: %s test <file.mon>\n", argv[0]); exit(1); }
         flags.mode       = CMD_TEST;
         flags.test_mode  = true;
         flags.test_run   = true;
-        flags.input_file = argv[2];
+        int option_start = 2;
+        if (argc >= 3 && !is_common_option_word(argv[2])) {
+            flags.input_file = argv[2];
+            option_start = 3;
+        }
+        for (int i = option_start; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown test flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
         return flags;
     }
 
@@ -1181,7 +1286,13 @@ void cmd_lsp(void) {
     exit(rc);
 }
 
-void cmd_test(const char *input_file) {
+void cmd_test(const CompilerFlags *flags) {
+    const char *input_file = flags ? flags->input_file : NULL;
+    if (!input_file) {
+        int rc = system("python3 tests/run.py");
+        exit(WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : 1);
+    }
+
     char self[1024] = "monad";
     {
         char buf[1024] = {0};
@@ -1190,7 +1301,8 @@ void cmd_test(const char *input_file) {
     }
 
     char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "%s --test-run %s --quiet", self, input_file);
+    snprintf(cmd, sizeof(cmd), "%s --test-run %s%s", self, input_file,
+             (flags && flags->verbose_level > 0) ? "" : " --quiet");
     int build_rc = system(cmd);
     if (!WIFEXITED(build_rc) || WEXITSTATUS(build_rc) != 0) {
         fprintf(stderr, "test build failed\n");

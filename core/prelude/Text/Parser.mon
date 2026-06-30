@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Data.List
+
 module Text.Parser
   [ParseResult
    parse-result parse-ok parse-error
@@ -64,13 +66,11 @@ define parse-error-code :: ParseResult -> Int
 
 
 define parser-empty? :: [Int] -> Bool
-  xs -> (= (count xs) 0)
+  xs -> list-null? xs
 
 
 define parser-drop :: Int -> [Int] -> [Int]
-  n xs | n <= 0 -> xs
-  n []             -> []
-  n [x|xs]         -> parser-drop (n - 1) xs
+  n xs -> list-drop n xs
 
 
 define byte :: Int -> Int -> [Int] -> ParseResult

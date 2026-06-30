@@ -3091,14 +3091,26 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
                 Term *rhs = dep_term_of_ast(ctx, ast->list.items[3]);
                 return term_eq(lhs, rhs, ty);
             }
+            // (<: A B) — compile-time subtype predicate, value-level Bool
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "<:") == 0 && ast->list.count == 3) {
+                return term_ann(term_hole(), term_embed(type_bool()));
+            }
             // (refl t)
             if (head->type == AST_SYMBOL && strcmp(head->symbol, "refl") == 0 && ast->list.count == 2)
                 return term_refl(dep_term_of_ast(ctx, ast->list.items[1]));
             // (if cond then else)
             if (head->type == AST_SYMBOL && strcmp(head->symbol, "if") == 0 && ast->list.count >= 3) {
-                Term *cond = dep_term_of_ast(ctx, ast->list.items[1]);
-                Term *t    = dep_term_of_ast(ctx, ast->list.items[2]);
-                Term *e    = ast->list.count >= 4 ? dep_term_of_ast(ctx, ast->list.items[3]) : term_hole();
+                bool infix_subtype_cond =
+                    ast->list.count >= 5 &&
+                    ast->list.items[2]->type == AST_SYMBOL &&
+                    strcmp(ast->list.items[2]->symbol, "<:") == 0;
+                Term *cond = infix_subtype_cond
+                    ? term_ann(term_hole(), term_embed(type_bool()))
+                    : dep_term_of_ast(ctx, ast->list.items[1]);
+                size_t then_idx = infix_subtype_cond ? 4 : 2;
+                size_t else_idx = infix_subtype_cond ? 5 : 3;
+                Term *t    = ast->list.count > then_idx ? dep_term_of_ast(ctx, ast->list.items[then_idx]) : term_hole();
+                Term *e    = ast->list.count > else_idx ? dep_term_of_ast(ctx, ast->list.items[else_idx]) : term_hole();
                 return term_if(cond, t, e);
             }
             // Variadic logical operators: (and a b c) -> (and a (and b c))
@@ -3893,7 +3905,6 @@ void dep_register_builtins(DepCtx *ctx) {
     dep_env_declare(env, "cong",  val_universe_n(0));  // placeholder
 
     // ── Standard Library Bootstrapping ─────────────────────────────
-    Term *t_int  = term_embed(type_int());
     Term *t_bool = term_embed(type_bool());
     Term *t_str  = term_embed(type_string());
 
@@ -3934,6 +3945,7 @@ void dep_register_builtins(DepCtx *ctx) {
     dep_env_declare(env, "<=",  dep_eval(poly_poly_bool, ee, NULL));
     dep_env_declare(env, ">",   dep_eval(poly_poly_bool, ee, NULL));
     dep_env_declare(env, "<",   dep_eval(poly_poly_bool, ee, NULL));
+    dep_env_declare(env, "<:",  dep_eval(poly_poly_bool, ee, NULL));
     dep_env_declare(env, "=",   dep_eval(poly_poly_bool, ee, NULL));
     dep_env_declare(env, "!=",  dep_eval(poly_poly_bool, ee, NULL));
 

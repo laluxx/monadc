@@ -49,25 +49,25 @@ tests
   :registration:
 
   :int-instance:
-  assert-eq (eq? 1 1) True "Eq Int eq? true"
-  assert-eq (eq? 1 2) False "Eq Int eq? false"
-  assert-eq (not-eq? 1 2) True "Eq Int not-eq? true"
+  assert-eq (eq? 1 1)     True  "Eq Int eq? true"
+  assert-eq (eq? 1 2)     False "Eq Int eq? false"
+  assert-eq (not-eq? 1 2) True  "Eq Int not-eq? true"
   :int-instance:
 
   :bool-instance:
-  assert-eq (eq? True True) True "Eq Bool eq? true"
-  assert-eq (eq? True False) False "Eq Bool eq? false"
-  assert-eq (not-eq? True False) True "Eq Bool not-eq? true"
+  assert-eq (eq? True True)      True  "Eq Bool eq? true"
+  assert-eq (eq? True False)     False "Eq Bool eq? false"
+  assert-eq (not-eq? True False) True  "Eq Bool not-eq? true"
   :bool-instance:
 
   :char-instance:
-  assert-eq (eq? 'A' 'A') True "Eq Char eq? true"
-  assert-eq (eq? 'A' 'B') False "Eq Char eq? false"
-  assert-eq (not-eq? 'A' 'B') True "Eq Char not-eq? true"
+  assert-eq (eq? 'A' 'A')     True  "Eq Char eq? true"
+  assert-eq (eq? 'A' 'B')     False "Eq Char eq? false"
+  assert-eq (not-eq? 'A' 'B') True  "Eq Char not-eq? true"
   :char-instance:
 
   :string-instance:
-  assert-eq (eq? "alpha" "alpha") True "Eq String eq? true"
-  assert-eq (eq? "alpha" "beta") False "Eq String eq? false"
-  assert-eq (not-eq? "alpha" "beta") True "Eq String not-eq? true"
+  assert-eq (eq?    "alpha" "alpha") True  "Eq String eq? true"
+  assert-eq (eq?     "alpha" "beta") False "Eq String eq? false"
+  assert-eq (not-eq? "alpha" "beta") True  "Eq String not-eq? true"
   :string-instance:

@@ -105,6 +105,8 @@ bool type_is_float(Type *t);
 void codegen_print_ast(CodegenContext *ctx, AST *ast);
 EnvParam *clone_params(EnvParam *src, int count);
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast);
+void codegen_predeclare_toplevel_functions(CodegenContext *ctx, AST **exprs,
+                                           size_t count, size_t first_code);
 void register_builtins(CodegenContext *ctx);
 
 // Declare an external symbol (from another module) into this module's env.

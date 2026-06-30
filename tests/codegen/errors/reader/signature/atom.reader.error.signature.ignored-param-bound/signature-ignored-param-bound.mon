@@ -1,0 +1,24 @@
+;; TEST-ID: tests.reader.error.signature-ignored-param-bound
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SUBSET: signature
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: reader
+;; TEST-CONTEXT: monadc.context.wisp.ignored-signature-param
+;; TEST-PURPOSE: A _ signature parameter is a whole-function ignored argument contract, not a type variable.
+;; TEST-ATOM: define bad :: _ -> Int followed by x -> x must be rejected.
+;; TEST-EXPECT: fail:compile
+;; TEST-EXPECT-DIAGNOSTIC: ignored signature parameter
+;; TEST-COVERAGE: reader.c:function signature wildcard parameter contract
+;; TEST-TAG: fail
+;; TEST-TAG: diagnostic
+;; TEST-MENU: errors/reader/signature/atom.reader.error.signature.ignored-param-bound
+;; TEST-MENU-PATH: codegen/errors/reader/signature/atom.reader.error.signature.ignored-param-bound
+;; TEST-ATOM-LEAF: atom.reader.error.signature.ignored-param-bound
+;; TEST-CLI-TARGET: codegen errors reader signature
+module Main
+
+define bad :: _ -> Int
+  x -> x
+
+show (bad 1)

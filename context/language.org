@@ -206,8 +206,8 @@
 
 [DEC id:dec.language.dispatch-rule date:2026-06-12 by:codex]
   A function is callable from paren-mode ONLY if it has a strcmp handler in
-  =codegen_expr=. =register_builtins=-only functions (=concat=, =substring=,
-  =reverse=, =nth=, =length=, =reduce=, =fn=, =lambda=, =cond=, =when=, =let=,
+  =codegen_expr=. =register_builtins=-only functions (=substring=,
+  =fn=, =lambda=, =cond=, =when=, =let=,
   =let*=, =letrec=) are NOT directly callable.
 
 * Working Dispatch
@@ -276,7 +276,7 @@
 :ID: monadc.context.language.codegen-gaps
 :CUSTOM_ID: codegen-gaps
 :CONTEXT_KIND: observation
-:CONTEXT_DESCRIPTION: Known codegen dispatch and runtime gaps: closures without strcmp handlers, register_builtins-only unreachable symbols (concat/substring/reverse/nth/length/reduce), missing control forms (cond/when/let/let*/letrec), map/set runtime construction for untyped contexts, list variadic construction, tail segfault, and inline assembly pointer sugar.
+:CONTEXT_DESCRIPTION: Known codegen dispatch and runtime gaps: closures without strcmp handlers, register_builtins-only unreachable symbols (substring), missing control forms (cond/when/let/let*/letrec), map/set runtime construction for untyped contexts, list variadic construction, tail segfault, and inline assembly pointer sugar.
 :CONTEXT_VERSION: 2
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: codex
@@ -297,8 +297,7 @@
 
 [OBS id:obs.language.gap-registered-only src:codegen.c conf:high]
   These functions are =register_builtins=-only — registered in env but lack
-  strcmp dispatch and are unreachable from paren-mode: =concat=, =substring=,
-  =reverse=, =nth=, =length=, =reduce=.
+  strcmp dispatch and are unreachable from paren-mode: =substring=.
 
 [OBS id:obs.language.gap-control-forms src:codegen.c conf:high]
   These control forms have no strcmp handler: =cond=, =when=, =let=, =let*=,
@@ -3036,4 +3035,3 @@ Test-driven observations and failure records for the corresponding subsystem.
   Test-context anchor used by the categorized test suite. The concrete
   fixtures and TSV rows remain the source of executable truth; this node
   makes TEST-CONTEXT links resolvable and searchable from the context graph.
-

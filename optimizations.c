@@ -560,12 +560,44 @@ bool opt_range_literal_length(AST *range_ast, long long *out_length) {
 }
 
 
-/// Constant table — internal helpers
+/// Constant table — open-addressing hash map
+//
+//  Mathematical basis:
+//    Load factor <= 0.5 (grow when count >= capacity/2) guarantees that
+//    linear probing finds an empty slot in at most 2 expected probes
+//    (by the coupon-collector bound for open addressing at alpha=0.5).
+//    Power-of-two capacity lets the modulo reduction be a bitmask: O(1)
+//    with no division instruction.
+//
+//    djb2 hash: h(0)=5381, h(i) = h(i-1)*33 ^ c_i.
+//    Multiplier 33 = 2^5+1 maps well to a single LEA on x86/ARM.
+//    Chosen to match env.c so the two subsystems use the same hash
+//    quality characteristics and can be compared directly in profiling.
+//
+//  Tombstones: we use name==NULL to mean "empty", name==(char*)1 to mean
+//  "deleted" (tombstone).  Lookup probes past tombstones; insert reuses
+//  the first tombstone it passes.  Since constants are only ever added
+//  (never deleted) within one optimizer pass, tombstones never occur in
+//  practice — the slot is reserved for future use if we add eviction.
+//
+
+#define CT_TOMB ((char *)1)  /* tombstone sentinel, distinct from NULL */
+
+static unsigned int ct_hash(const char *s) {
+    unsigned int h = 5381;
+    unsigned char c;
+    while ((c = (unsigned char)*s++)) h = ((h << 5) + h) ^ c;
+    return h;
+}
 
 static void constants_free(ConstantTable *table) {
-    for (size_t i = 0; i < table->count; i++) {
-        free(table->items[i].name);
-        ast_free(table->items[i].value);
+    if (!table->items) return;
+    for (size_t i = 0; i < table->capacity; i++) {
+        ConstantEntry *e = &table->items[i];
+        if (e->name && e->name != CT_TOMB) {
+            free(e->name);
+            ast_free(e->value);
+        }
     }
     free(table->items);
     table->items    = NULL;
@@ -573,25 +605,63 @@ static void constants_free(ConstantTable *table) {
     table->capacity = 0;
 }
 
+/*  ct_find_slot: return the index where name lives or should be inserted.
+ *  Records the first tombstone seen so insert can reuse it.
+ *  Never called on a full table (load <= 0.5 is maintained by constant_put).
+ */
+static size_t ct_find_slot(ConstantTable *table, const char *name,
+                            unsigned int h, size_t *tomb_out) {
+    size_t mask = table->capacity - 1;
+    size_t i    = h & mask;
+    size_t tomb = SIZE_MAX;
+    for (;;) {
+        char *n = table->items[i].name;
+        if (!n)                              { if (tomb_out) *tomb_out = tomb; return i; }
+        if (n == CT_TOMB)                    { if (tomb == SIZE_MAX) tomb = i; }
+        else if (strcmp(n, name) == 0)       { if (tomb_out) *tomb_out = tomb; return i; }
+        i = (i + 1) & mask;
+    }
+}
+
 static void constant_put(Optimizer *opt, const char *name, AST *value) {
     if (!name || !value || !is_literal(value)) return;
-    for (size_t i = 0; i < opt->constants.count; i++) {
-        if (strcmp(opt->constants.items[i].name, name) == 0) {
-            ast_free(opt->constants.items[i].value);
-            opt->constants.items[i].value = ast_clone(value);
-            return; /* update, not a new registration */
+
+    /* Grow before inserting if load factor would exceed 0.5. */
+    if (!opt->constants.items ||
+        (opt->constants.count + 1) * 2 > opt->constants.capacity) {
+        size_t new_cap = opt->constants.capacity
+                         ? opt->constants.capacity * 2 : 32;
+        ConstantEntry *new_items = calloc(new_cap, sizeof(ConstantEntry));
+        /* Rehash existing live entries into the new table. */
+        for (size_t i = 0; i < opt->constants.capacity; i++) {
+            ConstantEntry *old = &opt->constants.items[i];
+            if (!old->name || old->name == CT_TOMB) continue;
+            size_t j = ct_hash(old->name) & (new_cap - 1);
+            while (new_items[j].name) j = (j + 1) & (new_cap - 1);
+            new_items[j] = *old;
         }
+        free(opt->constants.items);
+        opt->constants.items    = new_items;
+        opt->constants.capacity = new_cap;
     }
-    if (opt->constants.count >= opt->constants.capacity) {
-        opt->constants.capacity = opt->constants.capacity
-                                  ? opt->constants.capacity * 2 : 16;
-        opt->constants.items = realloc(opt->constants.items,
-                                       sizeof(ConstantEntry) *
-                                       opt->constants.capacity);
+
+    unsigned int h    = ct_hash(name);
+    size_t       tomb = SIZE_MAX;
+    size_t       slot = ct_find_slot(&opt->constants, name, h, &tomb);
+
+    if (opt->constants.items[slot].name &&
+        opt->constants.items[slot].name != CT_TOMB) {
+        /* Update existing entry. */
+        ast_free(opt->constants.items[slot].value);
+        opt->constants.items[slot].value = ast_clone(value);
+        return;
     }
-    ConstantEntry *e = &opt->constants.items[opt->constants.count++];
-    e->name  = strdup(name);
-    e->value = ast_clone(value);
+
+    /* Insert into tombstone slot if available, else into empty slot. */
+    size_t ins = (tomb != SIZE_MAX) ? tomb : slot;
+    opt->constants.items[ins].name  = strdup(name);
+    opt->constants.items[ins].value = ast_clone(value);
+    opt->constants.count++;
     if (opt->stats) opt->stats->constants_registered++;
 }
 
@@ -621,21 +691,39 @@ static void shadow_pop_to(NameStack *stack, size_t mark) {
     stack->count = mark;
 }
 
-static bool is_shadowed(NameStack *stack, const char *name) {
-    for (size_t i = stack->count; i > 0; i--)
-        if (strcmp(stack->items[i - 1], name) == 0) return true;
-    return false;
-}
-
+/* is_shadowed defined below alongside constant_lookup — see that section. */
+static bool is_shadowed(NameStack *stack, const char *name);
 
 /// Constant lookup
 
+/*  is_shadowed: scan the shadow stack for name.
+ *
+ *  The shadow stack is almost always tiny (0-8 entries: lambda params of
+ *  the current nesting level).  A linear scan is optimal here — no hash
+ *  overhead for 0-8 comparisons, and the stack is hot in L1 cache.
+ *  We compare first chars before calling strcmp to short-circuit the
+ *  common case where names differ at the first character.
+ */
+static bool is_shadowed(NameStack *stack, const char *name) {
+    char first = name[0];
+    for (size_t i = stack->count; i > 0; i--) {
+        const char *s = stack->items[i - 1];
+        if (s[0] == first && strcmp(s, name) == 0) return true;
+    }
+    return false;
+}
+
 static AST *constant_lookup(Optimizer *opt, const char *name) {
+    /* Check shadow stack first — tiny, so linear is fine (see above). */
     if (is_shadowed(&opt->shadows, name)) return NULL;
-    for (size_t i = opt->constants.count; i > 0; i--)
-        if (strcmp(opt->constants.items[i - 1].name, name) == 0)
-            return opt->constants.items[i - 1].value;
-    return NULL;
+
+    /* O(1) hash map lookup for the constant table. */
+    if (!opt->constants.items || opt->constants.count == 0) return NULL;
+    size_t slot = ct_find_slot(&opt->constants, name,
+                               ct_hash(name), NULL);
+    ConstantEntry *e = &opt->constants.items[slot];
+    if (!e->name || e->name == CT_TOMB) return NULL;
+    return e->value;
 }
 
 
@@ -746,50 +834,137 @@ static void optimize_lambda(Optimizer *opt, AST *ast) {
 //  already been recursively optimized by optimize_list.
 //
 
-/* fold_numeric_call: constant-fold (+, -, *, /) on numeric literals. */
-static AST *fold_numeric_call(AST *ast, const char *op, Optimizer *opt) {
+/*  op_tag: integer token for each dispatchable operator.
+ *
+ *  Resolved by head_op_tag() in O(1) via first-character trie + length
+ *  check.  No strcmp needed for single-char ops or ops with unique first
+ *  chars.  The compiler turns the outer switch on first_char into a jump
+ *  table; the inner length/second-char checks are single integer compares.
+ *
+ *  The special forms (define, set!, quote, include) are handled before
+ *  head_op_tag() is called and are not members of this enum.
+ */
+typedef enum {
+    OP_UNKNOWN = 0,
+    OP_ADD, OP_SUB, OP_MUL, OP_DIV,
+    OP_EQ, OP_NEQ, OP_LT, OP_LTE, OP_GT, OP_GTE,
+    OP_AND, OP_OR, OP_NOT,
+    OP_IF,
+    OP_STR_APPEND
+} OpTag;
+
+/*  fold_numeric_call: constant-fold (+, -, *, /) on numeric literals.
+ *
+ *  Mathematical basis:
+ *    For associative+commutative ops (+, *) with identity e:
+ *      op(a1..an) = op(op(literals), op(unknowns))
+ *                 = op(folded_literal, u1, u2, ..., um)
+ *    If folded_literal == e  -> drop it, return op(unknowns)
+ *    If unknowns is empty    -> return folded_literal (full fold)
+ *    Otherwise               -> return op(folded_literal, unknowns)
+ *                               (partial fold: fewer nodes, fewer passes)
+ *
+ *  For non-commutative ops (-, /):
+ *    The first operand is positionally significant so only a full fold
+ *    is safe.  We still catch the unary-negate form (- x) as before.
+ *
+ *  Partial folding eliminates fixed-point iterations that existed solely
+ *  to collapse (+ 1 (+ 2 x)) -> (+ 3 x) -> result.  After flattening
+ *  and one partial-fold pass the literals are already grouped.
+ */
+/*  fold_numeric_call: constant-fold arithmetic operators.
+ *  Receives OpTag — zero strcmp calls inside.
+ *  See previous comment block for the partial-fold mathematical basis.
+ */
+static AST *fold_numeric_call(AST *ast, OpTag tag, Optimizer *opt) {
     if (ast->list.count < 2) return ast;
 
-    double acc = 0.0;
-    size_t start = 1;
+    bool is_add = tag == OP_ADD;
+    bool is_mul = tag == OP_MUL;
+    bool is_sub = tag == OP_SUB;
+    bool is_div = tag == OP_DIV;
 
-    if (strcmp(op, "*") == 0) {
-        acc = 1.0;
-    } else if (strcmp(op, "-") == 0 || strcmp(op, "/") == 0) {
+    /* Unary negation: (- x) -> (-x). */
+    if (is_sub && ast->list.count == 2) {
+        AST *arg = ast->list.items[1];
+        if (!arg || arg->type != AST_NUMBER) return ast;
+        if (opt->stats) opt->stats->expressions_folded++;
+        return replace_node(ast, number_ast(-arg->number), opt);
+    }
+
+    /* Non-commutative ops: full fold only (position matters). */
+    if (is_sub || is_div) {
         if (!ast->list.items[1] ||
             ast->list.items[1]->type != AST_NUMBER) return ast;
-        acc = ast->list.items[1]->number;
-        if (ast->list.count == 2 && strcmp(op, "-") == 0) {
-            if (opt->stats) opt->stats->expressions_folded++;
-            return replace_node(ast, number_ast(-acc), opt);
+        double acc = ast->list.items[1]->number;
+        for (size_t i = 2; i < ast->list.count; i++) {
+            AST *arg = ast->list.items[i];
+            if (!arg || arg->type != AST_NUMBER) return ast;
+            if (is_sub) { acc -= arg->number; }
+            else        { if (arg->number == 0.0) return ast; acc /= arg->number; }
         }
-        start = 2;
+        if (opt->stats) opt->stats->expressions_folded++;
+        return replace_node(ast, number_ast(acc), opt);
     }
 
-    for (size_t i = start; i < ast->list.count; i++) {
+    /* Commutative ops (+, *): partial fold.
+     * identity_val: the absorbing identity for the accumulator.
+     *   + -> 0.0   (* -> 1.0) */
+    double identity_val = is_mul ? 1.0 : 0.0;
+    double acc          = identity_val;
+    size_t n_unknown    = 0;
+
+    /* First pass: accumulate literals, count unknowns. */
+    for (size_t i = 1; i < ast->list.count; i++) {
         AST *arg = ast->list.items[i];
-        if (!arg || arg->type != AST_NUMBER) return ast;
-        double v = arg->number;
-        if      (strcmp(op, "+") == 0) acc += v;
-        else if (strcmp(op, "*") == 0) acc *= v;
-        else if (strcmp(op, "-") == 0) acc -= v;
-        else if (strcmp(op, "/") == 0) {
-            if (v == 0.0) return ast; /* never fold division by zero */
-            acc /= v;
+        if (arg && arg->type == AST_NUMBER) {
+            if (is_add) acc += arg->number;
+            else        acc *= arg->number;
+        } else {
+            n_unknown++;
         }
     }
 
+    /* Full fold: every operand was a literal. */
+    if (n_unknown == 0) {
+        if (opt->stats) opt->stats->expressions_folded++;
+        return replace_node(ast, number_ast(acc), opt);
+    }
+
+    /* Nothing to collapse: no literals at all, or acc == identity. */
+    bool acc_is_identity = (acc == identity_val);
+    size_t n_literals = (ast->list.count - 1) - n_unknown;
+    if (n_literals == 0 || (n_literals == 1 && !acc_is_identity)) return ast;
+
+    /* Partial fold: rewrite in-place, keeping only unknowns + folded literal.
+     * Layout of new items: [op, folded_literal?, unknown0, unknown1, ...] */
+    size_t out = 1; /* items[0] is the operator symbol, stays */
+    if (!acc_is_identity)
+        ast->list.items[out++] = number_ast(acc); /* folded literal first */
+
+    for (size_t i = 1; i < ast->list.count; i++) {
+        AST *arg = ast->list.items[i];
+        if (arg && arg->type == AST_NUMBER) {
+            ast_free(arg);          /* consumed into acc */
+            ast->list.items[i] = NULL;
+        } else {
+            ast->list.items[out++] = arg;
+        }
+    }
+    ast->list.count = out;
+    opt->changed = true;
     if (opt->stats) opt->stats->expressions_folded++;
-    return replace_node(ast, number_ast(acc), opt);
+    return ast;
 }
 
-/* fold_compare_call: constant-fold (=, !=, <, <=, >, >=).
+/*  fold_compare_call: constant-fold comparison operators.
  *
- *  Numeric comparisons fold on two AST_NUMBER operands.  Equality and
- *  inequality additionally fold on two nullary data-constructor symbols
- *  (structural equality is trivial when neither side carries fields).
+ *  Receives OpTag instead of string — zero strcmp calls inside.
+ *  Numeric: folds any two AST_NUMBER operands.
+ *  Equality: also folds two nullary ADT constructor symbols whose
+ *  structural equality is trivially decidable (no fields to compare).
  */
-static AST *fold_compare_call(AST *ast, const char *op, Optimizer *opt) {
+static AST *fold_compare_call(AST *ast, OpTag tag, Optimizer *opt) {
     if (ast->list.count != 3) return ast;
     AST *lhs = ast->list.items[1];
     AST *rhs = ast->list.items[2];
@@ -797,26 +972,28 @@ static AST *fold_compare_call(AST *ast, const char *op, Optimizer *opt) {
 
     if (lhs->type == AST_NUMBER && rhs->type == AST_NUMBER) {
         double l = lhs->number, r = rhs->number;
-        bool result = false;
-        if      (strcmp(op, "=")  == 0) result = l == r;
-        else if (strcmp(op, "!=") == 0) result = l != r;
-        else if (strcmp(op, "<")  == 0) result = l <  r;
-        else if (strcmp(op, "<=") == 0) result = l <= r;
-        else if (strcmp(op, ">")  == 0) result = l >  r;
-        else if (strcmp(op, ">=") == 0) result = l >= r;
-        else return ast;
+        bool result;
+        switch (tag) {
+        case OP_EQ:  result = l == r; break;
+        case OP_NEQ: result = l != r; break;
+        case OP_LT:  result = l <  r; break;
+        case OP_LTE: result = l <= r; break;
+        case OP_GT:  result = l >  r; break;
+        case OP_GTE: result = l >= r; break;
+        default: return ast;
+        }
         if (opt->stats) opt->stats->expressions_folded++;
         return replace_node(ast, bool_ast(result), opt);
     }
 
-    if ((strcmp(op, "=") == 0 || strcmp(op, "!=") == 0) &&
+    if ((tag == OP_EQ || tag == OP_NEQ) &&
         lhs->type == AST_SYMBOL && rhs->type == AST_SYMBOL &&
         data_registry_ctor_is_nullary(opt->data_types, opt->data_type_count,
                                       lhs->symbol) &&
         data_registry_ctor_is_nullary(opt->data_types, opt->data_type_count,
                                       rhs->symbol)) {
-        bool eq = strcmp(lhs->symbol, rhs->symbol) == 0;
-        bool result = (strcmp(op, "=") == 0) ? eq : !eq;
+        bool eq     = strcmp(lhs->symbol, rhs->symbol) == 0;
+        bool result = (tag == OP_EQ) ? eq : !eq;
         if (opt->stats) opt->stats->ctor_equalities_folded++;
         return replace_node(ast, bool_ast(result), opt);
     }
@@ -824,42 +1001,90 @@ static AST *fold_compare_call(AST *ast, const char *op, Optimizer *opt) {
     return ast;
 }
 
-/* fold_bool_call: constant-fold (not, and, or).
+/*  fold_bool_call: constant-fold (not, and, or).
  *
- *  Short-circuit semantics are preserved:
- *    (and … False …)  -> False  regardless of remaining args
- *    (or  … True  …)  -> True   regardless of remaining args
- *  We check each argument's truth value in order; a decisive value
- *  short-circuits immediately, and only an *undecidable* argument with
- *  no decisive value before it stops folding.
+ *  Mathematical basis:
+ *    `and` is commutative+associative with identity True and annihilator False.
+ *    `or`  is commutative+associative with identity False and annihilator True.
+ *
+ *    Annihilator rule (short-circuit, order-preserving):
+ *      Scan left-to-right; the first annihilator makes the whole expr
+ *      statically determined regardless of later (possibly impure) args.
+ *      We cannot drop args to the right of an unknown, so we stop there.
+ *
+ *    Identity elimination (partial fold, mirrors fold_numeric_call):
+ *      Known-identity args carry no information and can be dropped.
+ *      If only one non-identity arg remains, the op itself is redundant.
+ *        (and True x True) -> x
+ *        (or  False x)     -> x
  */
-static AST *fold_bool_call(AST *ast, const char *op, Optimizer *opt) {
-    if (strcmp(op, "not") == 0 && ast->list.count == 2) {
-        bool known = false;
+/*  fold_bool_call: constant-fold boolean operators.
+ *  Receives OpTag — zero strcmp calls inside.
+ *  See previous comment block for the algebraic basis.
+ */
+static AST *fold_bool_call(AST *ast, OpTag tag, Optimizer *opt) {
+    if (tag == OP_NOT && ast->list.count == 2) {
+        bool known  = false;
         bool falsey = is_falsey(ast->list.items[1], &known);
         if (!known) return ast;
         if (opt->stats) opt->stats->expressions_folded++;
         return replace_node(ast, bool_ast(falsey), opt);
     }
 
-    if ((strcmp(op, "and") == 0 || strcmp(op, "or") == 0) &&
-        ast->list.count >= 2) {
-        bool is_and = strcmp(op, "and") == 0;
-        for (size_t i = 1; i < ast->list.count; i++) {
-            bool known  = false;
-            bool falsey = is_falsey(ast->list.items[i], &known);
-            if (!known) return ast; /* cannot fold past an unknown */
-            if (is_and && falsey) {
-                if (opt->stats) opt->stats->expressions_folded++;
-                return replace_node(ast, bool_ast(false), opt);
-            }
-            if (!is_and && !falsey) {
-                if (opt->stats) opt->stats->expressions_folded++;
-                return replace_node(ast, bool_ast(true), opt);
-            }
+    bool is_and = (tag == OP_AND);
+    if (tag != OP_AND && tag != OP_OR) return ast;
+    if (ast->list.count < 2) return ast;
+
+    /* Left-to-right scan: annihilator terminates, identity is stripped.
+     * We stop scanning at the first unknown to preserve evaluation order. */
+    size_t out = 1; /* items[0] = operator symbol */
+    for (size_t i = 1; i < ast->list.count; i++) {
+        AST  *arg    = ast->list.items[i];
+        bool  known  = false;
+        bool  falsey = is_falsey(arg, &known);
+        if (!known) {
+            /* Unknown: keep it and all remaining args unchanged. */
+            ast->list.items[out++] = arg;
+            for (size_t j = i + 1; j < ast->list.count; j++)
+                ast->list.items[out++] = ast->list.items[j];
+            break;
         }
+        bool is_annihilator = is_and ? falsey : !falsey;
+        if (is_annihilator) {
+            /* Annihilator found: result is statically determined.
+             * Free all remaining args only if they are pure (no effects). */
+            bool rest_pure = true;
+            for (size_t j = i + 1; j < ast->list.count; j++)
+                if (!ast_is_pure(ast->list.items[j]))
+                    { rest_pure = false; break; }
+            if (!rest_pure) {
+                /* Cannot discard impure tail: keep from here onward. */
+                ast->list.items[out++] = arg;
+                for (size_t j = i + 1; j < ast->list.count; j++)
+                    ast->list.items[out++] = ast->list.items[j];
+                break;
+            }
+            for (size_t j = i; j < ast->list.count; j++)
+                ast_free(ast->list.items[j]);
+            if (opt->stats) opt->stats->expressions_folded++;
+            return replace_node(ast, bool_ast(!is_and), opt);
+        }
+        /* Identity: drop this arg (free it, don't copy to out). */
+        ast_free(arg);
+        opt->changed = true;
+    }
+    ast->list.count = out;
+
+    /* All args were identities: return the identity value itself. */
+    if (ast->list.count == 1) {
         if (opt->stats) opt->stats->expressions_folded++;
         return replace_node(ast, bool_ast(is_and), opt);
+    }
+    /* Single non-identity survivor: the op is now redundant. */
+    if (ast->list.count == 2 && ast_is_pure(ast->list.items[1])) {
+        AST *survivor = ast_clone(ast->list.items[1]);
+        if (opt->stats) opt->stats->identities_elided++;
+        return replace_node(ast, survivor, opt);
     }
     return ast;
 }
@@ -913,20 +1138,26 @@ static AST *fold_string_append(AST *ast, Optimizer *opt) {
  *    (and x True), (and True x)  -> x
  *    (or  x False), (or False x) -> x
  */
-static AST *fold_identity(AST *ast, const char *op, Optimizer *opt) {
+/*  fold_identity: eliminate identity-element applications.
+ *  Receives OpTag — zero strcmp calls inside.
+ *  See previous comment block for the algebraic rules.
+ */
+static AST *fold_identity(AST *ast, OpTag tag, Optimizer *opt) {
     if (ast->list.count < 3) return ast;
 
-    bool   is_num_op      = false;
-    bool   is_bool_op      = false;
-    double identity_num    = 0.0;
-    bool   identity_bool   = false; /* True for and, False for or */
+    bool   is_num_op    = false;
+    bool   is_bool_op   = false;
+    double identity_num  = 0.0;
+    bool   identity_bool = false;
 
-    if      (strcmp(op, "+") == 0) { is_num_op = true; identity_num = 0.0; }
-    else if (strcmp(op, "-") == 0) { is_num_op = true; identity_num = 0.0; }
-    else if (strcmp(op, "*") == 0) { is_num_op = true; identity_num = 1.0; }
-    else if (strcmp(op, "and") == 0) { is_bool_op = true; identity_bool = true;  }
-    else if (strcmp(op, "or")  == 0) { is_bool_op = true; identity_bool = false; }
-    else return ast;
+    switch (tag) {
+    case OP_ADD:                 is_num_op  = true; identity_num  = 0.0;  break;
+    case OP_SUB:                 is_num_op  = true; identity_num  = 0.0;  break;
+    case OP_MUL:                 is_num_op  = true; identity_num  = 1.0;  break;
+    case OP_AND: is_bool_op = true; identity_bool = true;  break;
+    case OP_OR:  is_bool_op = true; identity_bool = false; break;
+    default: return ast;
+    }
 
     size_t survivors = 0;
     AST   *survivor   = NULL;
@@ -946,7 +1177,7 @@ static AST *fold_identity(AST *ast, const char *op, Optimizer *opt) {
 
     /* Subtraction is non-commutative: only (- x 0) qualifies, never the
      * symmetric (- 0 x), which negates x rather than being a no-op. */
-    if (strcmp(op, "-") == 0) {
+    if (tag == OP_SUB) {
         if (ast->list.count != 3) return ast;
         AST *second = ast->list.items[2];
         if (survivor != ast->list.items[1] ||
@@ -1087,6 +1318,33 @@ static void analyze_pmatch(Optimizer *opt, AST *ast) {
     }
 }
 
+/*  head_op_tag: map a symbol string to an OpTag in O(1).
+ *
+ *  Implementation: trie on first character, disambiguated by length and
+ *  (where needed) second character.  Cost: 1 array-index + at most 2
+ *  integer comparisons + 0-1 strcmp (only for str-append).
+ *  All single-char operators and ops with unique initials cost exactly
+ *  one switch case with no further comparison.
+ */
+static OpTag head_op_tag(const char *s) {
+    if (!s || !s[0]) return OP_UNKNOWN;
+    switch (s[0]) {
+    case '+': return s[1] ? OP_UNKNOWN : OP_ADD;
+    case '-': return s[1] ? OP_UNKNOWN : OP_SUB;
+    case '*': return s[1] ? OP_UNKNOWN : OP_MUL;
+    case '/': return s[1] ? OP_UNKNOWN : OP_DIV;
+    case '=': return s[1] ? OP_UNKNOWN : OP_EQ;
+    case '!': return (s[1]=='=' && !s[2]) ? OP_NEQ : OP_UNKNOWN;
+    case '<': return !s[1] ? OP_LT : (s[1]=='=' && !s[2]) ? OP_LTE : OP_UNKNOWN;
+    case '>': return !s[1] ? OP_GT : (s[1]=='=' && !s[2]) ? OP_GTE : OP_UNKNOWN;
+    case 'a': return (s[1]=='n' && s[2]=='d' && !s[3]) ? OP_AND : OP_UNKNOWN;
+    case 'o': return (s[1]=='r' && !s[2])              ? OP_OR  : OP_UNKNOWN;
+    case 'n': return (s[1]=='o' && s[2]=='t' && !s[3]) ? OP_NOT : OP_UNKNOWN;
+    case 'i': return (s[1]=='f' && !s[2])              ? OP_IF  : OP_UNKNOWN;
+    case 's': return strcmp(s, "str-append") == 0 ? OP_STR_APPEND : OP_UNKNOWN;
+    default:  return OP_UNKNOWN;
+    }
+}
 
 /// optimize_list — the main rewrite dispatcher for list forms
 
@@ -1096,26 +1354,34 @@ static AST *optimize_list(Optimizer *opt, AST *ast) {
     AST        *head     = ast->list.items[0];
     const char *head_sym = (head && head->type == AST_SYMBOL)
                            ? head->symbol : NULL;
+    if (!head_sym) goto optimize_children;
 
-    /* Forms intentionally never rewritten beyond this point. */
-    if (head_sym && strcmp(head_sym, "quote")   == 0) return ast;
-    if (head_sym && strcmp(head_sym, "include") == 0) return ast;
-
-    /* (define …): only optimize the value expression. */
-    if (head_sym && strcmp(head_sym, "define") == 0 &&
-        ast->list.count >= 3) {
-        ast->list.items[2] = optimize_expr(opt, ast->list.items[2]);
-        return ast;
+    /* Special forms: guard before touching children. */
+    switch (head_sym[0]) {
+    case 'q':
+        if (head_sym[1]=='u' && strcmp(head_sym,"quote")==0)   return ast;
+        break;
+    case 'i':
+        if (head_sym[1]=='n' && strcmp(head_sym,"include")==0) return ast;
+        break;
+    case 'd':
+        if (head_sym[1]=='e' && strcmp(head_sym,"define")==0 &&
+            ast->list.count >= 3) {
+            ast->list.items[2] = optimize_expr(opt, ast->list.items[2]);
+            return ast;
+        }
+        break;
+    case 's':
+        if (head_sym[1]=='e' && strcmp(head_sym,"set!")==0) {
+            for (size_t i = 2; i < ast->list.count; i++)
+                ast->list.items[i] = optimize_expr(opt, ast->list.items[i]);
+            return ast;
+        }
+        break;
     }
 
-    /* (set! name val…): optimize the value expressions only (index 2+). */
-    if (head_sym && strcmp(head_sym, "set!") == 0) {
-        for (size_t i = 2; i < ast->list.count; i++)
-            ast->list.items[i] = optimize_expr(opt, ast->list.items[i]);
-        return ast;
-    }
-
-    /* General case: optimize all children first (bottom-up). */
+optimize_children:
+    /* Bottom-up: rewrite all children before folding this node. */
     for (size_t i = 0; i < ast->list.count; i++)
         ast->list.items[i] = optimize_expr(opt, ast->list.items[i]);
 
@@ -1123,38 +1389,32 @@ static AST *optimize_list(Optimizer *opt, AST *ast) {
     head_sym = (head && head->type == AST_SYMBOL) ? head->symbol : NULL;
     if (!head_sym) return ast;
 
-    if (strcmp(head_sym, "+") == 0 || strcmp(head_sym, "-") == 0 ||
-        strcmp(head_sym, "*") == 0 || strcmp(head_sym, "/") == 0) {
-        AST *folded = fold_numeric_call(ast, head_sym, opt);
-        if (folded != ast) return folded;
-        return fold_identity(ast, head_sym, opt);
+    OpTag tag = head_op_tag(head_sym);
+    switch (tag) {
+    case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV: {
+        AST *r = fold_numeric_call(ast, tag, opt);
+        return (r != ast) ? r : fold_identity(ast, tag, opt);
     }
-
-    if (strcmp(head_sym, "=")  == 0 || strcmp(head_sym, "!=") == 0 ||
-        strcmp(head_sym, "<")  == 0 || strcmp(head_sym, "<=") == 0 ||
-        strcmp(head_sym, ">")  == 0 || strcmp(head_sym, ">=") == 0)
-        return fold_compare_call(ast, head_sym, opt);
-
-    if (strcmp(head_sym, "and") == 0 || strcmp(head_sym, "or")  == 0 ||
-        strcmp(head_sym, "not") == 0) {
-        AST *folded = fold_bool_call(ast, head_sym, opt);
-        if (folded != ast) return folded;
-        if (strcmp(head_sym, "and") == 0 || strcmp(head_sym, "or") == 0)
-            return fold_identity(ast, head_sym, opt);
-        return folded;
+    case OP_EQ: case OP_NEQ:
+    case OP_LT: case OP_LTE:
+    case OP_GT: case OP_GTE:
+        return fold_compare_call(ast, tag, opt);
+    case OP_AND: case OP_OR: {
+        AST *r = fold_bool_call(ast, tag, opt);
+        return (r != ast) ? r : fold_identity(ast, tag, opt);
     }
-
-    if (strcmp(head_sym, "if") == 0) {
+    case OP_NOT:
+        return fold_bool_call(ast, tag, opt);
+    case OP_IF:
         detect_switch_candidate(ast, opt);
         return fold_if(ast, opt);
-    }
-
-    if (strcmp(head_sym, "str-append") == 0)
+    case OP_STR_APPEND:
         return fold_string_append(ast, opt);
-
+    case OP_UNKNOWN:
+        return ast;
+    }
     return ast;
 }
-
 
 /// optimize_expr — main recursive descent
 //

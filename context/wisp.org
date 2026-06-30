@@ -235,6 +235,16 @@
   unbound pattern variable. Non-simple clauses containing =_=, literals,
   collection patterns such as =[x|xs]=, or guards keep the pattern-clause path.
 
+[DEC id:dec.wisp.ignored-signature-param date:2026-06-27 by:codex]
+  A parameter type segment written as =_= in a function signature is an
+  ignored-argument contract, not a concrete type. Every pattern clause for
+  that parameter position must use wildcard =_=; otherwise reader/Wisp
+  expansion reports =ignored signature parameter=. After the contract is
+  validated, the annotation is erased so inference accepts any caller argument
+  type. Regression coverage:
+  =tests.codegen.rt-wisp-ignored-signature-param= and
+  =tests.reader.error.signature-ignored-param-bound=.
+
 [OBS id:obs.wisp.typed-value-sugar-fixed src:wisp.c,tests/wisp/rt_wisp_define_typed_value_sugar.mon conf:high]
   Wisp-style =define x :: Type value= is supported as sugar for the Lisp-layer
   bracketed typed binding:
@@ -860,3 +870,17 @@ Test-driven observations and failure records for the corresponding subsystem.
   Guard lines beginning with `|` are source syntax, not comments. The Wisp
   token stream must preserve them so old-core pattern clauses with guards
   compile.
+
+[FIX id:fix.wisp.ignored-signature-param-contract-2026-06-27 src:wisp.c,reader.c,pmatch.c,tests/codegen/errors/reader/signature/atom.reader.error.signature.ignored-param-bound/signature-ignored-param-bound.mon,tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.ignored.signature.param/rt_wisp_ignored_signature_param.mon conf:high]
+  A function signature parameter written as =_= is a semantic ignored-argument
+  contract. Reader/pmatch validation requires every pattern clause at that
+  argument position to use wildcard =_=; binding or destructuring it is a
+  compile-time error. Wisp simple-clause lowering preserves this contract before
+  promotion to canonical lambda/pmatch forms.
+
+[FIX id:fix.wisp.postfix-temp-field-projection-2026-06-27 src:wisp.c,codegen.c,tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.temp.field.projection/rt_wisp_temp_field_projection.mon conf:high]
+  Wisp postfix projection on temporary expressions, e.g.
+  =(make-pair 20 22).right= or =(tty-raw-termios original).c_iflag=, lowers to
+  the internal =__dot= form. Codegen projects the requested field from the
+  expression result instead of resolving the field name as a standalone
+  function symbol.

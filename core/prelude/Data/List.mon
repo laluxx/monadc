@@ -1,0 +1,114 @@
+;;; List.mon --- Small active list helpers
+
+;; Author: Laluxx
+;; Version: 0.2.0
+;; Keywords: Data.List list prelude
+
+;;; Commentary:
+
+;; This module owns stable list helpers used by core modules that should not
+;; depend directly on collection builtins. Broad user-facing names should live
+;; here, while compiler primitives keep low-level names such as count and ++.
+
+;;; Code:
+
+module Data.List
+  [list-null? list-length list-drop list-take list-append list-reverse
+   length reverse nth reduce]
+
+
+define list-null? :: [a] -> Bool
+  []     -> True
+  [x|xs] -> False
+
+
+define list-length :: [a] -> Int
+  []     -> 0
+  [x|xs] -> 1 + (list-length xs)
+
+
+define length :: [a] -> Int
+  xs -> list-length xs
+
+
+define reverse :: [a] -> [a]
+  xs -> list-reverse xs
+
+
+define nth :: [a] -> Int -> a
+  [] _              -> error "Data.List.nth: index out of bounds"
+  [x|xs] n | n <= 0 -> x
+  [x|xs] n          -> nth xs (n - 1)
+
+
+define reduce :: Fn -> b -> [a] -> b
+  _ acc []     -> acc
+  f acc [x|xs] -> reduce f (f acc x) xs
+
+
+define list-drop :: Int -> [a] -> [a]
+  n xs     | n <= 0 -> xs
+  n []              -> []
+  n [x|xs]          -> list-drop (n - 1) xs
+
+
+define list-take :: Int -> [a] -> [a]
+  n xs     | n <= 0 -> []
+  n []              -> []
+  n [x|xs]          -> (x ++ (list-take (n - 1) xs))
+
+
+define list-append :: [a] -> [a] -> [a]
+  [] ys     -> ys
+  [x|xs] ys -> (x ++ (list-append xs ys))
+
+
+define list-reverse :: [a] -> [a]
+  []     -> []
+  [x|xs] -> list-append (list-reverse xs) (list x)
+
+
+tests
+  :null:
+  assert-eq (list-null? []) True "Data.List list-null? empty"
+  assert-eq (list-null? (list 1)) False "Data.List list-null? nonempty"
+  :null:
+
+  :length:
+  assert-eq (list-length []) 0 "Data.List list-length empty"
+  assert-eq (list-length (list 1 2 3)) 3 "Data.List list-length values"
+  assert-eq (length (list 1 2 3 4)) 4 "Data.List length wrapper"
+  :length:
+
+  :drop:
+  assert-eq (show (list-drop 0 (list 1 2))) "(1 2)" "Data.List list-drop zero"
+  assert-eq (show (list-drop 2 (list 1 2 3 4))) "(3 4)" "Data.List list-drop middle"
+  assert-eq (show (list-drop 5 (list 1 2))) "()" "Data.List list-drop beyond"
+  :drop:
+
+  :take:
+  assert-eq (show (list-take 0 (list 1 2))) "()" "Data.List list-take zero"
+  assert-eq (show (list-take 2 (list 1 2 3))) "(1 2)" "Data.List list-take middle"
+  assert-eq (show (list-take 5 (list 1 2))) "(1 2)" "Data.List list-take beyond"
+  :take:
+
+  :append:
+  assert-eq (show (list-append (list 1 2) (list 3 4))) "(1 2 3 4)" "Data.List list-append"
+  assert-eq (show (list-append [] (list 3))) "(3)" "Data.List list-append empty left"
+  :append:
+
+  :reverse:
+  assert-eq (show (list-reverse [])) "()" "Data.List list-reverse empty"
+  assert-eq (show (list-reverse (list 1 2 3))) "(3 2 1)" "Data.List list-reverse values"
+  assert-eq (show (reverse (list 1 2 3))) "(3 2 1)" "Data.List reverse wrapper"
+  :reverse:
+
+  :nth:
+  assert-eq (nth (list 5 6 7) 0) 5 "Data.List nth first"
+  assert-eq (nth (list 5 6 7) 2) 7 "Data.List nth last"
+  :nth:
+
+  :reduce:
+  assert-eq (reduce (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)) 10 "Data.List reduce sum"
+  assert-eq (reduce (lambda (acc x) (* acc x)) 1 (list 2 3 4)) 24 "Data.List reduce product"
+  :reduce:

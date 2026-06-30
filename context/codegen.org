@@ -437,6 +437,18 @@ LLVM function with no type tags or dispatch overhead.
   type predicates, type conversions, collection operations, list operations,
   string operations, control flow, binding, quotation, and module operations.
 
+[FIX id:fix.codegen.legacy-collection-builtin-boundary-2026-06-27 date:2026-06-27 by:codex]
+  Collection/list/map/set builtin environment registration is now isolated in
+  =register_legacy_collection_builtins=. These names still lower through
+  existing codegen handlers, but the grouping marks them as transitional
+  library semantics to migrate into core modules while leaving true language
+  forms and low-level primitives in =register_builtins=.
+
+[FIX id:fix.codegen.optimizer-optag-order-2026-06-27 date:2026-06-27 by:codex]
+  Moved the =OpTag= enum before the optimizer fold helpers that take =OpTag=
+  parameters. This restores a clean =make= build after the optimizer's
+  first-character operator dispatch refactor.
+
 [OBS id:obs.codegen.fn.declare-external-var src:codegen.h:111-113 conf:high]
   =codegen_declare_external_var(CodegenContext *ctx, const char *mangled_name, Type *type)=
   — Declares an external variable in the LLVM module and inserts it into
@@ -799,3 +811,12 @@ LLVM function with no type tags or dispatch overhead.
   =rt_list_append(ptr, i8)=. Covered by =python3 tests/run_core.py=, including
   =Coll.mon= higher-order list tests and byte-list tests in =Text.Parser= and
   =Text.Readline=.
+
+[FIX id:fix.codegen.skip-wisp-signature-placeholder-body-2026-06-27 date:2026-06-27 by:codex]
+  Wisp typed signatures can leave a leading =(undefined)= placeholder expression
+  in a lambda body before the real implementation expression. Codegen must skip
+  that placeholder only when another body expression follows; otherwise
+  monomorphization specializes the placeholder and emits a runtime abort instead
+  of the implementation. Covered by =python3 tests/run_core.py= through active
+  =Data.Either= and =Data.Maybe= higher-order polymorphic tests in the
+  materialized-core path.

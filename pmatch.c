@@ -1247,6 +1247,30 @@ void pmatch_rename_anon_params(AST *pm, ASTParam *params, int param_count) {
     }
 }
 
+void pmatch_validate_ignored_signature_params(AST *pm,
+                                              ASTParam *params,
+                                              int param_count) {
+    if (!pm || pm->type != AST_PMATCH || !params) return;
+
+    for (int pi = 0; pi < param_count; pi++) {
+        if (!params[pi].type_name || strcmp(params[pi].type_name, "_") != 0)
+            continue;
+
+        for (int ci = 0; ci < pm->pmatch.clause_count; ci++) {
+            ASTPMatchClause *cl = &pm->pmatch.clauses[ci];
+            if (pi >= cl->pattern_count ||
+                cl->patterns[pi].kind != PAT_WILDCARD) {
+                READER_ERROR(pm->line > 0 ? pm->line : 1,
+                             pm->column > 0 ? pm->column : 1,
+                             "ignored signature parameter %d must use '_' in every clause",
+                             pi + 1);
+            }
+        }
+        free(params[pi].type_name);
+        params[pi].type_name = NULL;
+    }
+}
+
 AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
     if (!node || node->type != AST_PMATCH) return node;
 

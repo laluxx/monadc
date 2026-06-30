@@ -125,6 +125,111 @@ class TypeclassSuperclassTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(run_output.endswith("0\n"), run_output)
 
+    def test_prefix_instance_method_accepts_more_than_two_arguments(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (class Tri a where (tri) :: a -> a -> a -> a)
+            (instance Tri Int where (tri x y z) => (+ (+ x y) z))
+            (show (tri 10 12 20))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("42\n"), run_output)
+
+    def test_subtype_operator_numeric_width_chain(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (if U8 <: U16
+              (show 1)
+              (show 0))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("1\n"), run_output)
+
+    def test_subtype_operator_arbitrary_width_chain(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (if U4 <: U8
+              (if U4 <: U16
+                (if U4 <: Int
+                  (if U8 <: U4
+                    (show 0)
+                    (show 1))
+                  (show 0))
+                (show 0))
+              (show 0))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("1\n"), run_output)
+
+    def test_subtype_operator_refinement_to_base(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (type Positive { x ∈ Int | (> x 0) })
+            (if Positive <: Int
+              (show 1)
+              (show 0))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("1\n"), run_output)
+
+    def test_subtype_operator_rejects_reverse_numeric_width(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (if U16 <: U8
+              (show 1)
+              (show 0))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("0\n"), run_output)
+
+    def test_subtype_inherits_parent_typeclass_instance(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (class Eq a where (eq?) :: a -> a -> Bool)
+            (instance Eq Int where (eq? x y) => (= x y))
+            (define [x :: U8] 7)
+            (if (eq? x 7)
+              (show 1)
+              (show 0))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("1\n"), run_output)
+
+    def test_equals_operator_uses_eq_typeclass_instance(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (class Eq a where (eq?) :: a -> a -> Bool (not-eq?) :: a -> a -> Bool)
+            (instance Eq Int where (eq? x y) => False (not-eq? x y) => True)
+            (if (= 1 1)
+              (show 1)
+              (if (!= 1 1)
+                (show 0)
+                (show 2)))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("0\n"), run_output)
+
     def test_deriving_show_for_nullary_adt_constructor(self):
         result, run_output = self.run_monad(
             """
