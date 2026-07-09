@@ -31,6 +31,18 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("HINTS ${LLVM_LIBRARY_DIRS} ${LIBCLANG_LIBRARY_DIRS}", cmake)
         self.assertIn("llvm_map_components_to_libnames", cmake)
 
+    def test_cmake_uses_llvm_config_cmakedir_before_llvm_package_lookup(self):
+        cmake = read("CMakeLists.txt")
+
+        llvm_config = cmake.index("find_program(LLVM_CONFIG_EXECUTABLE")
+        llvm_cmakedir = cmake.index("LLVM_CONFIG_CMAKEDIR")
+        llvm_package = cmake.index("find_package(LLVM REQUIRED CONFIG)")
+
+        self.assertLess(llvm_config, llvm_cmakedir)
+        self.assertLess(llvm_cmakedir, llvm_package)
+        self.assertIn("COMMAND ${LLVM_CONFIG_EXECUTABLE} --cmakedir", cmake)
+        self.assertIn('list(PREPEND CMAKE_PREFIX_PATH "${LLVM_CONFIG_CMAKEDIR}")', cmake)
+
     def test_cmake_runs_checkout_local_path_smoke(self):
         cmake = read("CMakeLists.txt")
 

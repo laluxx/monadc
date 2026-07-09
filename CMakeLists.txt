@@ -8,15 +8,25 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+find_program(LLVM_CONFIG_EXECUTABLE
+  NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16
+  REQUIRED
+)
+execute_process(
+  COMMAND ${LLVM_CONFIG_EXECUTABLE} --cmakedir
+  OUTPUT_VARIABLE LLVM_CONFIG_CMAKEDIR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY
+)
+if(LLVM_CONFIG_CMAKEDIR)
+  list(PREPEND CMAKE_PREFIX_PATH "${LLVM_CONFIG_CMAKEDIR}")
+endif()
+
 find_package(LLVM REQUIRED CONFIG)
 find_package(Threads REQUIRED)
 find_package(PkgConfig QUIET)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-find_program(LLVM_CONFIG_EXECUTABLE
-  NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16
-  REQUIRED
-)
 if(PkgConfig_FOUND)
   pkg_check_modules(LIBCLANG QUIET libclang)
 endif()
