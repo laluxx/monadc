@@ -64,8 +64,8 @@ class CMakeBuildTests(unittest.TestCase):
         workflow = read(".github/workflows/ci.yml")
 
         self.assertIn("python tests/test_windows_portability.py", workflow)
-        self.assertIn("MONAD_BINARY=build/monad python tests/test_checkout_local_paths.py", workflow)
-        self.assertIn("MONAD_BINARY=build/monad.exe python tests/test_checkout_local_paths.py", workflow)
+        self.assertIn('MONAD_BINARY="$PWD/build/monad" python tests/test_checkout_local_paths.py', workflow)
+        self.assertIn('MONAD_BINARY="$PWD/build/monad.exe" python tests/test_checkout_local_paths.py', workflow)
 
 
 if __name__ == "__main__":

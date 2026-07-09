@@ -46,7 +46,7 @@ jobs:
       - name: Run focused portability tests
         run: |
           python tests/test_windows_portability.py
-          MONAD_BINARY=build/monad python tests/test_checkout_local_paths.py
+          MONAD_BINARY="$PWD/build/monad" python tests/test_checkout_local_paths.py
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
@@ -101,7 +101,7 @@ jobs:
       - name: Run focused portability tests
         run: |
           python tests/test_windows_portability.py
-          MONAD_BINARY=build/monad.exe python tests/test_checkout_local_paths.py
+          MONAD_BINARY="$PWD/build/monad.exe" python tests/test_checkout_local_paths.py
 
       - name: Smoke test compiler binary
         run: ./build/monad.exe --help

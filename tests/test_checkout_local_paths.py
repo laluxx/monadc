@@ -7,7 +7,16 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MONAD = Path(os.environ.get("MONAD_BINARY", ROOT / "monad"))
+
+
+def resolve_monad_binary(value: str | os.PathLike[str] | None = None) -> Path:
+    path = Path(value or os.environ.get("MONAD_BINARY", ROOT / "monad"))
+    if not path.is_absolute():
+        path = ROOT / path
+    return path
+
+
+MONAD = resolve_monad_binary()
 
 
 def read(name: str) -> str:
@@ -15,6 +24,9 @@ def read(name: str) -> str:
 
 
 class CheckoutLocalPathTests(unittest.TestCase):
+    def test_relative_monad_binary_env_resolves_from_checkout_root(self):
+        self.assertEqual(resolve_monad_binary("build/monad"), ROOT / "build" / "monad")
+
     def test_compiler_discovers_checkout_core_and_runtime_archive(self):
         main_c = read("main.c")
 

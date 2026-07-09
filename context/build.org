@@ -276,6 +276,13 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   that is not found by a plain package lookup. =tests/test_cmake_build.py=
   asserts the discovery ordering.
 
+[FIX id:fix.tests.checkout-local-monad-binary-root-2026-07-09 date:2026-07-09 by:codex]
+  =tests/test_checkout_local_paths.py= resolves relative =MONAD_BINARY= values
+  against the checkout root before running subprocesses. The package build
+  smoke changes =cwd= to a temporary project directory, so a relative compiler
+  path such as =build/monad= must be canonicalized before that subprocess call.
+  The GitHub Actions workflow also passes =$PWD/build/monad[.exe]= explicitly.
+
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the
   checkout before falling back to installed paths. =monad_core_dir= prefers
