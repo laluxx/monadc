@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-cmake:
+    name: Linux CMake
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            pkg-config \
+            llvm-dev \
+            libclang-dev \
+            libreadline-dev \
+            libgmp-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Run focused portability tests
+        run: |
+          python tests/test_windows_portability.py
+          MONAD_BINARY=build/monad python tests/test_checkout_local_paths.py
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: monadc-linux-cmake
+          if-no-files-found: warn
+          path: |
+            build/monad
+            build/libmonad.a
+            build/Testing/Temporary/LastTest.log
+
+  windows-msys2-cmake:
+    name: Windows MSYS2 UCRT64 CMake
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            pkgconf:p
+            python:p
+            llvm:p
+            clang:p
+            readline:p
+            gmp:p
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Run focused portability tests
+        run: |
+          python tests/test_windows_portability.py
+          MONAD_BINARY=build/monad.exe python tests/test_checkout_local_paths.py
+
+      - name: Smoke test compiler binary
+        run: ./build/monad.exe --help
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: monadc-windows-msys2-ucrt64-cmake
+          if-no-files-found: warn
+          path: |
+            build/monad.exe
+            build/libmonad.a
+            build/Testing/Temporary/LastTest.log

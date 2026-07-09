@@ -1,19 +1,27 @@
-CC      = gcc
-PYTHON  = python3
-CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
-LDFLAGS = -lm -lreadline -lpthread -lgmp $(shell llvm-config --ldflags --libs core) -lclang
-TARGET  = monad
+CC          = gcc
+PYTHON      = python3
+TARGET_BASE = monad
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
 LIBDIR  = $(PREFIX)/lib
 INCDIR  = $(PREFIX)/include/monad
 COREDIR = $(PREFIX)/lib/monad/core
 
+UNAME_S      := $(shell uname -s 2>/dev/null || echo unknown)
+WINDOWS_HOST := $(if $(filter MINGW% MSYS% CYGWIN%,$(UNAME_S)),1,)
+EXEEXT       := $(if $(WINDOWS_HOST),.exe,)
+TARGET       = $(TARGET_BASE)$(EXEEXT)
+EXPORT_LDFLAG := $(if $(WINDOWS_HOST),,-rdynamic)
+NO_PIE_LDFLAG := $(if $(WINDOWS_HOST),,-no-pie)
+
+CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
+LDFLAGS = -lm -lreadline -lpthread -lgmp $(shell llvm-config --ldflags --libs core) -lclang
+
 DEBUG_CFLAGS   = -g -DDEBUG
 ASAN_CFLAGS    = -g -fsanitize=address -fno-omit-frame-pointer -DDEBUG
 RELEASE_CFLAGS = -DNDEBUG -O2
 
-NPROCS = $(shell nproc)
+NPROCS = $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
 MAKEFLAGS += -j$(NPROCS)
 
 # Static archive — no rpath/ldconfig needed, works from any directory
@@ -44,7 +52,7 @@ $(RUNTIME_LIB): $(RUNTIME_OBJ)
 
 # Compiler binary: statically absorbs runtime, no .so dependency at runtime
 $(TARGET): $(OBJS) $(RUNTIME_LIB)
-	$(CC) $(CFLAGS) -rdynamic -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(EXPORT_LDFLAG) -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
 ffi.o: ffi.c
 	$(CC) $(CFLAGS) $(FFI_CFLAGS) -c $< -o $@
@@ -53,7 +61,7 @@ ffi.o: ffi.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET)
+	rm -f $(OBJS) $(RUNTIME_OBJ) $(RUNTIME_LIB) $(TARGET_BASE) $(TARGET_BASE).exe
 
 # Install: monad binary + static archive + core (for linking compiled .mon programs)
 install: $(RUNTIME_LIB) $(TARGET)
@@ -106,6 +114,10 @@ test-runner:
 	$(PYTHON) tests/test_run.py
 	$(PYTHON) tests/test_cli_duality.py
 	$(PYTHON) tests/test_tuple_commas.py
+	$(PYTHON) tests/test_windows_portability.py
+	$(PYTHON) tests/test_cmake_build.py
+	$(PYTHON) tests/test_checkout_local_paths.py
+	$(PYTHON) tests/test_readme_product.py
 	$(PYTHON) tests/test_bytecode.py
 
 test-context-visualizer:

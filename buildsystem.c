@@ -42,6 +42,23 @@ static char *bs_xstrdup(const char *s)
     return d;
 }
 
+static bool bs_file_exists(const char *path)
+{
+    return access(path, F_OK) == 0;
+}
+
+static char *build_runtime_archive_path(void)
+{
+    const char *env_runtime = getenv("MONAD_RUNTIME_LIB");
+    if (env_runtime && *env_runtime)
+        return bs_xstrdup(env_runtime);
+
+    if (bs_file_exists("libmonad.a"))
+        return bs_xstrdup("libmonad.a");
+
+    return bs_xstrdup("/usr/local/lib/libmonad.a");
+}
+
 #define BS_GROW(ptr, count, cap, type)                         \
     do {                                                       \
         if ((count) >= (cap)) {                                \
@@ -622,6 +639,27 @@ bool build_link_executable(BuildContext *build_ctx,
 {
     if (artifact_count == 0) return false;
 
+    const char *host_exe_suffix =
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+        ".exe";
+#else
+        "";
+#endif
+    const char *host_no_pie_flag =
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+        "";
+#else
+        " -no-pie";
+#endif
+    char output_with_suffix[1024];
+    if (host_exe_suffix[0] &&
+        strlen(output_name) < sizeof(output_with_suffix) - strlen(host_exe_suffix) - 1 &&
+        (strlen(output_name) < strlen(host_exe_suffix) ||
+         strcmp(output_name + strlen(output_name) - strlen(host_exe_suffix), host_exe_suffix) != 0)) {
+        snprintf(output_with_suffix, sizeof(output_with_suffix), "%s%s", output_name, host_exe_suffix);
+        output_name = output_with_suffix;
+    }
+
     char cmd[4096] = "gcc ";
 
     for (size_t i = 0; i < artifact_count; i++) {
@@ -629,9 +667,13 @@ bool build_link_executable(BuildContext *build_ctx,
         strcat(cmd, " ");
     }
 
-    strcat(cmd, "runtime.o -o ");
+    char *runtime_archive = build_runtime_archive_path();
+    strcat(cmd, runtime_archive);
+    strcat(cmd, " -o ");
     strcat(cmd, output_name);
-    strcat(cmd, " `llvm-config --ldflags --libs core` -lm -no-pie");
+    strcat(cmd, " `llvm-config --ldflags --libs core` -lm -lgmp");
+    strcat(cmd, host_no_pie_flag);
+    free(runtime_archive);
 
     if (build_ctx->verbose)
         printf("Linking: %s\n", cmd);

@@ -1,991 +1,264 @@
+# Monad
+
 <div align="center">
-
-<img src="./etc/logo.png" alt="Monad Logo" width="200"/>
-
-### A Pure Functional Language from High-Level Abstraction to Bare Metal
-
-*Mathematical purity. Lisp soul. Zero-overhead hardware control.*
-
+  <img src="./etc/logo.png" alt="Monad logo" width="160">
 </div>
 
-> **Editor Support:** For the best experience, use [monad-mode](https://github.com/laluxx/monad-mode) — a dedicated Emacs major mode providing syntax highlighting, REPL integration, inline assembly support, linting and much more!
+Monad is an experimental functional systems language implemented in C and
+LLVM. It combines a Lisp-like core, indentation-friendly Wisp syntax,
+Hindley-Milner inference, dependent-type experiments, algebraic data types,
+type classes, C FFI, inline assembly, a REPL, and an end-to-end compiler test
+suite.
 
------
+This repository is the compiler, runtime, standard-library seed, examples,
+tests, and project context for the language.
 
-## 1. Repository Map
+## Current Status
 
-```
-.
-├── *.c / *.h          — Compiler source (22 C files + 21 headers)
-│   reader.c/h         │   Lexer, parser, AST, pattern-match desugar
-│   wisp.c/h           │   Wisp syntax → S-expression expander
-│   dep.c/h            │   Dependent type checker (ITT kernel, NbE, bidir)
-│   infer.c/h          │   Hindley-Milner type inference
-│   codegen.c/h        │   LLVM IR codegen (83+ dispatch symbols)
-│   types.c/h          │   Type representation and operations
-│   env.c/h            │   Environment (symbol table)
-│   runtime.c/h        │   Runtime support (lists, sets, maps, GC)
-│   arena.c/h          │   Arena allocator
-│   asm.c/h            │   Inline assembly translator
-│   ffi.c/h            │   C FFI (libclang header parsing)
-│   pmatch.c/h         │   Pattern-match compilation
-│   macro.c/h          │   Macro expansion
-│   module.c/h         │   Module system
-│   module_export.c/h  │   Module export resolution
-│   cli.c/h            │   CLI argument parsing
-│   repl.c/h           │   Interactive REPL
-│   features.c/h       │   Conditional compilation (*features*)
-│   buildsystem.c/h    │   Package build system (package.yaml)
-│   typeclass.c/h      │   Type class support
-│   typst_emit.c/h     │   Typst math document emission
-│   main.c             │   Entry point, pipeline orchestration
-│
-├── core/              — Standard library (Monad source)
-│   ├── prelude/       │   Coll.mon, Test.mon
-│   ├── text/          │   Ascii.mon, String.mon
-│   ├── List.mon       │
-│   ├── Set.mon        │
-│   ├── Math.mon       │
-│   ├── Random.mon     │
-│   ├── Assert.mon     │
-│   ├── json.mon       │
-│   └── TODO.mon       │
-│
-├── tests/             — Test suite (~1400+ test cases)
-│   ├── run.py         │   Formatted test runner
-│   ├── codegen/       │   200+ compile/run .mon + .stdout pairs (includes wisp tests)
-│   ├── language/      │   600+ language feature tests
-│   └── sugar/         │   100+ sugar desugar tests
-│
-├── how_to/            — How-to guides (executable .mon files)
-│   ├── AlgebraicDataTypes.mon
-│   ├── Layouts.mon
-│   ├── Macros.mon
-│   ├── RefinementType.mon
-│   ├── Syntax.mon
-│   ├── Test.mon
-│   ├── Iter.mon
-│   ├── RaylibSpeedrun.mon, GlfwSpeedrun.mon, SdlSpeedrun.mon
-│   └── Term/           — Dependent type examples
-│
-├── context/           — Context system (LLM external memory)
-│   ├── context.org    │   Root entry
-│   ├── index.org      │   Schema, node index
-│   ├── reader.org     │   Reader/parser context
-│   ├── language.org   │   Language formalization
-│   ├── build.org      │   Build/install
-│   ├── tests.org      │   Test metadata, coverage
-│   ├── workflow.org   │   User preferences
-│   ├── rules.org      │   Repository rules
-│   ├── todo.org       │   TODO items
-│   ├── visualizer.org │   Context visualizer docs
-│   ├── opinions.org   │   LLM critique
-│   ├── philosophy.org │   Language philosophy
-│   source-map.org │   Every source file's purpose and connections
-│   ├── style.org       │   Code style taxonomy
-│   ├── navigation.org  │   ID prefix → file routing for quick LLM nav
-│   ├── references.org  │   Research paper bibliography & cross-links
-│   ├── wisp.org       │   Wisp expander context (architecture, arity, sugars)
-│   └── commit-format.org
-│
-├── etc/               — Assets (logo, screenshots, research PDFs)
-│   └── pdfs/          │   Research papers informing the design
-├── Makefile           — Build (gcc + LLVM)
-├── monad              — Compiled compiler binary
-└── libmonad.a         — Static runtime library
+Monad is not a polished general-purpose language yet. It is a serious compiler
+workbench with many implemented language features and a large regression suite.
+
+What is usable today:
+
+- Compile `.mon` files to native executables through LLVM.
+- Use either S-expression syntax or Wisp indentation syntax.
+- Run the REPL, CLI helpers, core library tests, codegen fixtures, reader tests,
+  and bytecode experiments.
+- Parse C headers through libclang for FFI declarations.
+- Build on Linux and MSYS2/Windows through the checked-in build paths.
+
+What is still experimental:
+
+- Some language areas are intentionally covered by future/known-failure tests.
+- The core library is still being shaped.
+- REPL/JIT and FFI-heavy workflows depend on platform linker behavior.
+- The context corpus is extensive and useful, but it is not introductory
+  documentation.
+
+## Quick Start
+
+Dependencies on Linux:
+
+```sh
+sudo apt install build-essential cmake ninja-build python3 llvm-dev libclang-dev libreadline-dev libgmp-dev pkg-config
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+./build/monad --help
 ```
 
------
+Run the main test suite:
 
-## 2. Philosophy
-
-> **Note on naming:** The codebase uses "Monad" (without the C suffix) for the language name throughout source files, type constructors, and documentation. The repository is named `monadc` (compiler) but the language itself is "Monad." This README follows the codebase convention.
-
-Monad is built on a conviction: the choice between high-level mathematical safety and low-level hardware control is a false dichotomy. A language should give you dependent types AND inline assembly, refinement types AND naked functions, lazy infinite lists AND C-compatible arrays — without binding generators, FFI wrappers, or runtime overhead.
-
-See `context/philosophy.org` for the full witnessed philosophy, and `context/opinions.org` for LLM critique.
-
-**Core principles:**
-
-- **No trade-off between safety and control** — The dual type system (HM + ITT), the `TERM_EMBED` bridge, naked functions, and inline assembly serve a single goal: you should not have to choose between dependent types and hardware access.
-- **Purity is practical** — Functions are relations, collections have set-theoretic semantics, and types are first-class. The compiler can reason about programs in ways imperative languages cannot, enabling compile-time predicate checking and zero-cost monomorphization.
-- **Two syntaxes are one language** — S-expressions and Wisp are interchangeable notations for the same semantics. They mix freely within a single file.
-- **Sets are the model** — Types are sets. Functions are relations. Refinement types are subsets. Universes are sets of sets.
-- **Zero to metal** — Start with `show "Hello, World!"`, add type annotations, introduce polymorphism, prove invariants with dependent types, drop to layout-based structs, and write inline assembly — all within the same function.
-
------
-
-## 3. Compiler Pipeline (11 phases)
-
-The compiler runs 11 sequential phases (plus a Phase 0 FFI pre-pass), orchestrated by `main.c:compile_one()`. Detailed OBS records for each phase are in `context/language.org::* Compilation Pipeline`.
-
-```
-source.mon  ──►  Phase 0: FFI Pre-pass          ──►  Phase 1: Wisp Expansion + Parsing
-                       (libclang C header parse)             (wisp_parse_all → desugared AST)
-                                                             (optional JSON/Typst emit)
-
-Phase 1  ──►  Phase 2: Module/Import Decls  ──►  Phase 3: LLVM Setup + Builtins
-                   (extract module/import forms)          (LLVM init, 94 codegen + dep builtins,
-                   (recursive compile dependencies)        declare_runtime_functions)
-
-Phase 3  ──►  Phase 4: External Declarations  ──►  Phase 5: Init/Main Function
-                   (declare import externals)                 (create LLVM fn, position builder)
-
-Phase 5  ──►  Phase 6: *features* Global  ──►  Phase 6.5: Dependent Type Checking
-                   (feature-conditional compilation)        (dep_toplevel, bidir + NbE, fatal)
-
-Phase 6.5  ──►  Phase 7: Codegen  ──►  Phase 8: Function Termination
-                   (codegen_expr per AST node,                  (main → return 0, lib → ret void)
-                    83+ strcmp dispatch, 94 builtins)
-
-Phase 8  ──►  Phase 9: Registry + Name Mangling  ──►  Phase 10: Verify + Optional Emit
-                   (CompiledModule, mangle)                     (LLVMVerifyModule → .ll/.s/.bc/.o)
-
-Phase 10  ──►  Phase 11: Object File Emit  ──►  executable (main)  or  .o library
-                   (emit_object, skip if up-to-date)
+```sh
+make test
 ```
 
-Phases are timed with `PHASE_START()`/`PHASE_END()` macros and logged to stderr. See `main.c:525-1290` for the full pipeline implementation.
+Run core library tests:
 
------
+```sh
+make test-core
+```
 
-## 4. Source File Guide
+Use the Python build wrapper for diagnostics:
 
-### 4.1 Reader & Parser (`reader.c/h`, `wisp.c/h`)
+```sh
+./make doctor
+./make test
+```
 
-| File | Purpose |
-|------|---------|
-| `reader.c` | Lexer, S-expression parser, AST construction (20 AST node types), pattern-match desugar, comment maps |
-| `wisp.c` | Wisp syntax expander (indentation-driven → S-expressions), arity table, quote/backtick desugar |
+## Windows / MSYS2
 
-**AST node types** (`reader.h:39-63`):
+Windows is supported through MSYS2. Use the MSYS shell, not PowerShell or a
+plain `cmd.exe` prompt.
 
-| Node | Example | Purpose |
-|------|---------|---------|
-| `AST_NUMBER` | `42`, `3.14` | Numeric literal |
-| `AST_SYMBOL` | `x`, `+` | Identifier |
-| `AST_STRING` | `"hello"` | String literal |
-| `AST_PATH` | `./file`, `~/path` | Filesystem path literal |
-| `AST_CHAR` | `'c'`, `#\A` | Character literal |
-| `AST_LIST` | `(f x y)`, `'(1 2 3)` | S-expression list |
-| `AST_KEYWORD` | `:keyword` | Keyword literal |
-| `AST_RATIO` | `1/3` | Rational literal |
-| `AST_ARRAY` | `[1 2 3]` | Array literal |
-| `AST_SET` | `{1 2 3}` | Set literal |
-| `AST_MAP` | `#{"k" v}` | Map literal |
-| `AST_LAMBDA` | `(lambda ...)` | Lambda expression |
-| `AST_ASM` | `(asm ...)` | Inline assembly |
-| `AST_REFINEMENT` | `(type Positive ...)` | Refinement type |
-| `AST_TESTS` | `(tests ...)` | Test block |
-| `AST_ADDRESS_OF` | `&x` | Address-of operator |
-| `AST_RANGE` | `(0..10)` | Range literal |
-| `AST_LAYOUT` | `(layout Point ...)` | Struct layout |
-| `AST_PMATCH` | pattern clauses | Pattern matching |
-| `AST_DATA` | `(data Color ...)` | Algebraic data type |
-| `AST_CLASS` | `(class Eq a ...)` | Type class declaration |
-| `AST_INSTANCE` | `(instance Eq Int ...)` | Type class instance |
-| `TOK_LAMBDA_LIT` | `λx. body` | Pure lambda literal |
+Install dependencies:
 
-Path literals are values: `define path ~/xos/projects/c/monadc/context/` defines `path` with type `Path`, and `(show path)` prints the path text.
+```sh
+pacman -S --needed base-devel git
+pacman -S --needed mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-readline mingw-w64-ucrt-x86_64-gmp
+```
 
-### 4.2 Type System
+Build and smoke test:
 
-The type system has two interlocking layers, implemented across 4 source files:
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+./build/monad.exe --help
+python tests/test_windows_portability.py
+```
 
-| File | Responsibility |
-|------|---------------|
-| `types.c/h` | Type representation, kind system (31 type kinds), type operations (clone, free, unify, subst, to_llvm) |
-| `infer.c/h` | Hindley-Milner inference: constraint gen → unification → generalization → instantiation → zonking |
-| `dep.c/h` | Dependent type checker: ITT kernel with NbE, bidir checking, metavariables, elaboration |
-| `typeclass.c/h` | Type class resolution and instance derivation |
+The repository also includes a GitHub Actions workflow at
+`.github/workflows/ci.yml` that performs CMake builds on Linux and
+MSYS2/UCRT64 Windows.
 
-**Hindley-Milner layer** (`infer.c`) — automatic inference with polymorphic schemes:
+## First Program
+
+Create `hello.mon`:
 
 ```monad
-(define (id x) x)          ; => ∀a. a -> a
-(define (const x y) x)     ; => ∀a b. a -> b -> a
-
-(id 42)                    ; Int -> Int
-(id "hi")                  ; String -> String
+show "Hello, Monad"
 ```
 
-Polymorphism is compiled via monomorphization — zero-cost abstraction.
+Compile and run it:
 
-**ITT kernel** (`dep.c`) — full Intensional Type Theory with:
-
-| Concept | Implementation | Detail |
-|---------|---------------|--------|
-| Universe hierarchy | `Type u : Type (u+1)` | Predicative, cumulative |
-| Dependent functions | `Π(x:A). B` | Bidirectional checking |
-| Dependent pairs | `Σ(x:A). B` | With `fst`/`snd` projections |
-| Equality | `t ≡ s : A` | `refl` + `subst` |
-| Natural numbers | `Nat`, `zero`, `succ`, `Nat-elim` | Primitive recursion |
-| Definitional equality | Normalization by Evaluation | Fuel: 100000 steps |
-| Representation | Locally nameless | De Bruijn indices + global names |
-| Elaboration | Metavariables + implicit args | `dep_conv` solver |
-| Ground bridge | `TERM_EMBED` | HM ↔ ITT interop |
-
-**Ground type hierarchy** (`types.h:8-49`):
-
-| Category | Types |
-|----------|-------|
-| Primitives | `Int`, `Float`, `Char`, `String`, `Symbol`, `Bool` |
-| Numeric | `Hex`, `Bin`, `Oct`, `Ratio` |
-| Fixed-width | `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `I128`, `U128` |
-| Extended | `F32`, `F80` |
-| Compound | `Arr`, `List`, `Set`, `Map`, `Fn`, `Layout` |
-| Pointer | `Ptr :: T` |
-| Optional | `T?` (sum-type encoding) |
-| Application | `Maybe Float`, `Arr :: Int :: 3` |
-| Refinement | `Natural { x ∈ Int | x >= 0 }` |
-
-**Refinement types** attach predicates to ground types as compile-time-checked subtypes, automatically generating predicate functions and materialized `Set` values.
-
-```monad
-type Natural { x ∈ Int | x >= 0 }
-  :alias ℕ
-
-(define (isNatural [x :: ℕ] -> Bool)
-  (Natural? x))
-
-show (isNatural 1)   ; => True
+```sh
+./build/monad hello.mon
+./hello
 ```
 
-**Type classes and ADTs:**
+On MSYS2/Windows the output binary is suffixed:
 
-```monad
-(class Eq a where
-  (=)  :: a -> a -> Bool
-  (!=) :: a -> a -> Bool
-  (x != y) => (not (x = y)))
-
-data TrafficLight Red | Yellow | Green
-
-data Shape
-  Circle    Float
-  Rectangle Float Float
-  Triangle  Point Point Point
+```sh
+./build/monad.exe hello.mon
+./hello.exe
 ```
 
-### 4.3 Codegen (`codegen.c/h`)
+## Package Builds
 
-The codegen module translates desugared AST into LLVM IR. It is the largest file in the compiler (~13,000 lines).
-
-**Dispatch architecture:**
-
-- `codegen_expr()` switches on AST type, then for `AST_LIST` heads dispatches via 83+ `strcmp` calls (lines 3889-12492)
-- 17 type predicates handled at `codegen.c:5458-5488`
-- 94 builtins registered via `register_builtins()` at `codegen.c:12960-13119`
-- 2nd registration layer: `infer_register_builtins()` adds type-annotated variants
-
-**Callability rule:** A function is callable from paren-mode code ONLY if it has a `strcmp` handler. Functions that only appear in `register_builtins()` (like `concat`, `substring`, `reverse`, `nth`, `length`, `reduce`, `fn`/`lambda`, `cond`, `let`) are NOT directly callable — they lack the strcmp dispatch entry despite being registered in the env.
-
-**Working dispatch categories** (all now covered by tests):
-
-| Category | Count | Key symbols |
-|----------|-------|-------------|
-| Arithmetic | 10 | `+`, `-`, `*`, `/`, `%`, `mod`, `1/4` ratio-as-function |
-| Bitwise | 6 | `&`, `~`, `bit-xor`, `<<`, `>>`, `>>>` |
-| Comparison | 7 | `=`, `!=`, `<`, `>`, `<=`, `>=`, `equal?` |
-| Logic | 3 | `and`, `or`, `not` |
-| Control | 4 | `if`, `begin`, `unless`, `while` |
-| Type preds | 18 | `Int?`, `Float?`, `Number?`, `String?`, `nil?`, etc. |
-| Type convs | 8 | `Int`, `Float`, `Char`, `Hex`, `Oct`, `Bin`, `Arr`, etc. |
-| String | 6 | `make-string`, `count`, `starts-with?`, `ends-with?`, `contains?`, indexing |
-| List | 10 | `list`, `car`, `cdr`, `cons`, `.`, `++`, `empty?`, `nil?`, `pair?`, `make-list` |
-| Set | 8 | `conj`, `disj`, `conj!`, `disj!`, `contains?`, `Set?`, `collection?`, set-as-function |
-| Other | 10 | `quote`, `define`, `set!`, `show`, `??`, `address-of`, array-index, etc. |
-
-### 4.4 Runtime (`runtime.c/h`, `arena.c/h`)
-
-The Runtime Value System — `RuntimeValue` tagged unions, all 14 type tags, value construction/unboxing API, thunk/lazy evaluation, cons-cell lists, open-addressing hash sets/maps, and the closure ABI — is documented in detail in `context/language.org::* Runtime Value System`.
-
-| File | Purpose |
-|------|---------|
-| `runtime.c` | Cons cells, list ops, set/map ops, GC (ref-count + cycle detection), `show` printer, keyword/value/ratio constructors |
-| `arena.c` | Bump allocator for compiler-internal allocations |
-
-**Known runtime limitations** (test suite verifies these):
-
-- `empty?` on set literal `{}` returns `False` (should be `True`)
-- `tail` on lists segfaults
-- Map literal `#{"k" v}` and set literal `{1 2 3}` produce garbage values without type annotation (`:: Map` / `:: Set`)
-- `assoc`, `dissoc`, `merge`, `keys`, `vals`, `find` dispatch correctly but produce garbage due to map runtime issues
-- List `length` and `reverse` are registered builtins but lack strcmp dispatch — unreachable from paren-mode
-
-### 4.5 FFI and Inline Assembly (`ffi.c/h`, `asm.c/h`)
-
-| File | Purpose |
-|------|---------|
-| `ffi.c` | C header parsing via libclang, type mapping (C → Monad), arity registration |
-| `asm.c` | Inline assembly IR generation, register allocation, naked function support |
-
-**Direct C header inclusion — no bindings needed:**
-
-```monad
-include <raylib.h>
-
-InitWindow 1920 1080 "No Bindings!?"
-
-define color Color 33 33 33 0
-
-until WindowShouldClose
-  BeginDrawing
-  ClearBackground color
-  DrawFPS 600 600
-  EndDrawing
-```
-
-**Inline assembly:**
-
-```monad
-(define (rdtsc -> Int)
-  "Read the CPU timestamp counter."
-  (asm rdtsc
-       shl 32   %rdx
-       or  %rdx %rax))
-```
-
-**Naked functions** (`:naked True`) remove prologue/epilogue for full control.
-
-### 4.6 Module System (`module.c/h`, `module_export.c/h`, `buildsystem.c/h`)
-
-| File | Purpose |
-|------|---------|
-| `module.c` | Module/import declaration parsing, dependency compilation, registry |
-| `module_export.c` | Export resolution, visibility rules |
-| `buildsystem.c` | `package.yaml` parsing, `monad new/build/run/install/clean` |
-
-**Import variants:**
-
-```monad
-(import Ascii)                           ; everything
-(import Math hiding [cos sin])           ; except
-(import Math [sqrt log])                 ; only
-(import qualified Math :as M)            ; qualified as M.sqrt
-```
-
-**Package format** (`package.yaml`):
+For a small package, place source under `src/` and add `package.yaml`:
 
 ```yaml
-name:                my-package
-version:             0.1.0.0
-dependencies:
-- core >= 0.1 && < 1.0
+name: hello
 executables:
-  my-package:
+  hello:
     main: Main.mon
     source-dirs: src
 ```
 
-### 4.7 Other Compiler Modules
-
-| File | Purpose |
-|------|---------|
-| `env.c/h` | Symbol table (hash map), entry kinds (VAR, FUNC, BUILTIN, LAYOUT, MACRO, MODULE) |
-| `pmatch.c/h` | Pattern-match compilation: coverage checking, clause desugaring to if/case chains |
-| `macro.c/h` | Macro expansion (define-macro, syntax-rules) |
-| `features.c/h` | Conditional compilation via `#+TAG` / `#---` directives, `*features*` global |
-| `cli.c/h` | CLI argument parsing, help text |
-| `repl.c/h` | Interactive REPL with readline support |
-| `typst_emit.c/h` | AST → Typst math document → PDF pipeline |
-| `main.c` | Entry point, pipeline orchestration, LLVM module management |
-
------
-
-## 5. Syntax: S-Expressions and Wisp
-
-Every construct can be written in two equivalent forms:
+Create `src/Main.mon`:
 
 ```monad
-;; S-expression form
-(define [var :: Int] 3)
-(define (square [x :: Int] -> Int) (* x x))
-
-;; Wisp form (identical semantics)
-define var :: Int 3
-define square :: Int -> Int
-  x -> x * x
-
-;; Parenthesized headers are also valid in bare Wisp define form.
-define (firstItem [n : Int] [xs : Arr] -> Int)
-  _ []     -> 0
-  n [x|xs] -> x
+(module Main)
+show "Hello, package"
 ```
 
-See `how_to/Syntax.mon` for comprehensive examples.
+Build and run it from the package directory:
 
-### Wisp Sugar Notes
-
-- **Typed value define sugar:** `define x :: Int 42` is Wisp sugar for the Lisp-layer `(define [x :: Int] 42)`. Bracketed `define [x :: Int] 42` and `define [x : Int] 42` remain valid.
-- **Signature clause sugar:** `define square :: Int -> Int` followed by `x -> x * x` binds `x` as the parameter and expands to a normal named-parameter function. Pattern clauses with `_`, literals, `[]`, `[x|xs]`, or guards remain pattern clauses.
-- **Parenthesized Wisp define headers:** `define (f [x : Int] -> Int)` is accepted without wrapping the whole form in parentheses, so Wisp can reuse Lisp-style function headers directly.
-- **Path values:** valid Unix path tokens such as `~/xos/projects/c/monadc/context/` are first-class `Path` values in Wisp and Lisp forms.
-- **`?`-sugar (method-call):** `(contains? var arg)` transforms to `(var contains? arg)` when `var` is an untyped identifier. Workaround: annotate the variable `(define [s :: Set] ...)` or use a literal first arg.
-- **`!`-sugar (mutation):** `(conj! var arg)` → `(var conj! arg)`. Same constraints and workaround as `?`-sugar.
-- **Pipe sugar:** `x |> f |> g` chains as `(g (f x))`. Wisp uses the arity table for grouping.
-- **Inline if/then/else:** `if expr then stuff else stuff` (Form 3) and multiline `if expr then stuff else stuff` (Form 2) both work.
-
------
-
-## 6. Type System (Reference)
-
-### 6.1 Hindley-Milner Inference
-
-The HM layer (`infer.c`) provides automatic type inference with polymorphic schemes via:
-1. **Constraint generation** — traverse AST, emit type equations
-2. **Unification** — Robinson's algorithm
-3. **Generalization** — quantify free type variables
-4. **Instantiation** — fresh variables at call sites
-5. **Zonking** — propagate substitution onto AST
-
-### 6.2 Dependent Types (ITT)
-
-The dependent type layer (`dep.c`) implements a full ITT kernel:
-
-- **Bidirectional checking** (Löh, McBride, Swierstra 2010):
-  - Inference (`Γ ⊢ t ⇒ A`): variables, annotations, applications, type constants
-  - Checking (`Γ ⊢ t ⇐ A`): lambda bodies, pair introductions, `refl`
-- **Definitional equality** via NbE with fuel limit (`DEP_CONV_FUEL = 100000`)
-- **Locally nameless** representation — De Bruijn indices + global names
-- **Metavariables** for elaboration — holes (`_`) and implicit args (`{x:A}`)
-- **Ground type embedding** via `TERM_EMBED` / `dep_ground_of_value`
-
-```monad
-;; Dependent function
-(define (append [xs :: List a] [ys :: List a] -> List a)
-  ...)
-
-;; Implicit arguments
-(define (id {A :: Type} [x :: A] -> A) x)
+```sh
+/path/to/monadc/build/monad build
+./build/hello
 ```
 
-### 6.3 Refinement Types
+`monad build` finds checkout-local `core/` and `libmonad.a` through the compiler
+binary location, so a development checkout does not need `make install` before
+building a package.
 
-```monad
-type Positive { x ∈ Int | x > 0 }
-type Even     { x ∈ Int | x % 2 = 0 }
+## Examples
 
-(type PositiveEven
-  { n ∈ Int
-  | ((Positive? n) and (Even? n)) })
+The `how_to/` directory contains executable language examples:
+
+```sh
+./build/monad how_to/Syntax.mon
+./build/monad how_to/AlgebraicDataTypes.mon
+./build/monad how_to/Macros.mon
+./build/monad how_to/Iter.mon
 ```
 
-Each refinement generates a predicate (`Positive?`) and a materialized `Set` (visualized as `{1 2 3 4 ...}` in the REPL).
+Some examples depend on external graphics libraries or platform-specific
+headers. Start with the syntax, ADT, macro, and iterator examples before trying
+the speedrun demos.
 
-### 6.4 Type Classes
+## Build Targets
 
-See `typeclass.c` for the compiler implementation and `how_to/AlgebraicDataTypes.mon` for examples.
+The CMake build is the primary portable build path.
 
------
+| Command                                      | Purpose                                                  |
+|----------------------------------------------|----------------------------------------------------------|
+| `cmake -S . -B build -G Ninja`               | Configure a debug build                                  |
+| `cmake --build build --parallel`             | Build `monad` and `libmonad.a`                           |
+| `ctest --test-dir build --output-on-failure` | Run CMake smoke and portability checks                   |
+| `cmake --install build --prefix /path`       | Install compiler, runtime archive, header, and core libs |
 
-## 7. Quick Start
+The root `Makefile` remains available while the migration completes.
 
-**Installation:**
+| Command                     | Purpose                                                     |
+|-----------------------------|-------------------------------------------------------------|
+| `make` or `make all`        | Debug compiler build                                        |
+| `make release`              | Optimized compiler build                                    |
+| `make asan`                 | AddressSanitizer build                                      |
+| `make test`                 | Full runner: reader, Wisp, language, and codegen fixtures   |
+| `make test-core`            | Core module test blocks                                     |
+| `make test-runner`          | Python runner/unit checks                                   |
+| `make clean`                | Remove compiler artifacts                                   |
+| `make install PREFIX=/path` | Install compiler, runtime archive, header, and core modules |
 
-```bash
-git clone https://github.com/laluxx/monadc.git
-cd monadc
-sudo make install
+The `./make` helper wraps common workflows and adds project diagnostics,
+portable packaging, and vendor/runtime closure commands:
+
+```sh
+./make help
+./make doctor
+./make release
+./make vendor
+./make tar --with-binaries
 ```
 
-**First program** (`Hello.mon`):
+## Repository Map
 
-```monad
-show "Hello, World!"
+| Path         | What lives there                                                 |
+|--------------|------------------------------------------------------------------|
+| `*.c`, `*.h` | Compiler, runtime, REPL, FFI, LSP, bytecode, and support code    |
+| `core/`      | Active core/prelude modules                                      |
+| `how_to/`    | Small executable examples                                        |
+| `tests/`     | Regression fixtures and Python test harnesses                    |
+| `context/`   | Source-grounded project memory, design notes, and subsystem docs |
+| `etc/`       | Logo, screenshots, fonts, and reference PDFs                     |
+| `CMakeLists.txt` | Primary portable build/test/install path                     |
+| `Makefile`   | Legacy build/test/install path during migration                  |
+| `make`       | Python build helper                                              |
+
+## Language Surface
+
+Monad currently includes:
+
+- S-expression and Wisp syntaxes for the same AST.
+- Functions, lambdas, pattern matching, algebraic data types, and type classes.
+- Hindley-Milner inference with monomorphized codegen.
+- Dependent-type and refinement-type experiments.
+- Arrays, lists, sets, maps, paths, chars, strings, numeric literals, and
+  fixed-width numeric types.
+- C FFI through libclang header parsing.
+- Inline assembly and low-level layout support.
+- Test blocks that can be compiled and executed by the test runner.
+
+For deeper language docs, start in `context/info/index.org`.
+
+## Verification
+
+The important local checks are:
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+python tests/test_windows_portability.py
+make test-runner
+make test-core
+make test
 ```
 
-```bash
-monad Hello.mon
-```
+`make test` is the broadest suite and can take longer because it compiles and
+runs many fixtures. Use the narrower commands while working on a specific
+subsystem.
 
-**REPL:**
+## Editor Support
 
-```bash
-monad -i
-```
+The companion Emacs mode is
+[monad-mode](https://github.com/laluxx/monad-mode). It provides syntax
+highlighting, REPL integration, inline assembly support, and linting helpers.
 
-**Run tests:**
+## Project Notes
 
-```bash
-python3 tests/run.py
-```
+Monad is intentionally ambitious: it explores the boundary between high-level
+functional programming and low-level systems control. The cost of that ambition
+is complexity. The way to keep the project workable is to route changes through
+small tests, source-grounded context records, and honest build verification.
 
-**Context visualizer dashboard:**
+Useful entry points:
 
-```bash
-python3 context-visualizer.py
-```
-
-**Package management:**
-
-```bash
-monad new my-project
-monad build
-monad run
-monad install
-```
-
------
-
-## 8. CLI Reference
-
-All commands and flags from `cli.h` / `cli.c`:
-
-### Modes
-
-| Command | Description |
-|---------|-------------|
-| `monad <file.mon>` | Compile source file to executable |
-| `monad -i` | Start interactive REPL |
-| `monad new <name>` | Scaffold a new package |
-| `monad build` | Build package (requires package.yaml) |
-| `monad run` | Build and run package |
-| `monad clean` | Remove build/ + *.o *.ll *.s |
-| `monad install` | Install to `~/.local/bin/` |
-| `monad test <file.mon>` | Compile with tests, run, delete test binary |
-| `monad --test <file>` | Compile with tests embedded, keep binary |
-
-### Flags
-
-| Flag | Effect |
-|------|--------|
-| `-o <file>` | Output file name |
-| `--emit-ir` | Emit LLVM IR (`.ll`) |
-| `--emit-bc` | Emit LLVM bitcode (`.bc`) |
-| `--emit-asm` | Emit assembly (`.s`) |
-| `--emit-obj` | Emit object file (`.o`) |
-| `--emit-json` | Emit AST as JSON (`.json`) |
-| `--emit-typst` | Emit Typst math document (`.typ`) and compile to PDF |
-| `--test` | Compile with test blocks embedded |
-| `-Wall` | Accepted (no-op) |
-| `-Wextra` | Accepted (no-op) |
-| `-h`, `--help` | Show help message |
-
------
-
-## 9. Language Tour
-
-### Variables and Built-in Types
-
-```monad
-(define i    20)      ; Int
-(define f    40.0)    ; Float
-(define c    'c')     ; Char
-(define s    "hello") ; String
-(define frac 1/3)     ; Ratio — true rational arithmetic
-(define h    0xFF)    ; Hex   (255)
-(define b    0b1010)  ; Bin   (10)
-(define o    0o755)   ; Oct   (493)
-```
-
-Types are first-class casting functions:
-
-```monad
-(Int   40.3)   ; => 40
-(Float 20)     ; => 20.0
-(Char  65)     ; => 'A'
-(Hex   65)     ; => 0x41
-(Arr   20)     ; => [20]
-```
-
-### Functions
-
-```monad
-;; Required parameters (→)
-(define (multf [x :: Float] → [y :: Float] → Int)
-  "Multiply X and Y."
-  (* x y))
-
-;; Optional parameters (⇒)
-(define (multh [x :: Hex] ⇒ [y :: Hex] → Int)
-  (if (unspecified? y) x (* x y)))
-
-;; Automatic infix — no backticks needed
-(newcomers into players)   ; => (into players newcomers)
-(3 + 4)                    ; => (+ 3 4)
-
-;; Function metadata
-define pow :: Float → Float → Float
-  :doc   "Raise BASE to the power EXP."
-  :alias ^
-  base exp → if exp = 0.0 1.0 else base * base ^ (exp - 1.0)
-```
-
-### Pattern Matching
-
-```monad
-(define (last List → a)
-  []     → nil
-  [x]    → x
-  [_|xs] → (last xs))
-```
-
-Guards, wildcards, variable binding, list destructuring, constructor patterns — all compiled via `pmatch_desugar` with exhaustive coverage verification.
-
-### Collections
-
-| Type | Syntax | Evaluation | Memory |
-|------|--------|------------|--------|
-| Lists | `'(1 2 3)` | Lazy | Thunks → memoized |
-| Arrays | `[1 2 3]` | Strict | C-compatible |
-| Vectors | `#[...]` | SIMD-aligned | Homogeneous |
-
-```monad
-define naturals (0..)     ; infinite lazy list — O(1) memory
-take 5 naturals           ; => '(0 1 2 3 4)
-
-define [arr :: Arr :: Int :: 3] [1 2 3]
-
-;; Boolean masking
-(define v #[10 20 30 40 50])
-(define mask (> v 25))    ; => #[#f #f #t #t #t]
-(v mask)                  ; => #[30 40 50]
-```
-
-### Maps, Sets, and Relations
-
-```monad
-(define scores #{"Fred" 1400  "Bob" 1240})
-(assoc  scores "Sally" 0)   ; add
-(dissoc scores "Bob")       ; remove
-(scores "Fred")             ; => 1400
-
-;; Relational algebra
-(define ages {("Alice", 30) ("Bob", 25)})
-(domain   ages)          ; => {"Alice" "Bob"}
-(image    ages "Alice")  ; => {30}
-(ages ∘ life-stages)      ; Relational composition
-```
-
-### Layouts (Structs)
-
-```monad
-(layout Point
-  [x :: Float]
-  [y :: Float])
-
-(define p (Point 1.0 2.0))
-p.x  ; => 1.0
-p.y  ; => 2.0
-```
-
-Layouts support pointer fields, inline nesting, packed alignment, and array-of-layout fields. See `how_to/Layouts.mon` for details.
-
-### Conditional Compilation
-
-```monad
-#+WINDOWS
-(show "Compiled for Windows")
-#---
-
-#+LINUX
-#+X86-64
-(show "Compiled for Linux x86-64")
-#---
-```
-
-### Per-Module Test Suites
-
-```monad
-(tests
-  (assert-eq (inc 0)   1  "inc 0")
-  (assert-eq (sum (filter even? '(1..20))) 110 "sum of evens 1..20"))
-```
-
-```bash
-monad test Module.mon
-```
-
-See `how_to/Test.mon` for guide.
-
------
-
-## 10. Context System
-
-The context system is a **file-system-based hippocampus** — an external, persistent memory that survives across LLM instantiations. It is a corpus of Org-mode files recording every durable fact, decision, observation, inference, and TODO about the compiler, structured as a category-theoretic graph.
-
-### 10.1 Category Theory Foundation
-
-| Category concept | Repository artifact | Example |
-|------------------|-------------------|---------|
-| Object | context heading, TODO, test, source anchor | `tests.reader.path-heap-literals` |
-| Morphism | typed relation between objects | `verifies`, `supports`, `evidenced by` |
-| Composition | chained meaning preservation | test verifies context, context links source |
-| Functor | executable test suite view from semantic context | context contract → automated check |
-
-### 10.2 Context Visualizer
-
-A live browser-based dashboard renders the entire graph:
-
-```bash
-python3 context-visualizer.py
-```
-
-Features: animated force graph, fuzzy search (`C-n`/`C-p`), Hoogle method browser, TODO dashboard, editor integration, morphism arrows.
-
-The visualizer supports category-based filtering — different views into the graph's
-subcategories. Three key views are captured below:
-
-<p align="center">
-  <img src="./etc/screenshots/context-category.png" alt="Category: Language Explorer — decision subset with Hoogle method browser" width="95%"/>
-  <br/>
-  <em>Language Explorer — the decision subset of the context category, filtering to type-system and language-primitive decision nodes. Each node is a design decision with its source anchors, cross-links, and philosophical grounding. The left panel shows the Hoogle-like method browser: every core and prelude function is queryable by name or type signature, with directed call/caller trees projected onto the graph. This replaces traditional API docs with a live, navigable knowledge graph.</em>
-</p>
-
-<p align="center">
-  <img src="./etc/screenshots/context-category3.png" alt="Category: Full context graph — all categories and connections" width="95%"/>
-  <br/>
-  <em>Full Category — the entire context graph with all categories unfiltered. Every object (context heading, test fixture, TODO, source anchor) and every morphism (verifies, supports, evidenced-by, contains) is visible. The force-directed layout clusters related nodes: decisions form one region, tests form another, observations orbit their sources, and cross-cutting edges span between them. This is the live map of the project's memory.</em>
-</p>
-
-<p align="center">
-  <img src="./etc/screenshots/context-category4.png" alt="Category: Tests subset — test nodes connected to context" width="95%"/>
-  <br/>
-  <em>Tests Subset — the test nodes of the category filtered to show the test–context connection graph. Each test fixture (from codegen `.mon` files, reader-atoms.tsv, reader-sugars.tsv, or language-corpus.tsv) is an object, and the `verifies` morphism connects each test to the context nodes that explain what it tests and why it matters. Yellow nodes mark TODOs; green nodes mark passing tests; red nodes mark known failures documented in the context. This is the functor from the context category into the category of executable verification.</em>
-</p>
-
-### 10.3 Test Metadata
-
-Every test fixture carries metadata linking it to context nodes:
-
-```
-;; TEST-ID: tests.codegen.rt-hm-polymorphic-identity
-;; TEST-CONTEXT: monadc.context.language.type-system-surface
-;; TEST-PURPOSE: polymorphic identity instantiates at Int and String
-;; TEST-ATOM: (define (id x) x) works at Int and String call sites
-;; TEST-EXPECT: compile, run
-```
-
-### 10.4 Context File Index
-
-See `context/index.org` for the full schema specification.
-
-| File                | Purpose                                     |
-|---------------------|---------------------------------------------|
-| `context.org`       | Root entry point, includes full index       |
-| `index.org`         | Schema, format specification, node index    |
-| `reader.org`        | Reader/parser context (AST, tokens, Wisp)   |
-| `language.org`      | Language formalization and type system      |
-| `build.org`         | Build/install commands and verification     |
-| `tests.org`         | Test metadata, philosophy, context links    |
-| `workflow.org`      | Standing user preferences and workflow      |
-| `rules.org`         | Standing repository rules                   |
-| `todo.org`          | Project TODO notes with confidence levels   |
-| `visualizer.org`    | Visualizer implementation docs              |
-| `opinions.org`      | LLM critique and suggestions for context    |
-| `philosophy.org`    | Language and project philosophy (witnessed) |
-| `wisp.org`          | Wisp expander architecture, arity, sugars   |
-| `references.org`    | Research paper bibliography & cross-links   |
-| `commit-format.org` | Commit message format conventions           |
-
-### 10.5 Context Node Documentation
-
-Every context section (node) carries a `CONTEXT_DESCRIPTION` property in its Org drawer explaining what that node IS — a human-readable summary of the concept, its role in the compiler, and why it exists. This description is rendered by the visualizer when a node is selected, replacing traditional API docs with a live navigable knowledge graph.
-
-Example from `context/wisp.org`:
-
-```org
-:CUSTOM_ID: wisp-architecture
-:CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: The Wisp syntax expander architecture: a two-pass process
-  (tokenization then layout expansion) that converts indentation-based Wisp into
-  standard S-expressions before the reader sees them.
-```
-
-**Current corpus:** ~1400 nodes, ~1500 edges — all connected through verified morphisms.
-
------
-
-## 11. Test Infrastructure
-
-| Layer    | Artifact                     | Size | Role                              |
-|----------|------------------------------|------|-----------------------------------|
-| Atoms    | `tests/reader-atoms.tsv`     | 772  | Parser conformance atoms          |
-| Sugar    | `tests/reader-sugars.tsv`    | 192  | Sugar desugar tests               |
-| Codegen  | `tests/codegen/*.mon`        | 200+ | Compile/run fixtures (incl. wisp) |
-| Language | `tests/language/*.mon`       | 600+ | Language feature tests            |
-| Runner   | `tests/run.py`               | —    | Formatted execution engine        |
-
-**Current status:** ~1400+ tests across TSV-based parser coverage, codegen compile/run pairs, and language feature tests. Pass/fail counts fluctuate as coverage expands; see context/tests.org for the current state.
-
-**Wisp tests** are consolidated under `tests/codegen/` (formerly in `tests/wisp/`). Wisp sugar test fixtures for `?-sugar`, `!-sugar`, pipe, and inline/multiline `if`/`then`/`else` exercise both compilation and runtime output.
-
-Run the suite:
-
-```bash
-python3 tests/run.py
-```
-
-See `context/tests.org` for coverage analysis and known failures.
-
-**How-to guides** in `how_to/` are also executable `.mon` files that serve as both documentation and integration tests:
-
-- `AlgebraicDataTypes.mon` — ADT definition and pattern matching
-- `Layouts.mon` — Struct layout and field access
-- `Macros.mon` — Macro system walkthrough
-- `RefinementType.mon` — Refinement type usage
-- `Syntax.mon` — Syntax comparison (S-expr vs Wisp)
-- `Test.mon` — Test framework usage
-- `RaylibSpeedrun.mon` — Real-world raylib application
-- `Term/` — Dependent type examples
-
------
-
-## 12. Fuzzing System
-
-A deterministic QuickCheck-style fuzzing harness for the compiler, located at `tests/fuzzing/`. The runner (`tests/fuzzing/fuzz_codegen.py`, 2369 lines) loads structured property files from a recursive property corpus, generates typed expressions, compiles them with `monad`, runs the resulting binary, and checks stdout against expected values.
-
-**Property corpus** (`tests/fuzzing/properties/`): **1933+ active `.fuzz` properties** organized in a hierarchical directory taxonomy across 15 top-level categories:
-
-| Directory | Focus | Count |
-|-----------|-------|-------|
-| `00-core/` | Arithmetic, comparison, order, lattice | ~300 |
-| `10-control/` | if/cond/while/for, phi lowering, loop mutation | ~100 |
-| `20-binding/` | Env, `with`, `set!`, shadowing, SSA | ~100 |
-| `20-functions/` | Function dispatch, arity | ~80 |
-| `30-codegen-dispatch/` | Operator dispatch, strategy matrix | ~250 |
-| `35-compiler-path-v11/` | Compiler-path targeted laws | ~150 |
-| `40-runtime-collections/` | Arrays, lists, sets, mutation | ~200 |
-| `40-runtime-values/` | Runtime value construction | ~80 |
-| `50-quote-null-path/` | Quote, null, path, predicate, cast | ~100 |
-| `60-cross-feature/` | Cross-feature compiler paths | ~150 |
-| `70-oracle/` | Python oracles (future) | ~50 |
-| `75-experimental/` | Unstable feature probes | ~50 |
-| `80-stress/` | Large/many-form programs | ~50 |
-| `90-negative/` | Expected-compile-fail invariants | ~200 |
-| `99-misc/` | Everything else | ~50 |
-
-Each `.fuzz` file is a self-contained property specification with optional metadata:
-
-```text
-name: int_add_commutative
-section: arithmetic
-tier: stable
-kind: law
-args: a:Int b:Int
-features: arithmetic, equality, logic
-compiler-path: codegen.arithmetic_dispatch, codegen.equality_dispatch
-type: Bool
-expect: True
-description: Addition must be commutative for generated Int expressions.
-law: (= (fuzz-add {a} {b}) (fuzz-add {b} {a}))
-```
-
-Properties support 5 tiers (`stable`, `experimental`, `oracle`, `compile-fail`, `stress`), 3 kinds (`law`, `program`, `compile-fail`), strategy-annotated generators (`x:Int@edge+if`), Python oracles (`expect-python:`), and variadic `=` lowering via the built-in rewriter.
-
-**Type-directed generators** produce typed Int, Bool, String, Char, Float, Arr, List, and dependent types (IndexOf, SubstrOf, ElemOf, DifferentFrom) with strategy modifiers:
-
-| Strategy | Effect |
-|----------|--------|
-| `tiny` | Small magnitude values |
-| `nat`/`index` | Non-negative small values |
-| `edge` | Edge-case values (-128, -1, 0, 1, 127, etc.) |
-| `bitwise` | Include bitwise operators |
-| `if`/`phi` | Bias toward `if` expressions |
-| `with`/`env` | Bias toward `with` bindings |
-| `array` | Include array-index expressions |
-
-**Runner features:**
-- Recursive `.fuzz` discovery (1933+ active, 23 disabled)
-- Coverage mode: one generated instance per property
-- Random batch mode: mixes random laws into programs
-- Shrink-on-failure: isolates minimal counterexample via `simpler_exprs`
-- Failure isolation: breaks failed batches into individual law runs
-- Regression tracking: persists history to `.fuzz-history.json`
-- Emacs-compatible output: `path:line:col:` for compilation-mode navigation
-- Styled output matching `tests/run.py` (Unicode dividers, colorized durations)
-
-**Fuzzer self-tests** (`tests/fuzzing/fuzz_fuzzing.py`) exercise the generation and rewrite logic in isolation with no compiler binary required:
-
-```
-python3 -m unittest tests.fuzzing.fuzz_fuzzing -v
-```
-
-Run the fuzzer via Make:
-
-```bash
-make fuzzing
-```
-
-Or directly with various options:
-
-```bash
-python3 tests/fuzzing/fuzz_codegen.py --seed 41 --cases 1 --keep
-python3 tests/fuzzing/fuzz_codegen.py --properties int_add_commutative
-python3 tests/fuzzing/fuzz_codegen.py --tiers all
-python3 tests/fuzzing/fuzz_codegen.py --list-properties
-```
-
-See `tests/fuzzing/README.md` for the complete reference.
-
------
-
-## 13. Build System
-
-```bash
-make              # Debug build (default)
-make release      # Release build (-O2)
-make asan         # Address sanitizer build
-make install      # Install to /usr/local
-make uninstall    # Remove installed files
-make clean        # Remove build artifacts
-```
-
-**Dependencies:** `gcc`, `llvm-dev`, `libclang-dev`, `libreadline-dev`, `libgmp-dev`, `pkg-config`.
-
-The static runtime `libmonad.a` (archive of `runtime.o` + `arena.o`) is linked into every binary. No shared library or `ldconfig` needed.
-
------
-
-## 14. Known Limitations
-
-These are documented architectural gaps — not bugs in the test suite:
-
-| Area | Issue | Root Cause |
-|------|-------|-----------|
-| Closures | `fn`/`lambda`/`defn` not callable | No strcmp dispatch handler; no closure allocation in codegen |
-| Lists | `tail` segfaults | Runtime list implementation bug |
-| Sets | `empty?` returns False on `{}` | Runtime set predicate bug |
-| Maps | `#{"k" v}` produces garbage without `:: Map` | Runtime map construction bug |
-| Map ops | `assoc`/`dissoc`/`merge`/`keys`/`vals`/`find` | Produce garbage via map runtime |
-| Dep phase | `concat`/`substring`/`reverse`/`nth`/`length`/`reduce` | Register_builtins-only — lack strcmp dispatch |
-| Higher-order | `map`/`filter`/`apply`/`partial` | Require closures |
-| Cond | `cond` form not recognized | Parser treats as ordinary variable |
-| Let | `let`/`let*`/`letrec` not dispatched | No strcmp handler |
-| Wisp cond | `cond` in wisp compiles but produces no output | No strcmp dispatch for `cond` |
-| Wisp let | `let`/`let*` in wisp — body nesting breaks | Wisp expansion doesn't preserve body scoping |
-| Wisp lambda | `lambda`/`fn` at wisp line level — param binding fails | Wisp layout can't nest lambda params |
-| Wisp for | `for` keyword not recognized by wisp expander | Missing from wisp keyword list |
-| Wisp begin | `begin` at wisp line level not callable | Treated as ordinary identifier |
-| Wisp @-sugar | `@`-sugar (indexing shorthand) not implemented | Reader rejects `@` in identifiers |
-| Garbage (wide) | Map, Set, List, String, Symbol, Keyword, Layout all leak through closures | `wrap_func_as_closure` passes ALL raw pointer types through without boxing |
-
------
-
-## 15. TODO
-
-See `context/todo.org` for the full priority-ranked list with confidence levels. Highlights:
-
-- Full dependent type elaboration pipeline (surface → core ITT → codegen)
-- Refinement type static predicate evaluation integration
-- Type class instance derivation (Eq, Enum, Ord, Bounded)
-- Closure support (fn/lambda/defn)
-- Wisp syntax parity with s-expression forms
-- Context visualizer performance optimization (60fps with 1258+ nodes)
-- `THINK` record type for speculative reasoning
-
------
-
-## 16. Contributing & License
-
-Every feature, bug fix, or test addition should be accompanied by context records explaining why it exists and what it verifies.
-
-**Key principles:**
-
-- **Smallest atoms** — Each test proves exactly one behavior.
-- **Context-linked** — Every test links to the context nodes that explain it.
-- **No fix without coverage** — Bug fixes require a test atom first.
-- **Append, don't rewrite** — Use superseding records instead of silently changing history.
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+- `context/info/index.org` for language documentation.
+- `context/build.org` for build and verification policy.
+- `context/tests.org` for test metadata and regression conventions.
+- `context/source-map.org` for source-file orientation.
+- `TODO.org` for open work.

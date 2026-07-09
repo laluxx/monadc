@@ -249,8 +249,10 @@
 [OBS id:obs.buildsystem.build.link src:buildsystem.c:363-396 conf:high]
   =build_link_executable(build_ctx, output_name, artifacts, artifact_count)= →
   =bool= — Builds a =gcc= command string concatenating all =object_path= values
-  with ="runtime.o -o output_name `llvm-config --ldflags --libs core` -lm -no-pie"=.
-  Executes via =system()=. Returns true on zero exit code.
+  with a runtime archive selected by =build_runtime_archive_path()=, then
+  =-o output_name `llvm-config --ldflags --libs core` -lm -lgmp= and the
+  platform-specific no-PIE flag. Executes via =system()=. Returns true on zero
+  exit code.
 
 * Utility Functions
 :PROPERTIES:
@@ -396,6 +398,13 @@
   tool's search path configuration, which is usually correct but can
   fail in sandboxed environments. Documenting the linking dependency
   explicitly would help troubleshoot "linked but segfaults" issues.
+
+[FIX id:fix.buildsystem.runtime-archive-link-2026-07-09 date:2026-07-09 by:codex]
+  =build_link_executable= now links =libmonad.a= instead of assuming a local
+  =runtime.o=. The resolver prefers =$MONAD_RUNTIME_LIB=, then checkout-local
+  =libmonad.a=, then the installed runtime archive. This keeps the legacy
+  package build layer compatible with the CMake build, where the runtime output
+  is an archive and not a root-level object file.
 
 [THINK id:think.buildsystem.project-vs-single-file conf:medium]
   The build system supports two modes: single-file compilation

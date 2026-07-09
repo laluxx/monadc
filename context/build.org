@@ -183,6 +183,92 @@ may fail if no password is provided.
 
 Cross-reference links to related context nodes. See [[file:connections.org][connections.org]] for the canonical routing table.
 
+* Windows / MSYS2 Build
+:PROPERTIES:
+:ID: monadc.context.build.windows-msys2
+:CUSTOM_ID: windows-msys2-build
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Windows build support through MSYS2, executable suffix handling, linker flag policy, and CI verification.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-07-09
+:CONTEXT_UPDATED: 2026-07-09
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: Makefile,main.c,buildsystem.c,cli.c,.github/workflows/ci.yml,tests/test_windows_portability.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.build.windows-msys2-first-class date:2026-07-09 by:codex]
+  Windows support is verified through MSYS2. The Makefile must derive
+  =TARGET= from =TARGET_BASE + EXEEXT=, skip Unix-only export/no-pie linker flags
+  on MSYS2-like hosts, and leave =monad= as the unsuffixed project target for
+  the Python build wrapper.
+
+[FIX id:fix.build.windows-msys2-link-contract-2026-07-09 date:2026-07-09 by:codex]
+  =main.c= and =buildsystem.c= now use =host_exe_suffix= and =host_no_pie_flag=
+  around generated executable names and linker flags. =cli.c= runs and removes
+  =*_test.exe= when the host executable suffix is =.exe=. The regression is
+  =tests/test_windows_portability.py= and the CI verifier is
+  =.github/workflows/ci.yml=.
+
+* CMake Build
+:PROPERTIES:
+:ID: monadc.context.build.cmake
+:CUSTOM_ID: cmake-build
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Portable CMake/Ninja build path for monad, libmonad.a, CTest smoke checks, and Linux/MSYS2 CI.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-07-09
+:CONTEXT_UPDATED: 2026-07-09
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: CMakeLists.txt,.github/workflows/ci.yml,tests/test_cmake_build.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.build.cmake-primary-path-2026-07-09 date:2026-07-09 by:codex]
+  CMake/Ninja is now the primary portable build path. The Makefile remains
+  available during migration, but CI verifies the CMake build on Linux and
+  MSYS2/UCRT64 Windows.
+
+[FIX id:fix.build.cmake-initial-port-2026-07-09 date:2026-07-09 by:codex]
+  Added =CMakeLists.txt= with a static =monad_runtime= archive whose output is
+  =libmonad.a=, a =monad= compiler executable, CTest smoke/contract checks, and
+  install rules for the compiler, runtime archive, header, and =core/**/*.mon=.
+  LLVM include/definition discovery uses CMake's LLVM package; final link flags
+  use =llvm-config --ldflags --libs core --system-libs= so shared-LLVM package
+  layouts are handled.
+
+[FIX id:fix.tests.cmake-build-contract-2026-07-09 date:2026-07-09 by:codex]
+  Added =tests/test_cmake_build.py= to assert the CMake target contract and the
+  Linux/MSYS2 GitHub Actions workflow. =make test-runner= now includes this
+  regression.
+
+[FIX id:fix.build.ci-explicit-portability-smokes-2026-07-09 date:2026-07-09 by:codex]
+  The Linux and MSYS2/UCRT64 CMake workflow jobs now run focused portability
+  tests explicitly after CTest: =tests/test_windows_portability.py= and
+  =tests/test_checkout_local_paths.py= with =MONAD_BINARY= pointed at the
+  CMake-built compiler. This makes checkout-local core/runtime and package
+  build behavior visible in the workflow log instead of only indirectly through
+  CTest.
+
+[FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
+  The compiler now resolves core modules and the runtime archive from the
+  checkout before falling back to installed paths. =monad_core_dir= prefers
+  =$MONAD_CORE=, then local =core/=, then installed core locations.
+  =runtime_archive_path= prefers =$MONAD_RUNTIME_LIB=, then local
+  =libmonad.a=, then a runtime archive beside the compiler binary, then
+  installed library paths. This makes both =./monad= and =build/monad= able to
+  compile a program from a fresh checkout without requiring =make install=.
+
 * LLM Analysis
 :PROPERTIES:
 :ID: monadc.context.build.llm-analysis

@@ -335,6 +335,21 @@ static void *lookup_imported_sym(const char *name) {
     return NULL;
 }
 
+static bool repl_file_exists(const char *path) {
+    return access(path, F_OK) == 0;
+}
+
+static char *repl_runtime_archive_path(void) {
+    const char *env_runtime = getenv("MONAD_RUNTIME_LIB");
+    if (env_runtime && *env_runtime)
+        return strdup(env_runtime);
+
+    if (repl_file_exists("libmonad.a"))
+        return strdup("libmonad.a");
+
+    return strdup("/usr/local/lib/libmonad.a");
+}
+
 static bool repl_name_needs_unicode_mangle(const char *name) {
     if (!name) return false;
 
@@ -1722,6 +1737,7 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
 
     {
         const char **all_objs = repl_get_compiled_obj_paths();
+        char *runtime_archive = repl_runtime_archive_path();
 
         char cmd[16384];
         int w = snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -o %s", so_path);
@@ -1729,7 +1745,8 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
             w += snprintf(cmd + w, sizeof(cmd) - w, " %s", all_objs[i]);
         w += snprintf(cmd + w, sizeof(cmd) - w,
                       " -Wl,--unresolved-symbols=ignore-all"
-                      " /usr/local/lib/libmonad.a -lm 2>&1");
+                      " %s -lm 2>&1", runtime_archive);
+        free(runtime_archive);
         free(all_objs);
 
         if (system(cmd) != 0) {
@@ -3143,4 +3160,3 @@ void repl_run(void) {
     printf("\n");
     repl_dispose(&ctx);
 }
-

@@ -31,6 +31,14 @@ static void write_file(const char *path, const char *content) {
     fclose(f);
 }
 
+static const char *host_exe_suffix(void) {
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+    return ".exe";
+#else
+    return "";
+#endif
+}
+
 static char *git_config(const char *key) {
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "git config --global %s 2>/dev/null", key);
@@ -1237,6 +1245,11 @@ void cmd_check(const char *input_file) {
 
     /* Clean up any binary that was produced */
     remove(tmp_out);
+    if (host_exe_suffix()[0]) {
+        char tmp_exe[1060];
+        snprintf(tmp_exe, sizeof(tmp_exe), "%s%s", tmp_out, host_exe_suffix());
+        remove(tmp_exe);
+    }
 
     if (used_bi) build_info_free(&bi);
     exit(WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : 1);
@@ -1311,12 +1324,14 @@ void cmd_test(const CompilerFlags *flags) {
 
     char *base = get_base_executable_name(input_file);
     char test_bin[1024];
-    snprintf(test_bin, sizeof(test_bin), "./%s_test", base);
+    char test_bin_name[1024];
+    snprintf(test_bin_name, sizeof(test_bin_name), "%s_test%s", base, host_exe_suffix());
+    snprintf(test_bin, sizeof(test_bin), "./%s", test_bin_name);
 
     printf("\n");
     int run_rc = system(test_bin);
 
-    remove(test_bin + 2);
+    remove(test_bin_name);
 
     char obj[1024];
     snprintf(obj, sizeof(obj), "%s_test.o", base);

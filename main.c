@@ -69,6 +69,7 @@ static CompiledModule *g_compiled = NULL;
 /* FFI libraries to link, accumulated during compile_one */
 static char  g_ffi_link_libs[2048] = {0};
 static int   g_ffi_link_libs_len   = 0;
+static const char *g_program_path = NULL;
 
 static void ffi_libs_add(FFIContext *ffi) {
     for (int i = 0; i < ffi->included_count; i++) {
@@ -367,8 +368,155 @@ static time_t file_mtime(const char *path) {
     return (stat(path, &st) == 0) ? st.st_mtime : 0;
 }
 
+static const char *host_exe_suffix(void) {
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+    return ".exe";
+#else
+    return "";
+#endif
+}
+
+static const char *host_no_pie_flag(void) {
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+    return "";
+#else
+    return " -no-pie";
+#endif
+}
+
 static bool file_exists(const char *path) {
     return access(path, F_OK) == 0;
+}
+
+static bool dir_exists(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static bool dir_prefix_matches(const char *path, const char *dir) {
+    if (!path || !dir || !*dir)
+        return false;
+
+    size_t dir_len = strlen(dir);
+    if (strncmp(path, dir, dir_len) == 0 &&
+        (path[dir_len] == '\0' || path[dir_len] == '/' || path[dir_len] == '\\'))
+        return true;
+
+    char path_real[1024];
+    char dir_real[1024];
+    if (realpath(path, path_real) && realpath(dir, dir_real)) {
+        size_t real_len = strlen(dir_real);
+        return strncmp(path_real, dir_real, real_len) == 0 &&
+               (path_real[real_len] == '\0' ||
+                path_real[real_len] == '/' ||
+                path_real[real_len] == '\\');
+    }
+
+    return false;
+}
+
+static bool same_dir_path(const char *a, const char *b) {
+    if (!a || !b)
+        return false;
+    if (strcmp(a, b) == 0)
+        return true;
+
+    char a_real[1024];
+    char b_real[1024];
+    if (realpath(a, a_real) && realpath(b, b_real))
+        return strcmp(a_real, b_real) == 0;
+    return false;
+}
+
+static char *dirname_dup(const char *path) {
+    if (!path || !*path)
+        return strdup(".");
+
+    char *copy = strdup(path);
+    char *last_sep = strrchr(copy, '/');
+    char *last_backslash = strrchr(copy, '\\');
+    if (!last_sep || (last_backslash && last_backslash > last_sep))
+        last_sep = last_backslash;
+
+    if (!last_sep) {
+        free(copy);
+        return strdup(".");
+    }
+
+    if (last_sep == copy)
+        last_sep[1] = '\0';
+    else
+        *last_sep = '\0';
+    return copy;
+}
+
+static char *path_join_dup(const char *dir, const char *leaf) {
+    size_t dir_len = strlen(dir);
+    bool needs_sep = dir_len > 0 && dir[dir_len - 1] != '/' && dir[dir_len - 1] != '\\';
+    char *out = malloc(dir_len + (needs_sep ? 1 : 0) + strlen(leaf) + 1);
+    sprintf(out, "%s%s%s", dir, needs_sep ? "/" : "", leaf);
+    return out;
+}
+
+static char *monad_core_dir(void) {
+    const char *env_core = getenv("MONAD_CORE");
+    if (env_core && *env_core)
+        return strdup(env_core);
+
+    if (dir_exists("core"))
+        return strdup("core");
+
+    if (g_program_path) {
+        char *bin_dir = dirname_dup(g_program_path);
+        char *beside_binary = path_join_dup(bin_dir, "core");
+        if (dir_exists(beside_binary)) {
+            free(bin_dir);
+            return beside_binary;
+        }
+        free(beside_binary);
+
+        char *build_tree = path_join_dup(bin_dir, "../core");
+        if (dir_exists(build_tree)) {
+            free(bin_dir);
+            return build_tree;
+        }
+        free(build_tree);
+
+        char *installed = path_join_dup(bin_dir, "../lib/monad/core");
+        free(bin_dir);
+        if (dir_exists(installed))
+            return installed;
+        free(installed);
+    }
+
+    return strdup("/usr/local/lib/monad/core");
+}
+
+static char *runtime_archive_path(void) {
+    const char *env_runtime = getenv("MONAD_RUNTIME_LIB");
+    if (env_runtime && *env_runtime)
+        return strdup(env_runtime);
+
+    if (file_exists("libmonad.a"))
+        return strdup("libmonad.a");
+
+    if (g_program_path) {
+        char *bin_dir = dirname_dup(g_program_path);
+        char *beside_binary = path_join_dup(bin_dir, "libmonad.a");
+        if (file_exists(beside_binary)) {
+            free(bin_dir);
+            return beside_binary;
+        }
+        free(beside_binary);
+
+        char *installed = path_join_dup(bin_dir, "../lib/libmonad.a");
+        free(bin_dir);
+        if (file_exists(installed))
+            return installed;
+        free(installed);
+    }
+
+    return strdup("/usr/local/lib/libmonad.a");
 }
 
 static char *base_no_ext(const char *path) {
@@ -535,19 +683,19 @@ static void declare_externals(CodegenContext *ctx,
 static char *get_obj_path(const char *source_path, bool is_main_module) {
     const char *home = getenv("HOME");
 
-    // Check system core
-    const char *system_core = "/usr/local/lib/monad/core/";
-    // Check env core
-    const char *env_core = getenv("MONAD_CORE");
+    char *core_prefix = monad_core_dir();
+    bool is_core_path = dir_prefix_matches(source_path, core_prefix);
 
-    const char *core_prefix = NULL;
-    if (strncmp(source_path, system_core, strlen(system_core)) == 0)
-        core_prefix = system_core;
-    else if (env_core && strncmp(source_path, env_core, strlen(env_core)) == 0)
-        core_prefix = env_core;
-
-    if (core_prefix && home) {
-        const char *rel = source_path + strlen(core_prefix);
+    if (is_core_path && home) {
+        const char *rel = source_path;
+        char source_real[1024];
+        char core_real[1024];
+        if (realpath(source_path, source_real) && realpath(core_prefix, core_real)) {
+            rel = source_real + strlen(core_real);
+        } else if (strncmp(source_path, core_prefix, strlen(core_prefix)) == 0) {
+            rel = source_path + strlen(core_prefix);
+        }
+        while (*rel == '/' || *rel == '\\') rel++;
         char *base = base_no_ext(rel);
 
         // Replace slashes with underscores for flat cache layout
@@ -566,8 +714,10 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
             snprintf(obj, sizeof(obj), "%s/%s.module.o", cache_dir, base);
         }
         free(base);
+        free(core_prefix);
         return strdup(obj);
     }
+    free(core_prefix);
 
     // Normal case
     char *base = base_no_ext(source_path);
@@ -671,11 +821,8 @@ static void compile_prelude_modules(const char *current_source,
     if (source_is_prelude_file(current_source))
         return;
 
-    const char *env_core = getenv("MONAD_CORE");
-    const char *system_core = "/usr/local/lib/monad/core/";
-    bool is_core_library =
-        (env_core && strncmp(current_source, env_core, strlen(env_core)) == 0) ||
-        strncmp(current_source, system_core, strlen(system_core)) == 0;
+    char *core_dir = monad_core_dir();
+    bool is_core_library = dir_prefix_matches(current_source, core_dir);
 
     if (is_core_library) {
         const char *p = source;
@@ -685,6 +832,7 @@ static void compile_prelude_modules(const char *current_source,
                  (p[6] == ' ' || p[6] == '\t')) ||
                 (*p == '(' && strncmp(p + 1, "import", 6) == 0 &&
                  (p[7] == ' ' || p[7] == '\t'))) {
+                free(core_dir);
                 return;
             }
             while (*p && *p != '\n') p++;
@@ -692,15 +840,10 @@ static void compile_prelude_modules(const char *current_source,
         }
     }
 
-    if (env_core) {
-        char path[1024];
-        snprintf(path, sizeof(path), "%s/prelude", env_core);
-        compile_prelude_dir(path, current_source, flags, source);
-        return;
-    }
-
-    compile_prelude_dir("/usr/local/lib/monad/core/prelude",
-                        current_source, flags, source);
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/prelude", core_dir);
+    compile_prelude_dir(path, current_source, flags, source);
+    free(core_dir);
 }
 
 static CompiledModule *compile_one(const char *source_path,
@@ -916,20 +1059,15 @@ static CompiledModule *compile_one(const char *source_path,
 
         bool in_core_data_dir = false;
         {
-            const char *env_core = getenv("MONAD_CORE");
+            char *core_dir = monad_core_dir();
             char data_dir[1024];
-            if (env_core) {
-                snprintf(data_dir, sizeof(data_dir), "%s/Data", env_core);
-                in_core_data_dir = strcmp(src_dir, data_dir) == 0;
-                if (!in_core_data_dir) {
-                    snprintf(data_dir, sizeof(data_dir), "%s/prelude/Data", env_core);
-                    in_core_data_dir = strcmp(src_dir, data_dir) == 0;
-                }
+            snprintf(data_dir, sizeof(data_dir), "%s/Data", core_dir);
+            in_core_data_dir = same_dir_path(src_dir, data_dir);
+            if (!in_core_data_dir) {
+                snprintf(data_dir, sizeof(data_dir), "%s/prelude/Data", core_dir);
+                in_core_data_dir = same_dir_path(src_dir, data_dir);
             }
-            if (!in_core_data_dir)
-                in_core_data_dir = strcmp(src_dir, "/usr/local/lib/monad/core/Data") == 0;
-            if (!in_core_data_dir)
-                in_core_data_dir = strcmp(src_dir, "/usr/local/lib/monad/core/prelude/Data") == 0;
+            free(core_dir);
         }
         if (in_core_data_dir || source_is_prelude_file(my_source_path))
             goto skip_primitive_type_autoload;
@@ -942,14 +1080,10 @@ static CompiledModule *compile_one(const char *source_path,
             snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
                      "%s/%s.mon", src_dir, stem);
             {
-                const char *env_core = getenv("MONAD_CORE");
-                if (env_core) {
-                    snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
-                             "%s/prelude/Data/%s.mon", env_core, stem);
-                } else {
-                    snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
-                             "/usr/local/lib/monad/core/prelude/Data/%s.mon", stem);
-                }
+                char *core_dir = monad_core_dir();
+                snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
+                         "%s/prelude/Data/%s.mon", core_dir, stem);
+                free(core_dir);
             }
 
             for (int _pi = 0; _pi < type_path_count; _pi++) {
@@ -1924,14 +2058,31 @@ static void compile(CompilerFlags *flags) {
         ? strdup(flags->output_name)
         : get_base_executable_name(flags->input_file);
 
+    const char *exe_suffix = host_exe_suffix();
+    bool exec_has_exe_suffix = exe_suffix[0] &&
+        strlen(exec_base) >= strlen(exe_suffix) &&
+        strcmp(exec_base + strlen(exec_base) - strlen(exe_suffix), exe_suffix) == 0;
+
     // Append _test suffix for test-run mode
     char *exec_name;
     if (flags->test_run) {
-        exec_name = malloc(strlen(exec_base) + 6);
-        sprintf(exec_name, "%s_test", exec_base);
+        exec_name = malloc(strlen(exec_base) + strlen(exe_suffix) + 6);
+        if (exec_has_exe_suffix) {
+            size_t stem_len = strlen(exec_base) - strlen(exe_suffix);
+            snprintf(exec_name, stem_len + 1, "%s", exec_base);
+            sprintf(exec_name + stem_len, "_test%s", exe_suffix);
+        } else {
+            sprintf(exec_name, "%s_test%s", exec_base, exe_suffix);
+        }
         free(exec_base);
     } else {
-        exec_name = exec_base;
+        if (exec_has_exe_suffix || exe_suffix[0] == '\0') {
+            exec_name = exec_base;
+        } else {
+            exec_name = malloc(strlen(exec_base) + strlen(exe_suffix) + 1);
+            sprintf(exec_name, "%s%s", exec_base, exe_suffix);
+            free(exec_base);
+        }
     }
 
     const char *ld_flag = "";
@@ -1947,10 +2098,12 @@ static void compile(CompilerFlags *flags) {
     for (size_t i = 0; i < n; i++)
         w += snprintf(cmd + w, sizeof(cmd) - w, " %s", objs[i]);
 
+    char *runtime_archive = runtime_archive_path();
     w += snprintf(cmd + w, sizeof(cmd) - w,
-                  " -o %s /usr/local/lib/libmonad.a"
-                  " `llvm-config --ldflags --libs core` -lm -lgmp -no-pie%s",
-                  exec_name, g_ffi_link_libs);
+                  " -o %s %s"
+                  " `llvm-config --ldflags --libs core` -lm -lgmp%s%s",
+                  exec_name, runtime_archive,
+                  host_no_pie_flag(), g_ffi_link_libs);
 
 
     if (flags->verbose_level > 0 || flags->trace_codegen)
@@ -1977,6 +2130,7 @@ static void compile(CompilerFlags *flags) {
 
     free(objs);
     free(exec_name);
+    free(runtime_archive);
     registry_free_all();
     wisp_clear_arities();
     if (g_ffi) { ffi_context_free(g_ffi); g_ffi = NULL; }
@@ -2031,6 +2185,8 @@ void cmd_eval(const char *code) {
 
 
 int main(int argc, char **argv) {
+    if (argc > 0)
+        g_program_path = argv[0];
     CompilerFlags flags = parse_flags(argc, argv);
     switch (flags.mode) {
     case CMD_REPL:    repl_run();                        return 0;

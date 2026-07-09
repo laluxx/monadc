@@ -11,10 +11,13 @@
 
 [[file:index.org][<- Back to Index]] · [[file:cli.org][CLI Reference]] · [[file:testing.org][Testing]] · [[file:modules.org][Modules]] · [[file:package-dev.org][Package Development]] · [[file:repl.org][REPL]] · [[file:errors.org][Diagnostics]]
 
-Test coverage: =make test= is the primary test target.
+Test coverage: =ctest --test-dir build --output-on-failure= is the CMake smoke
+gate; =make test= remains the broad end-to-end fixture target during migration.
 
-The Monad compiler uses a Makefile at the project root
-([[file:../Makefile][Makefile]], 112 lines) for building =monad= and =libmonad.a=.
+The Monad compiler uses a CMake build at the project root
+([[file:../CMakeLists.txt][CMakeLists.txt]]) for building =monad= and
+=libmonad.a=. The legacy [[file:../Makefile][Makefile]] remains available during
+the migration.
 The build manifest =package.yaml= (for user packages) is documented in
 [[file:package-dev.org][Package Development]]; its schema is documented at
 [[file:../context/buildsystem.org][context/buildsystem.org]].
@@ -52,7 +55,21 @@ For the CLI dispatch that triggers this pipeline, see [[file:cli.org][CLI Refere
 
 See also: [[file:cli.org][CLI Reference]]
 
-2. Three Build Modes
+2. Primary CMake Build
+
+#+BEGIN_SRC sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+#+END_SRC
+
+The CMake build produces =build/monad= and =build/libmonad.a=. On MSYS2/Windows,
+the compiler executable is =build/monad.exe=. The CMake install rule installs
+the compiler, runtime archive, =runtime.h=, and =core/**/*.mon=.
+
+See also: [[file:../context/build.org::* CMake Build][CMake Build]]
+
+3. Three Makefile Build Modes
 
 The Makefile at the project root defines three build modes via target-specific
 CFLAGS overrides. All three build the =monad= binary and =libmonad.a= static
@@ -85,7 +102,7 @@ For the arena allocator used by the compiler, see [[file:arena.org][Arena]].
 
 See also: [[file:arena.org][Arena]]
 
-3. Verification Ladder
+4. Verification Ladder
 
 Every install should follow this sequence:
 
@@ -106,7 +123,7 @@ track header dependencies automatically (see
 
 See also: [[file:contributing.org][Contributing]]
 
-4. Test Targets
+5. Test Targets
 
 #+CAPTION: Make Test Targets
 | Target | Command | What It Tests |
@@ -129,7 +146,34 @@ For the CLI test runner, see [[file:testing.org][Testing]].
 
 See also: [[file:testing.org][Testing]]
 
-5. Helper Script Targets
+6. Windows / MSYS2
+
+Windows builds are verified through MSYS2/UCRT64. Use the MSYS2 UCRT64 shell and
+install the compiler dependencies:
+
+#+BEGIN_SRC sh
+pacman -S --needed base-devel git
+pacman -S --needed mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-readline mingw-w64-ucrt-x86_64-gmp
+#+END_SRC
+
+Build and run the focused portability checks:
+
+#+BEGIN_SRC sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+./build/monad.exe --help
+python tests/test_windows_portability.py
+#+END_SRC
+
+CMake supplies the primary Windows build. The Makefile still derives
+=monad.exe= from =TARGET_BASE= and =EXEEXT= on MSYS2-like hosts while the
+migration is underway. Generated Monad executables also receive the =.exe=
+suffix.
+
+See also: [[file:../context/build.org::* Windows / MSYS2 Build][Windows / MSYS2 Build]]
+
+7. Helper Script Targets
 
 These Makefile front-doors wrap Python helper scripts (see
 [[file:../context/build.org][context/build.org]] and [[file:../context/scripts.org][context/scripts.org]]):
@@ -153,7 +197,7 @@ For fuzzing property details, see [[file:fuzzing.org][Fuzzing]].
 
 See also: [[file:fuzzing.org][Fuzzing]]
 
-6. Linking
+8. Linking
 
 The =monad= binary is linked with =gcc= (CC in the Makefile). Linker flags:
 
@@ -183,7 +227,7 @@ For details on LLVM discovery and linker fallback behaviour, see
 
 See also: [[file:ffi.org][C FFI]]
 
-7. Install Layout
+9. Install Layout
 
 =make install= copies files under =PREFIX= (default =/usr/local=):
 
@@ -207,7 +251,7 @@ For the standard library, see [[file:stdlib.org][Standard Library]].
 
 See also: [[file:core.org][Core Library]]
 
-8. Object Files and Caching
+10. Object Files and Caching
 
 Compiler object files (all =.c= except =runtime.c= and =arena.c=) are compiled
 via a generic pattern rule and placed alongside their sources. The =filter-out=
@@ -219,7 +263,7 @@ compiled with =-fPIC= for the static archive.
 - =runtime.c= and =arena.c= have special handling (=-fPIC= for static archive)
 - =filter-out= prevents parallel-make race conditions
 
-9. Package Manifest
+11. Package Manifest
 
 | File | Role |
 |--------------+------------------------------------------------------------------------|
