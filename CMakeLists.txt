@@ -13,17 +13,24 @@ find_package(Threads REQUIRED)
 find_package(PkgConfig QUIET)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-find_program(LLVM_CONFIG_EXECUTABLE NAMES llvm-config REQUIRED)
-find_library(READLINE_LIBRARY NAMES readline REQUIRED)
-find_library(GMP_LIBRARY NAMES gmp REQUIRED)
-find_library(CLANG_LIBRARY NAMES clang libclang REQUIRED)
-
+find_program(LLVM_CONFIG_EXECUTABLE
+  NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16
+  REQUIRED
+)
 if(PkgConfig_FOUND)
   pkg_check_modules(LIBCLANG QUIET libclang)
 endif()
 
 llvm_map_components_to_libnames(LLVM_LIBRARIES core)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
+
+find_library(READLINE_LIBRARY NAMES readline REQUIRED)
+find_library(GMP_LIBRARY NAMES gmp REQUIRED)
+find_library(CLANG_LIBRARY
+  NAMES clang libclang
+  HINTS ${LLVM_LIBRARY_DIRS} ${LIBCLANG_LIBRARY_DIRS}
+  REQUIRED
+)
 
 execute_process(
   COMMAND ${LLVM_CONFIG_EXECUTABLE} --ldflags

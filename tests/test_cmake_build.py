@@ -24,9 +24,11 @@ class CMakeBuildTests(unittest.TestCase):
 
         self.assertIn("find_package(LLVM REQUIRED CONFIG)", cmake)
         self.assertIn("find_package(Threads REQUIRED)", cmake)
+        self.assertIn("NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18", cmake)
         self.assertIn("find_library(READLINE_LIBRARY", cmake)
         self.assertIn("find_library(GMP_LIBRARY", cmake)
         self.assertIn("find_library(CLANG_LIBRARY", cmake)
+        self.assertIn("HINTS ${LLVM_LIBRARY_DIRS} ${LIBCLANG_LIBRARY_DIRS}", cmake)
         self.assertIn("llvm_map_components_to_libnames", cmake)
 
     def test_cmake_runs_checkout_local_path_smoke(self):

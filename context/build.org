@@ -260,6 +260,15 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   build behavior visible in the workflow log instead of only indirectly through
   CTest.
 
+[FIX id:fix.build.cmake-libclang-llvm-library-dirs-2026-07-09 date:2026-07-09 by:codex]
+  CMake =CLANG_LIBRARY= discovery uses =LLVM_LIBRARY_DIRS= and
+  =LIBCLANG_LIBRARY_DIRS= as hints. CI distributions may install =libclang=
+  under LLVM's package library directory rather than a default linker search
+  path. CMake also accepts versioned =llvm-config= names such as
+  =llvm-config-18= because distro LLVM packages do not always provide an
+  unversioned binary. =tests/test_cmake_build.py= keeps those resolver contracts
+  explicit.
+
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the
   checkout before falling back to installed paths. =monad_core_dir= prefers
