@@ -11,7 +11,9 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#if !defined(_WIN32)
 #include <dlfcn.h>
+#endif
 #include <llvm-c/Core.h>
 
 /// Helpers
@@ -1737,6 +1739,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
            ffi->function_count, ffi->constant_count, ffi->struct_count, _ms);
 
     /* ── dlopen the library for JIT symbol resolution (once only) ───────── */
+#if !defined(_WIN32)
     static char *g_dlopened[256] = {0};
     static int   g_dlopened_count = 0;
     for (int i = 0; i < ffi->included_count; i++) {
@@ -1766,6 +1769,7 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
             }
         }
     }
+#endif
 }
 
 /// Debug dump

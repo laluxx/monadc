@@ -61,7 +61,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#if !defined(_WIN32)
 #include <termios.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -458,7 +460,9 @@ typedef enum {
 struct DbgSession {
     DbgScreen       *screen;
     DbgTermCaps      caps;
+#if !defined(_WIN32)
     struct termios   saved_termios;
+#endif
     bool             raw_mode_active;
 
     DbgCursorBlink   blink;

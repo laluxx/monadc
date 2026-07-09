@@ -33,7 +33,16 @@
 #include <setjmp.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#if !defined(_WIN32)
 #include <dlfcn.h>
+#else
+#define RTLD_DEFAULT NULL
+#define RTLD_NOW 0
+#define RTLD_GLOBAL 0
+static void *dlopen(const char *path, int flags) { (void)path; (void)flags; return NULL; }
+static void *dlsym(void *handle, const char *name) { (void)handle; (void)name; return NULL; }
+static const char *dlerror(void) { return "dynamic loading is not available on this Windows build"; }
+#endif
 
 #include <signal.h>
 #include <readline/readline.h>

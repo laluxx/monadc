@@ -9,16 +9,50 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if !defined(_WIN32)
 #include <sys/wait.h>
+#endif
 #include <unistd.h>
 #include <time.h>
 #include <dirent.h>
 #include <errno.h>
+#if defined(_WIN32)
+#include <direct.h>
+#include <windows.h>
+#endif
 
 /// Internal helpers
 
+static int host_mkdir(const char *path) {
+#if defined(_WIN32)
+    return _mkdir(path);
+#else
+    return mkdir(path, 0755);
+#endif
+}
+
+static char *cli_strndup(const char *s, size_t n) {
+    char *r = malloc(n + 1);
+    if (!r) return NULL;
+    memcpy(r, s, n);
+    r[n] = '\0';
+    return r;
+}
+
+static void host_self_path(char *buf, size_t size) {
+    if (!buf || size == 0) return;
+#if defined(_WIN32)
+    DWORD n = GetModuleFileNameA(NULL, buf, (DWORD)size);
+    if (n == 0 || n >= size) buf[0] = '\0';
+#else
+    ssize_t n = readlink("/proc/self/exe", buf, size - 1);
+    if (n > 0) buf[n] = '\0';
+    else buf[0] = '\0';
+#endif
+}
+
 static void make_dir(const char *path) {
-    if (mkdir(path, 0755) != 0 && errno != EEXIST) {
+    if (host_mkdir(path) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: cannot create directory '%s': %s\n", path, strerror(errno));
         exit(1);
     }
@@ -36,6 +70,31 @@ static const char *host_exe_suffix(void) {
     return ".exe";
 #else
     return "";
+#endif
+}
+
+static int host_system_success(int status) {
+#if defined(_WIN32)
+    return status == 0;
+#else
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#endif
+}
+
+static int host_system_exit_code(int status) {
+#if defined(_WIN32)
+    return status;
+#else
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
+}
+
+static int host_system_signal(int status) {
+#if defined(_WIN32)
+    (void)status;
+    return 0;
+#else
+    return WIFSIGNALED(status) ? WTERMSIG(status) : 0;
 #endif
 }
 
@@ -84,12 +143,12 @@ static char *yaml_scalar(const char *content, const char *key) {
                 p++;
                 const char *end = strchr(p, '"');
                 if (!end) return NULL;
-                return strndup(p, end - p);
+                return cli_strndup(p, end - p);
             }
             const char *end = p;
             while (*end && *end != '\n' && *end != '\r') end++;
             while (end > p && (end[-1] == ' ' || end[-1] == '\t')) end--;
-            return strndup(p, end - p);
+            return cli_strndup(p, end - p);
         }
         p = strchr(p, '\n');
         if (p) p++;
@@ -121,7 +180,7 @@ static char **yaml_list(const char *content, const char *key, int *count) {
             while (*end && *end != '\n' && *end != '\r') end++;
             while (end > line && (end[-1] == ' ' || end[-1] == '\t')) end--;
             if (*count >= cap) { cap *= 2; items = realloc(items, sizeof(char *) * cap); }
-            items[(*count)++] = strndup(line, end - line);
+            items[(*count)++] = cli_strndup(line, end - line);
         } else if (*line != '\0' && *line != '\n' && *line != '\r') {
             break;
         }
@@ -154,7 +213,7 @@ static char *yaml_exe_field(const char *content, const char *exe_name, const cha
             const char *end = val;
             while (*end && *end != '\n' && *end != '\r') end++;
             while (end > val && (end[-1] == ' ' || end[-1] == '\t')) end--;
-            return strndup(val, end - val);
+            return cli_strndup(val, end - val);
         }
         p = strchr(p, '\n'); if (!p) break; p++;
     }
@@ -174,7 +233,7 @@ static char *yaml_first_exe(const char *content) {
     const char *end = line;
     while (*end && *end != ':' && *end != '\n') end++;
     if (*end != ':') return NULL;
-    return strndup(line, end - line);
+    return cli_strndup(line, end - line);
 }
 
 /// Usage
@@ -994,8 +1053,8 @@ static int do_build(const BuildInfo *bi, const CompilerFlags *flags) {
     char self[1024] = "monad";
     {
         char buf[1024] = {0};
-        ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (n > 0) strncpy(self, buf, sizeof(self) - 1);
+        host_self_path(buf, sizeof(buf));
+        if (buf[0]) strncpy(self, buf, sizeof(self) - 1);
     }
     char cmd[4096];
     char opt_flag[8] = "";
@@ -1217,8 +1276,8 @@ void cmd_check(const char *input_file) {
     char self[1024] = "monad";
     {
         char buf[1024] = {0};
-        ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (n > 0) strncpy(self, buf, sizeof(self) - 1);
+        host_self_path(buf, sizeof(buf));
+        if (buf[0]) strncpy(self, buf, sizeof(self) - 1);
     }
 
     const char *target = input_file;
@@ -1252,10 +1311,15 @@ void cmd_check(const char *input_file) {
     }
 
     if (used_bi) build_info_free(&bi);
-    exit(WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : 1);
+    exit(host_system_success(rc) ? 0 : 1);
 }
 
 void cmd_debug(const CompilerFlags *flags) {
+#if defined(_WIN32)
+    (void)flags;
+    fprintf(stderr, "monad debug is not available on this Windows build.\n");
+    exit(1);
+#else
     if (!flags || !flags->input_file) {
         fprintf(stderr, "Usage: monad debug <file.mon> [options]\n");
         exit(1);
@@ -1284,6 +1348,7 @@ void cmd_debug(const CompilerFlags *flags) {
     char *dbg_argv[] = { "monad debug", flags->input_file, NULL };
     int rc = dbg_main_with_config(2, dbg_argv, cfg);
     exit(rc);
+#endif
 }
 
 void cmd_lsp(void) {
@@ -1303,21 +1368,21 @@ void cmd_test(const CompilerFlags *flags) {
     const char *input_file = flags ? flags->input_file : NULL;
     if (!input_file) {
         int rc = system("python3 tests/run.py");
-        exit(WIFEXITED(rc) && WEXITSTATUS(rc) == 0 ? 0 : 1);
+        exit(host_system_success(rc) ? 0 : 1);
     }
 
     char self[1024] = "monad";
     {
         char buf[1024] = {0};
-        ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-        if (n > 0) strncpy(self, buf, sizeof(self) - 1);
+        host_self_path(buf, sizeof(buf));
+        if (buf[0]) strncpy(self, buf, sizeof(self) - 1);
     }
 
     char cmd[4096];
     snprintf(cmd, sizeof(cmd), "%s --test-run %s%s", self, input_file,
              (flags && flags->verbose_level > 0) ? "" : " --quiet");
     int build_rc = system(cmd);
-    if (!WIFEXITED(build_rc) || WEXITSTATUS(build_rc) != 0) {
+    if (!host_system_success(build_rc)) {
         fprintf(stderr, "test build failed\n");
         exit(1);
     }
@@ -1337,13 +1402,12 @@ void cmd_test(const CompilerFlags *flags) {
     snprintf(obj, sizeof(obj), "%s_test.o", base);
     remove(obj);
 
-    if (!WIFEXITED(run_rc) || WEXITSTATUS(run_rc) != 0) {
-        if (WIFEXITED(run_rc))
-            fprintf(stderr, "test failed with exit code %d\n", WEXITSTATUS(run_rc));
-        else if (WIFSIGNALED(run_rc))
-            fprintf(stderr, "test failed with signal %d\n", WTERMSIG(run_rc));
+    if (!host_system_success(run_rc)) {
+        int signal = host_system_signal(run_rc);
+        if (signal)
+            fprintf(stderr, "test failed with signal %d\n", signal);
         else
-            fprintf(stderr, "test failed\n");
+            fprintf(stderr, "test failed with exit code %d\n", host_system_exit_code(run_rc));
 
         free(base);
         exit(1);

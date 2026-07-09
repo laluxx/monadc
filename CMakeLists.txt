@@ -97,6 +97,10 @@ set(MONADC_COMPILER_SOURCES
   wisp.c
 )
 
+if(WIN32)
+  list(REMOVE_ITEM MONADC_COMPILER_SOURCES debugger.c)
+endif()
+
 add_library(monad_runtime STATIC ${MONADC_RUNTIME_SOURCES})
 set_target_properties(monad_runtime PROPERTIES OUTPUT_NAME monad)
 target_compile_options(monad_runtime PRIVATE ${MONADC_WARNING_FLAGS})

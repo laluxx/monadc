@@ -18,6 +18,15 @@
 #include "completion.h"
 
 #include <stdio.h>
+
+#if defined(_WIN32)
+int lsp_repl_run(void)
+{
+    fprintf(stderr, "LSP REPL is not available on this Windows build.\n");
+    return 1;
+}
+#else
+
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -1151,3 +1160,5 @@ int lsp_repl_run(void)
 
     return 0;
 }
+
+#endif

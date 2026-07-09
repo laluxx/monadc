@@ -21,7 +21,9 @@
 #include <llvm-c/Analysis.h>
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/TargetMachine.h>
+#if !defined(_WIN32)
 #include <dlfcn.h>
+#endif
 
 static LLVMValueRef emit_call_0(CodegenContext *ctx, LLVMValueRef fn, LLVMTypeRef ret_t, const char *name);
 static LLVMValueRef emit_call_1(CodegenContext *ctx, LLVMValueRef fn, LLVMTypeRef ret_t, LLVMValueRef a1, const char *name);

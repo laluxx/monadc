@@ -56,6 +56,33 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("host_exe_suffix", cli_c)
         self.assertIn("test_bin_name", cli_c)
 
+    def test_posix_only_headers_are_guarded_for_windows_builds(self):
+        cli_c = read("cli.c")
+        lsp_repl_c = read("lsp_repl.c")
+        ffi_c = read("ffi.c")
+        repl_c = read("repl.c")
+
+        self.assertIn("#if !defined(_WIN32)", cli_c)
+        self.assertIn("host_system_success", cli_c)
+        self.assertIn("host_mkdir", cli_c)
+        self.assertIn("cli_strndup", cli_c)
+        self.assertIn("host_self_path", cli_c)
+        self.assertIn("GetModuleFileNameA", cli_c)
+        self.assertIn("monad debug is not available on this Windows build", cli_c)
+        self.assertIn("#if defined(_WIN32)", lsp_repl_c)
+        self.assertIn("LSP REPL is not available on this Windows build", lsp_repl_c)
+        self.assertIn("#if !defined(_WIN32)", ffi_c)
+        self.assertIn("#if !defined(_WIN32)", repl_c)
+
+    def test_debugger_header_and_cmake_are_windows_safe(self):
+        debugger_h = read("debugger.h")
+        cmake = read("CMakeLists.txt")
+
+        self.assertIn("#if !defined(_WIN32)", debugger_h)
+        self.assertIn("saved_termios", debugger_h)
+        self.assertIn("if(WIN32)", cmake)
+        self.assertIn("list(REMOVE_ITEM MONADC_COMPILER_SOURCES debugger.c)", cmake)
+
 
 if __name__ == "__main__":
     unittest.main()

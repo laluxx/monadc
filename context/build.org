@@ -283,6 +283,14 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   path such as =build/monad= must be canonicalized before that subprocess call.
   The GitHub Actions workflow also passes =$PWD/build/monad[.exe]= explicitly.
 
+[FIX id:fix.build.windows-posix-guards-2026-07-09 date:2026-07-09 by:codex]
+  Windows CMake builds exclude the Unix TUI debugger implementation and compile
+  stubs for Unix-only interactive LSP/debug/dynamic-loader paths. =cli.c= owns
+  host helpers for =mkdir=, =system()= status checks, self executable discovery,
+  and =strndup= replacement behavior. =tests/test_windows_portability.py=
+  asserts these guards, and local =zig cc -target x86_64-windows-gnu= checks
+  compile the guarded CLI/LSP/header paths.
+
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the
   checkout before falling back to installed paths. =monad_core_dir= prefers
