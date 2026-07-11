@@ -1,4 +1,5 @@
 #include "types.h"
+#include "compat.h"
 #include "reader.h"
 #include <stdlib.h>
 #include <string.h>

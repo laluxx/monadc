@@ -56,6 +56,15 @@
 void lsp_analysis_result_apply(LspDocument *doc, LspAnalysisResult *r);
 LspConfig lsp_default_config(void);
 
+static struct tm *lsp_gmtime(time_t *now, struct tm *out)
+{
+#if defined(_WIN32)
+    return gmtime_s(out, now) == 0 ? out : NULL;
+#else
+    return gmtime_r(now, out);
+#endif
+}
+
 
 /// §1  Includes and internal constants
 
@@ -3978,9 +3987,13 @@ void lsp_log(LspServer *server, int level, const char *fmt, ...)
     /* Timestamp */
     time_t  now = time(NULL);
     struct tm tm_buf;
-    struct tm *t = gmtime_r(&now, &tm_buf);
+    struct tm *t = lsp_gmtime(&now, &tm_buf);
     char ts[20];
-    strftime(ts, sizeof(ts), "%H:%M:%S", t);
+    if (t) {
+        strftime(ts, sizeof(ts), "%H:%M:%S", t);
+    } else {
+        snprintf(ts, sizeof(ts), "--:--:--");
+    }
 
     fprintf(f, "[%s][%s] ", ts, lname);
 

@@ -57,7 +57,7 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("windows-latest", workflow)
         self.assertIn("msys2/setup-msys2@v2", workflow)
         self.assertIn("cmake -S . -B build", workflow)
-        self.assertIn("cmake --build build", workflow)
+        self.assertIn("cmake --build build --parallel --verbose", workflow)
         self.assertIn("ctest --test-dir build", workflow)
 
     def test_ci_runs_explicit_portability_smokes(self):

@@ -38,7 +38,7 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel --verbose
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
@@ -93,7 +93,7 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel --verbose
 
       - name: Test
         run: ctest --test-dir build --output-on-failure

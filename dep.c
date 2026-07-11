@@ -1,4 +1,5 @@
 #include "dep.h"
+#include "compat.h"
 #include "reader.h"
 #include <stdio.h>
 #include <stdlib.h>

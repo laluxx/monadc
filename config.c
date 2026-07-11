@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#if defined(_WIN32)
+#include <direct.h>
+#endif
 
 /// Path helpers
 
@@ -23,7 +26,12 @@ static char *config_join_path(const char *left, const char *right)
 
 static void config_make_dir(const char *path)
 {
-    if (mkdir(path, 0755) != 0 && errno != EEXIST) {
+#if defined(_WIN32)
+    int rc = _mkdir(path);
+#else
+    int rc = mkdir(path, 0755);
+#endif
+    if (rc != 0 && errno != EEXIST) {
         fprintf(stderr, "warning: cannot create config directory '%s': %s\n",
                 path, strerror(errno));
     }

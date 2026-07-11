@@ -1,5 +1,27 @@
 #include "completion.h"
 
+#if defined(_WIN32)
+
+#include <stdio.h>
+
+void print_usage(const char *prog)
+{
+    printf("Usage: %s <command> [options]\n", prog ? prog : "monad");
+}
+
+void print_subcommand_menu(const char *subcmd)
+{
+    printf("Monad %s\n", subcmd ? subcmd : "commands");
+}
+
+int completion_menu_main(const char *prog)
+{
+    print_usage(prog);
+    return 0;
+}
+
+#else
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -1075,3 +1097,5 @@ int completion_menu_main(const char *prog)
 
     return 0;
 }
+
+#endif

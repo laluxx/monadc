@@ -1,4 +1,5 @@
 #include "wisp.h"
+#include "compat.h"
 #include "reader.h"
 #include "macro.h"
 #include <stdio.h>

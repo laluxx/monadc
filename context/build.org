@@ -291,6 +291,14 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   asserts these guards, and local =zig cc -target x86_64-windows-gnu= checks
   compile the guarded CLI/LSP/header paths.
 
+[FIX id:fix.build.windows-libc-compat-2026-07-11 date:2026-07-11 by:codex]
+  Windows CMake builds must not assume POSIX libc helpers are available. Shared
+  source files that use =strndup= include =compat.h=, which maps it to
+  =monad_strndup= on =_WIN32=. =lsp.c= routes UTC timestamp conversion through
+  =lsp_gmtime=, using =gmtime_s= on Windows and =gmtime_r= elsewhere. CI build
+  steps run CMake with verbose output so the failing translation unit and full
+  compiler invocation are visible in GitHub Actions logs.
+
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the
   checkout before falling back to installed paths. =monad_core_dir= prefers
