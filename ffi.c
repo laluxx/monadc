@@ -1,4 +1,5 @@
 #include "ffi.h"
+#include "compat.h"
 #include "codegen.h"
 #include "env.h"
 #include "types.h"
@@ -1833,9 +1834,9 @@ static void ffi_cache_mkdir(void) {
     if (!home) return;
     char dir[256];
     snprintf(dir, sizeof(dir), "%s/.cache", home);
-    mkdir(dir, 0755);
+    monad_mkdir(dir);
     snprintf(dir, sizeof(dir), "%s/.cache/monad", home);
-    mkdir(dir, 0755);
+    monad_mkdir(dir);
 }
 
 static void write_str(FILE *f, const char *s) {

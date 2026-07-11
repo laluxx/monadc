@@ -6,6 +6,9 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <dirent.h>
+#if defined(_WIN32)
+#include <stdlib.h>
+#endif
 
 #include "reader.h"
 #include "cli.h"
@@ -393,6 +396,15 @@ static bool dir_exists(const char *path) {
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+static char *host_realpath(const char *path, char *resolved)
+{
+#if defined(_WIN32)
+    return _fullpath(resolved, path, 1024);
+#else
+    return realpath(path, resolved);
+#endif
+}
+
 static bool dir_prefix_matches(const char *path, const char *dir) {
     if (!path || !dir || !*dir)
         return false;
@@ -404,7 +416,7 @@ static bool dir_prefix_matches(const char *path, const char *dir) {
 
     char path_real[1024];
     char dir_real[1024];
-    if (realpath(path, path_real) && realpath(dir, dir_real)) {
+    if (host_realpath(path, path_real) && host_realpath(dir, dir_real)) {
         size_t real_len = strlen(dir_real);
         return strncmp(path_real, dir_real, real_len) == 0 &&
                (path_real[real_len] == '\0' ||
@@ -423,7 +435,7 @@ static bool same_dir_path(const char *a, const char *b) {
 
     char a_real[1024];
     char b_real[1024];
-    if (realpath(a, a_real) && realpath(b, b_real))
+    if (host_realpath(a, a_real) && host_realpath(b, b_real))
         return strcmp(a_real, b_real) == 0;
     return false;
 }
@@ -690,7 +702,7 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
         const char *rel = source_path;
         char source_real[1024];
         char core_real[1024];
-        if (realpath(source_path, source_real) && realpath(core_prefix, core_real)) {
+        if (host_realpath(source_path, source_real) && host_realpath(core_prefix, core_real)) {
             rel = source_real + strlen(core_real);
         } else if (strncmp(source_path, core_prefix, strlen(core_prefix)) == 0) {
             rel = source_path + strlen(core_prefix);
@@ -748,7 +760,7 @@ static bool source_is_prelude_file(const char *path)
         return true;
 
     char real[1024];
-    if (realpath(path, real) && strstr(real, "/prelude/"))
+    if (host_realpath(path, real) && strstr(real, "/prelude/"))
         return true;
 
     return false;
@@ -761,7 +773,7 @@ static bool path_is_current_source(const char *path, const char *current)
 
     char path_real[1024];
     char current_real[1024];
-    if (realpath(path, path_real) && realpath(current, current_real))
+    if (host_realpath(path, path_real) && host_realpath(current, current_real))
         return strcmp(path_real, current_real) == 0;
     return false;
 }
@@ -2024,7 +2036,7 @@ static void compile(CompilerFlags *flags) {
         bool seen = false;
 
         char candidate_real[1024];
-        bool candidate_has_real = realpath(candidate, candidate_real) != NULL;
+        bool candidate_has_real = host_realpath(candidate, candidate_real) != NULL;
 
         for (size_t i = 0; i < n; i++) {
             if (strcmp(objs[i], candidate) == 0) {
@@ -2034,7 +2046,7 @@ static void compile(CompilerFlags *flags) {
 
             if (candidate_has_real) {
                 char existing_real[1024];
-                if (realpath(objs[i], existing_real) &&
+                if (host_realpath(objs[i], existing_real) &&
                     strcmp(candidate_real, existing_real) == 0) {
                     seen = true;
                     break;

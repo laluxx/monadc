@@ -38,7 +38,9 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build --parallel --verbose
+        run: |
+          set -o pipefail
+          cmake --build build --parallel --verbose 2>&1 | tee build/build.log
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
@@ -57,6 +59,7 @@ jobs:
           path: |
             build/monad
             build/libmonad.a
+            build/build.log
             build/Testing/Temporary/LastTest.log
 
   windows-msys2-cmake:
@@ -93,7 +96,9 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
-        run: cmake --build build --parallel --verbose
+        run: |
+          set -o pipefail
+          cmake --build build --parallel --verbose 2>&1 | tee build/build.log
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
@@ -115,4 +120,5 @@ jobs:
           path: |
             build/monad.exe
             build/libmonad.a
+            build/build.log
             build/Testing/Temporary/LastTest.log

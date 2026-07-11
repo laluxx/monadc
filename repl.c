@@ -14,6 +14,7 @@
  */
 
 #include "repl.h"
+#include "compat.h"
 #include "reader.h"
 #include "codegen.h"
 #include "runtime.h"
@@ -93,7 +94,9 @@ static void repl_sigint_handler(int sig) {
 static void repl_signal_handler(int sig) {
     /* Reinstall ourselves immediately so the next crash is also caught */
     signal(SIGSEGV, repl_signal_handler);
+#if !defined(_WIN32)
     signal(SIGBUS,  repl_signal_handler);
+#endif
     if (g_in_eval) {
         g_in_eval = false;  /* prevent re-entrancy */
         /* Use write() — async-signal-safe, unlike fprintf */
@@ -107,7 +110,7 @@ static void repl_signal_handler(int sig) {
 }
 
 
-static sigjmp_buf *g_assert_jmp_ptr = NULL;
+static jmp_buf *g_assert_jmp_ptr = NULL;
 
 void __monad_assert_fail(const char *label) {
     fprintf(stderr, "<input>:0:0: \x1b[31;1merror:\x1b[0m Assertion failed: %s\n", label);
@@ -1903,6 +1906,10 @@ void repl_init(REPLContext *ctx) {
 
     /* Install signal handlers so JIT crashes don't kill the process.
      * No SA_RESETHAND — we want the handler to persist across crashes. */
+#if defined(_WIN32)
+    signal(SIGSEGV, repl_signal_handler);
+    signal(SIGINT, repl_sigint_handler);
+#else
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = repl_signal_handler;
@@ -1917,6 +1924,7 @@ void repl_init(REPLContext *ctx) {
     sigemptyset(&sa_int.sa_mask);
     sa_int.sa_flags = 0;
     sigaction(SIGINT, &sa_int, NULL);
+#endif
 
 
     ctx->cg.context    = LLVMContextCreate();
