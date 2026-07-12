@@ -336,6 +336,14 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   to emit. =main.c= now maps either separator to =_= before writing cached core
   object files, and =tests/test_windows_portability.py= asserts the rule.
 
+[FIX id:fix.build.windows-crlf-bulk-read-2026-07-12 date:2026-07-12 by:codex]
+  Bulk source/config readers must open files in binary mode and terminate at
+  the actual =fread= byte count, not the =ftell= size. On Windows text-mode
+  reads translate CRLF to LF, so =fread(..., ftell_size)= can return fewer
+  bytes and leave an uninitialized tail that the reader later parses as source.
+  =main.c= and =cli.c= now use =rb= plus =src[n] = '\0'= / =buf[n] = '\0'=;
+  =tests/test_windows_portability.py= asserts this contract.
+
 [FIX id:fix.build.checkout-local-annotation-tail-2026-07-12 date:2026-07-12 by:codex]
   Checkout-local CI smoke tests must preserve the tail of compiler/linker
   output in GitHub =::error= annotations. Public Windows Actions logs and

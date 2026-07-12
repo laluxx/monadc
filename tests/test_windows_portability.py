@@ -56,6 +56,20 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("host_exe_suffix", cli_c)
         self.assertIn("test_bin_name", cli_c)
 
+    def test_bulk_file_readers_are_binary_and_use_actual_read_size(self):
+        main_c = read("main.c")
+        cli_c = read("cli.c")
+
+        self.assertIn('fopen(path, "rb")', main_c)
+        self.assertIn("size_t n = fread(src, 1, sz, f);", main_c)
+        self.assertIn("src[n] = '\\0';", main_c)
+        self.assertNotIn("fread(src, 1, sz, f); src[sz] = '\\0';", main_c)
+
+        self.assertIn('fopen(path, "rb")', cli_c)
+        self.assertIn("size_t n = fread(buf, 1, sz, f);", cli_c)
+        self.assertIn("buf[n] = '\\0';", cli_c)
+        self.assertNotIn("fread(buf, 1, sz, f); buf[sz] = '\\0';", cli_c)
+
     def test_posix_only_headers_are_guarded_for_windows_builds(self):
         compat_h = read("compat.h")
         cli_c = read("cli.c")

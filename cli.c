@@ -120,11 +120,12 @@ static char *current_year(void) {
 }
 
 static char *read_file_str(const char *path) {
-    FILE *f = fopen(path, "r");
+    FILE *f = fopen(path, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
     char *buf = malloc(sz + 1);
-    fread(buf, 1, sz, f); buf[sz] = '\0'; fclose(f);
+    size_t n = fread(buf, 1, sz, f);
+    buf[n] = '\0'; fclose(f);
     return buf;
 }
 

@@ -359,11 +359,12 @@ const char **repl_get_compiled_obj_paths(void) {
 /// Helpers
 
 static char *read_file(const char *path) {
-    FILE *f = fopen(path, "r");
+    FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "Cannot open file: %s\n", path); exit(1); }
     fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
     char *src = malloc(sz + 1);
-    fread(src, 1, sz, f); src[sz] = '\0'; fclose(f);
+    size_t n = fread(src, 1, sz, f);
+    src[n] = '\0'; fclose(f);
     return src;
 }
 
