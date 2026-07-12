@@ -329,6 +329,13 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   =tests/test_windows_portability.py= asserts that generated link commands do
   not contain the shell-substitution form.
 
+[FIX id:fix.build.windows-core-cache-separators-2026-07-12 date:2026-07-12 by:codex]
+  Core module object cache names must flatten both =/= and =\= path separators.
+  MSYS2 CI produced paths such as =prelude\Data\Int.module.o= under
+  =$HOME/.cache/monad/core=, which LLVM treated as nested directories and failed
+  to emit. =main.c= now maps either separator to =_= before writing cached core
+  object files, and =tests/test_windows_portability.py= asserts the rule.
+
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the
   checkout before falling back to installed paths. =monad_core_dir= prefers

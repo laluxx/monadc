@@ -751,8 +751,8 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
         while (*rel == '/' || *rel == '\\') rel++;
         char *base = base_no_ext(rel);
 
-        // Replace slashes with underscores for flat cache layout
-        for (char *p = base; *p; p++) if (*p == '/') *p = '_';
+        // Replace path separators with underscores for flat cache layout.
+        for (char *p = base; *p; p++) if (*p == '/' || *p == '\\') *p = '_';
 
         char cache_dir[1024];
         snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/monad/core", home);

@@ -97,6 +97,7 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("ensure_cache_dir", main_c)
         self.assertIn("monad_mkdir", main_c)
         self.assertIn("llvm_config_link_flags", main_c)
+        self.assertIn("if (*p == '/' || *p == '\\\\') *p = '_';", main_c)
         self.assertNotIn("`llvm-config --ldflags --libs core`", main_c)
         self.assertNotIn("`llvm-config --ldflags --libs core`", buildsystem_c)
         self.assertNotIn("mkdir -p", main_c)
