@@ -59,6 +59,7 @@ class WindowsPortabilityTests(unittest.TestCase):
     def test_posix_only_headers_are_guarded_for_windows_builds(self):
         compat_h = read("compat.h")
         cli_c = read("cli.c")
+        buildsystem_c = read("buildsystem.c")
         completion_c = read("completion.c")
         config_c = read("config.c")
         codegen_c = read("codegen.c")
@@ -95,6 +96,9 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("_fullpath", main_c)
         self.assertIn("ensure_cache_dir", main_c)
         self.assertIn("monad_mkdir", main_c)
+        self.assertIn("llvm_config_link_flags", main_c)
+        self.assertNotIn("`llvm-config --ldflags --libs core`", main_c)
+        self.assertNotIn("`llvm-config --ldflags --libs core`", buildsystem_c)
         self.assertNotIn("mkdir -p", main_c)
         self.assertIn("#if !defined(_WIN32)", ffi_c)
         self.assertIn('#include "compat.h"', ffi_c)

@@ -420,6 +420,32 @@ static char *host_realpath(const char *path, char *resolved)
 #endif
 }
 
+static char *llvm_config_link_flags(void)
+{
+    FILE *pipe = popen("llvm-config --ldflags --libs core", "r");
+    if (!pipe)
+        return strdup("");
+
+    char buf[1024];
+    size_t used = 0;
+    while (used + 1 < sizeof(buf)) {
+        size_t n = fread(buf + used, 1, sizeof(buf) - used - 1, pipe);
+        used += n;
+        if (n == 0)
+            break;
+    }
+    pclose(pipe);
+    buf[used] = '\0';
+
+    for (size_t i = 0; i < used; i++) {
+        if (buf[i] == '\r' || buf[i] == '\n')
+            buf[i] = ' ';
+    }
+    while (used > 0 && (buf[used - 1] == ' ' || buf[used - 1] == '\t'))
+        buf[--used] = '\0';
+    return strdup(buf);
+}
+
 static bool dir_prefix_matches(const char *path, const char *dir) {
     if (!path || !dir || !*dir)
         return false;
@@ -2124,11 +2150,14 @@ static void compile(CompilerFlags *flags) {
         w += snprintf(cmd + w, sizeof(cmd) - w, " %s", objs[i]);
 
     char *runtime_archive = runtime_archive_path();
+    char *llvm_flags = llvm_config_link_flags();
     w += snprintf(cmd + w, sizeof(cmd) - w,
                   " -o %s %s"
-                  " `llvm-config --ldflags --libs core` -lm -lgmp%s%s",
+                  " %s -lm -lgmp%s%s",
                   exec_name, runtime_archive,
+                  llvm_flags,
                   host_no_pie_flag(), g_ffi_link_libs);
+    free(llvm_flags);
 
 
     if (flags->verbose_level > 0 || flags->trace_codegen)

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-11
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-07-11
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -307,6 +307,15 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   cache directories are created with =monad_mkdir= instead of shelling out to
   =mkdir -p=, because MinGW =system()= executes through Windows command handling
   where that POSIX command is not portable.
+
+[FIX id:fix.build.windows-no-shell-backticks-2026-07-11 date:2026-07-11 by:codex]
+  Compiler-generated link commands must not rely on POSIX shell backtick
+  substitution. MSYS2-built executables can execute =system()= commands through
+  Windows command handling, where =`llvm-config ...`= is not portable. =main.c=
+  and =buildsystem.c= now capture =llvm-config --ldflags --libs core= with
+  =popen=, normalize newlines to spaces, and append those flags explicitly.
+  =tests/test_windows_portability.py= asserts that generated link commands do
+  not contain the shell-substitution form.
 
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the

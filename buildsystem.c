@@ -668,10 +668,23 @@ bool build_link_executable(BuildContext *build_ctx,
     }
 
     char *runtime_archive = build_runtime_archive_path();
+    char llvm_flags[1024] = "";
+    FILE *llvm_pipe = popen("llvm-config --ldflags --libs core", "r");
+    if (llvm_pipe) {
+        size_t used = fread(llvm_flags, 1, sizeof(llvm_flags) - 1, llvm_pipe);
+        pclose(llvm_pipe);
+        llvm_flags[used] = '\0';
+        for (size_t i = 0; i < used; i++) {
+            if (llvm_flags[i] == '\r' || llvm_flags[i] == '\n')
+                llvm_flags[i] = ' ';
+        }
+    }
     strcat(cmd, runtime_archive);
     strcat(cmd, " -o ");
     strcat(cmd, output_name);
-    strcat(cmd, " `llvm-config --ldflags --libs core` -lm -lgmp");
+    strcat(cmd, " ");
+    strcat(cmd, llvm_flags);
+    strcat(cmd, " -lm -lgmp");
     strcat(cmd, host_no_pie_flag);
     free(runtime_archive);
 
