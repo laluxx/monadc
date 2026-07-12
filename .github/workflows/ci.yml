@@ -103,10 +103,25 @@ jobs:
           set -o pipefail
           cmake --build build --parallel --verbose 2>&1 | tee build/build.log
 
-      - name: Test
+      - name: Test monad help
         run: |
           set -o pipefail
-          ctest --test-dir build --output-on-failure 2>&1 | tee build/ctest.log
+          ctest --test-dir build --output-on-failure -R '^monad_help$' 2>&1 | tee build/ctest-monad-help.log
+
+      - name: Test Windows portability contract
+        run: |
+          set -o pipefail
+          ctest --test-dir build --output-on-failure -R '^windows_portability_contract$' 2>&1 | tee build/ctest-windows-portability.log
+
+      - name: Test CMake build contract
+        run: |
+          set -o pipefail
+          ctest --test-dir build --output-on-failure -R '^cmake_build_contract$' 2>&1 | tee build/ctest-cmake-build.log
+
+      - name: Test checkout local paths
+        run: |
+          set -o pipefail
+          ctest --test-dir build --output-on-failure -R '^checkout_local_paths$' 2>&1 | tee build/ctest-checkout-local-paths.log
 
       - name: Run focused portability tests
         run: |
@@ -126,5 +141,5 @@ jobs:
             build/monad.exe
             build/libmonad.a
             build/build.log
-            build/ctest.log
+            build/ctest-*.log
             build/Testing/Temporary/LastTest.log

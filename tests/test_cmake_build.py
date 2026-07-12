@@ -63,7 +63,9 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("build/build.log", workflow)
         self.assertIn("ctest --test-dir build", workflow)
         self.assertIn("tee build/ctest.log", workflow)
-        self.assertIn("build/ctest.log", workflow)
+        self.assertIn("Test checkout local paths", workflow)
+        self.assertIn("ctest-checkout-local-paths.log", workflow)
+        self.assertIn("build/ctest-*.log", workflow)
 
     def test_ci_runs_explicit_portability_smokes(self):
         workflow = read(".github/workflows/ci.yml")
