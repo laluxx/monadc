@@ -15,10 +15,20 @@ def github_escape(value: str) -> str:
     return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
+def summarize_for_github_annotation(message: str, limit: int = 3500) -> str:
+    if len(message) <= limit:
+        return message
+    marker = "\n...\n[truncated: keeping failure tail]\n...\n"
+    head_limit = min(900, max(0, limit // 3))
+    tail_limit = max(0, limit - head_limit - len(marker))
+    tail = message[-tail_limit:] if tail_limit else ""
+    return message[:head_limit] + marker + tail
+
+
 def emit_github_error(title: str, message: str) -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
-    body = github_escape(message[:3500])
+    body = github_escape(summarize_for_github_annotation(message))
     print(f"::error title={github_escape(title)}::{body}", flush=True)
 
 
@@ -51,6 +61,14 @@ class CheckoutLocalPathTests(unittest.TestCase):
     def test_windows_drive_monad_binary_env_is_already_absolute(self):
         self.assertEqual(resolve_monad_binary("D:/a/monadc/monadc/build/monad.exe"),
                          Path("D:/a/monadc/monadc/build/monad.exe"))
+
+    def test_github_annotations_keep_failure_tail(self):
+        message = "header\n" + ("warning line\n" * 400) + "final linker error\n"
+        summarized = summarize_for_github_annotation(message, limit=200)
+        self.assertLessEqual(len(summarized), 200)
+        self.assertIn("header", summarized)
+        self.assertIn("truncated: keeping failure tail", summarized)
+        self.assertTrue(summarized.endswith("final linker error\n"), summarized)
 
     def test_generated_executable_prefers_windows_suffix_when_present(self):
         with tempfile.TemporaryDirectory(prefix="monadc-exe-suffix-") as td:

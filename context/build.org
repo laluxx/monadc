@@ -336,6 +336,14 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   to emit. =main.c= now maps either separator to =_= before writing cached core
   object files, and =tests/test_windows_portability.py= asserts the rule.
 
+[FIX id:fix.build.checkout-local-annotation-tail-2026-07-12 date:2026-07-12 by:codex]
+  Checkout-local CI smoke tests must preserve the tail of compiler/linker
+  output in GitHub =::error= annotations. Public Windows Actions logs and
+  artifacts can be unavailable without authentication, while compiler failures
+  often print many warnings before the actionable final linker or emit error.
+  =tests/test_checkout_local_paths.py= asserts that truncated annotations keep
+  both the command context and the failure tail.
+
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the
   checkout before falling back to installed paths. =monad_core_dir= prefers
