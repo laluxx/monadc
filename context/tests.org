@@ -1221,6 +1221,12 @@ Test-driven observations and failure records for the corresponding subsystem.
   MSYS2-style environments is not the right source of truth for the generated
   file name.
 
+[FIX id:fix.tests.checkout-local-windows-drive-path-2026-07-12 date:2026-07-12 by:codex]
+  =tests/test_checkout_local_paths.py= treats =D:/...= and =D:\...= style
+  =MONAD_BINARY= values as already absolute. CMake may expand
+  =$<TARGET_FILE:monad>= to a Windows drive path in MSYS2 CI, while POSIX
+  Python's =Path.is_absolute()= still reports that form as relative.
+
 [FIX id:fix.tests.readme-product-contract-2026-07-09 date:2026-07-09 by:codex]
   Added =tests/test_readme_product.py= to keep the README in a human-facing
   product shape. The contract requires status, quick start, Windows/MSYS2,

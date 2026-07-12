@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -7,11 +8,13 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 
 def resolve_monad_binary(value: str | os.PathLike[str] | None = None) -> Path:
-    path = Path(value or os.environ.get("MONAD_BINARY", ROOT / "monad"))
-    if not path.is_absolute():
+    raw = value or os.environ.get("MONAD_BINARY", ROOT / "monad")
+    path = Path(raw)
+    if not path.is_absolute() and not WINDOWS_DRIVE_PATH.match(str(raw)):
         path = ROOT / path
     return path
 
@@ -33,6 +36,10 @@ def generated_executable(path: Path) -> Path:
 class CheckoutLocalPathTests(unittest.TestCase):
     def test_relative_monad_binary_env_resolves_from_checkout_root(self):
         self.assertEqual(resolve_monad_binary("build/monad"), ROOT / "build" / "monad")
+
+    def test_windows_drive_monad_binary_env_is_already_absolute(self):
+        self.assertEqual(resolve_monad_binary("D:/a/monadc/monadc/build/monad.exe"),
+                         Path("D:/a/monadc/monadc/build/monad.exe"))
 
     def test_generated_executable_prefers_windows_suffix_when_present(self):
         with tempfile.TemporaryDirectory(prefix="monadc-exe-suffix-") as td:

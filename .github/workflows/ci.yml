@@ -121,7 +121,7 @@ jobs:
       - name: Test checkout local binary env path
         run: |
           set -o pipefail
-          ctest --test-dir build --output-on-failure -R '^checkout_local_paths\.test_relative_monad_binary_env_resolves_from_checkout_root$' 2>&1 | tee build/ctest-checkout-local-binary-env.log
+          ctest --test-dir build --output-on-failure -R '^checkout_local_paths\.test_(relative_monad_binary_env_resolves_from_checkout_root|windows_drive_monad_binary_env_is_already_absolute)$' 2>&1 | tee build/ctest-checkout-local-binary-env.log
 
       - name: Test checkout local executable suffix
         run: |

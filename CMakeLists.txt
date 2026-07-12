@@ -142,6 +142,7 @@ add_test(
 )
 set(MONADC_CHECKOUT_LOCAL_TESTS
   test_relative_monad_binary_env_resolves_from_checkout_root
+  test_windows_drive_monad_binary_env_is_already_absolute
   test_generated_executable_prefers_windows_suffix_when_present
   test_compiler_discovers_checkout_core_and_runtime_archive
   test_legacy_buildsystem_links_runtime_archive_not_object_file

@@ -50,6 +50,7 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("NAME checkout_local_paths.${checkout_local_test}", cmake)
         self.assertIn("add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)", cmake)
         self.assertIn("tests/test_checkout_local_paths.py", cmake)
+        self.assertIn("test_windows_drive_monad_binary_env_is_already_absolute", cmake)
         self.assertIn("MONAD_BINARY=$<TARGET_FILE:monad>", cmake)
         self.assertIn("CheckoutLocalPathTests.${checkout_local_test}", cmake)
 
