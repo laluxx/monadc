@@ -299,7 +299,9 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   cache-directory creation goes through =monad_mkdir=. CI build steps tee
   verbose CMake output into =build/build.log= and upload it as an artifact so
   the failing translation unit and full compiler invocation are preserved even
-  when the public Actions UI only exposes step-level annotations.
+  when the public Actions UI only exposes step-level annotations. CTest uses
+  =$<TARGET_FILE:monad>= instead of a bare =monad= command and tees output to
+  =build/ctest.log= for the same reason.
 
 [FIX id:fix.build.checkout-local-runtime-core-2026-07-09 date:2026-07-09 by:codex]
   The compiler now resolves core modules and the runtime archive from the

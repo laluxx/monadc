@@ -131,7 +131,7 @@ endif()
 
 enable_testing()
 
-add_test(NAME monad_help COMMAND monad --help)
+add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)
 add_test(
   NAME windows_portability_contract
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_windows_portability.py

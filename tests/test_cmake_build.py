@@ -47,6 +47,7 @@ class CMakeBuildTests(unittest.TestCase):
         cmake = read("CMakeLists.txt")
 
         self.assertIn("NAME checkout_local_paths", cmake)
+        self.assertIn("add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)", cmake)
         self.assertIn("tests/test_checkout_local_paths.py", cmake)
         self.assertIn("MONAD_BINARY=$<TARGET_FILE:monad>", cmake)
 
@@ -61,6 +62,8 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("tee build/build.log", workflow)
         self.assertIn("build/build.log", workflow)
         self.assertIn("ctest --test-dir build", workflow)
+        self.assertIn("tee build/ctest.log", workflow)
+        self.assertIn("build/ctest.log", workflow)
 
     def test_ci_runs_explicit_portability_smokes(self):
         workflow = read(".github/workflows/ci.yml")
