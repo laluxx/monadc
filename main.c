@@ -11,6 +11,7 @@
 #endif
 
 #include "reader.h"
+#include "compat.h"
 #include "cli.h"
 #include "types.h"
 #include "env.h"
@@ -396,6 +397,20 @@ static bool dir_exists(const char *path) {
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+static void ensure_cache_dir(const char *home)
+{
+    if (!home || !*home)
+        return;
+
+    char dir[1024];
+    snprintf(dir, sizeof(dir), "%s/.cache", home);
+    monad_mkdir(dir);
+    snprintf(dir, sizeof(dir), "%s/.cache/monad", home);
+    monad_mkdir(dir);
+    snprintf(dir, sizeof(dir), "%s/.cache/monad/core", home);
+    monad_mkdir(dir);
+}
+
 static char *host_realpath(const char *path, char *resolved)
 {
 #if defined(_WIN32)
@@ -715,9 +730,7 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
 
         char cache_dir[1024];
         snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/monad/core", home);
-        char mkdir_cmd[1024];
-        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p %s", cache_dir);
-        system(mkdir_cmd);
+        ensure_cache_dir(home);
 
         char obj[1024];
         if (is_main_module) {
