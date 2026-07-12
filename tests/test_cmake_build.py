@@ -46,10 +46,12 @@ class CMakeBuildTests(unittest.TestCase):
     def test_cmake_runs_checkout_local_path_smoke(self):
         cmake = read("CMakeLists.txt")
 
-        self.assertIn("NAME checkout_local_paths", cmake)
+        self.assertIn("MONADC_CHECKOUT_LOCAL_TESTS", cmake)
+        self.assertIn("NAME checkout_local_paths.${checkout_local_test}", cmake)
         self.assertIn("add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)", cmake)
         self.assertIn("tests/test_checkout_local_paths.py", cmake)
         self.assertIn("MONAD_BINARY=$<TARGET_FILE:monad>", cmake)
+        self.assertIn("CheckoutLocalPathTests.${checkout_local_test}", cmake)
 
     def test_ci_uses_cmake_on_linux_and_msys2_windows(self):
         workflow = read(".github/workflows/ci.yml")
@@ -64,6 +66,7 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("ctest --test-dir build", workflow)
         self.assertIn("tee build/ctest.log", workflow)
         self.assertIn("Test checkout local paths", workflow)
+        self.assertIn("'^checkout_local_paths\\.'", workflow)
         self.assertIn("ctest-checkout-local-paths.log", workflow)
         self.assertIn("build/ctest-*.log", workflow)
 

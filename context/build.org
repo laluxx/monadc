@@ -283,6 +283,12 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   path such as =build/monad= must be canonicalized before that subprocess call.
   The GitHub Actions workflow also passes =$PWD/build/monad[.exe]= explicitly.
 
+[FIX id:fix.build.checkout-local-split-ctest-2026-07-12 date:2026-07-12 by:codex]
+  CMake registers each =CheckoutLocalPathTests= method as its own
+  =checkout_local_paths.*= CTest. The Windows workflow runs those tests with
+  =ctest -R '^checkout_local_paths\.'= so MSYS2 failures identify the exact
+  path contract instead of returning only the aggregate unittest exit code.
+
 [FIX id:fix.build.windows-posix-guards-2026-07-09 date:2026-07-09 by:codex]
   Windows CMake builds exclude the Unix TUI debugger implementation and compile
   stubs for Unix-only interactive LSP/debug/dynamic-loader paths. =cli.c= owns

@@ -121,7 +121,7 @@ jobs:
       - name: Test checkout local paths
         run: |
           set -o pipefail
-          ctest --test-dir build --output-on-failure -R '^checkout_local_paths$' 2>&1 | tee build/ctest-checkout-local-paths.log
+          ctest --test-dir build --output-on-failure -R '^checkout_local_paths\.' 2>&1 | tee build/ctest-checkout-local-paths.log
 
       - name: Run focused portability tests
         run: |

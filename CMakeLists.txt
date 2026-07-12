@@ -140,21 +140,39 @@ add_test(
   NAME cmake_build_contract
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cmake_build.py
 )
-add_test(
-  NAME checkout_local_paths
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_checkout_local_paths.py
+set(MONADC_CHECKOUT_LOCAL_TESTS
+  test_relative_monad_binary_env_resolves_from_checkout_root
+  test_generated_executable_prefers_windows_suffix_when_present
+  test_compiler_discovers_checkout_core_and_runtime_archive
+  test_legacy_buildsystem_links_runtime_archive_not_object_file
+  test_repl_module_import_link_uses_runtime_archive_resolver
+  test_checkout_compiler_can_compile_program_without_install_env
+  test_package_build_finds_checkout_core_from_project_directory
 )
+
+foreach(checkout_local_test IN LISTS MONADC_CHECKOUT_LOCAL_TESTS)
+  add_test(
+    NAME checkout_local_paths.${checkout_local_test}
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_checkout_local_paths.py
+      CheckoutLocalPathTests.${checkout_local_test}
+  )
+endforeach()
 
 set_tests_properties(
   windows_portability_contract
   cmake_build_contract
-  checkout_local_paths
   PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
-set_tests_properties(
-  checkout_local_paths
-  PROPERTIES ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
-)
+
+foreach(checkout_local_test IN LISTS MONADC_CHECKOUT_LOCAL_TESTS)
+  set_tests_properties(
+    checkout_local_paths.${checkout_local_test}
+    PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
+  )
+endforeach()
 
 install(TARGETS monad monad_runtime
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
