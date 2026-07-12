@@ -562,7 +562,7 @@ tests
   assert-eq (whitespace? 0x78) False "whitespace rejects x"
   :Whitespace:
 
-  :Blanks and line breaks:
+  :blanks-line-breaks:
   assert-eq (blank? 0x20) True "blank accepts space"
   assert-eq (blank? 0x09) True "blank accepts tab"
   assert-eq (blank? 0x0a) False "blank rejects lf"
@@ -573,7 +573,7 @@ tests
   assert-eq (linebreak? 0x0a) True "linebreak accepts lf"
   assert-eq (linebreak? 0x0d) True "linebreak accepts cr"
   assert-eq (linebreak? 0x09) False "linebreak rejects tab"
-  :Blanks and line breaks:
+  :blanks-line-breaks:
 
   :Control-printable-graph:
   assert-eq (control? 0x00) True "control accepts NUL"
@@ -745,4 +745,3 @@ tests
   assert-eq (0x5f.underscore?) True "dot underscore"
   assert-eq (0x2d.dash?) True "dot dash"
   :Dot-dispatch:
-

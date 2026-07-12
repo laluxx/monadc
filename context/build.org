@@ -344,6 +344,19 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   =main.c= and =cli.c= now use =rb= plus =src[n] = '\0'= / =buf[n] = '\0'=;
   =tests/test_windows_portability.py= asserts this contract.
 
+[FIX id:fix.build.windows-crlf-wisp-commentary-2026-07-12 date:2026-07-12 by:codex]
+  Binary source reads preserve CRLF carriage returns, so Wisp documentation
+  strippers must treat trailing =\r= as line ending. MSYS2 CI showed
+  =;;; Commentary:\r= was not recognized, allowing prose such as
+  =- postfix dot method dispatch= to reach the reader as code. =wisp.c= now
+  stops logical lines at =\r=, accepts =\r= after commentary/code section
+  markers, treats CR-only whitespace as blank, and makes tokenisation treat
+  =\r= as token whitespace so CRLF module headers and grouped exports do not
+  produce symbols such as =where\r= or =cr\r=. Define metadata continuation
+  lines such as =Documentation.\r= are also accepted as metadata instead of
+  executable symbols;
+  =tests/test_windows_portability.py= asserts the rule.
+
 [FIX id:fix.build.checkout-local-annotation-tail-2026-07-12 date:2026-07-12 by:codex]
   Checkout-local CI smoke tests must preserve the tail of compiler/linker
   output in GitHub =::error= annotations. Public Windows Actions logs and

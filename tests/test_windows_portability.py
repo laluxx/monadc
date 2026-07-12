@@ -70,6 +70,22 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("buf[n] = '\\0';", cli_c)
         self.assertNotIn("fread(buf, 1, sz, f); buf[sz] = '\\0';", cli_c)
 
+    def test_wisp_commentary_stripping_accepts_crlf_markers(self):
+        wisp_c = read("wisp.c")
+
+        self.assertIn("else if (*p == '\\r') break;", wisp_c)
+        self.assertIn("bool blank = (trim >= line_end || *trim == '\\r');", wisp_c)
+        self.assertIn("p == line_end || *p == '\\r' || *p == ' ' || *p == '\\t'", wisp_c)
+        self.assertIn("*p == ' ' || *p == '\\t' || *p == '\\r'", wisp_c)
+        self.assertIn("*p != ' ' && *p != '\\t' && *p != '\\r' && *p != ';'", wisp_c)
+        self.assertIn("mt[14] == '\\r'", wisp_c)
+
+    def test_core_char_test_labels_are_single_tokens(self):
+        char_mon = read("core/prelude/Data/Char.mon")
+
+        self.assertIn(":blanks-line-breaks:", char_mon)
+        self.assertNotIn(":Blanks and line breaks:", char_mon)
+
     def test_posix_only_headers_are_guarded_for_windows_builds(self):
         compat_h = read("compat.h")
         cli_c = read("cli.c")
