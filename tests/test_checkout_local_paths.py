@@ -23,9 +23,23 @@ def read(name: str) -> str:
     return (ROOT / name).read_text(encoding="utf-8")
 
 
+def generated_executable(path: Path) -> Path:
+    exe_path = Path(str(path) + ".exe")
+    if exe_path.exists():
+        return exe_path
+    return path
+
+
 class CheckoutLocalPathTests(unittest.TestCase):
     def test_relative_monad_binary_env_resolves_from_checkout_root(self):
         self.assertEqual(resolve_monad_binary("build/monad"), ROOT / "build" / "monad")
+
+    def test_generated_executable_prefers_windows_suffix_when_present(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-exe-suffix-") as td:
+            output = Path(td) / "hello"
+            exe = Path(str(output) + ".exe")
+            exe.touch()
+            self.assertEqual(generated_executable(output), exe)
 
     def test_compiler_discovers_checkout_core_and_runtime_archive(self):
         main_c = read("main.c")
@@ -81,7 +95,7 @@ class CheckoutLocalPathTests(unittest.TestCase):
             self.assertEqual(compile_result.returncode, 0, compile_result.stdout)
 
             run_result = subprocess.run(
-                [str(output)],
+                [str(generated_executable(output))],
                 cwd=ROOT,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -127,9 +141,7 @@ class CheckoutLocalPathTests(unittest.TestCase):
             )
             self.assertEqual(build_result.returncode, 0, build_result.stdout)
 
-            exe = project / "build" / "checkout-smoke"
-            if os.name == "nt":
-                exe = exe.with_suffix(".exe")
+            exe = generated_executable(project / "build" / "checkout-smoke")
             run_result = subprocess.run(
                 [str(exe)],
                 cwd=project,
