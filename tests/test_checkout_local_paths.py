@@ -11,6 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 
+def github_escape(value: str) -> str:
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def emit_github_error(title: str, message: str) -> None:
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    body = github_escape(message[:3500])
+    print(f"::error title={github_escape(title)}::{body}", flush=True)
+
+
 def resolve_monad_binary(value: str | os.PathLike[str] | None = None) -> Path:
     raw = value or os.environ.get("MONAD_BINARY", ROOT / "monad")
     path = Path(raw)
@@ -99,16 +110,27 @@ class CheckoutLocalPathTests(unittest.TestCase):
                 stderr=subprocess.STDOUT,
                 check=False,
             )
+            if compile_result.returncode != 0:
+                emit_github_error(
+                    "checkout compiler smoke compile failed",
+                    f"MONAD={MONAD}\nsource={source}\noutput={output}\n{compile_result.stdout}",
+                )
             self.assertEqual(compile_result.returncode, 0, compile_result.stdout)
 
+            exe = generated_executable(output)
             run_result = subprocess.run(
-                [str(generated_executable(output))],
+                [str(exe)],
                 cwd=ROOT,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 check=False,
             )
+            if run_result.returncode != 0:
+                emit_github_error(
+                    "checkout compiler smoke executable failed",
+                    f"executable={exe}\n{run_result.stdout}",
+                )
             self.assertEqual(run_result.returncode, 0, run_result.stdout)
             self.assertTrue(run_result.stdout.endswith("42\n"), run_result.stdout)
 
@@ -146,6 +168,11 @@ class CheckoutLocalPathTests(unittest.TestCase):
                 stderr=subprocess.STDOUT,
                 check=False,
             )
+            if build_result.returncode != 0:
+                emit_github_error(
+                    "checkout package smoke build failed",
+                    f"MONAD={MONAD}\nproject={project}\n{build_result.stdout}",
+                )
             self.assertEqual(build_result.returncode, 0, build_result.stdout)
 
             exe = generated_executable(project / "build" / "checkout-smoke")
@@ -157,6 +184,11 @@ class CheckoutLocalPathTests(unittest.TestCase):
                 stderr=subprocess.STDOUT,
                 check=False,
             )
+            if run_result.returncode != 0:
+                emit_github_error(
+                    "checkout package smoke executable failed",
+                    f"executable={exe}\n{run_result.stdout}",
+                )
             self.assertEqual(run_result.returncode, 0, run_result.stdout)
             self.assertTrue(run_result.stdout.endswith("42\n"), run_result.stdout)
 

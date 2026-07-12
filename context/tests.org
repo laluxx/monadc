@@ -1227,6 +1227,12 @@ Test-driven observations and failure records for the corresponding subsystem.
   =$<TARGET_FILE:monad>= to a Windows drive path in MSYS2 CI, while POSIX
   Python's =Path.is_absolute()= still reports that form as relative.
 
+[FIX id:fix.tests.checkout-local-actions-annotations-2026-07-12 date:2026-07-12 by:codex]
+  Checkout-local compile/run smoke failures emit GitHub Actions =::error=
+  annotations with the compiler path, fixture path, and captured command output.
+  Public job metadata exposes annotations even when raw logs and artifact zip
+  downloads require authentication.
+
 [FIX id:fix.tests.readme-product-contract-2026-07-09 date:2026-07-09 by:codex]
   Added =tests/test_readme_product.py= to keep the README in a human-facing
   product shape. The contract requires status, quick start, Windows/MSYS2,
