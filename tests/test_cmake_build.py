@@ -65,9 +65,12 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("build/build.log", workflow)
         self.assertIn("ctest --test-dir build", workflow)
         self.assertIn("tee build/ctest.log", workflow)
-        self.assertIn("Test checkout local paths", workflow)
-        self.assertIn("'^checkout_local_paths\\.'", workflow)
-        self.assertIn("ctest-checkout-local-paths.log", workflow)
+        self.assertIn("Test checkout local compiler smoke", workflow)
+        self.assertIn("Test checkout local package smoke", workflow)
+        self.assertIn("test_checkout_compiler_can_compile_program_without_install_env", workflow)
+        self.assertIn("test_package_build_finds_checkout_core_from_project_directory", workflow)
+        self.assertIn("ctest-checkout-local-compiler-smoke.log", workflow)
+        self.assertIn("ctest-checkout-local-package-smoke.log", workflow)
         self.assertIn("build/ctest-*.log", workflow)
 
     def test_ci_runs_explicit_portability_smokes(self):
