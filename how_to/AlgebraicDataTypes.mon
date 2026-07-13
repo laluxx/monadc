@@ -9,23 +9,27 @@
 ;;   (x != y) => not x = y   ; Default implementation(s)
 
 
-class Enum a where
-  succ     :: a -> a
-  pred     :: a -> a
-  toEnum   :: Int -> a
-  fromEnum :: a -> Int
-  (succ x) => toEnum ((fromEnum x) + 1)
-  (pred x) => toEnum ((fromEnum x) - 1)
+;; class Enum a where
+;;   succ     :: a -> a
+;;   pred     :: a -> a
+;;   toEnum   :: Int -> a
+;;   fromEnum :: a -> Int
+;;   (succ x) => toEnum ((fromEnum x) + 1)
+;;   (pred x) => toEnum ((fromEnum x) - 1)
 
 
 data TrafficLight Red | Yellow | Green
-  deriving [Eq Enum]
 
 
-show Red = Red
-show Red = Green
-show Red != Green
-show Red != Red
+show Red
+show Yellow
+show Green
+
+;; deriving [Eq Enum] and class defaults are still compiler workbench material.
+;; show Red = Red
+;; show Red = Green
+;; show Red != Green
+;; show Red != Red
 
 ;; show fromEnum Red
 ;; show fromEnum Yellow
@@ -102,20 +106,20 @@ show Red != Red
 
 ;; show ((lambda (x) x) 103)
 
-define test-set :: Int -> Int
-  _ -> result
-  where
-    result = 42
+;; define test-set :: Int -> Int
+;;   _ -> result
+;;   where
+;;     result = 42
 
 ;; show test-set 0
 
 
 
-define until :: (a -> Bool) -> (a -> a) -> a -> a
-  p f                -> go
-  where
-    go x | p x       -> x
-         | otherwise -> go (f x)
+;; define until :: (a -> Bool) -> (a -> a) -> a -> a
+;;   p f                -> go
+;;   where
+;;     go x | p x       -> x
+;;          | otherwise -> go (f x)
 
 
 ;; show until (> 10) (+ 1) 5
@@ -135,12 +139,14 @@ define until :: (a -> Bool) -> (a -> a) -> a -> a
 ;;       | otherwise -> y
 
 
-define sqrt :: Float -> Float
-  x | <= 0      -> 0
-    | otherwise -> until goodEnough? improve (x / 2)
-    where
-      improve    g -> (g + x / g) / 2
-      goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
+;; This block is intentionally left as a sketch until higher-order local
+;; helpers and numeric defaulting agree on the active surface syntax.
+;; define sqrt :: Float -> Float
+;;   x | <= 0      -> 0
+;;     | otherwise -> until goodEnough? improve (x / 2)
+;;     where
+;;       improve    g -> (g + x / g) / 2
+;;       goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
 
 ;; define sqrt :: Float -> Float
 ;;   x | x <= 0    -> 0

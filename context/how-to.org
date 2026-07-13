@@ -611,15 +611,24 @@
 
 [OBS id:obs.how-to.coverage src:how_to/ conf:high]
   Feature coverage by example:
-  - ADTs: AlgebraicDataTypes.mon (data, pattern matching, deriving)
+  - ADTs: AlgebraicDataTypes.mon (active nullary data constructors; class
+    defaults, deriving, and higher-order numeric sketches remain commented)
   - Macros: Macros.mon (when, unless, swap!, assert, hygiene)
   - Syntax variants: Syntax.mon (paren vs wisp side-by-side)
   - Refinement types: RefinementType.mon (set-builder notation)
   - Layout/C-FFI: Layouts.mon, Test.mon (struct layout, methods)
   - External FFI: GlfwSpeedrun.mon, RaylibSpeedrun.mon, SdlSpeedrun.mon
   - Vulkan/GPU: Term/ (full Vulkan app in Monad)
-  - Iteration: Iter.mon (for loop arrow directions)
+  - Iteration: Iter.mon (active range loops and mutation-backed accumulation)
   - Type-level: experiment.mon (forall, type class constraints)
+
+[FIX id:fix.how-to.executable-readme-smoke-2026-07-14 date:2026-07-14 by:codex]
+  README-listed examples are now regression-tested by
+  =tests/test_how_to_examples.py=: =Syntax.mon=, =AlgebraicDataTypes.mon=,
+  =Macros.mon=, and =Iter.mon= must compile with checkout-local core/runtime
+  paths. The active ADT and iterator examples were narrowed to syntax the
+  current compiler owns; more ambitious sketches stay commented until they have
+  green fixture coverage.
 
 * Connections
 :PROPERTIES:

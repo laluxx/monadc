@@ -46,6 +46,7 @@ typedef struct {
     int debug_blink_count;
     bool start_repl;    bool test_mode;      // emit test blocks
     bool test_run;       // run and delete test binary (monad test)
+    char *test_suite;
     char *output_name;
     char *input_file;
     char *eval_code;

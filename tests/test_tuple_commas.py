@@ -2,9 +2,10 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from monad_binary import resolve_monad_binary
 
 ROOT = Path(__file__).resolve().parents[1]
-MONAD = ROOT / "monad"
+MONAD = resolve_monad_binary()
 
 
 class TupleCommaTests(unittest.TestCase):

@@ -9,10 +9,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from monad_binary import resolve_monad_binary
 
 ROOT = Path(__file__).resolve().parent.parent
 CORE_ROOT = ROOT / os.environ.get("MONAD_CORE_ROOT", "core")
-MONAD = ROOT / "monad"
+MONAD = resolve_monad_binary()
 WIDTH = 78
 TRACKED_FILES: set[Path] | None = None
 

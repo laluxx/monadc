@@ -73,13 +73,18 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("ctest-checkout-local-compiler-smoke.log", workflow)
         self.assertIn("ctest-checkout-local-package-smoke.log", workflow)
         self.assertIn("build/ctest-*.log", workflow)
+        self.assertIn("Run compiler-facing unified suite", workflow)
+        self.assertIn("./build/monad test runner", workflow)
+        self.assertIn("./build/monad.exe test runner", workflow)
+        self.assertIn("build/monad-test-runner.log", workflow)
 
     def test_ci_runs_explicit_portability_smokes(self):
         workflow = read(".github/workflows/ci.yml")
 
-        self.assertIn("python tests/test_windows_portability.py", workflow)
-        self.assertIn('MONAD_BINARY="$PWD/build/monad" python tests/test_checkout_local_paths.py', workflow)
-        self.assertIn('MONAD_BINARY="$PWD/build/monad.exe" python tests/test_checkout_local_paths.py', workflow)
+        self.assertIn('MONAD_BINARY="$PWD/build/monad" ./build/monad test runner', workflow)
+        self.assertIn('MONAD_BINARY="$PWD/build/monad.exe" ./build/monad.exe test runner', workflow)
+        self.assertIn("windows_portability_contract", workflow)
+        self.assertIn("checkout_local_paths", workflow)
 
 
 if __name__ == "__main__":

@@ -43,6 +43,11 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("EXPORT_LDFLAG", makefile)
         self.assertIn("NO_PIE_LDFLAG", makefile)
         self.assertIn("$(TARGET_BASE)$(EXEEXT)", makefile)
+        self.assertIn("WINDOWS_EXCLUDED_SRCS", makefile)
+        self.assertIn("debugger.c", makefile)
+        self.assertIn("$(WINDOWS_EXCLUDED_SRCS)", makefile)
+        self.assertIn("HEADERS = $(wildcard *.h)", makefile)
+        self.assertIn("%.o: %.c $(HEADERS)", makefile)
 
     def test_compiler_link_paths_do_not_hardcode_posix_flags_for_windows(self):
         main_c = read("main.c")
@@ -149,6 +154,16 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("saved_termios", debugger_h)
         self.assertIn("if(WIN32)", cmake)
         self.assertIn("list(REMOVE_ITEM MONADC_COMPILER_SOURCES debugger.c)", cmake)
+
+    def test_python_test_harnesses_resolve_windows_compiler_binary(self):
+        helper = read("tests/monad_binary.py")
+        tuple_test = read("tests/test_tuple_commas.py")
+        run_core = read("tests/run_core.py")
+
+        self.assertIn("MONAD_BINARY", helper)
+        self.assertIn("monad.exe", helper)
+        self.assertIn("resolve_monad_binary", tuple_test)
+        self.assertIn("resolve_monad_binary", run_core)
 
 
 if __name__ == "__main__":

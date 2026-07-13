@@ -551,6 +551,20 @@ static bool is_dispatch_word(const char *arg)
     return false;
 }
 
+static bool is_test_suite_word(const char *arg)
+{
+    return arg &&
+           (strcmp(arg, "list") == 0 ||
+            strcmp(arg, "runner") == 0 ||
+            strcmp(arg, "core") == 0 ||
+            strcmp(arg, "how-to") == 0 ||
+            strcmp(arg, "windows") == 0 ||
+            strcmp(arg, "cmake") == 0 ||
+            strcmp(arg, "readme") == 0 ||
+            strcmp(arg, "bytecode") == 0 ||
+            strcmp(arg, "all") == 0);
+}
+
 static bool is_common_option_word(const char *arg)
 {
     if (!arg) return false;
@@ -748,6 +762,7 @@ CompilerFlags parse_flags(int argc, char **argv) {
         return flags;
     }
 
+    // monad test <suite>     ->  run unified repository test suite
     // monad test <file.mon>  ->  compile with tests, run _test binary, delete it
     if (strcmp(argv[1], "test") == 0) {
         flags.mode       = CMD_TEST;
@@ -755,7 +770,10 @@ CompilerFlags parse_flags(int argc, char **argv) {
         flags.test_run   = true;
         int option_start = 2;
         if (argc >= 3 && !is_common_option_word(argv[2])) {
-            flags.input_file = argv[2];
+            if (is_test_suite_word(argv[2]))
+                flags.test_suite = argv[2];
+            else
+                flags.input_file = argv[2];
             option_start = 3;
         }
         for (int i = option_start; i < argc; i++) {
@@ -1368,7 +1386,10 @@ void cmd_lsp(void) {
 void cmd_test(const CompilerFlags *flags) {
     const char *input_file = flags ? flags->input_file : NULL;
     if (!input_file) {
-        int rc = system("python3 tests/run.py");
+        const char *suite = (flags && flags->test_suite) ? flags->test_suite : "list";
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "python3 tests/main.py %s", suite);
+        int rc = system(cmd);
         exit(host_system_success(rc) ? 0 : 1);
     }
 

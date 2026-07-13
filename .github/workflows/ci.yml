@@ -47,10 +47,10 @@ jobs:
           set -o pipefail
           ctest --test-dir build --output-on-failure 2>&1 | tee build/ctest.log
 
-      - name: Run focused portability tests
+      - name: Run compiler-facing unified suite
         run: |
-          python tests/test_windows_portability.py
-          MONAD_BINARY="$PWD/build/monad" python tests/test_checkout_local_paths.py
+          set -o pipefail
+          MONAD_BINARY="$PWD/build/monad" ./build/monad test runner 2>&1 | tee build/monad-test-runner.log
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
@@ -63,6 +63,7 @@ jobs:
             build/libmonad.a
             build/build.log
             build/ctest.log
+            build/monad-test-runner.log
             build/Testing/Temporary/LastTest.log
 
   windows-msys2-cmake:
@@ -153,10 +154,10 @@ jobs:
           set -o pipefail
           ctest --test-dir build --output-on-failure -R '^checkout_local_paths\.test_package_build_finds_checkout_core_from_project_directory$' 2>&1 | tee build/ctest-checkout-local-package-smoke.log
 
-      - name: Run focused portability tests
+      - name: Run compiler-facing unified suite
         run: |
-          python tests/test_windows_portability.py
-          MONAD_BINARY="$PWD/build/monad.exe" python tests/test_checkout_local_paths.py
+          set -o pipefail
+          MONAD_BINARY="$PWD/build/monad.exe" ./build/monad.exe test runner 2>&1 | tee build/monad-test-runner.log
 
       - name: Smoke test compiler binary
         run: ./build/monad.exe --help
@@ -172,4 +173,5 @@ jobs:
             build/libmonad.a
             build/build.log
             build/ctest-*.log
+            build/monad-test-runner.log
             build/Testing/Temporary/LastTest.log

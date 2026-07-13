@@ -452,6 +452,21 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   would guide first-time users without changing the behavior for
   experienced developers.
 
+[FIX id:fix.build.makefile-msys2-header-deps-2026-07-14 date:2026-07-14 by:codex]
+  The legacy Makefile now has a Windows-specific source exclusion list so
+  MSYS2 builds do not compile =debugger.c=, whose POSIX terminal headers are
+  unavailable on Windows. Object rules also depend on =$(wildcard *.h)=.
+  This matters for ABI-bearing headers such as =cli.h=: without header
+  dependencies, an incremental Makefile build can link objects compiled
+  against different =CompilerFlags= layouts.
+
+[FIX id:fix.build.ci-compiler-facing-suite-2026-07-14 date:2026-07-14 by:codex]
+  GitHub Actions keeps the CMake/CTest jobs for Linux and MSYS2/UCRT64 Windows,
+  but now also runs the public =monad test runner= interface with
+  =MONAD_BINARY= set to the CMake-built compiler. CI therefore proves both the
+  build-system path and the human-facing test command instead of only proving
+  individual Python scripts.
+
 [INF id:inf.build.connects-to from:monadc.context.build.file-metadata conf:high]
   connects-to -> `monadc.context.makefile` (build targets documented in
   makefile.org correspond to Makefile targets listed here) ·

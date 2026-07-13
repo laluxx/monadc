@@ -1239,3 +1239,21 @@ Test-driven observations and failure records for the corresponding subsystem.
   first program, package builds, build targets, verification, project notes,
   the current =.github/workflows/ci.yml= workflow, and current CI action
   versions for checkout/upload-artifact plus MSYS2 UCRT64.
+
+[FIX id:fix.tests.compiler-facing-suite-entrypoint-2026-07-14 date:2026-07-14 by:codex]
+  =tests/main.py= is now the Python implementation detail behind the public
+  compiler-facing test interface. =monad test list= prints the suite menu;
+  =monad test runner= runs Python harness contracts, portability checks,
+  README-listed how_to smokes, and bytecode tests; =monad test windows= runs
+  MSYS2/Windows portability and checkout-local executable resolution checks.
+  CTest includes =unified_test_entrypoint_contract= and =monad_test_suite_menu=,
+  and the Makefile delegates =test-runner= and =test-how-to= through the
+  compiler binary instead of invoking individual scripts directly.
+
+[FIX id:fix.tests.issue-1-msys2-regressions-2026-07-14 date:2026-07-14 by:codex]
+  GitHub issue #1 regressions are covered by tests: MSYS2 builds exclude
+  =debugger.c= from the Makefile compiler source list, Python harnesses resolve
+  =MONAD_BINARY= plus =monad.exe=, and README-listed examples compile through
+  =tests/test_how_to_examples.py=. The how_to smoke runs with temporary =HOME=,
+  checkout-local =MONAD_CORE=, and resolved =MONAD_RUNTIME_LIB= so examples do
+  not depend on an installed compiler or writable user cache.

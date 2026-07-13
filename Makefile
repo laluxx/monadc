@@ -28,9 +28,15 @@ MAKEFLAGS += -j$(NPROCS)
 RUNTIME_LIB = libmonad.a
 RUNTIME_SRC = runtime.c arena.c
 RUNTIME_OBJ = $(RUNTIME_SRC:.c=.o)
+HEADERS = $(wildcard *.h)
 
-# All .c files EXCEPT runtime sources to prevent concurrent write race conditions in make -j
-SRCS = $(filter-out $(RUNTIME_SRC), $(wildcard *.c))
+# All compiler .c files except runtime sources and platform-only sources.
+WINDOWS_EXCLUDED_SRCS =
+ifeq ($(WINDOWS_HOST),1)
+WINDOWS_EXCLUDED_SRCS = debugger.c
+endif
+COMPILER_EXCLUDED_SRCS = $(RUNTIME_SRC) $(WINDOWS_EXCLUDED_SRCS)
+SRCS = $(filter-out $(COMPILER_EXCLUDED_SRCS), $(wildcard *.c))
 FFI_CFLAGS = $(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")
 OBJS = $(SRCS:.c=.o)
 
@@ -44,7 +50,7 @@ asan: $(RUNTIME_LIB) $(TARGET)
 release: CFLAGS += $(RELEASE_CFLAGS)
 release: $(RUNTIME_LIB) $(TARGET)
 
-$(RUNTIME_OBJ): %.o: %.c
+$(RUNTIME_OBJ): %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 $(RUNTIME_LIB): $(RUNTIME_OBJ)
@@ -54,10 +60,10 @@ $(RUNTIME_LIB): $(RUNTIME_OBJ)
 $(TARGET): $(OBJS) $(RUNTIME_LIB)
 	$(CC) $(CFLAGS) $(EXPORT_LDFLAG) -o $@ $(OBJS) $(RUNTIME_LIB) $(LDFLAGS)
 
-ffi.o: ffi.c
+ffi.o: ffi.c $(HEADERS)
 	$(CC) $(CFLAGS) $(FFI_CFLAGS) -c $< -o $@
 
-%.o: %.c
+%.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
@@ -110,15 +116,11 @@ generate-asm-tests:
 generate-asm-tests-extra:
 	$(PYTHON) create_asm_tests_extra.py
 
-test-runner:
-	$(PYTHON) tests/test_run.py
-	$(PYTHON) tests/test_cli_duality.py
-	$(PYTHON) tests/test_tuple_commas.py
-	$(PYTHON) tests/test_windows_portability.py
-	$(PYTHON) tests/test_cmake_build.py
-	$(PYTHON) tests/test_checkout_local_paths.py
-	$(PYTHON) tests/test_readme_product.py
-	$(PYTHON) tests/test_bytecode.py
+test-runner: all
+	MONAD_BINARY=$(CURDIR)/$(TARGET) ./$(TARGET) test runner
+
+test-how-to: all
+	MONAD_BINARY=$(CURDIR)/$(TARGET) ./$(TARGET) test how-to
 
 test-context-visualizer:
 	$(PYTHON) tests/test_context_visualizer.py
@@ -152,4 +154,4 @@ fuzzing: test-fuzzing
 context-visualizer:
 	$(PYTHON) context-visualizer.py
 
-.PHONY: all clean release install uninstall asan test core test-core bytecode test-bytecode generate-asm-tests generate-asm-tests-extra test-runner test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer
+.PHONY: all clean release install uninstall asan test core test-core bytecode test-bytecode generate-asm-tests generate-asm-tests-extra test-runner test-how-to test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer

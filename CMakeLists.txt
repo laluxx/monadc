@@ -140,6 +140,18 @@ add_test(
   NAME cmake_build_contract
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cmake_build.py
 )
+add_test(
+  NAME unified_test_entrypoint_contract
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unified_test_entrypoint.py
+)
+add_test(
+  NAME monad_test_suite_menu
+  COMMAND $<TARGET_FILE:monad> test list
+)
+add_test(
+  NAME how_to_examples
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_how_to_examples.py
+)
 set(MONADC_CHECKOUT_LOCAL_TESTS
   test_relative_monad_binary_env_resolves_from_checkout_root
   test_windows_drive_monad_binary_env_is_already_absolute
@@ -163,7 +175,23 @@ endforeach()
 set_tests_properties(
   windows_portability_contract
   cmake_build_contract
+  unified_test_entrypoint_contract
   PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+set_tests_properties(
+  unified_test_entrypoint_contract
+  monad_test_suite_menu
+  PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
+)
+
+set_tests_properties(
+  how_to_examples
+  PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
 )
 
 foreach(checkout_local_test IN LISTS MONADC_CHECKOUT_LOCAL_TESTS)

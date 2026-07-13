@@ -53,6 +53,17 @@ Run the main test suite:
 make test
 ```
 
+Explore the focused test suites:
+
+```sh
+./build/monad test list
+./build/monad test runner
+./build/monad test how-to
+python tests/main.py list
+python tests/main.py runner
+python tests/main.py how-to
+```
+
 Run core library tests:
 
 ```sh
@@ -85,7 +96,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ./build/monad.exe --help
-python tests/test_windows_portability.py
+MONAD_BINARY="$PWD/build/monad.exe" ./build/monad.exe test runner
 ```
 
 The repository also includes a GitHub Actions workflow at
@@ -179,7 +190,8 @@ The root `Makefile` remains available while the migration completes.
 | `make asan`                 | AddressSanitizer build                                      |
 | `make test`                 | Full runner: reader, Wisp, language, and codegen fixtures   |
 | `make test-core`            | Core module test blocks                                     |
-| `make test-runner`          | Python runner/unit checks                                   |
+| `make test-runner`          | Compiler-facing unified runner suite                        |
+| `make test-how-to`          | Compiler-facing README-listed example smoke suite           |
 | `make clean`                | Remove compiler artifacts                                   |
 | `make install PREFIX=/path` | Install compiler, runtime archive, header, and core modules |
 
@@ -233,6 +245,10 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 python tests/test_windows_portability.py
+./build/monad test list
+./build/monad test runner
+python tests/main.py list
+python tests/main.py runner
 make test-runner
 make test-core
 make test

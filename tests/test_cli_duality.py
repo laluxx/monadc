@@ -69,7 +69,9 @@ class CliFlagDualityTests(unittest.TestCase):
         self.assertIn("normalized_argv[0] = argv[0];", cli_c)
         self.assertIn('strcmp(argv[1], "test") == 0', cli_c)
         self.assertIn("Unknown test flag", cli_c)
-        self.assertIn('system("python3 tests/run.py")', cli_c)
+        self.assertIn("is_test_suite_word", cli_c)
+        self.assertIn("flags.test_suite", cli_c)
+        self.assertIn("python3 tests/main.py %s", cli_c)
         self.assertIn("cmd_test(&flags);", main_c)
 
     def test_usage_menu_lists_flag_word_duality_and_eval_help(self):
@@ -83,6 +85,8 @@ class CliFlagDualityTests(unittest.TestCase):
         self.assertIn("-jit, jit", completion_c)
         self.assertIn("monad jit file.mon", completion_c)
         self.assertIn("monad -jit file.mon", completion_c)
+        self.assertIn("monad test [list|runner|windows|how-to|file.mon]", completion_c)
+        self.assertIn("Suites: list, runner, windows, how-to, cmake, readme, bytecode, core, all", completion_c)
         self.assertIn("-S, asm", completion_c)
         self.assertIn("-c, obj", completion_c)
         self.assertIn("-O, optimize", completion_c)
