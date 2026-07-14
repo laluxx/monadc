@@ -1,0 +1,35 @@
+;; TEST-ID: tests.codegen.layout-field-constructor-arg
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.layout.field.constructor.arg
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: layouts-fields
+;; TEST-CATEGORY: data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.codegen.layout-field-access
+;; TEST-PURPOSE: Parenthesized infix over a layout field can be passed as a constructor argument.
+;; TEST-ATOM: Dotted infix field expressions and bare field accessors lower to field loads.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c parenthesized infix lowering with dotted field operands
+;; TEST-USES-ATOM: atom.codegen.category.data-layout
+;; TEST-MENU: branches/data-layout/layouts-fields/atom.codegen.layout.field.constructor.arg
+;; TEST-MENU-PATH: codegen/branches/data-layout/layouts-fields/atom.codegen.layout.field.constructor.arg
+;; TEST-ATOM-LEAF: atom.codegen.layout.field.constructor.arg
+;; TEST-CLI-TARGET: codegen branches data-layout layouts-fields
+
+module Main
+
+layout Bag
+  [item :: Int]
+
+layout Wrap
+  [item :: Int]
+
+define copy :: Bag -> Wrap
+  bag -> (Wrap (bag.item & 7))
+
+define bag (Bag 3)
+define wrap (copy bag)
+
+show wrap.item
+show (item wrap)

@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.rt-wisp-hex-control-char-typed-define
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.hex.control.char.typed.define
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: basic-values
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.reader.char-literal
+;; TEST-PURPOSE: Wisp typed Char constants preserve hex control escapes through expansion.
+;; TEST-ATOM: define [fs :: Char] '\x1c' must not lower to an ambiguous caret literal.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c char literal token canonicalization
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.hex.control.char.typed.define
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.hex.control.char.typed.define
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.basic.values.rt.wisp.hex.control.char.typed.define
+;; TEST-CLI-TARGET: codegen branches wisp-codegen basic-values
+module Main
+
+define [nul :: Char] '\x00'
+define [fs  :: Char] '\x1c'
+define [del :: Char] '\x7f'
+
+show 1

@@ -1,0 +1,39 @@
+;; TEST-ID: tests.codegen.rt-wisp-typed-multiline-local-def
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.multiline.local.def
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: define-and-types
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.typed-define-pattern-params
+;; TEST-PURPOSE: Typed Wisp function clauses may use continuation lines with local def bindings.
+;; TEST-ATOM: A typed clause body with two local def statements should lower to a sequenced body.
+;; TEST-EXPECT: compile, run
+;; TEST-COVERAGE: wisp.c typed signature clause continuation lowering
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp.codegen
+;; TEST-MENU: branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.multiline.local.def
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.multiline.local.def
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.typed.multiline.local.def
+;; TEST-CLI-TARGET: codegen branches wisp-codegen define-and-types
+module Main
+
+define add-local :: Int -> Int
+  x -> def y (x + 1)
+       def z (y + 1)
+       z
+
+define four-args :: Int -> Int -> Int -> Int -> Int
+  a b c d -> (+ (+ a b) (+ c d))
+
+define grouped-arg-call :: Int -> Int
+  x -> four-args x (+ x 1) x x
+
+define if-else-continuation :: Int -> Int
+  x -> def y x
+       if y = 1 then 10
+       else 20
+
+show (add-local 40)
+show (grouped-arg-call 2)
+show (if-else-continuation 1)

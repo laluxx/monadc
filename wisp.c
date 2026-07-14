@@ -2050,6 +2050,11 @@ static char *wisp_expand_pointfree_guard(ArityTable *at,
                                          const char *guard_src,
                                          char **subjects,
                                          int subject_count);
+static int measure_indent(const char *s);
+static void wisp_append_expanded_statement(ArityTable *at, SB *out,
+                                           const char *start,
+                                           const char *end,
+                                           int *expr_count);
 
 static const char *wisp_find_top_level_pipe_range(const char *start,
                                                   const char *end) {
@@ -2446,9 +2451,74 @@ static char *wisp_try_expand_simple_where_lambda(ArityTable *at,
             body_end--;
         }
 
-        char *body_src = strndup(body_start, (size_t)(body_end - body_start));
-        clauses[clause_count].body = wisp_expand_expr_snippet(at, body_src);
-        free(body_src);
+        SB body;
+        sb_init(&body);
+        int expr_count = 0;
+        wisp_append_expanded_statement(at, &body, body_start, body_end, &expr_count);
+
+        while (*p) {
+            const char *cls = p;
+            while (*p && *p != '\n') p++;
+            const char *cle = p;
+            if (*p == '\n') p++;
+
+            const char *clt = cls;
+            while (clt < cle && (*clt == ' ' || *clt == '\t')) clt++;
+            while (cle > clt && (cle[-1] == ' ' || cle[-1] == '\t' || cle[-1] == '\r'))
+                cle--;
+
+            if (clt >= cle || *clt == ';')
+                continue;
+
+            int cont_indent = measure_indent(cls);
+            char *cont_line = strndup(clt, (size_t)(cle - clt));
+            const char *cont_arrow = wisp_find_top_level_arrow(cont_line);
+            if (cont_indent <= 0 || cont_arrow) {
+                free(cont_line);
+                p = cls;
+                break;
+            }
+
+            const char *cont_end = get_logical_line_end(cont_line);
+            const char *cont_stmt = cont_line;
+            char *joined_if = NULL;
+            if (strncmp(cont_line, "if ", 3) == 0 &&
+                strstr(cont_line, " else ") == NULL && *p) {
+                const char *els = p;
+                const char *ele = p;
+                while (*ele && *ele != '\n') ele++;
+                const char *elt = els;
+                while (elt < ele && (*elt == ' ' || *elt == '\t')) elt++;
+                if (ele - elt >= 4 && strncmp(elt, "else", 4) == 0 &&
+                    (elt + 4 == ele || elt[4] == ' ' || elt[4] == '\t')) {
+                    SB joined;
+                    sb_init(&joined);
+                    sb_puts(&joined, cont_line);
+                    sb_putc(&joined, ' ');
+                    sb_puts(&joined, elt);
+                    joined_if = sb_take(&joined);
+                    cont_stmt = joined_if;
+                    p = (*ele == '\n') ? ele + 1 : ele;
+                }
+            }
+            cont_end = get_logical_line_end(cont_stmt);
+            wisp_append_expanded_statement(at, &body, cont_stmt, cont_end, &expr_count);
+            free(joined_if);
+            free(cont_line);
+        }
+
+        char *body_text = sb_take(&body);
+        if (expr_count > 1) {
+            SB seq;
+            sb_init(&seq);
+            sb_puts(&seq, "(begin ");
+            sb_puts(&seq, body_text);
+            sb_putc(&seq, ')');
+            clauses[clause_count].body = sb_take(&seq);
+            free(body_text);
+        } else {
+            clauses[clause_count].body = body_text;
+        }
         clause_count++;
 
         free(line);
@@ -4349,6 +4419,125 @@ static bool wisp_token_can_call_group(const char *text) {
     return true;
 }
 
+static bool wisp_token_is_infix_name(const char *text) {
+    return text &&
+           (strcmp(text, "&") == 0 ||
+            strcmp(text, "+") == 0 ||
+            strcmp(text, "-") == 0 ||
+            strcmp(text, "*") == 0 ||
+            strcmp(text, "/") == 0 ||
+            strcmp(text, "%") == 0 ||
+            strcmp(text, "=") == 0 ||
+            strcmp(text, "!=") == 0 ||
+            strcmp(text, "<") == 0 ||
+            strcmp(text, ">") == 0 ||
+            strcmp(text, "<=") == 0 ||
+            strcmp(text, ">=") == 0 ||
+            strcmp(text, "and") == 0 ||
+            strcmp(text, "or") == 0 ||
+            strcmp(text, "mod") == 0);
+}
+
+static char *wisp_rewrite_grouped_infix(ArityTable *t, const char *text) {
+    size_t len = strlen(text);
+    if (len < 2 || text[0] != '(' || text[len - 1] != ')')
+        return strdup(text);
+
+    char **items = NULL;
+    int count = 0;
+    int cap = 0;
+    const char *inner = text + 1;
+    const char *end = text + len - 1;
+    const char *item_start = NULL;
+    int depth = 0;
+    bool in_str = false;
+    bool in_char = false;
+    bool escape = false;
+
+    for (const char *p = inner; p <= end; p++) {
+        char c = (p < end) ? *p : ' ';
+        if (in_str) {
+            if (escape) escape = false;
+            else if (c == '\\') escape = true;
+            else if (c == '"') in_str = false;
+            continue;
+        }
+        if (in_char) {
+            if (escape) escape = false;
+            else if (c == '\\') escape = true;
+            else if (c == '\'') in_char = false;
+            continue;
+        }
+        if (c == '"') { in_str = true; if (!item_start) item_start = p; continue; }
+        if (c == '\'') { in_char = true; if (!item_start) item_start = p; continue; }
+        if (c == '(' || c == '[' || c == '{') {
+            if (!item_start) item_start = p;
+            depth++;
+            continue;
+        }
+        if (c == ')' || c == ']' || c == '}') {
+            if (depth > 0) depth--;
+            continue;
+        }
+        if ((c == ' ' || c == '\t' || c == '\n' || c == '\r') && depth == 0) {
+            if (item_start) {
+                if (count >= cap) {
+                    cap = cap ? cap * 2 : 8;
+                    items = realloc(items, sizeof(char *) * cap);
+                }
+                items[count++] = strndup(item_start, (size_t)(p - item_start));
+                item_start = NULL;
+            }
+            continue;
+        }
+        if (!item_start)
+            item_start = p;
+    }
+
+    if (count == 0) {
+        free(items);
+        return strdup(text);
+    }
+
+    char **rewritten = calloc((size_t)count, sizeof(char *));
+    for (int i = 0; i < count; i++) {
+        rewritten[i] = (items[i][0] == '(')
+                           ? wisp_rewrite_grouped_infix(t, items[i])
+                           : strdup(items[i]);
+    }
+
+    int op_arity = count == 3 ? wisp_lookup_arity(t, items[1]) : -2;
+    bool can_rewrite =
+        count == 3 &&
+        wisp_token_is_infix_name(items[1]) &&
+        (op_arity >= 2 || op_arity == -1 || strcmp(items[1], "&") == 0);
+
+    SB out;
+    sb_init(&out);
+    sb_putc(&out, '(');
+    if (can_rewrite) {
+        sb_puts(&out, items[1]);
+        sb_putc(&out, ' ');
+        sb_puts(&out, rewritten[0]);
+        sb_putc(&out, ' ');
+        sb_puts(&out, rewritten[2]);
+    } else {
+        for (int i = 0; i < count; i++) {
+            if (i) sb_putc(&out, ' ');
+            sb_puts(&out, rewritten[i]);
+        }
+    }
+    sb_putc(&out, ')');
+
+    for (int i = 0; i < count; i++) {
+        free(items[i]);
+        free(rewritten[i]);
+    }
+    free(items);
+    free(rewritten);
+    return sb_take(&out);
+}
+
 static int g_infix_fence = -1; /* stream pos: infix promotion stops before this */
 
 static void wisp_syntax_error(int line, int column, const char *message, const char *hint) {
@@ -4408,12 +4597,14 @@ static char *wisp_control_char_literal_token(unsigned char ch) {
     char buf[8];
 
     if (ch < 0x20) {
-        snprintf(buf, sizeof(buf), "'^%c'", (char)(ch + '@'));
+        snprintf(buf, sizeof(buf), "'\\x%02x'", ch);
         return strdup(buf);
     }
 
-    if (ch == 0x7F)
-        return strdup("'^?'");
+    if (ch == 0x7F) {
+        snprintf(buf, sizeof(buf), "'\\x%02x'", ch);
+        return strdup(buf);
+    }
 
     return NULL;
 }
@@ -8239,7 +8430,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                      * right-hand side as the direct body. Pattern clauses that
                      * contain _, literals, [], [x|xs], guards, etc. keep the
                      * normal pattern-matching path. */
-                    if (arr_count > 0 && strchr(sig_rest, '[') == NULL) {
+                    if (arr_count > 0) {
                         const char *body_line = p;
                         while (*body_line) {
                             const char *candidate_start = body_line;
@@ -8533,6 +8724,120 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                         char *rhs_src = rhs_acc;
                                         char *rhs_tok = NULL;
                                         const char *consume_end = next_line;
+
+                                        SB seq_body;
+                                        bool have_seq_body = false;
+                                        int seq_expr_count = 0;
+                                        const char *cont_scan = next_line;
+                                        while (*cont_scan) {
+                                            const char *cls = cont_scan;
+                                            while (*cont_scan && *cont_scan != '\n')
+                                                cont_scan++;
+                                            const char *cle = cont_scan;
+                                            const char *after_cont = (*cont_scan == '\n')
+                                                                         ? cont_scan + 1
+                                                                         : cont_scan;
+
+                                            const char *clt = cls;
+                                            while (clt < cle &&
+                                                   (*clt == ' ' || *clt == '\t'))
+                                                clt++;
+                                            while (cle > clt &&
+                                                   (cle[-1] == ' ' || cle[-1] == '\t' ||
+                                                    cle[-1] == '\r'))
+                                                cle--;
+
+                                            if (clt >= cle || *clt == ';') {
+                                                consume_end = after_cont;
+                                                cont_scan = after_cont;
+                                                continue;
+                                            }
+
+                                            int cont_indent = measure_indent(cls);
+                                            if (cont_indent <= indent ||
+                                                cont_indent <= body_indent ||
+                                                *clt == ':') {
+                                                break;
+                                            }
+
+                                            char *cont_line =
+                                                strndup(clt, (size_t)(cle - clt));
+                                            const char *cont_arrow =
+                                                wisp_find_top_level_arrow(cont_line);
+                                            if (cont_arrow) {
+                                                free(cont_line);
+                                                break;
+                                            }
+
+                                            if (!have_seq_body) {
+                                                sb_init(&seq_body);
+                                                have_seq_body = true;
+                                                const char *rhs_stmt_end =
+                                                    get_logical_line_end(rhs_src);
+                                                wisp_append_expanded_statement(at,
+                                                                               &seq_body,
+                                                                               rhs_src,
+                                                                               rhs_stmt_end,
+                                                                               &seq_expr_count);
+                                            }
+
+                                            const char *cont_stmt = cont_line;
+                                            char *joined_if = NULL;
+                                            if (strncmp(cont_line, "if ", 3) == 0 &&
+                                                strstr(cont_line, " else ") == NULL &&
+                                                *after_cont) {
+                                                const char *els = after_cont;
+                                                const char *ele = after_cont;
+                                                while (*ele && *ele != '\n')
+                                                    ele++;
+                                                const char *elt = els;
+                                                while (elt < ele &&
+                                                       (*elt == ' ' || *elt == '\t'))
+                                                    elt++;
+                                                if (ele - elt >= 4 &&
+                                                    strncmp(elt, "else", 4) == 0 &&
+                                                    (elt + 4 == ele ||
+                                                     elt[4] == ' ' || elt[4] == '\t')) {
+                                                    SB joined;
+                                                    sb_init(&joined);
+                                                    sb_puts(&joined, cont_line);
+                                                    sb_putc(&joined, ' ');
+                                                    sb_puts(&joined, elt);
+                                                    joined_if = sb_take(&joined);
+                                                    cont_stmt = joined_if;
+                                                    after_cont = (*ele == '\n')
+                                                                     ? ele + 1
+                                                                     : ele;
+                                                }
+                                            }
+                                            const char *cont_end =
+                                                get_logical_line_end(cont_stmt);
+                                            wisp_append_expanded_statement(at,
+                                                                           &seq_body,
+                                                                           cont_stmt,
+                                                                           cont_end,
+                                                                           &seq_expr_count);
+                                            free(joined_if);
+                                            free(cont_line);
+                                            consume_end = after_cont;
+                                            cont_scan = after_cont;
+                                        }
+
+                                        if (have_seq_body) {
+                                            char *seq_text = sb_take(&seq_body);
+                                            free(rhs_src);
+                                            if (seq_expr_count > 1) {
+                                                SB wrapped;
+                                                sb_init(&wrapped);
+                                                sb_puts(&wrapped, "(begin ");
+                                                sb_puts(&wrapped, seq_text);
+                                                sb_putc(&wrapped, ')');
+                                                rhs_src = sb_take(&wrapped);
+                                                free(seq_text);
+                                            } else {
+                                                rhs_src = seq_text;
+                                            }
+                                        }
 
                                         if (followed_by_where && where_line_start) {
                                             const char *bindings_start = where_line_start;
@@ -10174,7 +10479,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
             if (starts_num && (has_slash || has_pct))
                 is_ratio_lit = true;
         }
-        if (!is_grouped && arity == -2 &&
+        if (!is_grouped && arity == -2 && caller_prec < 6 &&
             wisp_token_can_call_group(text) &&
             s->pos < s->count &&
             s->tokens[s->pos].lineno == my_lineno &&
@@ -10205,7 +10510,13 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                 sb_puts(&prefix_sb, text);
             }
         } else {
-            sb_puts(&prefix_sb, text);
+            if (is_grouped && text[0] == '(') {
+                char *rewritten = wisp_rewrite_grouped_infix(t, text);
+                sb_puts(&prefix_sb, rewritten);
+                free(rewritten);
+            } else {
+                sb_puts(&prefix_sb, text);
+            }
         }
     }
     else {

@@ -15971,6 +15971,55 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
+            if (ast->list.count == 2) {
+                const char *field_name = head->symbol;
+                CodegenResult base = codegen_expr(ctx, ast->list.items[1]);
+                Type *lay = base.type;
+                if (lay && lay->kind == TYPE_PTR && lay->element_type)
+                    lay = lay->element_type;
+                if (lay && lay->kind == TYPE_LAYOUT &&
+                    lay->layout_field_count == 0 && lay->layout_name) {
+                    Type *resolved = env_lookup_layout(ctx->env, lay->layout_name);
+                    if (resolved) lay = resolved;
+                }
+                if (lay && lay->kind == TYPE_LAYOUT) {
+                    int field_idx = -1;
+                    for (int i = 0; i < lay->layout_field_count; i++) {
+                        if (strcmp(lay->layout_fields[i].name, field_name) == 0) {
+                            field_idx = i;
+                            break;
+                        }
+                    }
+                    if (field_idx >= 0) {
+                        char sname[256];
+                        snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
+                        LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                        LLVMValueRef ptr = base.value;
+                        if (LLVMGetTypeKind(LLVMTypeOf(ptr)) != LLVMPointerTypeKind) {
+                            LLVMValueRef tmp =
+                                LLVMBuildAlloca(ctx->builder, LLVMTypeOf(ptr), "tmp");
+                            LLVMBuildStore(ctx->builder, ptr, tmp);
+                            ptr = tmp;
+                        }
+                        LLVMValueRef zero =
+                            LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0);
+                        LLVMValueRef fidx =
+                            LLVMConstInt(LLVMInt32TypeInContext(ctx->context),
+                                         field_idx, 0);
+                        LLVMValueRef indices[] = {zero, fidx};
+                        LLVMValueRef fld_ptr =
+                            LLVMBuildGEP2(ctx->builder, struct_llvm, ptr,
+                                          indices, 2, "fld");
+                        Type *fld_type = lay->layout_fields[field_idx].type;
+                        result.value =
+                            LLVMBuildLoad2(ctx->builder, type_to_llvm(ctx, fld_type),
+                                           fld_ptr, field_name);
+                        result.type = type_clone(fld_type);
+                        return result;
+                    }
+                }
+            }
+
             if (ast->inferred_type && ast->inferred_type->kind != TYPE_UNKNOWN) {
                 char *imported_call_name =
                     codegen_imported_call_name(ctx, head->symbol);
