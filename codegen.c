@@ -117,13 +117,16 @@ static LLVMValueRef emit_type_cast(CodegenContext *ctx, LLVMValueRef val, LLVMTy
 
 
 void codegen_init(CodegenContext *ctx, const char *module_name) {
+    memset(ctx, 0, sizeof(*ctx));
     ctx->context = LLVMContextCreate();
     ctx->module = LLVMModuleCreateWithNameInContext(module_name, ctx->context);
     ctx->builder = LLVMCreateBuilderInContext(ctx->context);
     ctx->env = env_create();
     env_init_infer(ctx->env);
     ctx->module_ctx = NULL;
+    ctx->is_top_level = false;
     ctx->init_fn = NULL;
+    ctx->top_level_fn = NULL;
     // Initialize format strings to NULL - will be created lazily
     ctx->fmt_str   = NULL;
     ctx->fmt_char  = NULL;
@@ -134,6 +137,9 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->fmt_oct   = NULL;
     ctx->error_jmp_set = false;
     ctx->ffi = NULL;
+    ctx->test_mode = false;
+    ctx->current_function_name = NULL;
+    ctx->in_coalesce_depth = 0;
     // Initialize monomorphization cache
     ctx->mono_cache.entries  = NULL;
     ctx->mono_cache.count    = 0;
@@ -1077,8 +1083,9 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
 
     // Codegen body
     CodegenResult body = {NULL, NULL};
-    const char *prev   = ctx->current_function_name;
-    ctx->current_function_name = spec_name;
+    const char *prev = ctx->current_function_name;
+    char *owned_current_function_name = strdup(spec_name);
+    ctx->current_function_name = owned_current_function_name;
     if (lambda->lambda.body->type == AST_ASM) {
         RegisterAllocator reg_alloc;
         reg_alloc_init(&reg_alloc);
@@ -1111,6 +1118,7 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
         }
     }
     ctx->current_function_name = prev;
+    free(owned_current_function_name);
 
     if (!body.value)
         body.value = LLVMConstNull(ret_llvm);
@@ -2935,6 +2943,71 @@ static AST *derive_show_nullary_lambda(AST *data_ast, const char *type_name,
                           desugared, body_exprs, 1);
 }
 
+static AST *derive_eq_nullary_lambda(AST *data_ast, const char *type_name,
+                                     bool negate) {
+    int nctors = data_ast->data.constructor_count;
+    int total_clauses = nctors + 1;
+    ASTPMatchClause *clauses = malloc(sizeof(ASTPMatchClause) * total_clauses);
+
+    for (int ci = 0; ci < nctors; ci++) {
+        const char *cname = data_ast->data.constructors[ci].name;
+        ASTPattern *pats = malloc(sizeof(ASTPattern) * 2);
+        pats[0].kind = PAT_CONSTRUCTOR;
+        pats[0].var_name = strdup(cname);
+        pats[0].lit_value = 0;
+        pats[0].ctor_fields = NULL;
+        pats[0].ctor_field_count = 0;
+        pats[0].elements = NULL;
+        pats[0].element_count = 0;
+        pats[0].tail = NULL;
+        pats[1] = pats[0];
+        pats[1].var_name = strdup(cname);
+
+        clauses[ci].patterns = pats;
+        clauses[ci].pattern_count = 2;
+        clauses[ci].body = ast_new_symbol(negate ? "False" : "True");
+        clauses[ci].guard_conds = NULL;
+        clauses[ci].guard_bodies = NULL;
+        clauses[ci].guard_count = 0;
+    }
+
+    ASTPattern *wild_pats = malloc(sizeof(ASTPattern) * 2);
+    wild_pats[0].kind = PAT_WILDCARD;
+    wild_pats[0].var_name = NULL;
+    wild_pats[0].lit_value = 0;
+    wild_pats[0].elements = NULL;
+    wild_pats[0].element_count = 0;
+    wild_pats[0].tail = NULL;
+    wild_pats[0].ctor_fields = NULL;
+    wild_pats[0].ctor_field_count = 0;
+    wild_pats[1] = wild_pats[0];
+    clauses[nctors].patterns = wild_pats;
+    clauses[nctors].pattern_count = 2;
+    clauses[nctors].body = ast_new_symbol(negate ? "True" : "False");
+    clauses[nctors].guard_conds = NULL;
+    clauses[nctors].guard_bodies = NULL;
+    clauses[nctors].guard_count = 0;
+
+    ASTParam *params = malloc(sizeof(ASTParam) * 2);
+    params[0].name = strdup("__p0");
+    params[0].type_name = strdup(type_name);
+    params[0].is_rest = false;
+    params[0].is_anon = false;
+    params[1].name = strdup("__p1");
+    params[1].type_name = strdup(type_name);
+    params[1].is_rest = false;
+    params[1].is_anon = false;
+
+    AST *pm = ast_new_pmatch(clauses, total_clauses);
+    AST *desugared = pmatch_desugar(pm, params, 2);
+    free(pm);
+
+    AST **body_exprs = malloc(sizeof(AST*));
+    body_exprs[0] = desugared;
+    return ast_new_lambda(params, 2, "Bool", NULL, NULL, false,
+                          desugared, body_exprs, 1);
+}
+
 void codegen_data(CodegenContext *ctx, AST *ast) {
     // Each data type becomes a tagged union:
     // struct { i32 tag; [max-payload fields as i64] }
@@ -3229,76 +3302,52 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             /* Check instance not already defined */
             if (tc_find_instance(ctx->tc_registry, "Eq", type_name)) continue;
 
-            /* Build instance AST synthetically:
-             * For each constructor pair (A, A) => True, plus (_ = _) => False */
-            int total_clauses = nctors + 1;
-            char    **method_names  = malloc(sizeof(char*));
-            AST     **method_bodies = malloc(sizeof(AST*));
-            method_names[0] = strdup("=");
-
-            ASTPMatchClause *clauses = malloc(sizeof(ASTPMatchClause) * total_clauses);
-
+            bool all_nullary = true;
             for (int ci = 0; ci < nctors; ci++) {
-                const char *cname = ast->data.constructors[ci].name;
-                ASTPattern *pats  = malloc(sizeof(ASTPattern) * 2);
-                pats[0].kind            = PAT_CONSTRUCTOR;
-                pats[0].var_name        = strdup(cname);
-                pats[0].ctor_fields     = NULL;
-                pats[0].ctor_field_count = 0;
-                pats[0].elements        = NULL;
-                pats[0].element_count   = 0;
-                pats[0].tail            = NULL;
-                pats[1] = pats[0];
-                pats[1].var_name = strdup(cname);
-
-                clauses[ci].patterns      = pats;
-                clauses[ci].pattern_count = 2;
-                clauses[ci].body          = ast_new_symbol("True");
-                clauses[ci].guard_conds   = NULL;
-                clauses[ci].guard_bodies  = NULL;
-                clauses[ci].guard_count   = 0;
+                if (ast->data.constructors[ci].field_count != 0) {
+                    all_nullary = false;
+                    break;
+                }
+            }
+            if (!all_nullary) {
+                fprintf(stderr,
+                        "warning: deriving Eq for '%s' currently supports nullary constructors only\n",
+                        type_name);
+                continue;
             }
 
-            /* Wildcard clause: (_ = _) => False */
-            ASTPattern *wild_pats = malloc(sizeof(ASTPattern) * 2);
-            wild_pats[0].kind            = PAT_WILDCARD;
-            wild_pats[0].var_name        = NULL;
-            wild_pats[0].elements        = NULL;
-            wild_pats[0].element_count   = 0;
-            wild_pats[0].tail            = NULL;
-            wild_pats[0].ctor_fields     = NULL;
-            wild_pats[0].ctor_field_count = 0;
-            wild_pats[1] = wild_pats[0];
-            clauses[nctors].patterns      = wild_pats;
-            clauses[nctors].pattern_count = 2;
-            clauses[nctors].body          = ast_new_symbol("False");
-            clauses[nctors].guard_conds   = NULL;
-            clauses[nctors].guard_bodies  = NULL;
-            clauses[nctors].guard_count   = 0;
+            int method_count = 0;
+            for (int mi = 0; mi < cls->method_count; mi++) {
+                const char *m = cls->methods[mi].name;
+                if (m && (strcmp(m, "=") == 0 || strcmp(m, "!=") == 0 ||
+                          strcmp(m, "eq?") == 0 || strcmp(m, "not-eq?") == 0)) {
+                    method_count++;
+                }
+            }
+            if (method_count == 0) {
+                fprintf(stderr,
+                        "warning: deriving Eq for '%s' found no binary equality method\n",
+                        type_name);
+                continue;
+            }
 
-            /* Desugar pmatch into a lambda */
-            ASTParam *params = malloc(sizeof(ASTParam) * 2);
-            params[0].name      = strdup("__p0");
-            params[0].type_name = strdup(type_name);
-            params[0].is_rest   = false;
-            params[0].is_anon   = false;
-            params[1].name      = strdup("__p1");
-            params[1].type_name = strdup(type_name);
-            params[1].is_rest   = false;
-            params[1].is_anon   = false;
-
-            AST *pm       = ast_new_pmatch(clauses, total_clauses);
-            AST *desugared = pmatch_desugar(pm, params, 2);
-            free(pm);
-
-            AST **body_exprs = malloc(sizeof(AST*));
-            body_exprs[0]    = desugared;
-            method_bodies[0] = ast_new_lambda(params, 2, "Bool", NULL, NULL,
-                                              false, desugared, body_exprs, 1);
+            char **method_names = malloc(sizeof(char*) * method_count);
+            AST **method_bodies = malloc(sizeof(AST*) * method_count);
+            int out = 0;
+            for (int mi = 0; mi < cls->method_count; mi++) {
+                const char *m = cls->methods[mi].name;
+                if (!m) continue;
+                bool is_eq = strcmp(m, "=") == 0 || strcmp(m, "eq?") == 0;
+                bool is_neq = strcmp(m, "!=") == 0 || strcmp(m, "not-eq?") == 0;
+                if (!is_eq && !is_neq) continue;
+                method_names[out] = strdup(m);
+                method_bodies[out] = derive_eq_nullary_lambda(ast, type_name, is_neq);
+                out++;
+            }
 
             AST *inst_ast = ast_new_instance("Eq", type_name,
                                              NULL, NULL, 0,
-                                             method_names, method_bodies, 1);
+                                             method_names, method_bodies, method_count);
             tc_register_instance(ctx->tc_registry, inst_ast, ctx);
             ast_free(inst_ast);
 
@@ -6997,10 +7046,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                             CodegenResult jbody = {NULL, NULL};
                             const char *saved_fname = ctx->current_function_name;
-                            ctx->current_function_name = var_name;
+                            char *owned_fname = strdup(var_name);
+                            ctx->current_function_name = owned_fname;
                             for (int bi = 0; bi < lambda->lambda.body_count; bi++)
                                 jbody = codegen_expr(ctx, lambda->lambda.body_exprs[bi]);
                             ctx->current_function_name = saved_fname;
+                            free(owned_fname);
 
                             Env *body_env = ctx->env;
                             ctx->module  = swap_mod;
@@ -7460,7 +7511,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         Env *prev_env = ctx->env;
                         ctx->env = stub_env;
                         const char *prev_fn = ctx->current_function_name;
-                        ctx->current_function_name = var_name;
+                        char *owned_fn = strdup(var_name);
+                        ctx->current_function_name = owned_fn;
                         CodegenResult stub_body = {NULL, NULL};
                         for (int i = 0; i < lambda->lambda.body_count; i++) {
                             if (lambda->lambda.body_count > 1 &&
@@ -7470,6 +7522,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                 ctx, stub_body, lambda->lambda.body_exprs[i]);
                         }
                         ctx->current_function_name = prev_fn;
+                        free(owned_fn);
                         ctx->env = prev_env;
                         env_free(stub_env);
 
@@ -7536,8 +7589,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             body_result.type = ret_type;
                             free_asm_instructions(asm_instructions, asm_inst_count);
                         } else {
-                            const char *prev_fn   = ctx->current_function_name;
-                            ctx->current_function_name = var_name;
+                            const char *prev_fn = ctx->current_function_name;
+                            char *owned_fn = strdup(var_name);
+                            ctx->current_function_name = owned_fn;
                             for (int i = 0; i < lambda->lambda.body_count; i++) {
                                 if (lambda->lambda.body_count > 1 &&
                                     codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
@@ -7548,6 +7602,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
 
                             ctx->current_function_name = prev_fn;
+                            free(owned_fn);
                             if (!body_result.type) {
                                 body_result.type  = type_clone(ret_type);
                                 body_result.value = LLVMConstInt(
@@ -11716,15 +11771,15 @@ if (ast->list.count >= 5) {
                         }
                     }
 
-                    /* 2. Layout type from lhs.type — for heap pointers */
-                    if (!type_name && lhs.type && lhs.type->kind == TYPE_LAYOUT)
-                        type_name = lhs.type->layout_name;
+                    /* 2. Nominal type from lhs.type — for heap pointers and ADTs */
+                    if (!type_name)
+                        type_name = tc_instance_type_name_from_type(lhs.type);
 
-                    /* 3. Env symbol lookup for named layout variables */
+                    /* 3. Env symbol lookup for named nominal variables */
                     if (!type_name && ast->list.items[1]->type == AST_SYMBOL) {
                         EnvEntry *e = env_lookup(ctx->env, ast->list.items[1]->symbol);
-                        if (e && e->type && e->type->kind == TYPE_LAYOUT)
-                            type_name = e->type->layout_name;
+                        if (e && e->type)
+                            type_name = tc_instance_type_name_from_type(e->type);
                     }
 
                     /* If we can't determine a concrete layout type, the call is
@@ -11889,6 +11944,8 @@ if (ast->list.count >= 5) {
                                                     lhs.type->kind == TYPE_LIST    ||
                                                     lhs.type->kind == TYPE_COLL    ||
                                                     lhs.type->kind == TYPE_ARR     ||
+                                                    lhs.type->kind == TYPE_LAYOUT  ||
+                                                    lhs.type->kind == TYPE_APP     ||
                                                     lhs.type->kind == TYPE_RATIO   ||
                                                     lhs.type->kind == TYPE_UNKNOWN);
                 bool rhs_is_ptr_type = rhs.type && (rhs.type->kind == TYPE_SET     ||
@@ -11896,6 +11953,8 @@ if (ast->list.count >= 5) {
                                                     rhs.type->kind == TYPE_LIST    ||
                                                     rhs.type->kind == TYPE_COLL    ||
                                                     rhs.type->kind == TYPE_ARR     ||
+                                                    rhs.type->kind == TYPE_LAYOUT  ||
+                                                    rhs.type->kind == TYPE_APP     ||
                                                     rhs.type->kind == TYPE_RATIO   ||
                                                     rhs.type->kind == TYPE_UNKNOWN);
 

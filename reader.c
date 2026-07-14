@@ -166,6 +166,14 @@ static bool is_local_callable(const char *name) {
     return false;
 }
 
+static bool reader_is_known_callable_name(const char *name) {
+    if (!name)
+        return false;
+    if (g_is_known_function && g_is_known_function(name))
+        return true;
+    return is_local_callable(name);
+}
+
 /// Multiline -| comments |-
 
 CommentSpan *g_comment_spans = NULL;
@@ -4178,6 +4186,7 @@ static bool is_infix_operator_symbol(const char *s) {
             strcmp(s, "/") == 0 ||
             strcmp(s, "%") == 0 ||
             strcmp(s, "+") == 0 ||
+            strcmp(s, "++") == 0 ||
             strcmp(s, "-") == 0 ||
             strcmp(s, "=") == 0 ||
             strcmp(s, "!=") == 0 ||
@@ -7898,25 +7907,21 @@ static AST *parse_list(Parser *p) {
              *   - first is NOT a known callable (already a prefix call head)
              *   - the head `first` does NOT expect a function at the next slot
              * Chains left-to-right: (a f b g c) => (g (f a b) c)          */
-            bool candidate_is_known_fn = true;
-            if (p->current.type == TOK_SYMBOL && p->current.value) {
-                if (g_is_known_function)
-                    candidate_is_known_fn = g_is_known_function(p->current.value);
-                if (!candidate_is_known_fn && is_local_callable(p->current.value))
-                    candidate_is_known_fn = true;
-            }
-
             bool first_is_infix_operator =
                 first->type == AST_SYMBOL &&
                 is_infix_operator_symbol(first->symbol);
+            bool first_is_known_callable =
+                first->type == AST_SYMBOL &&
+                reader_is_known_callable_name(first->symbol);
             bool candidate_is_infix_operator =
                 p->current.type == TOK_SYMBOL &&
                 is_infix_operator_symbol(p->current.value);
 
             if (!first_is_infix_operator &&
+                !first_is_known_callable &&
                 p->current.type == TOK_SYMBOL && p->current.value &&
                 strcmp(p->current.value, "__index") != 0 &&
-                (candidate_is_known_fn || candidate_is_infix_operator)) {
+                candidate_is_infix_operator) {
                 /* peek: is there a rhs after the candidate? */
                 /* We need at least one more token that isn't ')' */
                 /* Strategy: tentatively check using saved lexer state */
@@ -7947,6 +7952,10 @@ static AST *parse_list(Parser *p) {
                 }
 
                 if (has_rhs && !head_wants_func) {
+                    Lexer infix_saved_lexer = *p->lexer;
+                    Token infix_saved_current = p->current;
+                    bool infix_failed = false;
+
                     /* Infix rewrite with proper operator precedence */
                     int op_cap = 4;
                     int op_count = 0;
@@ -7959,14 +7968,9 @@ static AST *parse_list(Parser *p) {
                     int num_operands = 1;
 
                     while (p->current.type == TOK_SYMBOL && p->current.value) {
-                        bool chain_is_known_fn = true;
-                        if (g_is_known_function)
-                            chain_is_known_fn = g_is_known_function(p->current.value);
-                        if (!chain_is_known_fn && is_local_callable(p->current.value))
-                            chain_is_known_fn = true;
                         bool chain_is_infix_operator =
                             is_infix_operator_symbol(p->current.value);
-                        if (!chain_is_known_fn && !chain_is_infix_operator)
+                        if (!chain_is_infix_operator)
                             break;
 
                         /* peek again to confirm rhs exists */
@@ -8013,71 +8017,88 @@ static AST *parse_list(Parser *p) {
                         operands[num_operands++] = parse_expr(p);
 
                         if (p->current.type == TOK_RPAREN) break;
+                        if (!(p->current.type == TOK_SYMBOL && p->current.value)) {
+                            infix_failed = true;
+                            break;
+                        }
                     }
 
-                    /* Reduce operands according to precedence */
-                    while (op_count > 0) {
-                        int max_prec = -1;
-                        int best_idx = -1;
-                        for (int i = 0; i < op_count; i++) {
-                            int prec = 6;
-                            if (strcmp(operators[i], "*") == 0 || strcmp(operators[i], "/") == 0 || strcmp(operators[i], "%") == 0) prec = 5;
-                            else if (strcmp(operators[i], "+") == 0 || strcmp(operators[i], "-") == 0) prec = 4;
-                            else if (strcmp(operators[i], "=") == 0 || strcmp(operators[i], "!=") == 0 ||
-                                     strcmp(operators[i], "<") == 0 || strcmp(operators[i], ">") == 0 ||
-                                     strcmp(operators[i], "<=") == 0 || strcmp(operators[i], ">=") == 0) prec = 3;
-                            else if (strcmp(operators[i], "and") == 0) prec = 2;
-                            else if (strcmp(operators[i], "or") == 0) prec = 1;
+                    if (infix_failed) {
+                        for (int i = 1; i < num_operands; i++)
+                            ast_free(operands[i]);
+                        for (int i = 0; i < op_count; i++)
+                            free(operators[i]);
+                        free(operands);
+                        free(operators);
+                        free(op_lines);
+                        free(op_cols);
+                        *p->lexer = infix_saved_lexer;
+                        p->current = infix_saved_current;
+                    } else {
+                        /* Reduce operands according to precedence */
+                        while (op_count > 0) {
+                            int max_prec = -1;
+                            int best_idx = -1;
+                            for (int i = 0; i < op_count; i++) {
+                                int prec = 6;
+                                if (strcmp(operators[i], "*") == 0 || strcmp(operators[i], "/") == 0 || strcmp(operators[i], "%") == 0) prec = 5;
+                                else if (strcmp(operators[i], "+") == 0 || strcmp(operators[i], "-") == 0) prec = 4;
+                                else if (strcmp(operators[i], "=") == 0 || strcmp(operators[i], "!=") == 0 ||
+                                         strcmp(operators[i], "<") == 0 || strcmp(operators[i], ">") == 0 ||
+                                         strcmp(operators[i], "<=") == 0 || strcmp(operators[i], ">=") == 0) prec = 3;
+                                else if (strcmp(operators[i], "and") == 0) prec = 2;
+                                else if (strcmp(operators[i], "or") == 0) prec = 1;
 
-                            if (prec > max_prec) {
-                                max_prec = prec;
-                                best_idx = i;
+                                if (prec > max_prec) {
+                                    max_prec = prec;
+                                    best_idx = i;
+                                }
                             }
+
+                            AST *fn_sym = ast_new_symbol(operators[best_idx]);
+                            fn_sym->line   = op_lines[best_idx];
+                            fn_sym->column = op_cols[best_idx];
+
+                            AST *call = ast_new_list();
+                            call->line   = op_lines[best_idx];
+                            call->column = op_cols[best_idx];
+                            ast_list_append(call, fn_sym);
+                            ast_list_append(call, operands[best_idx]);
+                            ast_list_append(call, operands[best_idx + 1]);
+
+                            free(operators[best_idx]);
+
+                            operands[best_idx] = call;
+                            for (int i = best_idx + 1; i < num_operands - 1; i++)
+                                operands[i] = operands[i + 1];
+                            for (int i = best_idx; i < op_count - 1; i++) {
+                                operators[i] = operators[i + 1];
+                                op_lines[i] = op_lines[i + 1];
+                                op_cols[i] = op_cols[i + 1];
+                            }
+                            num_operands--;
+                            op_count--;
                         }
 
-                        AST *fn_sym = ast_new_symbol(operators[best_idx]);
-                        fn_sym->line   = op_lines[best_idx];
-                        fn_sym->column = op_cols[best_idx];
+                        AST *acc = operands[0];
+                        free(operands);
+                        free(operators);
+                        free(op_lines);
+                        free(op_cols);
 
-                        AST *call = ast_new_list();
-                        call->line   = op_lines[best_idx];
-                        call->column = op_cols[best_idx];
-                        ast_list_append(call, fn_sym);
-                        ast_list_append(call, operands[best_idx]);
-                        ast_list_append(call, operands[best_idx + 1]);
-
-                        free(operators[best_idx]);
-
-                        operands[best_idx] = call;
-                        for (int i = best_idx + 1; i < num_operands - 1; i++)
-                            operands[i] = operands[i + 1];
-                        for (int i = best_idx; i < op_count - 1; i++) {
-                            operators[i] = operators[i + 1];
-                            op_lines[i] = op_lines[i + 1];
-                            op_cols[i] = op_cols[i + 1];
-                        }
-                        num_operands--;
-                        op_count--;
+                        if (p->current.type != TOK_RPAREN)
+                            compiler_error(p->current.line, p->current.column,
+                                           "Expected ')' after infix expression");
+                        int end_col = p->current.column + 1;
+                        p->current  = lexer_next_token(p->lexer);
+                        /* list was never appended to — safe to free the empty shell */
+                        free(list->list.items);
+                        free(list);
+                        acc->line       = start_line;
+                        acc->column     = start_column;
+                        acc->end_column = end_col;
+                        return acc;
                     }
-
-                    AST *acc = operands[0];
-                    free(operands);
-                    free(operators);
-                    free(op_lines);
-                    free(op_cols);
-
-                    if (p->current.type != TOK_RPAREN)
-                        compiler_error(p->current.line, p->current.column,
-                                       "Expected ')' after infix expression");
-                    int end_col = p->current.column + 1;
-                    p->current  = lexer_next_token(p->lexer);
-                    /* list was never appended to — safe to free the empty shell */
-                    free(list->list.items);
-                    free(list);
-                    acc->line       = start_line;
-                    acc->column     = start_column;
-                    acc->end_column = end_col;
-                    return acc;
                 }
             }
 
@@ -9250,30 +9271,15 @@ AST *parse_expr(Parser *p) {
         }
 
         if (is_super) {
-            if (power > 0) {
-                AST *mul_expr = expr_result;
-                for (int i = 1; i < power; i++) {
-                    AST *mul_node = ast_new_list();
-                    ast_list_append(mul_node, ast_new_symbol("*"));
-                    ast_list_append(mul_node, mul_expr);
-                    ast_list_append(mul_node, ast_clone(expr_result));
-                    mul_node->line = expr_result->line;
-                    mul_node->column = expr_result->column;
-                    mul_node->end_column = end_col;
-                    mul_expr = mul_node;
-                }
-                expr_result = mul_expr;
-            } else {
-                AST *pow_node = ast_new_list();
-                ast_list_append(pow_node, ast_new_symbol("^"));
-                ast_list_append(pow_node, expr_result);
-                ast_list_append(pow_node, ast_new_number(0.0, "0"));
+            AST *pow_node = ast_new_list();
+            ast_list_append(pow_node, ast_new_symbol("^"));
+            ast_list_append(pow_node, expr_result);
+            ast_list_append(pow_node, ast_new_number((double)power, NULL));
 
-                pow_node->line = expr_result->line;
-                pow_node->column = expr_result->column;
-                pow_node->end_column = end_col;
-                expr_result = pow_node;
-            }
+            pow_node->line = expr_result->line;
+            pow_node->column = expr_result->column;
+            pow_node->end_column = end_col;
+            expr_result = pow_node;
         }
     }
 

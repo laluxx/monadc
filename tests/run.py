@@ -40,6 +40,7 @@ FIRST_FAILURE_FILE = TEST_ROOT / ".last-first-failure.org"
 FAILURE_DIR = TEST_ROOT / ".last-failures"
 TRACKED_FILES: set[Path] | None = None
 JSON_GOLDEN_TABLES: dict[Path, dict[str, object]] = {}
+MONAD_TEST_ENV: dict[str, str] | None = None
 WIDTH = 118
 
 # ANSI styles. The runner intentionally keeps color because the output is meant
@@ -395,7 +396,7 @@ def read_corpus(path: Path, prefix: str = "language") -> list[TestCase]:
         if len(fields) < 4:
             raise ValueError(f"{path}:{line_number}: expected at least 4 tab-separated fields")
         name, context, purpose, source = fields[:4]
-        expected = fields[4].strip() if len(fields) >= 5 else ""
+        expected = fields[4].strip().replace("\\n", "\n") if len(fields) >= 5 else ""
         expected_diagnostic = fields[5].strip() if len(fields) >= 6 else ""
         test_id = f"tests.{prefix}.{name}"
         meta = {
@@ -833,14 +834,15 @@ def materialize_fixture(case: TestCase, tmpdir: Path) -> Path:
 
 
 def run_monad(args: list[str]) -> CommandResult:
-    return run_command([str(MONAD), *args], cwd=ROOT)
+    return run_command([str(MONAD), *args], cwd=ROOT, env=MONAD_TEST_ENV)
 
 
-def run_command(args: list[str], cwd: Path) -> CommandResult:
+def run_command(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> CommandResult:
     start = time.perf_counter_ns()
     proc = subprocess.run(
         args,
         cwd=cwd,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
@@ -882,7 +884,11 @@ def emit_and_check_reader_goldens(
 ) -> tuple[tuple[bool, str, str] | None, object | None, str]:
     json_path = Path(f"{output_base}.json")
     emit_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
-    if desugar_golden_path and desugar_golden_path.exists() and not any(
+    wants_desugar_output = (
+        bool(case.metadata.get("TEST-EXPECT-DESUGAR"))
+        or bool(desugar_golden_path and desugar_golden_path.exists())
+    )
+    if wants_desugar_output and not any(
         flag.startswith("--trace=") for flag in emit_flags
     ):
         emit_flags.append("--trace=ast")
@@ -1769,13 +1775,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     suite_start = time.perf_counter_ns()
+    global MONAD_TEST_ENV
     with tempfile.TemporaryDirectory(prefix="monadc-tests-") as tmp:
         suite_tmpdir = Path(tmp)
-        for case in tests:
-            runner.run(case, suite_tmpdir)
-            if runner.should_stop:
-                print_section_line("STOPPING EARLY", YELLOW, bold=True)
-                break
+        env = os.environ.copy()
+        suite_home = suite_tmpdir / "home"
+        suite_home.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(suite_home)
+        env["MONAD_CORE"] = str(ROOT / "core")
+        MONAD_TEST_ENV = env
+        try:
+            for case in tests:
+                runner.run(case, suite_tmpdir)
+                if runner.should_stop:
+                    print_section_line("STOPPING EARLY", YELLOW, bold=True)
+                    break
+        finally:
+            MONAD_TEST_ENV = None
     if runner.current_section is not None:
         runner.print_section_footer(runner.current_section)
     suite_elapsed_ns = time.perf_counter_ns() - suite_start

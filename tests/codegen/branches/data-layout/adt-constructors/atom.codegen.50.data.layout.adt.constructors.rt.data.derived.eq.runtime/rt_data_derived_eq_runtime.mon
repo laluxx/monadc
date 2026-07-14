@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.rt-data-derived-eq-runtime
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.50.data.layout.adt.constructors.rt.data.derived.eq.runtime
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: adt-constructors
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.how-to.adt
+;; TEST-PURPOSE: Nullary ADTs deriving Eq compile and run both equality and inequality.
+;; TEST-ATOM: Derived Eq must dispatch on ADT constructor values instead of falling through to numeric comparison.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c:derived Eq nullary ADT equality and inequality
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-MENU: branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.derived.eq.runtime
+;; TEST-MENU-PATH: codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.derived.eq.runtime
+;; TEST-ATOM-LEAF: atom.codegen.50.data.layout.adt.constructors.rt.data.derived.eq.runtime
+;; TEST-CLI-TARGET: codegen branches data-layout adt-constructors
+(module Main)
+(class Eq a where
+  (=) :: a -> a -> Bool
+  (!=) :: a -> a -> Bool)
+(data TrafficLight Red | Yellow | Green deriving [Eq])
+(show (= Red Red))
+(show (= Red Green))
+(show (!= Red Green))
+(show (!= Red Red))

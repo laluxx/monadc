@@ -3,34 +3,37 @@
 ;; ;; TODO constraint propagation
 ;; ;; TODO deriving Eq should work on _non nullary_ data types too
 
-;; class Eq a where
-;;   (=)  :: a -> a -> Bool
-;;   (!=) :: a -> a -> Bool
-;;   (x != y) => not x = y   ; Default implementation(s)
+class Eq a where
+  (=)  :: a -> a -> Bool
+  (!=) :: a -> a -> Bool
+  ;; Default method bodies are tracked by fixtures, not this executable how_to.
+  ;; (x != y) => not x = y
 
 
-;; class Enum a where
-;;   succ     :: a -> a
-;;   pred     :: a -> a
-;;   toEnum   :: Int -> a
-;;   fromEnum :: a -> Int
-;;   (succ x) => toEnum ((fromEnum x) + 1)
-;;   (pred x) => toEnum ((fromEnum x) - 1)
+class Enum a where
+  succ     :: a -> a
+  pred     :: a -> a
+  toEnum   :: Int -> a
+  fromEnum :: a -> Int
+  ;; (succ x) => toEnum ((fromEnum x) + 1)
+  ;; (pred x) => toEnum ((fromEnum x) - 1)
 
 
 data TrafficLight Red | Yellow | Green
+  deriving [Eq]
 
 
 show Red
 show Yellow
 show Green
 
-;; deriving [Eq Enum] and class defaults are still compiler workbench material.
-;; show Red = Red
-;; show Red = Green
-;; show Red != Green
-;; show Red != Red
+show (Red = Red)
+show (Red = Green)
+show (Red != Green)
+show (Red != Red)
 
+;; Enum deriving is not active here yet because succ/pred currently fail
+;; dependent checking for nullary ADTs in this path.
 ;; show fromEnum Red
 ;; show fromEnum Yellow
 ;; show fromEnum Green

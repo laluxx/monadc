@@ -73,13 +73,14 @@
 :END:
 
 [OBS id:obs.adt.class-decl src:how_to/AlgebraicDataTypes.mon:1-19 conf:high]
-  Type class designs: (class Eq a), (class Enum a) with default
-  implementations. =(deriving [Eq Enum])= syntax for automatic instance
-  derivation. Commented out — type class system is in development.
+  Type class designs: (class Eq a), (class Enum a) and deriving syntax.
+  Nullary ADTs deriving Eq are active in this executable how-to; class default
+  method bodies and Enum succ/pred remain future work.
 
 [OBS id:obs.adt.data-traffic-light src:how_to/AlgebraicDataTypes.mon:21-22 conf:high]
   Data type: =(data TrafficLight Red | Yellow | Green)= with deriving.
-  Shows fromEnum/succ/pred operations on ADT constructors as enum values.
+  Shows constructor values and parenthesized Eq/!= comparisons so infix
+  precedence cannot parse the comparison as applying to the =show= result.
 
 [OBS id:obs.adt.lambda-syntax src:how_to/AlgebraicDataTypes.mon:44-51 conf:high]
   Lambda definition syntax experiments: =(define square λx.x²)=,
@@ -114,6 +115,11 @@
 [THINK id:think.adt.constraint-propagate src:how_to/AlgebraicDataTypes.mon:3-4 conf:high]
   Lines 3-4: Type class constraint propagation and deriving Eq for
   non-nullary data types are not yet implemented.
+
+[FIX id:fix.adt.nullary-eq src:tests/codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.rt.data.derived.eq.runtime/rt_data_derived_eq_runtime.mon conf:high]
+  Nullary ADTs deriving Eq must synthesize both equality and inequality
+  methods when the class declares them. Regression coverage:
+  =python3 tests/run.py --name codegen.rt-data-derived-eq-runtime=.
 
 [THINK id:think.adt.pmatch-bug src:how_to/AlgebraicDataTypes.mon:394-397 conf:high]
   Lines 394-397: Pattern matching bug — extra show statements are
