@@ -67,6 +67,11 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         self.assertIn("./$(TARGET) test how-to", makefile)
         self.assertNotIn("$(PYTHON) tests/test_tuple_commas.py", makefile)
 
+    def test_runner_suite_covers_core_runner_contracts(self):
+        test_main = read("tests/main.py")
+
+        self.assertIn('py("tests/test_run_core.py")', test_main)
+
     def test_readme_advertises_unified_test_entrypoint(self):
         readme = read("README.md")
 

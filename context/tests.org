@@ -602,6 +602,14 @@ assertions directly instead of requiring hand-written shell checks per fixture.
    inside active =tests= blocks before invoking the compiler. Regression
    coverage: =python3 -m unittest tests.test_run_core=.
 
+[DEC id:dec.tests.core-cookie-headings-2026-07-14 date:2026-07-14 by:human+codex]
+   Core Wisp test blocks may use a progress cookie heading such as
+   =tests [0/0]=. =tests/run_core.py= accepts that heading while materializing
+   compiler-readable =(tests ...)= forms, and after a successful module test it
+   rewrites existing cookie headings to the real assertion count, for example
+   =tests [5/5]=. Plain =tests= headings are left unchanged. Regression
+   coverage: =python3 tests/test_run_core.py=.
+
 [FIX id:fix.tests.core-runner-ignore-lock-files-2026-06-18 date:2026-06-18 by:codex]
    =tests/run_core.py= filters discovery candidates with =Path.is_file()= before
    reading active test blocks. This prevents dangling editor lock symlinks such

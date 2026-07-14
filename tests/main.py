@@ -29,6 +29,7 @@ SUITES: dict[str, Suite] = {
         "Python harness contracts, portability checks, example smokes, and bytecode tests.",
         (
             py("tests/test_run.py"),
+            py("tests/test_run_core.py"),
             py("tests/test_cli_duality.py"),
             py("tests/test_tuple_commas.py"),
             py("tests/test_windows_portability.py"),

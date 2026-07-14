@@ -81,7 +81,10 @@ def run_module(path: Path) -> ModuleResult:
         )
     elapsed_ns = time.perf_counter_ns() - start
     cleanup_artifacts(path, before)
-    return ModuleResult(path, result.returncode == 0, elapsed_ns, result.stdout, count_assertions(path))
+    passed = result.returncode == 0
+    if passed:
+        update_test_cookies(path)
+    return ModuleResult(path, passed, elapsed_ns, result.stdout, count_assertions(path))
 
 
 def materialize_core_tree(destination: Path) -> None:
@@ -112,7 +115,7 @@ def materialize_test_source(path: Path) -> str:
     for line_number, line in enumerate(lines, start=1):
         stripped = line.lstrip()
         indent = len(line) - len(stripped)
-        if not in_tests and stripped == "tests":
+        if not in_tests and parse_tests_heading(stripped):
             assertions = []
             in_tests = True
             test_indent = indent
@@ -152,6 +155,51 @@ def materialize_test_source(path: Path) -> str:
             raise ValueError(f"{path}:{open_drawer_line}: unclosed test drawer :{open_drawer}:")
         out.append(format_tests_block(assertions))
     return "\n".join(out) + "\n"
+
+
+def parse_tests_heading(stripped: str) -> re.Match[str] | None:
+    return re.fullmatch(r"tests(?:\s+\[\d*/\d*\])?", stripped)
+
+
+def update_test_cookies(path: Path) -> bool:
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    changed = False
+    out: list[str] = []
+    index = 0
+
+    while index < len(lines):
+        line = lines[index]
+        body = line[:-1] if line.endswith("\n") else line
+        newline = "\n" if line.endswith("\n") else ""
+        stripped = body.lstrip()
+        indent = len(body) - len(stripped)
+        match = re.fullmatch(r"tests\s+\[\d*/\d*\]", stripped)
+
+        if not match:
+            out.append(line)
+            index += 1
+            continue
+
+        count = 0
+        scan = index + 1
+        while scan < len(lines):
+            scan_body = lines[scan][:-1] if lines[scan].endswith("\n") else lines[scan]
+            scan_stripped = scan_body.lstrip()
+            scan_indent = len(scan_body) - len(scan_stripped)
+            if scan_stripped and scan_indent <= indent and not scan_stripped.startswith(";;"):
+                break
+            if re.match(r"assert-eq(?:\s|\()", scan_stripped):
+                count += 1
+            scan += 1
+
+        replacement = f"{body[:indent]}tests [{count}/{count}]{newline}"
+        out.append(replacement)
+        changed = changed or replacement != line
+        index += 1
+
+    if changed:
+        path.write_text("".join(out), encoding="utf-8")
+    return changed
 
 
 def format_tests_block(assertions: list[str]) -> str:

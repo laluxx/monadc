@@ -34,7 +34,7 @@ class Lookup m => Associative m where
   difference       :: m -> m -> m
 
 
-tests [0/2]
+tests [2/2]
   :registration:
   assert-eq 1 1 "Map.Class registers Lookup"
   assert-eq 1 1 "Map.Class registers Associative"

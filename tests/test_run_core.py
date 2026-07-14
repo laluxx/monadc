@@ -53,6 +53,58 @@ class CoreRunnerDiscoveryTests(unittest.TestCase):
 
         self.assertIn('(assert-eq 1 1 "ok")', materialized)
 
+    def test_materialize_accepts_progress_cookie_on_tests_heading(self):
+        runner_mod = load_core_runner()
+        with tempfile.TemporaryDirectory() as td:
+            module = Path(td) / "Cookie.mon"
+            module.write_text(
+                "(module Cookie [])\n\n"
+                "tests [0/0]\n"
+                "  assert-eq 1 1 \"one\"\n"
+                "  assert-eq 2 2 \"two\"\n",
+                encoding="utf-8",
+            )
+
+            materialized = runner_mod.materialize_test_source(module)
+
+        self.assertIn('(assert-eq 1 1 "one")', materialized)
+        self.assertIn('(assert-eq 2 2 "two")', materialized)
+
+    def test_update_test_cookies_rewrites_existing_heading_counts(self):
+        runner_mod = load_core_runner()
+        with tempfile.TemporaryDirectory() as td:
+            module = Path(td) / "Cookie.mon"
+            module.write_text(
+                "(module Cookie [])\n\n"
+                "tests [0/0]\n"
+                "  assert-eq 1 1 \"one\"\n"
+                "  assert-eq 2 2 \"two\"\n",
+                encoding="utf-8",
+            )
+
+            changed = runner_mod.update_test_cookies(module)
+            text = module.read_text(encoding="utf-8")
+
+        self.assertTrue(changed)
+        self.assertIn("tests [2/2]", text)
+
+    def test_update_test_cookies_leaves_plain_tests_heading_alone(self):
+        runner_mod = load_core_runner()
+        with tempfile.TemporaryDirectory() as td:
+            module = Path(td) / "Plain.mon"
+            original = (
+                "(module Plain [])\n\n"
+                "tests\n"
+                "  assert-eq 1 1 \"one\"\n"
+            )
+            module.write_text(original, encoding="utf-8")
+
+            changed = runner_mod.update_test_cookies(module)
+            text = module.read_text(encoding="utf-8")
+
+        self.assertFalse(changed)
+        self.assertEqual(text, original)
+
     def test_materialize_rejects_unclosed_test_drawers(self):
         runner_mod = load_core_runner()
         with tempfile.TemporaryDirectory() as td:
