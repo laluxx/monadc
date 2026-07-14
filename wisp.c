@@ -5307,6 +5307,43 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             }
         }
 
+        if (indent == 0) {
+            const char *line_end = get_logical_line_end(t);
+            const char *arrow = wisp_find_top_level_arrow(t);
+            if (arrow && arrow < line_end) {
+                char *name = wisp_trim_range_dup(t, arrow);
+                if (wisp_is_simple_identifier_text(name)) {
+                    const char *rhs_start = arrow + 2;
+                    while (rhs_start < line_end &&
+                           (*rhs_start == ' ' || *rhs_start == '\t'))
+                        rhs_start++;
+
+                    if (rhs_start < line_end) {
+                        char *rhs_src = wisp_trim_range_dup(rhs_start, line_end);
+                        char *rhs = wisp_expand_expr_snippet(at, rhs_src);
+                        SB form;
+                        sb_init(&form);
+                        sb_puts(&form, "(define ");
+                        sb_puts(&form, name);
+                        sb_putc(&form, ' ');
+                        sb_puts(&form, rhs);
+                        sb_putc(&form, ')');
+
+                        char *desugared = sb_take(&form);
+                        wts_push(&s, desugared, indent, lineno);
+                        free(desugared);
+                        free(rhs);
+                        free(rhs_src);
+                        free(name);
+                        free(raw);
+                        lineno++;
+                        goto next_line;
+                    }
+                }
+                free(name);
+            }
+        }
+
         if (strncmp(t, "define", 6) != 0 &&
             strncmp(t, "layout", 6) != 0 &&
             strncmp(t, "data", 4) != 0 &&

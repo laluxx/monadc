@@ -113,6 +113,7 @@ wisp_higher_order_predicate_arg	monadc.context.wisp.old-core-prelude-compat	Wisp
 # ── Wisp Arrow-Clause Sugar ──────────────────────────────────────────────────
 wisp_arrow_single	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause desugars to lambda.	x -> x + 1				regression	passing-baseline-2026-06-15
 wisp_arrow_pattern	monadc.context.wisp.sugar.arrow-clause	Wisp arrow clause with pattern matching.	[] -> nil | [x] -> x				regression	passing-baseline-2026-06-15
+wisp_arrow_value_binding	monadc.context.wisp.sugar.arrow-value-binding	Top-level name arrow value binding desugars to define.	i -> 3\nshow i	(define i 3)\nshow\ni			regression	regression-2026-07-14
 # ── Wisp Def Sugar ──────────────────────────────────────────────────────────
 wisp_def_simple	monadc.context.wisp.sugar.def	Wisp def shorthand desugars to define.	define x 42	(define x 42)			regression	passing-baseline-2026-06-15
 # ── Wisp Guard Sugar ────────────────────────────────────────────────────────

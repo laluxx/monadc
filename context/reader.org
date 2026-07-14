@@ -530,6 +530,13 @@ Expected Wisp shape:
   bindings. =x -> body= in lambda position creates a lambda with parameter =x=.
   In define position, =define f x -> body= creates (define (f x) body).
 
+[FIX id:fix.reader.wisp-arrow-value-binding-2026-07-14 date:2026-07-14 by:codex src:wisp.c,tests/reader-sugars.tsv conf:high]
+  Top-level Wisp =name -> expr= now desugars as a value binding
+  =(define name expr)= when =name= is a simple identifier. This rule runs after
+  =for= desugaring and before the generic arrow-clause parser, so
+  =i -> 3= followed by =show i= is a usable top-level binding without stealing
+  =define f x -> body= or nested pattern clauses.
+
 [OBS id:obs.reader.heap-array-golden-json src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.runtime/rt_heap_array_runtime.json,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for/rt_heap_array_for.json conf:high]
   Heap array regressions now carry expected AST JSON sidecars. These goldens make
   the =AST_ARRAY.array.is_heap=true= contract observable alongside runtime stdout
