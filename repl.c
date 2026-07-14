@@ -56,6 +56,7 @@ static const char *dlerror(void) { return "dynamic loading is not available on t
 #include <llvm-c/Analysis.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Support.h>
+#include <llvm/Config/llvm-config.h>
 
 ASTList wisp_parse_all(const char *source, const char *filename);
 void wisp_register_arity(const char *name, int arity);
@@ -1909,8 +1910,12 @@ void repl_init(REPLContext *ctx) {
     ctx->jit           = NULL;
     ctx->jd            = NULL;
     ctx->cg.context    = LLVMContextCreate();
+#if LLVM_VERSION_MAJOR >= 19
     ctx->tsc           =
         LLVMOrcCreateNewThreadSafeContextFromLLVMContext(ctx->cg.context);
+#else
+    ctx->tsc           = LLVMOrcCreateNewThreadSafeContext();
+#endif
     ctx->cg.module     = NULL;
     ctx->cg.builder    = NULL;
     ctx->cg.env        = env_create();
@@ -2018,6 +2023,12 @@ void repl_dispose(REPLContext *ctx) {
         LLVMOrcDisposeThreadSafeContext(ctx->tsc);
         ctx->tsc = NULL;
     }
+#if LLVM_VERSION_MAJOR < 19
+    if (ctx->cg.context) {
+        LLVMContextDispose(ctx->cg.context);
+        ctx->cg.context = NULL;
+    }
+#endif
     if (ctx->cg.tc_registry) {
         tc_registry_free(ctx->cg.tc_registry);
         ctx->cg.tc_registry = NULL;

@@ -20,6 +20,7 @@
 #include <llvm-c/Error.h>
 #include <llvm-c/LLJIT.h>
 #include <llvm-c/Orc.h>
+#include <llvm/Config/llvm-config.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Analysis.h>
 #include <llvm-c/BitWriter.h>
@@ -4023,11 +4024,17 @@ static bool codegen_orc_add_module_and_lookup(LLVMContextRef *ctx_ref,
     LLVMOrcJITDylibRef jd = LLVMOrcLLJITGetMainJITDylib(jit);
     LLVMOrcJITDylibAddGenerator(jd, process_gen);
 
-    LLVMOrcThreadSafeContextRef tsc =
-        LLVMOrcCreateNewThreadSafeContextFromLLVMContext(*ctx_ref);
+    LLVMOrcThreadSafeContextRef tsc = NULL;
+#if LLVM_VERSION_MAJOR >= 19
+    tsc = LLVMOrcCreateNewThreadSafeContextFromLLVMContext(*ctx_ref);
+#else
+    tsc = LLVMOrcCreateNewThreadSafeContext();
+#endif
     LLVMOrcThreadSafeModuleRef tsm =
         LLVMOrcCreateNewThreadSafeModule(*mod_ref, tsc);
+#if LLVM_VERSION_MAJOR >= 19
     *ctx_ref = NULL;
+#endif
     *mod_ref = NULL;
 
     err = LLVMOrcLLJITAddLLVMIRModule(jit, jd, tsm);
