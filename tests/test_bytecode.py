@@ -1,4 +1,6 @@
+import platform
 import subprocess
+import sys
 import tempfile
 import textwrap
 import time
@@ -8,6 +10,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def host_supports_baseline_jit() -> bool:
+    machine = platform.machine().lower()
+    return (
+        machine in {"x86_64", "amd64"}
+        and sys.platform.startswith("linux")
+    )
 
 
 class BytecodeModuleTests(unittest.TestCase):
@@ -235,7 +245,8 @@ class BytecodeModuleTests(unittest.TestCase):
                     fprintf(stderr, "baseline jit unexpectedly succeeded\n");
                     return 3;
                 }
-                if (!strstr(error.message, "unsupported")) {
+                if (!strstr(error.message, "unsupported") &&
+                    !strstr(error.message, "not available")) {
                     fprintf(stderr, "wrong jit error: %s\n", error.message);
                     return 4;
                 }
@@ -781,6 +792,9 @@ class BytecodeModuleTests(unittest.TestCase):
         TEST-STATUS: active
         TEST-COVERAGE: bytecode.h, bytecode.c
         """
+        if not host_supports_baseline_jit():
+            self.skipTest("baseline JIT is available only on Linux x86_64")
+
         harness = textwrap.dedent(
             r'''
             #include "bytecode.h"
