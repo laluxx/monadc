@@ -1,0 +1,26 @@
+;; TEST-ID: tests.codegen.stateful.adt.enum.derived.succ.pred
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: 50-data-layout
+;; TEST-SUBSET: adts
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.stateful.adt.enum.derived.succ.pred
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Derived Enum instances expose succ and pred, not only tag conversion.
+;; TEST-ATOM: (data T A | B | C deriving [Enum]) should step through constructors.
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.adt
+;; TEST-COVERAGE: codegen.c derived Enum instance method generation
+;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
+;; TEST-USES-ATOM: atom.codegen.subset.50.data.layout.adts
+;; TEST-MENU: branches/data-layout/adts/atom.codegen.stateful.adt.enum.derived.succ.pred
+;; TEST-MENU-PATH: codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.derived.succ.pred
+;; TEST-ATOM-LEAF: atom.codegen.stateful.adt.enum.derived.succ.pred
+;; TEST-CLI-TARGET: codegen branches data-layout adts
+
+(import Data.Enum)
+(data T A | B | C deriving [Enum Show])
+(show (fromEnum A))
+(show (fromEnum (succ A)))
+(show (fromEnum (pred C)))

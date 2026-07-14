@@ -122,7 +122,7 @@ status:
 |---------+----------------------------+---------------------------------------------------------|
 | =Eq=    | Working for all constructors | Structural equality comparing tags and fields           |
 | =Show=  | Working for all constructors | Pretty-prints as =(Ctor field0 field1 ...)=              |
-| =Enum=  | Working for nullary only     | =fromEnum= returns tag index; =toEnum= maps tag → ctor   |
+| =Enum=  | Working for nullary only     | =fromEnum= returns tag index; =toEnum= maps tag → ctor; =succ= / =pred= step through tags |
 | =Bounded| Partially working           | Requires nullary constructors for bounds                 |
 
 Deriving for constructors with fields is work in progress for =Enum= and

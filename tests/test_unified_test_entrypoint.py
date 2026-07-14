@@ -44,6 +44,22 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         self.assertIn("runner", result.stdout)
         self.assertIn("windows", result.stdout)
 
+    def test_compiler_test_help_is_the_discoverable_front_door(self):
+        result = subprocess.run(
+            [str(MONAD), "test", "--help"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Usage: monad test [list|runner|windows|how-to|file.mon]", result.stdout)
+        self.assertIn("Available test suites:", result.stdout)
+        self.assertIn("runner", result.stdout)
+        self.assertIn("windows", result.stdout)
+
     def test_makefile_routes_ad_hoc_runner_suite_through_single_entrypoint(self):
         makefile = read("Makefile")
 

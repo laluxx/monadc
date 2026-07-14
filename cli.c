@@ -565,6 +565,34 @@ static bool is_test_suite_word(const char *arg)
             strcmp(arg, "all") == 0);
 }
 
+static bool is_help_word(const char *arg)
+{
+    return arg &&
+           (strcmp(arg, "-h") == 0 ||
+            strcmp(arg, "--help") == 0 ||
+            strcmp(arg, "help") == 0);
+}
+
+static void print_test_help(void)
+{
+    printf("Usage: monad test [list|runner|windows|how-to|file.mon] [options]\n\n");
+    printf("Run repository test suites or compile and run tests in one .mon file.\n\n");
+    printf("Available test suites:\n");
+    printf("  list      Show this suite menu\n");
+    printf("  runner    Python harness contracts, portability checks, examples, and bytecode tests\n");
+    printf("  core      Core and prelude module tests\n");
+    printf("  how-to    README-listed how_to example smokes\n");
+    printf("  windows   MSYS2/Windows portability contracts\n");
+    printf("  cmake     CMake and CI contract tests\n");
+    printf("  readme    Human-facing README product contract\n");
+    printf("  bytecode  Bytecode VM, verifier, serialization, and visual diagnostics\n");
+    printf("  all       Runner plus core suites\n\n");
+    printf("Examples:\n");
+    printf("  monad test list\n");
+    printf("  monad test runner\n");
+    printf("  monad test core/prelude/Data/Enum.mon\n");
+}
+
 static bool is_common_option_word(const char *arg)
 {
     if (!arg) return false;
@@ -768,6 +796,10 @@ CompilerFlags parse_flags(int argc, char **argv) {
         flags.mode       = CMD_TEST;
         flags.test_mode  = true;
         flags.test_run   = true;
+        if (argc >= 3 && is_help_word(argv[2])) {
+            flags.test_suite = "help";
+            return flags;
+        }
         int option_start = 2;
         if (argc >= 3 && !is_common_option_word(argv[2])) {
             if (is_test_suite_word(argv[2]))
@@ -1387,6 +1419,10 @@ void cmd_test(const CompilerFlags *flags) {
     const char *input_file = flags ? flags->input_file : NULL;
     if (!input_file) {
         const char *suite = (flags && flags->test_suite) ? flags->test_suite : "list";
+        if (is_help_word(suite)) {
+            print_test_help();
+            exit(0);
+        }
         char cmd[256];
         snprintf(cmd, sizeof(cmd), "python3 tests/main.py %s", suite);
         int rc = system(cmd);

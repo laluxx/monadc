@@ -3008,6 +3008,33 @@ static AST *derive_eq_nullary_lambda(AST *data_ast, const char *type_name,
                           desugared, body_exprs, 1);
 }
 
+static AST *derive_enum_step_nullary_lambda(AST *data_ast, const char *type_name,
+                                            bool forward) {
+    ASTParam *params = malloc(sizeof(ASTParam));
+    params[0].name = strdup("__p0");
+    params[0].type_name = strdup(type_name);
+    params[0].is_rest = false;
+    params[0].is_anon = false;
+
+    AST *offset = ast_new_list();
+    ast_list_append(offset, ast_new_symbol(forward ? "+" : "-"));
+    ast_list_append(offset, ast_new_symbol("__p0.__tag"));
+    AST *one = ast_new_number(1.0, NULL);
+    one->has_raw_int = true;
+    one->raw_int = 1;
+    ast_list_append(offset, one);
+
+    AST *body = ast_new_list();
+    ast_list_append(body, ast_new_symbol("toEnum"));
+    ast_list_append(body, offset);
+
+    AST **body_exprs = malloc(sizeof(AST*));
+    body_exprs[0] = body;
+    (void)data_ast;
+    return ast_new_lambda(params, 1, type_name, NULL, NULL, false,
+                          body, body_exprs, 1);
+}
+
 void codegen_data(CodegenContext *ctx, AST *ast) {
     // Each data type becomes a tagged union:
     // struct { i32 tag; [max-payload fields as i64] }
@@ -3412,10 +3439,26 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             }
             if (tc_find_instance(ctx->tc_registry, "Enum", type_name)) continue;
 
-            char **method_names = malloc(sizeof(char*) * 2);
-            AST **method_bodies = malloc(sizeof(AST*) * 2);
+            bool all_nullary = true;
+            for (int ci = 0; ci < nctors; ci++) {
+                if (ast->data.constructors[ci].field_count != 0) {
+                    all_nullary = false;
+                    break;
+                }
+            }
+            if (!all_nullary) {
+                fprintf(stderr,
+                        "warning: deriving Enum for '%s' currently supports nullary constructors only\n",
+                        type_name);
+                continue;
+            }
+
+            char **method_names = malloc(sizeof(char*) * 4);
+            AST **method_bodies = malloc(sizeof(AST*) * 4);
             method_names[0] = strdup("fromEnum");
             method_names[1] = strdup("toEnum");
+            method_names[2] = strdup("succ");
+            method_names[3] = strdup("pred");
 
             /* fromEnum body: (lambda ([__p0 :: Type]) __p0.__tag) */
             ASTParam *from_params = malloc(sizeof(ASTParam) * 1);
@@ -3460,8 +3503,10 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             AST **to_exprs = malloc(sizeof(AST*));
             to_exprs[0] = cur;
             method_bodies[1] = ast_new_lambda(to_params, 1, type_name, NULL, NULL, false, cur, to_exprs, 1);
+            method_bodies[2] = derive_enum_step_nullary_lambda(ast, type_name, true);
+            method_bodies[3] = derive_enum_step_nullary_lambda(ast, type_name, false);
 
-            AST *inst_ast = ast_new_instance("Enum", type_name, NULL, NULL, 0, method_names, method_bodies, 2);
+            AST *inst_ast = ast_new_instance("Enum", type_name, NULL, NULL, 0, method_names, method_bodies, 4);
             tc_register_instance(ctx->tc_registry, inst_ast, ctx);
             ast_free(inst_ast);
 
@@ -13458,7 +13503,7 @@ if (ast->list.count >= 5) {
 
             if (entry && entry->kind == ENV_FUNC) {
                 /* Typeclass instance resolution for non-operator methods */
-                if (entry->func_ref == NULL && tc_is_method(ctx->tc_registry, head->symbol)) {
+                if (tc_is_method(ctx->tc_registry, head->symbol)) {
                     const char *op        = head->symbol;
                     const char *cls       = tc_method_class(ctx->tc_registry, op);
                     const char *type_name = NULL;
@@ -13524,11 +13569,11 @@ if (ast->list.count >= 5) {
                                     break;
                                 }
                             }
-                        } else {
+                        } else if (entry->func_ref == NULL) {
                             CODEGEN_ERROR(ctx, "%s:%d:%d: error: No instance for '%s %s' arising from use of '%s'",
                                 parser_get_filename(), ast->line, ast->column, cls, type_name, op);
                         }
-                    } else {
+                    } else if (entry->func_ref == NULL) {
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: Ambiguous typeclass call to '%s'",
                             parser_get_filename(), ast->line, ast->column, op);
                     }
