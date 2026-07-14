@@ -145,6 +145,10 @@ add_test(
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unified_test_entrypoint.py
 )
 add_test(
+  NAME repl_contract
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_repl.py
+)
+add_test(
   NAME monad_test_suite_menu
   COMMAND $<TARGET_FILE:monad> test list
 )
@@ -181,6 +185,7 @@ set_tests_properties(
 
 set_tests_properties(
   unified_test_entrypoint_contract
+  repl_contract
   monad_test_suite_menu
   PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

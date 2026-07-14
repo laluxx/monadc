@@ -49,7 +49,9 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("MONADC_CHECKOUT_LOCAL_TESTS", cmake)
         self.assertIn("NAME checkout_local_paths.${checkout_local_test}", cmake)
         self.assertIn("add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)", cmake)
+        self.assertIn("add_test(\n  NAME repl_contract", cmake)
         self.assertIn("tests/test_checkout_local_paths.py", cmake)
+        self.assertIn("tests/test_repl.py", cmake)
         self.assertIn("test_windows_drive_monad_binary_env_is_already_absolute", cmake)
         self.assertIn("MONAD_BINARY=$<TARGET_FILE:monad>", cmake)
         self.assertIn("CheckoutLocalPathTests.${checkout_local_test}", cmake)
@@ -77,6 +79,7 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("./build/monad test runner", workflow)
         self.assertIn("./build/monad.exe test runner", workflow)
         self.assertIn("build/monad-test-runner.log", workflow)
+        self.assertIn("tests/test_repl.py", read("tests/main.py"))
 
     def test_ci_runs_explicit_portability_smokes(self):
         workflow = read(".github/workflows/ci.yml")

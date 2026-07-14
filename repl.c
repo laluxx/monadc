@@ -3,11 +3,10 @@
  *
  * Architecture:
  *   - One LLVMContext + one Env live for the whole session.
- *   - One MCJIT ExecutionEngine accumulates modules (one per expression).
+ *   - One ORC LLJIT instance accumulates modules (one per expression).
  *   - fresh_module(): creates a new LLVMModule + builder, declares runtime
  *     functions, re-declares all env globals/funcs as extern so the verifier
- *     is happy, then registers every declaration's address with the engine
- *     via LLVMAddGlobalMapping so the JIT can actually call them.
+ *     is happy, then hands the module to ORC for incremental linking.
  *   - codegen_expr() from codegen.c is called directly — no reimplementation.
  *   - exit() is shadowed by a macro that longjmps back to the eval loop so
  *     errors don't kill the process.
@@ -50,7 +49,9 @@ static const char *dlerror(void) { return "dynamic loading is not available on t
 #include <readline/history.h>
 
 #include <llvm-c/Core.h>
-#include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/Error.h>
+#include <llvm-c/LLJIT.h>
+#include <llvm-c/Orc.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Analysis.h>
 #include <llvm-c/TargetMachine.h>
@@ -134,14 +135,74 @@ void __monad_runtime_error(const char *file, long line, long col, const char *ms
 /* -------------------------------------------------------------------------
  * Globals
  * ------------------------------------------------------------------------- */
-/* Wrapper name is unique per expression to prevent MCJIT from returning
- * the cached address of the *first* compiled wrapper on every subsequent
- * LLVMGetFunctionAddress call.  Format: __repl_wrap_N */
+/* Wrapper name is unique per expression so ORC lookup always resolves the
+ * current module's entry point. Format: __repl_wrap_N */
 #define WRAPPER_FMT  "__repl_wrap_%u"
 static char g_wrapper_name[64] = "__repl_wrap_0";
 static unsigned int g_wrapper_seq = 0;
 
 static REPLContext *g_repl_ctx = NULL;
+
+typedef struct { char name[256]; } OrcDefinedSym;
+#define MAX_ORC_DEFINED 8192
+static OrcDefinedSym g_orc_defined[MAX_ORC_DEFINED];
+static int           g_orc_defined_count = 0;
+
+static void repl_report_llvm_error(const char *prefix, LLVMErrorRef err) {
+    if (!err) return;
+    char *msg = LLVMGetErrorMessage(err);
+    fprintf(stderr, "%s: %s\n", prefix, msg ? msg : "unknown LLVM error");
+    LLVMDisposeErrorMessage(msg);
+}
+
+static bool orc_symbol_already_defined(const char *name) {
+    for (int i = 0; i < g_orc_defined_count; i++)
+        if (strcmp(g_orc_defined[i].name, name) == 0)
+            return true;
+    return false;
+}
+
+static void orc_note_defined_symbol(const char *name) {
+    if (!name || !*name || orc_symbol_already_defined(name))
+        return;
+    if (g_orc_defined_count >= MAX_ORC_DEFINED)
+        return;
+    strncpy(g_orc_defined[g_orc_defined_count].name, name,
+            sizeof(g_orc_defined[g_orc_defined_count].name) - 1);
+    g_orc_defined[g_orc_defined_count].name[
+        sizeof(g_orc_defined[g_orc_defined_count].name) - 1] = '\0';
+    g_orc_defined_count++;
+}
+
+static bool repl_orc_define_absolute(REPLContext *ctx,
+                                     const char *name,
+                                     void *addr,
+                                     bool callable) {
+    if (!ctx || !ctx->jit || !ctx->jd || !name || !*name || !addr)
+        return true;
+    if (orc_symbol_already_defined(name))
+        return true;
+
+    LLVMOrcSymbolStringPoolEntryRef interned =
+        LLVMOrcLLJITMangleAndIntern(ctx->jit, name);
+    LLVMOrcCSymbolMapPair pair;
+    memset(&pair, 0, sizeof(pair));
+    pair.Name = interned;
+    pair.Sym.Address = (LLVMOrcExecutorAddress)(uintptr_t)addr;
+    pair.Sym.Flags.GenericFlags = LLVMJITSymbolGenericFlagsExported |
+                                  (callable ? LLVMJITSymbolGenericFlagsCallable : 0);
+    pair.Sym.Flags.TargetFlags = 0;
+
+    LLVMOrcMaterializationUnitRef mu = LLVMOrcAbsoluteSymbols(&pair, 1);
+    LLVMErrorRef err = LLVMOrcJITDylibDefine(ctx->jd, mu);
+    if (err) {
+        repl_report_llvm_error("REPL: ORC absolute symbol definition failed", err);
+        return false;
+    }
+
+    orc_note_defined_symbol(name);
+    return true;
+}
 
 // Host-side table mapping variable name -> malloc'd layout heap pointer
 typedef struct { char name[256]; void *ptr; } LayoutPtr;
@@ -186,14 +247,10 @@ __attribute__((weak)) void *__layout_ptr_get(const char *name) {
 /* -------------------------------------------------------------------------
  * Runtime symbol table
  *
- * Every runtime function that generated code may call must be registered
- * with LLVMAddGlobalMapping on the specific LLVMValueRef declaration inside
- * the *current* module.  We cannot do this once at boot — each fresh_module()
- * creates new LLVMValueRefs via declare_runtime_functions(), and those new
- * values must be mapped individually.
- *
- * We keep a flat table of { name -> host address } and call
- * map_runtime_in_module() after every declare_runtime_functions() call.
+ * ORC can resolve exported process symbols through its process generator.
+ * On Windows and static-link-heavy builds that is not enough, so the REPL
+ * also defines known runtime host addresses as absolute ORC symbols once
+ * during initialization.
  * ------------------------------------------------------------------------- */
 typedef struct { const char *name; void *addr; } RTSym;
 
@@ -286,21 +343,16 @@ static void rt_sym_table_init(void) {
 #undef ADD
 }
 
-/*
- * For every name in g_rt_syms, look up the matching LLVMValueRef in `mod`
- * (put there by declare_runtime_functions) and register its host address
- * with the engine.
- */
-static void map_runtime_in_module(LLVMExecutionEngineRef engine,
-                                  LLVMModuleRef mod) {
+static bool repl_orc_define_host_symbols(REPLContext *ctx) {
     for (int i = 0; i < g_rt_sym_count; i++) {
-        LLVMValueRef fn = LLVMGetNamedFunction(mod, g_rt_syms[i].name);
-        if (fn) LLVMAddGlobalMapping(engine, fn, g_rt_syms[i].addr);
+        if (!repl_orc_define_absolute(ctx, g_rt_syms[i].name,
+                                      g_rt_syms[i].addr, true))
+            return false;
     }
-    /* assert failure handler lives in repl.c — map it explicitly */
-    LLVMValueRef assert_fail = LLVMGetNamedFunction(mod, "__monad_assert_fail");
-    if (assert_fail)
-        LLVMAddGlobalMapping(engine, assert_fail, (void *)__monad_assert_fail);
+    if (!repl_orc_define_absolute(ctx, "__monad_assert_fail",
+                                  (void *)__monad_assert_fail, true))
+        return false;
+    return true;
 }
 
 /* -------------------------------------------------------------------------
@@ -308,13 +360,14 @@ static void map_runtime_in_module(LLVMExecutionEngineRef engine,
  *
  * LLVM verifier rejects IR that references globals from a different module.
  * We add extern declarations so the verifier passes, and the JIT resolves
- * them through the engine's accumulated symbol table.
+ * them through ORC's accumulated JITDylib symbol table.
  * ------------------------------------------------------------------------- */
 /*
  * Imported-symbol address table.
  * When handle_import runs repl_compile_module + dlopen, it registers each
- * mangled symbol name and its host address here.  redeclare_env_symbols then
- * calls LLVMAddGlobalMapping so MCJIT can resolve them.
+ * mangled symbol name and its host address here for reflection and fallback
+ * bookkeeping. ORC normally resolves these through its process generator after
+ * dlopen(..., RTLD_GLOBAL).
  */
 typedef struct { char name[256]; void *addr; } ImportedSym;
 #define MAX_IMPORTED 4096
@@ -337,14 +390,6 @@ static void register_imported_sym(const char *name, void *addr) {
     g_imported[g_imported_count].name[255] = '\0';
     g_imported[g_imported_count].addr = addr;
     g_imported_count++;
-}
-
-static void *lookup_imported_sym(const char *name) __attribute__((unused));
-static void *lookup_imported_sym(const char *name) {
-    for (int i = 0; i < g_imported_count; i++)
-        if (strcmp(g_imported[i].name, name) == 0)
-            return g_imported[i].addr;
-    return NULL;
 }
 
 static bool repl_file_exists(const char *path) {
@@ -502,99 +547,6 @@ static void redeclare_env_symbols(REPLContext *ctx) {
     }
 }
 
-/*
- * map_imported_in_module — called in close_and_run after LLVMAddModule.
- *
- * Registers addresses for:
- *   (a) runtime functions (g_rt_syms) — same as map_runtime_in_module but
- *       we now do both in one post-AddModule pass.
- *   (b) imported module symbols (g_imported) — functions/globals from
- *       dlopen'd modules.
- *
- * We look up each symbol by name in the module that was just handed to the
- * engine.  If it exists, we call LLVMAddGlobalMapping.  This is the correct
- * order: map AFTER AddModule, not before.
- */
-static void map_imported_in_module(LLVMExecutionEngineRef engine,
-                                   LLVMModuleRef mod) {
-    for (LLVMValueRef fn = LLVMGetFirstFunction(mod);
-         fn;
-         fn = LLVMGetNextFunction(fn)) {
-        const char *name = LLVMGetValueName(fn);
-        if (!name || !*name) continue;
-        if (strncmp(name, "__repl_wrap_", 12) == 0) continue;
-
-        if (LLVMCountBasicBlocks(fn) != 0) continue;
-
-        void *addr = lookup_imported_sym(name);
-        if (addr)
-            LLVMAddGlobalMapping(engine, fn, addr);
-    }
-
-    for (LLVMValueRef gv = LLVMGetFirstGlobal(mod);
-         gv;
-         gv = LLVMGetNextGlobal(gv)) {
-        const char *name = LLVMGetValueName(gv);
-        if (!name || !*name) continue;
-
-        if (LLVMGetInitializer(gv)) continue;
-
-        void *addr = lookup_imported_sym(name);
-        if (addr)
-            LLVMAddGlobalMapping(engine, gv, addr);
-    }
-}
-
-static void map_ffi_in_module(LLVMExecutionEngineRef engine,
-                               LLVMModuleRef mod,
-                               FFIContext *ffi) {
-    if (!ffi) return;
-    for (int i = 0; i < ffi->function_count; i++) {
-        const char *name = ffi->functions[i].name;
-        LLVMValueRef fn  = LLVMGetNamedFunction(mod, name);
-        if (!fn) continue;
-        /* Look up the symbol in the process - works if the .so was
-         * dlopen'd with RTLD_GLOBAL or the binary was linked with it */
-        void *addr = dlsym(RTLD_DEFAULT, name);
-        if (addr)
-            LLVMAddGlobalMapping(engine, fn, addr);
-    }
-}
-
-static void register_repl_defined_symbols(REPLContext *ctx,
-                                          LLVMModuleRef mod) {
-    for (LLVMValueRef fn = LLVMGetFirstFunction(mod);
-         fn;
-         fn = LLVMGetNextFunction(fn)) {
-        const char *name = LLVMGetValueName(fn);
-        if (!name || !*name) continue;
-        if (strncmp(name, "__repl_wrap_", 12) == 0) continue;
-
-        /* Declarations have no basic blocks. Only record real definitions. */
-        if (LLVMCountBasicBlocks(fn) == 0) continue;
-
-        uint64_t addr = LLVMGetFunctionAddress(ctx->engine, name);
-        if (addr) {
-            register_imported_sym(name, (void *)(uintptr_t)addr);
-        }
-    }
-
-    for (LLVMValueRef gv = LLVMGetFirstGlobal(mod);
-         gv;
-         gv = LLVMGetNextGlobal(gv)) {
-        const char *name = LLVMGetValueName(gv);
-        if (!name || !*name) continue;
-
-        /* External declarations have no initializer. Only record real globals. */
-        if (!LLVMGetInitializer(gv)) continue;
-
-        uint64_t addr = LLVMGetGlobalValueAddress(ctx->engine, name);
-        if (addr) {
-            register_imported_sym(name, (void *)(uintptr_t)addr);
-        }
-    }
-}
-
 /// Module lifecycle
 
 static void fresh_module(REPLContext *ctx, const char *mod_name) {
@@ -602,7 +554,7 @@ static void fresh_module(REPLContext *ctx, const char *mod_name) {
         LLVMDisposeBuilder(ctx->cg.builder);
         ctx->cg.builder = NULL;
     }
-    /* Previous module was handed to the engine — do NOT dispose it. */
+    /* Previous module was handed to ORC — do NOT dispose it. */
 
     ctx->cg.module  = LLVMModuleCreateWithNameInContext(mod_name,
                                                         ctx->cg.context);
@@ -616,9 +568,8 @@ static void fresh_module(REPLContext *ctx, const char *mod_name) {
     /* 1. Declare runtime functions in this module */
     declare_runtime_functions(&ctx->cg);
 
-    /* 2. Re-declare env globals/funcs from previous modules (declarations only).
-     * LLVMAddGlobalMapping is called in close_and_run AFTER LLVMAddModule —
-     * MCJIT requires mappings to be registered after the module is added.   */
+    /* 2. Re-declare env globals/funcs from previous modules as declarations.
+     * ORC resolves them from the persistent main JITDylib. */
     redeclare_env_symbols(ctx);
 }
 
@@ -1467,25 +1418,58 @@ static bool close_and_run(REPLContext *ctx) {
     if (err) LLVMDisposeMessage(err);
 
     LLVMModuleRef mod = ctx->cg.module;
-    LLVMAddModule(ctx->engine, mod);
     ctx->cg.module = NULL;
 
-    /* Map runtime functions first */
-    map_runtime_in_module(ctx->engine, mod);
+    char defined_names[512][256];
+    int defined_count = 0;
+    for (LLVMValueRef fnv = LLVMGetFirstFunction(mod);
+         fnv && defined_count < 512;
+         fnv = LLVMGetNextFunction(fnv)) {
+        const char *name = LLVMGetValueName(fnv);
+        if (!name || !*name) continue;
+        if (strncmp(name, "__repl_wrap_", 12) == 0) continue;
+        if (LLVMCountBasicBlocks(fnv) == 0) continue;
+        LLVMLinkage linkage = LLVMGetLinkage(fnv);
+        if (linkage == LLVMPrivateLinkage || linkage == LLVMInternalLinkage)
+            continue;
+        strncpy(defined_names[defined_count], name,
+                sizeof(defined_names[defined_count]) - 1);
+        defined_names[defined_count][sizeof(defined_names[defined_count]) - 1] = '\0';
+        defined_count++;
+    }
+    for (LLVMValueRef gv = LLVMGetFirstGlobal(mod);
+         gv && defined_count < 512;
+         gv = LLVMGetNextGlobal(gv)) {
+        const char *name = LLVMGetValueName(gv);
+        if (!name || !*name) continue;
+        if (!LLVMGetInitializer(gv)) continue;
+        LLVMLinkage linkage = LLVMGetLinkage(gv);
+        if (linkage == LLVMPrivateLinkage || linkage == LLVMInternalLinkage)
+            continue;
+        strncpy(defined_names[defined_count], name,
+                sizeof(defined_names[defined_count]) - 1);
+        defined_names[defined_count][sizeof(defined_names[defined_count]) - 1] = '\0';
+        defined_count++;
+    }
 
-    /* Map imported module symbols (Math__fib etc.) */
-    map_imported_in_module(ctx->engine, mod);
+    LLVMOrcThreadSafeModuleRef tsm =
+        LLVMOrcCreateNewThreadSafeModule(mod, ctx->tsc);
+    LLVMErrorRef add_err =
+        LLVMOrcLLJITAddLLVMIRModule(ctx->jit, ctx->jd, tsm);
+    if (add_err) {
+        repl_report_llvm_error("Error: ORC could not add REPL module", add_err);
+        return false;
+    }
 
-    /* Map FFI symbols (raylib, SDL, etc.) */
-    map_ffi_in_module(ctx->engine, mod, ctx->cg.ffi);
+    LLVMOrcExecutorAddress wrapper_addr = 0;
+    LLVMErrorRef lookup_err =
+        LLVMOrcLLJITLookup(ctx->jit, &wrapper_addr, g_wrapper_name);
+    if (lookup_err) {
+        repl_report_llvm_error("Error: ORC lookup failed", lookup_err);
+        return false;
+    }
 
-    /* Previous REPL definitions and imported module symbols were already
-     * handled by map_imported_in_module().  That pass scans only the
-     * unresolved declarations in this module, so we do not need to walk the
-     * whole persistent environment on every expression. */
-
-    void (*fn)(void) = (void(*)(void))
-        LLVMGetFunctionAddress(ctx->engine, g_wrapper_name);
+    void (*fn)(void) = (void(*)(void))(uintptr_t)wrapper_addr;
 
     if (!fn) {
         fprintf(stderr, "Error: JIT could not find %s\n", g_wrapper_name);
@@ -1494,7 +1478,18 @@ static bool close_and_run(REPLContext *ctx) {
 
     fn();
 
-    register_repl_defined_symbols(ctx, mod);
+    for (int i = 0; i < defined_count; i++) {
+        LLVMOrcExecutorAddress addr = 0;
+        LLVMErrorRef sym_err =
+            LLVMOrcLLJITLookup(ctx->jit, &addr, defined_names[i]);
+        if (sym_err) {
+            repl_report_llvm_error("REPL: ORC symbol registration lookup failed",
+                                   sym_err);
+            continue;
+        }
+        if (addr)
+            register_imported_sym(defined_names[i], (void *)(uintptr_t)addr);
+    }
 
     arena_reset(&g_eval_arena);
     return true;
@@ -1900,7 +1895,6 @@ void repl_init(REPLContext *ctx) {
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
-    LLVMLinkInMCJIT();
 
     rt_sym_table_init();
 
@@ -1926,8 +1920,11 @@ void repl_init(REPLContext *ctx) {
     sigaction(SIGINT, &sa_int, NULL);
 #endif
 
-
+    ctx->jit           = NULL;
+    ctx->jd            = NULL;
     ctx->cg.context    = LLVMContextCreate();
+    ctx->tsc           =
+        LLVMOrcCreateNewThreadSafeContextFromLLVMContext(ctx->cg.context);
     ctx->cg.module     = NULL;
     ctx->cg.builder    = NULL;
     ctx->cg.env        = env_create();
@@ -1943,16 +1940,27 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.current_function_name = NULL;
     ctx->cg.tc_registry = tc_registry_create();
 
-    /* Bootstrap engine from an empty module */
-    LLVMModuleRef boot = LLVMModuleCreateWithNameInContext(
-        "__repl_boot", ctx->cg.context);
-    char *error = NULL;
-    if (LLVMCreateExecutionEngineForModule(&ctx->engine, boot, &error) != 0) {
-        fprintf(stderr, "REPL: engine creation failed: %s\n", error);
-        LLVMDisposeMessage(error);
+    LLVMErrorRef jit_err = LLVMOrcCreateLLJIT(&ctx->jit, NULL);
+    if (jit_err) {
+        repl_report_llvm_error("REPL: ORC LLJIT creation failed", jit_err);
         _Exit(1);
     }
-    /* boot is owned by engine now */
+    ctx->jd = LLVMOrcLLJITGetMainJITDylib(ctx->jit);
+
+    LLVMOrcDefinitionGeneratorRef process_gen = NULL;
+    LLVMErrorRef gen_err =
+        LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(
+            &process_gen, LLVMOrcLLJITGetGlobalPrefix(ctx->jit), NULL, NULL);
+    if (gen_err) {
+        repl_report_llvm_error("REPL: ORC process symbol generator failed",
+                               gen_err);
+        _Exit(1);
+    }
+    LLVMOrcJITDylibAddGenerator(ctx->jd, process_gen);
+
+    if (!repl_orc_define_host_symbols(ctx)) {
+        _Exit(1);
+    }
 
     ctx->cg.ffi = ffi_context_create();
     register_builtins(&ctx->cg);
@@ -2015,7 +2023,15 @@ void repl_init(REPLContext *ctx) {
 void repl_dispose(REPLContext *ctx) {
     if (ctx->cg.builder) LLVMDisposeBuilder(ctx->cg.builder);
     if (ctx->cg.module)  LLVMDisposeModule(ctx->cg.module);
-    LLVMDisposeExecutionEngine(ctx->engine);
+    if (ctx->jit) {
+        LLVMErrorRef err = LLVMOrcDisposeLLJIT(ctx->jit);
+        if (err) repl_report_llvm_error("REPL: ORC LLJIT disposal failed", err);
+        ctx->jit = NULL;
+    }
+    if (ctx->tsc) {
+        LLVMOrcDisposeThreadSafeContext(ctx->tsc);
+        ctx->tsc = NULL;
+    }
     if (ctx->cg.tc_registry) {
         tc_registry_free(ctx->cg.tc_registry);
         ctx->cg.tc_registry = NULL;
@@ -2760,7 +2776,13 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     free(source_copy);
 
 
-    if (!res.value) {
+    bool definition_or_layout =
+        ast_was_layout ||
+        (ast && ast->type == AST_LIST && ast->list.count >= 1 &&
+         ast->list.items[0]->type == AST_SYMBOL &&
+         strcmp(ast->list.items[0]->symbol, "define") == 0);
+
+    if (!res.value && !definition_or_layout) {
         if (ast) ast_free(ast);
         recover_module(ctx);
         fresh_module(ctx, "__repl_recover");

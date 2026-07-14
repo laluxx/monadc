@@ -37,6 +37,7 @@ SUITES: dict[str, Suite] = {
             py("tests/test_checkout_local_paths.py"),
             py("tests/test_readme_product.py"),
             py("tests/test_unified_test_entrypoint.py"),
+            py("tests/test_repl.py"),
             py("tests/test_how_to_examples.py"),
             py("tests/test_bytecode.py"),
         ),

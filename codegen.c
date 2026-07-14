@@ -17,7 +17,9 @@
 #include <ctype.h>
 #include <math.h>
 #include <llvm-c/Core.h>
-#include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/Error.h>
+#include <llvm-c/LLJIT.h>
+#include <llvm-c/Orc.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Analysis.h>
 #include <llvm-c/BitWriter.h>
@@ -3980,13 +3982,83 @@ static void print_defined(const char *var_name, Type *fallback_type,
 }
 
 static unsigned int g_jit_pred_seq = 0;
-static LLVMExecutionEngineRef g_refinement_engine = NULL;
-static LLVMContextRef         g_refinement_ctx    = NULL;
+
+static void codegen_report_llvm_error(const char *prefix, LLVMErrorRef err) {
+    if (!err) return;
+    char *msg = LLVMGetErrorMessage(err);
+    fprintf(stderr, "%s: %s\n", prefix, msg ? msg : "unknown LLVM error");
+    LLVMDisposeErrorMessage(msg);
+}
 
 static void ensure_refinement_ctx(void) {
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
-    LLVMLinkInMCJIT();
+}
+
+static bool codegen_orc_add_module_and_lookup(LLVMContextRef *ctx_ref,
+                                              LLVMModuleRef *mod_ref,
+                                              const char *symbol,
+                                              LLVMOrcLLJITRef *jit_out,
+                                              LLVMOrcThreadSafeContextRef *tsc_out,
+                                              LLVMOrcExecutorAddress *addr_out) {
+    *jit_out = NULL;
+    *tsc_out = NULL;
+    *addr_out = 0;
+
+    LLVMOrcLLJITRef jit = NULL;
+    LLVMErrorRef err = LLVMOrcCreateLLJIT(&jit, NULL);
+    if (err) {
+        codegen_report_llvm_error("ORC: LLJIT creation failed", err);
+        return false;
+    }
+
+    LLVMOrcDefinitionGeneratorRef process_gen = NULL;
+    err = LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(
+        &process_gen, LLVMOrcLLJITGetGlobalPrefix(jit), NULL, NULL);
+    if (err) {
+        codegen_report_llvm_error("ORC: process symbol generator failed", err);
+        LLVMOrcDisposeLLJIT(jit);
+        return false;
+    }
+    LLVMOrcJITDylibRef jd = LLVMOrcLLJITGetMainJITDylib(jit);
+    LLVMOrcJITDylibAddGenerator(jd, process_gen);
+
+    LLVMOrcThreadSafeContextRef tsc =
+        LLVMOrcCreateNewThreadSafeContextFromLLVMContext(*ctx_ref);
+    LLVMOrcThreadSafeModuleRef tsm =
+        LLVMOrcCreateNewThreadSafeModule(*mod_ref, tsc);
+    *ctx_ref = NULL;
+    *mod_ref = NULL;
+
+    err = LLVMOrcLLJITAddLLVMIRModule(jit, jd, tsm);
+    if (err) {
+        codegen_report_llvm_error("ORC: add module failed", err);
+        LLVMOrcDisposeLLJIT(jit);
+        LLVMOrcDisposeThreadSafeContext(tsc);
+        return false;
+    }
+
+    err = LLVMOrcLLJITLookup(jit, addr_out, symbol);
+    if (err) {
+        codegen_report_llvm_error("ORC: symbol lookup failed", err);
+        LLVMOrcDisposeLLJIT(jit);
+        LLVMOrcDisposeThreadSafeContext(tsc);
+        return false;
+    }
+
+    *jit_out = jit;
+    *tsc_out = tsc;
+    return *addr_out != 0;
+}
+
+static void codegen_orc_dispose(LLVMOrcLLJITRef jit,
+                                LLVMOrcThreadSafeContextRef tsc) {
+    if (jit) {
+        LLVMErrorRef err = LLVMOrcDisposeLLJIT(jit);
+        if (err) codegen_report_llvm_error("ORC: LLJIT disposal failed", err);
+    }
+    if (tsc)
+        LLVMOrcDisposeThreadSafeContext(tsc);
 }
 
 /* Cache: type_name -> result for already-checked literals */
@@ -4120,9 +4192,7 @@ static int jit_eval_refinement(CodegenContext *ctx,
         }
     }
 
-    /* Compile all refinement predicates directly into this module,
-     * but only if they haven't already been compiled into a previous
-     * JIT module — duplicate definitions cause MCJIT to fail.       */
+    /* Compile all refinement predicates directly into this module. */
     for (RefinementEntry *re = g_refinements; re; re = re->next) {
         if (!re->predicate_ast || !re->var) continue;
         char sub_name[256];
@@ -4130,11 +4200,8 @@ static int jit_eval_refinement(CodegenContext *ctx,
         if (LLVMGetNamedFunction(tmp_mod, sub_name)) continue;
 
 
-        /* Always recompile into this module — cross-module symbol resolution
-         * is unreliable with MCJIT's LLVMAddModule. Each module must be
-         * self-contained with all predicates it depends on defined inline.
-         *
-         * Also recompile any user-defined functions referenced by this predicate. */
+        /* Keep each refinement evaluator self-contained, including any
+         * user-defined functions referenced by the predicate. */
         {
             /* Walk the predicate AST and recompile any user ENV_FUNC entries
              * that are not refinement predicates and not yet in tmp_mod.     */
@@ -4360,15 +4427,14 @@ static int jit_eval_refinement(CodegenContext *ctx,
         }
         if (err) LLVMDisposeMessage(err);
 
-        LLVMExecutionEngineRef eval_ee = NULL;
-        char *ee_err = NULL;
-        if (LLVMCreateExecutionEngineForModule(&eval_ee, tmp_mod, &ee_err) != 0) {
-            if (ee_err) LLVMDisposeMessage(ee_err);
+        LLVMOrcLLJITRef eval_jit = NULL;
+        LLVMOrcThreadSafeContextRef eval_tsc = NULL;
+        LLVMOrcExecutorAddress fn_addr = 0;
+        if (!codegen_orc_add_module_and_lookup(&eval_ctx, &tmp_mod, wrap_name,
+                                               &eval_jit, &eval_tsc, &fn_addr)) {
             goto cleanup;
         }
-        tmp_mod = NULL; /* engine owns it */
 
-        uint64_t fn_addr = LLVMGetFunctionAddress(eval_ee, wrap_name);
         if (fn_addr) {
             if (is_str) {
                 typedef long long (*pred_str_t)(const char *);
@@ -4380,16 +4446,18 @@ static int jit_eval_refinement(CodegenContext *ctx,
                 result = (r & 0xFF) ? 1 : 0;
             }
         }
-        LLVMDisposeExecutionEngine(eval_ee);
+        LLVMDisposeBuilder(tmp_bld);
+        tmp_bld = NULL;
+        codegen_orc_dispose(eval_jit, eval_tsc);
 
     } else {
         LLVMBuildRet(tmp_bld, LLVMConstInt(i1, 1, 0));
     }
 
 cleanup:
-    LLVMDisposeBuilder(tmp_bld);
+    if (tmp_bld) LLVMDisposeBuilder(tmp_bld);
     if (tmp_mod) LLVMDisposeModule(tmp_mod);
-    LLVMContextDispose(eval_ctx);
+    if (eval_ctx) LLVMContextDispose(eval_ctx);
 
     env_free(jit_ctx.env);
 
@@ -7146,11 +7214,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             /* Verify and run to extract the return value */
                             char *verr = NULL;
                             if (LLVMVerifyModule(jit_mod, LLVMReturnStatusAction, &verr) == 0) {
-                                LLVMExecutionEngineRef ee = NULL;
-                                char *ee_err = NULL;
-                                if (LLVMCreateExecutionEngineForModule(&ee, jit_mod, &ee_err) == 0) {
-                                    jit_mod = NULL;
-                                    uint64_t addr = LLVMGetFunctionAddress(ee, jfn_name);
+                                LLVMOrcLLJITRef ee = NULL;
+                                LLVMOrcThreadSafeContextRef ee_tsc = NULL;
+                                LLVMOrcExecutorAddress addr = 0;
+                                if (codegen_orc_add_module_and_lookup(&jit_ctx2, &jit_mod,
+                                                                       jfn_name, &ee,
+                                                                       &ee_tsc, &addr)) {
                                     if (addr) {
                                         AST *ret_ast = NULL;
                                         if (fn_ret_str) {
@@ -7168,9 +7237,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                             int ok = jit_eval_refinement(ctx, rtype_name, ret_ast);
                                             ast_free(ret_ast);
                                             if (ok == 0) {
-                                                LLVMDisposeExecutionEngine(ee);
                                                 LLVMDisposeBuilder(jit_bld);
+                                                jit_bld = NULL;
+                                                codegen_orc_dispose(ee, ee_tsc);
                                                 LLVMContextDispose(jit_ctx2);
+                                                jit_ctx2 = NULL;
                                                 env_free(jc.env);
                                                 CODEGEN_ERROR(ctx,
                                                     "%s:%d:%d: error: function ‘%s’ declares return type "
@@ -7180,17 +7251,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                             }
                                         }
                                     }
-                                    LLVMDisposeExecutionEngine(ee);
-                                } else {
-                                    if (ee_err) LLVMDisposeMessage(ee_err);
+                                    if (jit_bld) {
+                                        LLVMDisposeBuilder(jit_bld);
+                                        jit_bld = NULL;
+                                    }
+                                    codegen_orc_dispose(ee, ee_tsc);
                                 }
                             } else {
                                 if (verr) LLVMDisposeMessage(verr);
                             }
 
-                            LLVMDisposeBuilder(jit_bld);
+                            if (jit_bld) LLVMDisposeBuilder(jit_bld);
                             if (jit_mod) LLVMDisposeModule(jit_mod);
-                            LLVMContextDispose(jit_ctx2);
+                            if (jit_ctx2) LLVMContextDispose(jit_ctx2);
                             env_free(jc.env);
                         }
                     }

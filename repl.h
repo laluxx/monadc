@@ -2,14 +2,17 @@
 #define REPL_H
 
 #include <stdbool.h>
-#include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/LLJIT.h>
+#include <llvm-c/Orc.h>
 #include "codegen.h"
 #include "env.h"
 #include "module.h"
 #include "infer.h"
 
 typedef struct {
-    LLVMExecutionEngineRef engine;      // persistent across expressions
+    LLVMOrcLLJITRef        jit;         // persistent ORC LLJIT across expressions
+    LLVMOrcJITDylibRef     jd;          // main JITDylib owned by jit
+    LLVMOrcThreadSafeContextRef tsc;    // owns the LLVM context used by modules
     CodegenContext         cg;          // module/builder replaced per expr
     unsigned int           expr_count;
     InferEnv              *infer_env;   // persistent HM type environment

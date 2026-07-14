@@ -146,6 +146,22 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("struct sigaction", repl_c)
         self.assertIn('#include "compat.h"', types_c)
 
+    def test_repl_uses_orc_jit_not_mcjit(self):
+        repl_c = read("repl.c")
+        repl_h = read("repl.h")
+        codegen_c = read("codegen.c")
+        codegen_h = read("codegen.h")
+        main_c = read("main.c")
+
+        self.assertIn("#include <llvm-c/LLJIT.h>", repl_c)
+        self.assertIn("LLVMOrcCreateLLJIT", repl_c)
+        self.assertIn("LLVMOrcLLJITAddLLVMIRModule", repl_c)
+        self.assertIn("LLVMOrcLLJITLookup", repl_c)
+        self.assertIn("LLVMOrcCreateLLJIT", codegen_c)
+        self.assertNotIn("LLVMCreateExecutionEngineForModule", repl_c + codegen_c)
+        self.assertNotIn("LLVMLinkInMCJIT", repl_c + codegen_c)
+        self.assertNotIn("#include <llvm-c/ExecutionEngine.h>", repl_c + repl_h + codegen_c + codegen_h + main_c)
+
     def test_debugger_header_and_cmake_are_windows_safe(self):
         debugger_h = read("debugger.h")
         cmake = read("CMakeLists.txt")
