@@ -1195,6 +1195,17 @@ Test-driven observations and failure records for the corresponding subsystem.
   =i -> 3= binding is visible to a following =show i= expression and prints
   =3=. The paired reader TSV regression pins the desugared binding shape.
 
+[FIX id:fix.tests.wisp-for-range-2026-07-14 date:2026-07-14 by:codex src:tests/codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.for.range,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.list.count conf:high]
+  =tests.codegen.rt-wisp-for-range= proves =for i -> 1..30= iterates and prints
+  the inclusive range. =tests.codegen.rt-range-list-count= pins the lower-level
+  =count= behavior for closed list ranges and raw =RuntimeList*= values.
+
+[TODO id:todo.tests.wisp-for-body-assignment owner:codex status:open]
+  Add coverage and fix recursive Wisp =for= body expansion for assignment
+  statements such as =sum <- sum + i=. During the range work, =show i= grouped
+  correctly after the arity fix, but assignment inside the recursive body still
+  needs statement-level expansion rather than expression-only token parsing.
+
 [FIX id:fix.tests.core-maybe-either-runtime-contracts-2026-06-27 date:2026-06-27 by:codex]
   =core/prelude/Data/Maybe.mon= and =core/prelude/Data/Either.mon= now use
   active runtime assertions for their exported ADT helper APIs instead of

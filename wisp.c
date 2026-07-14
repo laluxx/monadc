@@ -116,6 +116,15 @@ int wisp_get_arity(const char *name) {
     return arity_get(&g_ffi_arities, name);
 }
 
+static int wisp_lookup_arity(ArityTable *t, const char *name) {
+    int arity = arity_get(t, name);
+    if (arity != -2)
+        return arity;
+    if (!g_ffi_arities_init)
+        return arity;
+    return arity_get(&g_ffi_arities, name);
+}
+
 void wisp_set_trace(bool enabled) {
     g_wisp_trace_enabled = enabled;
 }
@@ -1197,6 +1206,75 @@ static const char *wisp_find_top_level_arrow(const char *s) {
         else if (depth == 0 && *q == '-' && *(q + 1) == '>') return q;
     }
     return NULL;
+}
+
+static bool wisp_has_top_level_dotdot(const char *s) {
+    int depth = 0;
+    bool in_str = false;
+    bool in_char = false;
+    bool escape = false;
+
+    for (const char *q = s; *q; q++) {
+        if (in_str) {
+            if (escape) escape = false;
+            else if (*q == '\\') escape = true;
+            else if (*q == '"') in_str = false;
+            continue;
+        }
+
+        if (in_char) {
+            if (escape) escape = false;
+            else if (*q == '\\') escape = true;
+            else if (*q == '\'') in_char = false;
+            continue;
+        }
+
+        if (*q == '"') { in_str = true; continue; }
+        if (*q == '\'') { in_char = true; continue; }
+        if (*q == ';') break;
+
+        if (*q == '(' || *q == '[' || *q == '{') {
+            depth++;
+            continue;
+        }
+        if (*q == ')' || *q == ']' || *q == '}') {
+            if (depth > 0) depth--;
+            continue;
+        }
+
+        if (depth == 0 && q[0] == '.' && q[1] == '.')
+            return true;
+    }
+
+    return false;
+}
+
+static char *wisp_wrap_bare_range_expr(const char *expr, bool *wrapped) {
+    if (wrapped) *wrapped = false;
+    const char *start = expr;
+    while (*start == ' ' || *start == '\t') start++;
+    const char *end = start + strlen(start);
+    while (end > start && (*(end - 1) == ' ' || *(end - 1) == '\t'))
+        end--;
+
+    char *trimmed = strndup(start, (size_t)(end - start));
+    if (!trimmed)
+        return NULL;
+
+    if (!wisp_has_top_level_dotdot(trimmed) ||
+        trimmed[0] == '(' ||
+        trimmed[0] == '[' ||
+        trimmed[0] == '{')
+        return trimmed;
+
+    SB out;
+    sb_init(&out);
+    sb_putc(&out, '(');
+    sb_puts(&out, trimmed);
+    sb_putc(&out, ')');
+    free(trimmed);
+    if (wrapped) *wrapped = true;
+    return sb_take(&out);
 }
 
 static bool wisp_has_top_level_pipe(const char *s) {
@@ -5180,6 +5258,9 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     while (*iter_expr_start == ' ' || *iter_expr_start == '\t') iter_expr_start++;
                     const char *iter_expr_end = get_logical_line_end(iter_expr_start);
                     char *iter_expr = strndup(iter_expr_start, iter_expr_end - iter_expr_start);
+                    bool iter_expr_is_bare_range = false;
+                    char *iter_expr_readable =
+                        wisp_wrap_bare_range_expr(iter_expr, &iter_expr_is_bare_range);
 
                     /* Nesting depth is tracked via the recursive call stack:
                      * g_for_iter_depth is incremented before we recurse into
@@ -5263,15 +5344,28 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                     /* Build desugared s-expression */
                     SB ds; sb_init(&ds);
+                    char iterable_var[64];
+                    if (iter_expr_is_bare_range) {
+                        snprintf(iterable_var, sizeof(iterable_var),
+                                 "__wisp_iterable%d", iter_depth);
+                        sb_puts(&ds, "(let [");
+                        sb_puts(&ds, iterable_var);
+                        sb_putc(&ds, ' ');
+                        sb_puts(&ds, iter_expr_readable);
+                        sb_puts(&ds, "] ");
+                    }
+                    const char *iterable_expr = iter_expr_is_bare_range
+                        ? iterable_var
+                        : iter_expr_readable;
                         if (is_forward) {
                             sb_puts(&ds, "(for [");
                             sb_puts(&ds, iter_var);
                             sb_puts(&ds, " 0 (count ");
-                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, iterable_expr);
                             sb_puts(&ds, ")] (define ");
                             sb_puts(&ds, bind_name);
                             sb_puts(&ds, " (");
-                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, iterable_expr);
                             sb_puts(&ds, " ");
                             sb_puts(&ds, iter_var);
                             sb_puts(&ds, "))");
@@ -5279,11 +5373,11 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             sb_puts(&ds, "(for [");
                             sb_puts(&ds, iter_var);
                             sb_puts(&ds, " (- (count ");
-                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, iterable_expr);
                             sb_puts(&ds, ") 1) -1 -1] (define ");
                             sb_puts(&ds, bind_name);
                             sb_puts(&ds, " (");
-                            sb_puts(&ds, iter_expr);
+                            sb_puts(&ds, iterable_expr);
                             sb_puts(&ds, " ");
                             sb_puts(&ds, iter_var);
                             sb_puts(&ds, "))");
@@ -5293,11 +5387,14 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         sb_puts(&ds, body_expanded);
                     }
                     sb_putc(&ds, ')');
+                    if (iter_expr_is_bare_range)
+                        sb_putc(&ds, ')');
                     free(body_expanded);
 
                     char *desugared = sb_take(&ds);
                     wts_push(&s, desugared, indent, lineno);
                     free(desugared);
+                    free(iter_expr_readable);
                     free(iter_expr);
                     free(bind_name);
                     free(raw);
@@ -10035,7 +10132,9 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                        (text[0] == '~' && text[1] == '[') ||
                        (text[0] == '#' && text[1] == '{'));
 
-    int arity = is_grouped ? 0 : arity_get(t, text);
+    int arity = is_grouped ? 0 : wisp_lookup_arity(t, text);
+    if (!is_grouped && strcmp(text, "show") == 0)
+        arity = 1;
 
     if (!is_grouped) {
         /* fprintf(stderr, "DEBUG wisp_parse_expr: text='%s' arity=%d pos=%d\n", text, arity, s->pos); */
@@ -10089,7 +10188,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
             s->tokens[s->pos].lineno == my_lineno) {
             /* Check the next token is a value, not an operator that would
              * be handled by the infix loop (arity >= 2). */
-            int next_ar = arity_get(t, s->tokens[s->pos].text);
+            int next_ar = wisp_lookup_arity(t, s->tokens[s->pos].text);
             bool next_is_value = (next_ar == 0 || next_ar == -2 ||
                                   s->tokens[s->pos].text[0] == '(' ||
                                   s->tokens[s->pos].text[0] == '[' ||
@@ -10149,7 +10248,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                                        arg->text[0] != '{' &&
                                        !(arg->text[0] == '~' && arg->text[1] == '[') &&
                                        !(arg->text[0] == '#' && arg->text[1] == '{');
-                    int arg_arity = arg_is_atom ? arity_get(t, arg->text) : -2;
+                    int arg_arity = arg_is_atom ? wisp_lookup_arity(t, arg->text) : -2;
                     preserve_later_fixed_slots = arg_is_atom && arg_arity > 0;
                 }
                 if (kind == PARAM_FUNC || args_are_bare || preserve_later_fixed_slots) {
@@ -10206,7 +10305,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                         !(op_tok->text[0] == '~' && op_tok->text[1] == '[') &&
                         op_tok->text[0] != '{');
         if (!op_atom) break;
-        int op_ar = arity_get(t, op_tok->text);
+        int op_ar = wisp_lookup_arity(t, op_tok->text);
         if (op_ar < 2 && op_ar != -1) break;
 
         int op_prec = op_precedence(op_tok->text);

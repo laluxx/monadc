@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-range-list-count
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.rt.range.list.count
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arrays-ranges
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.collections.range-count
+;; TEST-PURPOSE: Closed list ranges report their finite element count.
+;; TEST-ATOM: (count (1..30)) returns 30 for the raw RuntimeList* range path.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c count special form for TYPE_LIST
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.list.count
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.list.count
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.rt.range.list.count
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(show (count (1..30)))
+(define xs (1..30))
+(show (count xs))
+(show (xs 0))
+(show (xs 29))

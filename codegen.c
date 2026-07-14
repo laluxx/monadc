@@ -11500,6 +11500,16 @@ if (ast->list.count >= 5) {
                     return result;
                 }
 
+                // 3. Raw list handling: range and list codegen produce RuntimeList*,
+                // not boxed RuntimeValue*, so count them directly.
+                if (col_r.type && col_r.type->kind == TYPE_LIST) {
+                    result.value = LLVMBuildCall2(ctx->builder,
+                                                  LLVMFunctionType(i64_t, &ptr_t, 1, 0),
+                                                  get_rt_list_length(ctx), &val, 1, "list_cnt");
+                    result.type = type_int();
+                    return result;
+                }
+
                 // 3. Map handling: Unbox and call rt_map_count
                 if (col_r.type && col_r.type->kind == TYPE_MAP) {
                     LLVMValueRef ub_fn = get_rt_unbox_map(ctx);

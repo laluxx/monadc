@@ -537,6 +537,12 @@ Expected Wisp shape:
   =i -> 3= followed by =show i= is a usable top-level binding without stealing
   =define f x -> body= or nested pattern clauses.
 
+[FIX id:fix.reader.wisp-for-bare-range-2026-07-14 date:2026-07-14 by:codex src:wisp.c conf:high]
+  Wisp =for i -> 1..30= normalizes the bare top-level range expression to the
+  reader's parenthesized range shape and binds it once before lowering to the
+  existing =count= plus index loop. Recursive Wisp body expansion treats =show=
+  as unary even in =--emit-json= paths where builtin arities are not registered.
+
 [OBS id:obs.reader.heap-array-golden-json src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.runtime/rt_heap_array_runtime.json,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.heap.array.for/rt_heap_array_for.json conf:high]
   Heap array regressions now carry expected AST JSON sidecars. These goldens make
   the =AST_ARRAY.array.is_heap=true= contract observable alongside runtime stdout
