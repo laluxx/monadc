@@ -56,6 +56,7 @@ static const char *dlerror(void) { return "dynamic loading is not available on t
 #include <llvm-c/Analysis.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Support.h>
+#include <llvm-c/Transforms/PassBuilder.h>
 #include <llvm/Config/llvm-config.h>
 
 ASTList wisp_parse_all(const char *source, const char *filename);
@@ -342,6 +343,78 @@ static bool repl_orc_define_host_symbols(REPLContext *ctx) {
     return true;
 }
 
+static LLVMTargetMachineRef repl_orc_create_target_machine(LLVMCodeGenOptLevel level) {
+    char *triple = LLVMGetDefaultTargetTriple();
+    if (!triple) return NULL;
+
+    LLVMTargetRef target = NULL;
+    char *target_err = NULL;
+    if (LLVMGetTargetFromTriple(triple, &target, &target_err) != 0 || !target) {
+        if (target_err) LLVMDisposeMessage(target_err);
+        LLVMDisposeMessage(triple);
+        return NULL;
+    }
+    if (target_err) LLVMDisposeMessage(target_err);
+
+    char *cpu = LLVMGetHostCPUName();
+    char *features = LLVMGetHostCPUFeatures();
+    LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
+        target, triple,
+        cpu ? cpu : "generic",
+        features ? features : "",
+        level, LLVMRelocDefault, LLVMCodeModelDefault);
+
+    if (features) LLVMDisposeMessage(features);
+    if (cpu) LLVMDisposeMessage(cpu);
+    LLVMDisposeMessage(triple);
+    return tm;
+}
+
+static void repl_orc_configure_module(REPLContext *ctx, LLVMModuleRef mod,
+                                      LLVMTargetMachineRef tm) {
+    if (!mod) return;
+
+    char *triple = LLVMGetDefaultTargetTriple();
+    if (triple) {
+        LLVMSetTarget(mod, triple);
+        LLVMDisposeMessage(triple);
+    }
+
+    if (ctx && ctx->jit) {
+        const char *layout = LLVMOrcLLJITGetDataLayoutStr(ctx->jit);
+        if (layout && *layout) {
+            LLVMSetDataLayout(mod, layout);
+            return;
+        }
+    }
+
+    if (!tm) return;
+    LLVMTargetDataRef data = LLVMCreateTargetDataLayout(tm);
+    if (!data) return;
+
+    char *layout = LLVMCopyStringRepOfTargetData(data);
+    if (layout) {
+        LLVMSetDataLayout(mod, layout);
+        LLVMDisposeMessage(layout);
+    }
+    LLVMDisposeTargetData(data);
+}
+
+static bool repl_orc_run_pass_pipeline(LLVMModuleRef mod,
+                                       LLVMTargetMachineRef tm) {
+    LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
+    if (!opts) return true;
+
+    LLVMPassBuilderOptionsSetVerifyEach(opts, 1);
+    LLVMErrorRef err = LLVMRunPasses(mod, "default<O0>", tm, opts);
+    LLVMDisposePassBuilderOptions(opts);
+    if (err) {
+        repl_report_llvm_error("REPL: ORC pass pipeline failed", err);
+        return false;
+    }
+    return true;
+}
+
 /* -------------------------------------------------------------------------
  * Re-declare env globals/funcs as extern in the current module
  *
@@ -546,6 +619,7 @@ static void fresh_module(REPLContext *ctx, const char *mod_name) {
     ctx->cg.module  = LLVMModuleCreateWithNameInContext(mod_name,
                                                         ctx->cg.context);
     ctx->cg.builder = LLVMCreateBuilderInContext(ctx->cg.context);
+    repl_orc_configure_module(ctx, ctx->cg.module, NULL);
 
     /* Reset cached format strings */
     ctx->cg.fmt_str = ctx->cg.fmt_char = ctx->cg.fmt_int =
@@ -1406,6 +1480,19 @@ static bool close_and_run(REPLContext *ctx) {
 
     LLVMModuleRef mod = ctx->cg.module;
     ctx->cg.module = NULL;
+
+    LLVMTargetMachineRef tm =
+        repl_orc_create_target_machine(LLVMCodeGenLevelNone);
+    repl_orc_configure_module(ctx, mod, tm);
+    if (!repl_orc_run_pass_pipeline(mod, tm)) {
+        if (tm) LLVMDisposeTargetMachine(tm);
+        LLVMDisposeModule(mod);
+        return false;
+    }
+    if (tm) {
+        LLVMDisposeTargetMachine(tm);
+        tm = NULL;
+    }
 
     char defined_names[512][256];
     int defined_count = 0;

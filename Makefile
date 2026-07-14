@@ -15,7 +15,7 @@ EXPORT_LDFLAG := $(if $(WINDOWS_HOST),,-rdynamic)
 NO_PIE_LDFLAG := $(if $(WINDOWS_HOST),,-no-pie)
 
 CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
-LLVM_COMPONENTS = core orcjit native
+LLVM_COMPONENTS = core orcjit native passes
 LDFLAGS = -lm -lreadline -lpthread -lgmp $(shell llvm-config --ldflags --libs $(LLVM_COMPONENTS)) -lclang
 
 DEBUG_CFLAGS   = -g -DDEBUG

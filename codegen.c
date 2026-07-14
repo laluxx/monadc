@@ -25,6 +25,7 @@
 #include <llvm-c/Analysis.h>
 #include <llvm-c/BitWriter.h>
 #include <llvm-c/TargetMachine.h>
+#include <llvm-c/Transforms/PassBuilder.h>
 #if !defined(_WIN32)
 #include <dlfcn.h>
 #endif
@@ -3996,6 +3997,71 @@ static void ensure_refinement_ctx(void) {
     LLVMInitializeNativeAsmPrinter();
 }
 
+static LLVMTargetMachineRef codegen_orc_create_target_machine(LLVMCodeGenOptLevel level) {
+    char *triple = LLVMGetDefaultTargetTriple();
+    if (!triple) return NULL;
+
+    LLVMTargetRef target = NULL;
+    char *target_err = NULL;
+    if (LLVMGetTargetFromTriple(triple, &target, &target_err) != 0 || !target) {
+        if (target_err) LLVMDisposeMessage(target_err);
+        LLVMDisposeMessage(triple);
+        return NULL;
+    }
+    if (target_err) LLVMDisposeMessage(target_err);
+
+    char *cpu = LLVMGetHostCPUName();
+    char *features = LLVMGetHostCPUFeatures();
+    LLVMTargetMachineRef tm = LLVMCreateTargetMachine(
+        target, triple,
+        cpu ? cpu : "generic",
+        features ? features : "",
+        level, LLVMRelocDefault, LLVMCodeModelDefault);
+
+    if (features) LLVMDisposeMessage(features);
+    if (cpu) LLVMDisposeMessage(cpu);
+    LLVMDisposeMessage(triple);
+    return tm;
+}
+
+static void codegen_orc_configure_module(LLVMModuleRef mod,
+                                         LLVMTargetMachineRef tm) {
+    if (!mod) return;
+
+    char *triple = LLVMGetDefaultTargetTriple();
+    if (triple) {
+        LLVMSetTarget(mod, triple);
+        LLVMDisposeMessage(triple);
+    }
+
+    if (!tm) return;
+    LLVMTargetDataRef data = LLVMCreateTargetDataLayout(tm);
+    if (!data) return;
+
+    char *layout = LLVMCopyStringRepOfTargetData(data);
+    if (layout) {
+        LLVMSetDataLayout(mod, layout);
+        LLVMDisposeMessage(layout);
+    }
+    LLVMDisposeTargetData(data);
+}
+
+static bool codegen_orc_run_pass_pipeline(LLVMModuleRef mod,
+                                          LLVMTargetMachineRef tm,
+                                          const char *label) {
+    LLVMPassBuilderOptionsRef opts = LLVMCreatePassBuilderOptions();
+    if (!opts) return true;
+
+    LLVMPassBuilderOptionsSetVerifyEach(opts, 1);
+    LLVMErrorRef err = LLVMRunPasses(mod, "default<O0>", tm, opts);
+    LLVMDisposePassBuilderOptions(opts);
+    if (err) {
+        codegen_report_llvm_error(label, err);
+        return false;
+    }
+    return true;
+}
+
 static bool codegen_orc_add_module_and_lookup(LLVMContextRef *ctx_ref,
                                               LLVMModuleRef *mod_ref,
                                               const char *symbol,
@@ -4023,6 +4089,20 @@ static bool codegen_orc_add_module_and_lookup(LLVMContextRef *ctx_ref,
     }
     LLVMOrcJITDylibRef jd = LLVMOrcLLJITGetMainJITDylib(jit);
     LLVMOrcJITDylibAddGenerator(jd, process_gen);
+
+    LLVMTargetMachineRef tm =
+        codegen_orc_create_target_machine(LLVMCodeGenLevelNone);
+    codegen_orc_configure_module(*mod_ref, tm);
+    if (!codegen_orc_run_pass_pipeline(*mod_ref, tm,
+                                       "ORC: pass pipeline failed")) {
+        if (tm) LLVMDisposeTargetMachine(tm);
+        LLVMOrcDisposeLLJIT(jit);
+        return false;
+    }
+    if (tm) {
+        LLVMDisposeTargetMachine(tm);
+        tm = NULL;
+    }
 
     LLVMOrcThreadSafeContextRef tsc = NULL;
 #if LLVM_VERSION_MAJOR >= 19

@@ -154,6 +154,8 @@ class WindowsPortabilityTests(unittest.TestCase):
         main_c = read("main.c")
 
         self.assertIn("#include <llvm-c/LLJIT.h>", repl_c)
+        self.assertIn("#include <llvm-c/Transforms/PassBuilder.h>", repl_c)
+        self.assertIn("#include <llvm-c/Transforms/PassBuilder.h>", codegen_c)
         self.assertIn("#include <llvm/Config/llvm-config.h>", repl_c)
         self.assertIn("#include <llvm/Config/llvm-config.h>", codegen_c)
         self.assertIn("LLVMOrcCreateLLJIT", repl_c)
@@ -164,6 +166,13 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("#if LLVM_VERSION_MAJOR >= 19", codegen_c)
         self.assertIn("LLVMOrcCreateNewThreadSafeContext()", repl_c)
         self.assertIn("LLVMOrcCreateNewThreadSafeContext()", codegen_c)
+        self.assertIn("LLVMOrcLLJITGetDataLayoutStr", repl_c)
+        self.assertIn("LLVMSetDataLayout", repl_c)
+        self.assertIn("LLVMSetDataLayout", codegen_c)
+        self.assertIn("LLVMRunPasses", repl_c)
+        self.assertIn("LLVMRunPasses", codegen_c)
+        self.assertIn("default<O0>", repl_c)
+        self.assertIn("default<O0>", codegen_c)
         self.assertNotIn("LLVMCreateExecutionEngineForModule", repl_c + codegen_c)
         self.assertNotIn("LLVMLinkInMCJIT", repl_c + codegen_c)
         self.assertNotIn("#include <llvm-c/ExecutionEngine.h>", repl_c + repl_h + codegen_c + codegen_h + main_c)
@@ -186,10 +195,10 @@ class WindowsPortabilityTests(unittest.TestCase):
         main_c = read("main.c")
         buildsystem_c = read("buildsystem.c")
 
-        self.assertIn("LLVM_COMPONENTS = core orcjit native", makefile)
+        self.assertIn("LLVM_COMPONENTS = core orcjit native passes", makefile)
         self.assertIn("llvm-config --ldflags --libs $(LLVM_COMPONENTS)", makefile)
-        self.assertIn("llvm-config --ldflags --libs core orcjit native", main_c)
-        self.assertIn("llvm-config --ldflags --libs core orcjit native", buildsystem_c)
+        self.assertIn("llvm-config --ldflags --libs core orcjit native passes", main_c)
+        self.assertIn("llvm-config --ldflags --libs core orcjit native passes", buildsystem_c)
 
     def test_debugger_header_and_cmake_are_windows_safe(self):
         debugger_h = read("debugger.h")

@@ -31,7 +31,7 @@ if(PkgConfig_FOUND)
   pkg_check_modules(LIBCLANG QUIET libclang)
 endif()
 
-set(MONADC_LLVM_COMPONENTS core orcjit native)
+set(MONADC_LLVM_COMPONENTS core orcjit native passes)
 llvm_map_components_to_libnames(LLVM_LIBRARIES ${MONADC_LLVM_COMPONENTS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 
