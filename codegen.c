@@ -6296,6 +6296,26 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             return result;
         }
 
+        if (ast->range.end != NULL) {
+            const char *enum_helper = ast->range.step != NULL
+                ? "enumFromThenTo"
+                : "enumFromTo";
+            if (resolve_symbol_with_modules(ctx, enum_helper, ast)) {
+                AST *call = ast_new_list();
+                call->line = ast->line;
+                call->column = ast->column;
+                ast_list_append(call, ast_new_symbol(enum_helper));
+                ast_list_append(call, ast_clone(ast->range.start));
+                if (ast->range.step != NULL)
+                    ast_list_append(call, ast_clone(ast->range.step));
+                ast_list_append(call, ast_clone(ast->range.end));
+
+                CodegenResult enum_range = codegen_expr(ctx, call);
+                ast_free(call);
+                return enum_range;
+            }
+        }
+
         // ----------------------------------------------------------------
         // (lo ..)  /  (lo, next ..)  /  (lo .. hi)  /  (lo, next .. hi)
         // — paren syntax => lazy list

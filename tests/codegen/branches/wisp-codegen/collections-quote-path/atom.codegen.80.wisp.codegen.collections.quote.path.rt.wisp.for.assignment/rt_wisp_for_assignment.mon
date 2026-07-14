@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.rt-wisp-for-assignment
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.for.assignment
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: collections-quote-path
+;; TEST-CATEGORY: 80-wisp-codegen
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.wisp.for-body-assignment
+;; TEST-PURPOSE: Wisp for body expansion preserves assignment statements.
+;; TEST-ATOM: sum <- sum + i inside for i -> 1..30 mutates outer sum.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: wisp.c recursive for body statement expansion
+;; TEST-USES-ATOM: atom.codegen.category.80.wisp-codegen
+;; TEST-MENU: branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.for.assignment
+;; TEST-MENU-PATH: codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.for.assignment
+;; TEST-ATOM-LEAF: atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.for.assignment
+;; TEST-CLI-TARGET: codegen branches wisp-codegen collections-quote-path
+sum -> 0
+for i -> 1..30
+  sum <- sum + i
+show sum

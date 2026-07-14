@@ -1,0 +1,24 @@
+;; TEST-ID: tests.codegen.rt-range-enum-helpers
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-CODEGEN-ATOM: atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+;; TEST-QUALITY: branch-regression
+;; TEST-SUBSET: arrays-ranges
+;; TEST-CATEGORY: 40-collections
+;; TEST-SECTION: codegen
+;; TEST-CONTEXT: monadc.context.collections.range-enum
+;; TEST-PURPOSE: Range syntax follows core Data.Enum helper semantics.
+;; TEST-ATOM: (1..4) matches enumFromTo, and (1,3..7) matches enumFromThenTo.
+;; TEST-EXPECT: compile, run
+
+;; TEST-COVERAGE: codegen.c AST_RANGE finite list lowering to Data.Enum helpers
+;; TEST-USES-ATOM: atom.codegen.category.40.collections
+;; TEST-MENU: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+;; TEST-MENU-PATH: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+;; TEST-ATOM-LEAF: atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+;; TEST-CLI-TARGET: codegen branches collections arrays-ranges
+(import Data.Enum)
+(show (1..4))
+(show (enumFromTo 1 4))
+(show (1,3..7))
+(show (enumFromThenTo 1 3 7))

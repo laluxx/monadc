@@ -1200,11 +1200,14 @@ Test-driven observations and failure records for the corresponding subsystem.
   the inclusive range. =tests.codegen.rt-range-list-count= pins the lower-level
   =count= behavior for closed list ranges and raw =RuntimeList*= values.
 
-[TODO id:todo.tests.wisp-for-body-assignment owner:codex status:open]
-  Add coverage and fix recursive Wisp =for= body expansion for assignment
-  statements such as =sum <- sum + i=. During the range work, =show i= grouped
-  correctly after the arity fix, but assignment inside the recursive body still
-  needs statement-level expansion rather than expression-only token parsing.
+[FIX id:fix.tests.wisp-for-body-assignment-2026-07-14 date:2026-07-14 by:codex src:tests/codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.for.assignment conf:high]
+  =tests.codegen.rt-wisp-for-assignment= proves =sum <- sum + i= inside
+  =for i -> 1..30= mutates the outer accumulator and prints =465=. This covers
+  recursive Wisp =for= body expansion for assignment statements.
+
+[FIX id:fix.tests.range-enum-helper-contract-2026-07-14 date:2026-07-14 by:codex src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers conf:high]
+  =tests.codegen.rt-range-enum-helpers= imports =Data.Enum= and proves finite
+  list range syntax follows =enumFromTo= / =enumFromThenTo= helper behavior.
 
 [FIX id:fix.tests.core-maybe-either-runtime-contracts-2026-06-27 date:2026-06-27 by:codex]
   =core/prelude/Data/Maybe.mon= and =core/prelude/Data/Either.mon= now use
