@@ -172,6 +172,7 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("(void *)(uintptr_t)&n", table_init)
         self.assertNotIn("dlsym(RTLD_DEFAULT", table_init)
         self.assertIn("ADD(rt_list_empty)", table_init)
+        self.assertIn("ADD(rt_list_cons)", table_init)
         self.assertIn("ADD(printf)", table_init)
 
     def test_all_build_paths_link_orc_jit_components(self):
