@@ -2648,7 +2648,6 @@ void declare_runtime_functions(CodegenContext *ctx) {
     // --- Print ---
     DECL("rt_print_value",         void_t, ptr);
     DECL("rt_print_list",          void_t, ptr);
-    DECL("rt_print_list_limited",  void_t, ptr, i64);
 
     // --- String & Array Helpers ---
     DECL("rt_string_concat",  ptr, ptr, ptr);

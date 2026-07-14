@@ -669,7 +669,7 @@ bool build_link_executable(BuildContext *build_ctx,
 
     char *runtime_archive = build_runtime_archive_path();
     char llvm_flags[1024] = "";
-    FILE *llvm_pipe = popen("llvm-config --ldflags --libs core", "r");
+    FILE *llvm_pipe = popen("llvm-config --ldflags --libs core orcjit native", "r");
     if (llvm_pipe) {
         size_t used = fread(llvm_flags, 1, sizeof(llvm_flags) - 1, llvm_pipe);
         pclose(llvm_pipe);

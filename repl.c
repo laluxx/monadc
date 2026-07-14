@@ -254,7 +254,7 @@ __attribute__((weak)) void *__layout_ptr_get(const char *name) {
  * ------------------------------------------------------------------------- */
 typedef struct { const char *name; void *addr; } RTSym;
 
-/* Populate the table lazily once using dlsym(RTLD_DEFAULT). */
+/* Populate the table lazily once using direct host addresses. */
 static RTSym g_rt_syms[256];
 static int   g_rt_sym_count = 0;
 
@@ -262,10 +262,9 @@ static void rt_sym_table_init(void) {
     if (g_rt_sym_count > 0) return;
 
 #define ADD(n) do { \
-    void *a = dlsym(RTLD_DEFAULT, #n); \
-    if (a) { g_rt_syms[g_rt_sym_count].name = #n; \
-              g_rt_syms[g_rt_sym_count].addr = a; \
-              g_rt_sym_count++; } \
+    g_rt_syms[g_rt_sym_count].name = #n; \
+    g_rt_syms[g_rt_sym_count].addr = (void *)(uintptr_t)&n; \
+    g_rt_sym_count++; \
     } while(0)
 
     // Runtime list
@@ -276,7 +275,7 @@ static void rt_sym_table_init(void) {
     ADD(rt_equal_p);      ADD(rt_list_lazy_cons);    ADD(rt_list_is_empty_list);
     ADD(rt_thunk_create); ADD(rt_force);             ADD(rt_list_range);
     ADD(rt_list_from);    ADD(rt_list_from_step);    ADD(rt_list_take);
-    ADD(rt_list_drop);    ADD(rt_value_thunk);       ADD(rt_print_list_limited);
+    ADD(rt_list_drop);    ADD(rt_value_thunk);
     ADD(rt_string_take);
 
     // Map
@@ -293,22 +292,8 @@ static void rt_sym_table_init(void) {
     ADD(rt_set_get);        ADD(rt_set_count);    ADD(rt_set_seq);
     ADD(rt_value_set);      ADD(rt_unbox_set);
 
-    /* Hardcode HOF set functions since dlsym may not find static lib symbols */
-    g_rt_syms[g_rt_sym_count].name = "rt_set_foldl";
-    g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_foldl;
-    g_rt_sym_count++;
-    g_rt_syms[g_rt_sym_count].name = "rt_set_map";
-    g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_map;
-    g_rt_sym_count++;
-    g_rt_syms[g_rt_sym_count].name = "rt_set_filter";
-    g_rt_syms[g_rt_sym_count].addr = (void *)rt_set_filter;
-    g_rt_sym_count++;
-    g_rt_syms[g_rt_sym_count].name = "rt_closure_calln";
-    g_rt_syms[g_rt_sym_count].addr = (void *)rt_closure_calln;
-    g_rt_sym_count++;
-    g_rt_syms[g_rt_sym_count].name = "rt_value_closure";
-    g_rt_syms[g_rt_sym_count].addr = (void *)rt_value_closure;
-    g_rt_sym_count++;
+    ADD(rt_set_foldl);   ADD(rt_set_map);      ADD(rt_set_filter);
+    ADD(rt_closure_calln); ADD(rt_value_closure);
 
 
     ADD(__layout_ptr_set);

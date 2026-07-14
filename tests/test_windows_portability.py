@@ -162,6 +162,28 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertNotIn("LLVMLinkInMCJIT", repl_c + codegen_c)
         self.assertNotIn("#include <llvm-c/ExecutionEngine.h>", repl_c + repl_h + codegen_c + codegen_h + main_c)
 
+    def test_orc_runtime_symbols_are_registered_without_dlsym(self):
+        repl_c = read("repl.c")
+
+        start = repl_c.index("static void rt_sym_table_init")
+        end = repl_c.index("#undef ADD", start)
+        table_init = repl_c[start:end]
+
+        self.assertIn("(void *)(uintptr_t)&n", table_init)
+        self.assertNotIn("dlsym(RTLD_DEFAULT", table_init)
+        self.assertIn("ADD(rt_list_empty)", table_init)
+        self.assertIn("ADD(printf)", table_init)
+
+    def test_all_build_paths_link_orc_jit_components(self):
+        makefile = read("Makefile")
+        main_c = read("main.c")
+        buildsystem_c = read("buildsystem.c")
+
+        self.assertIn("LLVM_COMPONENTS = core orcjit native", makefile)
+        self.assertIn("llvm-config --ldflags --libs $(LLVM_COMPONENTS)", makefile)
+        self.assertIn("llvm-config --ldflags --libs core orcjit native", main_c)
+        self.assertIn("llvm-config --ldflags --libs core orcjit native", buildsystem_c)
+
     def test_debugger_header_and_cmake_are_windows_safe(self):
         debugger_h = read("debugger.h")
         cmake = read("CMakeLists.txt")

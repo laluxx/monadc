@@ -31,7 +31,8 @@ if(PkgConfig_FOUND)
   pkg_check_modules(LIBCLANG QUIET libclang)
 endif()
 
-llvm_map_components_to_libnames(LLVM_LIBRARIES core)
+set(MONADC_LLVM_COMPONENTS core orcjit native)
+llvm_map_components_to_libnames(LLVM_LIBRARIES ${MONADC_LLVM_COMPONENTS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 
 find_library(READLINE_LIBRARY NAMES readline REQUIRED)
@@ -49,7 +50,7 @@ execute_process(
   COMMAND_ERROR_IS_FATAL ANY
 )
 execute_process(
-  COMMAND ${LLVM_CONFIG_EXECUTABLE} --libs core --system-libs
+  COMMAND ${LLVM_CONFIG_EXECUTABLE} --libs ${MONADC_LLVM_COMPONENTS} --system-libs
   OUTPUT_VARIABLE LLVM_CONFIG_LIBS
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY

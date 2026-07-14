@@ -15,7 +15,8 @@ EXPORT_LDFLAG := $(if $(WINDOWS_HOST),,-rdynamic)
 NO_PIE_LDFLAG := $(if $(WINDOWS_HOST),,-no-pie)
 
 CFLAGS  = -Wall -Wextra -std=c99 $(shell llvm-config --cflags)
-LDFLAGS = -lm -lreadline -lpthread -lgmp $(shell llvm-config --ldflags --libs core) -lclang
+LLVM_COMPONENTS = core orcjit native
+LDFLAGS = -lm -lreadline -lpthread -lgmp $(shell llvm-config --ldflags --libs $(LLVM_COMPONENTS)) -lclang
 
 DEBUG_CFLAGS   = -g -DDEBUG
 ASAN_CFLAGS    = -g -fsanitize=address -fno-omit-frame-pointer -DDEBUG

@@ -422,7 +422,7 @@ static char *host_realpath(const char *path, char *resolved)
 
 static char *llvm_config_link_flags(void)
 {
-    FILE *pipe = popen("llvm-config --ldflags --libs core", "r");
+    FILE *pipe = popen("llvm-config --ldflags --libs core orcjit native", "r");
     if (!pipe)
         return strdup("");
 

@@ -30,6 +30,8 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("find_library(CLANG_LIBRARY", cmake)
         self.assertIn("HINTS ${LLVM_LIBRARY_DIRS} ${LIBCLANG_LIBRARY_DIRS}", cmake)
         self.assertIn("llvm_map_components_to_libnames", cmake)
+        self.assertIn("set(MONADC_LLVM_COMPONENTS core orcjit native)", cmake)
+        self.assertIn("COMMAND ${LLVM_CONFIG_EXECUTABLE} --libs ${MONADC_LLVM_COMPONENTS} --system-libs", cmake)
 
     def test_cmake_uses_llvm_config_cmakedir_before_llvm_package_lookup(self):
         cmake = read("CMakeLists.txt")
