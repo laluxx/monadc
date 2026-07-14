@@ -1135,10 +1135,10 @@ if __name__ == "__main__":
     fail_color = "\033[1;31m"
     cyan = "\033[36m"
     reset = "\033[0m"
-    time_width = max(len(f"{elapsed_us:.0f}\u00b5s") for *_, elapsed_us in results) if results else 0
+    time_width = max(len(f"{elapsed_us:.0f}us") for *_, elapsed_us in results) if results else 0
     for name, ok, errors, failures, elapsed_us in results:
         status = f"{pass_color}PASS{reset}" if ok else f"{fail_color}FAIL{reset}"
-        timing = f"{cyan}\u23f1 {elapsed_us:.0f}\u00b5s{reset}".rjust(time_width + len(cyan) + len(reset) + 3)
+        timing = f"{cyan}{elapsed_us:.0f}us{reset}".rjust(time_width + len(cyan) + len(reset))
         print(f"  {name.ljust(name_width)}  {status}  {timing}")
         for _, trace in errors + failures:
             print(trace)
