@@ -43,6 +43,21 @@ void codegen_set_trace(bool enabled) {
     g_codegen_trace_enabled = enabled;
 }
 
+void monad_repl_global_getter_name(const char *global_name, char *buf, size_t buf_size) {
+    if (!buf || buf_size == 0) return;
+    const char *name = (global_name && *global_name) ? global_name : "anon";
+    int n = snprintf(buf, buf_size, "__monad_repl_get");
+    size_t pos = n > 0 ? (size_t)n : 0;
+    for (const unsigned char *p = (const unsigned char *)name;
+         *p && pos + 4 < buf_size;
+         p++) {
+        n = snprintf(buf + pos, buf_size - pos, "_%02x", *p);
+        if (n <= 0) break;
+        pos += (size_t)n;
+    }
+    buf[buf_size - 1] = '\0';
+}
+
 static bool codegen_import_debug_enabled(void) {
     const char *v = getenv("MONAD_IMPORT_DEBUG");
     return v && v[0] && strcmp(v, "0") != 0;
@@ -6329,6 +6344,19 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     load_target = mgv;
                 }
                 free(mangled);
+            }
+        }
+
+        const char *global_name = LLVMGetValueName(load_target);
+        if (global_name && *global_name) {
+            char getter_name[512];
+            monad_repl_global_getter_name(global_name, getter_name, sizeof(getter_name));
+            LLVMValueRef getter = LLVMGetNamedFunction(ctx->module, getter_name);
+            if (getter) {
+                result.value = LLVMBuildCall2(ctx->builder,
+                                              LLVMGlobalGetValueType(getter),
+                                              getter, NULL, 0, ast->symbol);
+                return result;
             }
         }
 

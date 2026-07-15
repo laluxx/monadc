@@ -52,6 +52,7 @@ class ReplTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout)
         lines = clean_output(result.stdout).splitlines()
+        self.assertNotIn("runtime crash", result.stdout)
         self.assertNotIn("JIT session error", result.stdout)
         self.assertNotIn("ORC lookup failed", result.stdout)
         self.assertEqual(lines[0], "30")

@@ -3,6 +3,7 @@
 
 #include <llvm-c/Core.h>
 #include <setjmp.h>
+#include <stddef.h>
 #include "reader.h"
 #include "types.h"
 #include "env.h"
@@ -127,6 +128,7 @@ void codegen_declare_external_func(CodegenContext *ctx,
 void codegen_layout(CodegenContext *ctx, AST *ast);
 
 char *mangle_unicode_name(const char *name);
+void monad_repl_global_getter_name(const char *global_name, char *buf, size_t buf_size);
 
 
 /// Fat arrays

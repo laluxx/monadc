@@ -513,6 +513,14 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                 LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name);
                 LLVMSetLinkage(gv, LLVMExternalLinkage);
                 e->value = gv;
+
+                char getter_name[512];
+                monad_repl_global_getter_name(name, getter_name, sizeof(getter_name));
+                if (!LLVMGetNamedFunction(ctx->cg.module, getter_name)) {
+                    LLVMTypeRef ft = LLVMFunctionType(lt, NULL, 0, 0);
+                    LLVMValueRef getter = LLVMAddFunction(ctx->cg.module, getter_name, ft);
+                    LLVMSetLinkage(getter, LLVMExternalLinkage);
+                }
             }
             else if (e->kind == ENV_FUNC && e->func_ref) {
                 const char *name = (e->llvm_name && e->llvm_name[0])
@@ -642,6 +650,45 @@ static void fresh_module(REPLContext *ctx, const char *mod_name) {
     /* 2. Re-declare env globals/funcs from previous modules as declarations.
      * ORC resolves them from the persistent main JITDylib. */
     redeclare_env_symbols(ctx);
+}
+
+static void repl_define_value_getter(REPLContext *ctx, EnvEntry *e) {
+    if (!ctx || !e || e->kind != ENV_VAR || !e->value || !e->type)
+        return;
+    if (!LLVMIsAGlobalVariable(e->value))
+        return;
+
+    const char *global_name = LLVMGetValueName(e->value);
+    if (!global_name || !*global_name)
+        return;
+
+    LLVMTypeRef ret_t = type_to_llvm(&ctx->cg, e->type);
+    if (!ret_t || LLVMGetTypeKind(ret_t) == LLVMVoidTypeKind)
+        return;
+
+    char getter_name[512];
+    monad_repl_global_getter_name(global_name, getter_name, sizeof(getter_name));
+
+    LLVMValueRef getter = LLVMGetNamedFunction(ctx->cg.module, getter_name);
+    if (getter && LLVMCountBasicBlocks(getter) > 0)
+        return;
+
+    LLVMTypeRef ft = LLVMFunctionType(ret_t, NULL, 0, 0);
+    if (!getter) {
+        getter = LLVMAddFunction(ctx->cg.module, getter_name, ft);
+    }
+    LLVMSetLinkage(getter, LLVMExternalLinkage);
+
+    LLVMBasicBlockRef saved_bb = LLVMGetInsertBlock(ctx->cg.builder);
+    LLVMBasicBlockRef bb = LLVMAppendBasicBlockInContext(ctx->cg.context,
+                                                         getter,
+                                                         "entry");
+    LLVMPositionBuilderAtEnd(ctx->cg.builder, bb);
+    LLVMValueRef value = LLVMBuildLoad2(ctx->cg.builder, ret_t, e->value, "value");
+    LLVMBuildRet(ctx->cg.builder, value);
+
+    if (saved_bb)
+        LLVMPositionBuilderAtEnd(ctx->cg.builder, saved_bb);
 }
 
 static void open_wrapper(REPLContext *ctx) {
@@ -2860,6 +2907,15 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     }
     free(source_copy);
 
+    if (ast && ast->type == AST_LIST && ast->list.count >= 3 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "define") == 0) {
+        AST *name_expr = ast->list.items[1];
+        if (name_expr->type == AST_SYMBOL) {
+            EnvEntry *e = env_lookup(ctx->cg.env, name_expr->symbol);
+            repl_define_value_getter(ctx, e);
+        }
+    }
 
     bool definition_or_layout =
         ast_was_layout ||
