@@ -80,7 +80,17 @@ void wisp_register_arity(const char *name, int arity);
  * Error recovery: shadow exit() so codegen errors don't kill the process.
  * Only active while g_in_eval is true.
  * ------------------------------------------------------------------------- */
-static jmp_buf g_repl_escape;
+#if defined(_WIN32)
+typedef jmp_buf repl_jmp_buf;
+#define repl_setjmp(env) setjmp(env)
+#define repl_longjmp(env, val) longjmp(env, val)
+#else
+typedef sigjmp_buf repl_jmp_buf;
+#define repl_setjmp(env) sigsetjmp(env, 1)
+#define repl_longjmp(env, val) siglongjmp(env, val)
+#endif
+
+static repl_jmp_buf g_repl_escape;
 static bool    g_in_eval = false;
 static volatile sig_atomic_t g_interrupted = 0;
 
@@ -105,7 +115,7 @@ static void repl_signal_handler(int sig) {
         /* Use write() — async-signal-safe, unlike fprintf */
         const char msg[] = "\nError: runtime crash (SIGSEGV) in JIT code\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
-        longjmp(g_repl_escape, 99);
+        repl_longjmp(g_repl_escape, 99);
     }
     /* Not in eval: restore default and re-raise for core dump */
     signal(sig, SIG_DFL);
@@ -129,7 +139,7 @@ void __monad_runtime_error(const char *file, long line, long col, const char *ms
         longjmp(*g_assert_jmp_ptr, 1);
     if (g_in_eval) {
         g_in_eval = false;
-        longjmp(g_repl_escape, 1);
+        repl_longjmp(g_repl_escape, 1);
     }
     abort();
 }
@@ -2500,7 +2510,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     free(src);
                     return false;
                 }
-                if (setjmp(g_repl_escape) == 0)
+                if (repl_setjmp(g_repl_escape) == 0)
                     ran = close_and_run(ctx);
                 g_in_eval = false;
                 g_assert_jmp_ptr = NULL;
@@ -2749,7 +2759,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
 
             g_in_eval = true;
             bool ran = false;
-            if (setjmp(g_repl_escape) == 0)
+            if (repl_setjmp(g_repl_escape) == 0)
                 ran = close_and_run(ctx);
             g_in_eval = false;
             rt_interrupted = 0;
@@ -2892,7 +2902,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         recover_module(ctx);
         return false;
     }
-    if (setjmp(g_repl_escape) == 0)
+    if (repl_setjmp(g_repl_escape) == 0)
         ran = close_and_run(ctx);
     g_in_eval = false;
     g_assert_jmp_ptr = NULL;
