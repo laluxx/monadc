@@ -72,6 +72,7 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
 
         self.assertIn('py("tests/test_run_core.py")', test_main)
         self.assertIn('py("tests/test_repl.py")', test_main)
+        self.assertIn('py("tests/test_tail_calls.py")', test_main)
 
     def test_readme_advertises_unified_test_entrypoint(self):
         readme = read("README.md")

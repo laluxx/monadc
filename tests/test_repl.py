@@ -37,6 +37,26 @@ class ReplTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(clean_output(result.stdout), "42")
 
+    def test_repl_bare_integer_expression_prints_one_line(self):
+        result = self.run_repl("3 + 3\n")
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(clean_output(result.stdout), "6")
+
+    def test_repl_persists_top_level_value_definitions(self):
+        result = self.run_repl(
+            "define x 30\n"
+            "x\n"
+            "show (x + 12)\n"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        lines = clean_output(result.stdout).splitlines()
+        self.assertNotIn("JIT session error", result.stdout)
+        self.assertNotIn("ORC lookup failed", result.stdout)
+        self.assertEqual(lines[0], "30")
+        self.assertEqual(lines[-1], "42")
+
     def test_repl_evaluates_multiline_wisp_typed_function_then_call(self):
         result = self.run_repl(
             "define add2 :: Int -> Int\n"

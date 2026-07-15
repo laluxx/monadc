@@ -98,6 +98,7 @@ RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity
 RuntimeValue *rt_value_closure_named(void *fn_ptr, void **env, int env_size, int arity, const char *name);
 RuntimeValue *rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args);
 void         *rt_closure_get_env(RuntimeValue *closure);
+void         *rt_closure_get_fn_ptr(RuntimeValue *closure);
 
 /// HOF Callback Types
 
@@ -375,6 +376,7 @@ LLVMValueRef get___monad_runtime_error(CodegenContext *ctx);
 LLVMValueRef get_rt_value_closure(CodegenContext *ctx);
 LLVMValueRef get_rt_value_closure_named(CodegenContext *ctx);
 LLVMValueRef get_rt_closure_calln(CodegenContext *ctx);
+LLVMValueRef get_rt_closure_get_fn_ptr(CodegenContext *ctx);
 
 //// Thunks
 

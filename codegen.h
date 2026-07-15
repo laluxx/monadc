@@ -59,6 +59,9 @@ typedef struct CodegenContext {
     bool test_mode;
     const char *current_function_name;  // NULL at top level, set when inside a define
     int in_coalesce_depth;
+    bool tail_position;
+    bool current_closure_abi;
+    int current_closure_param_count;
 
     // Monomorphization cache
     MonoCache mono_cache;

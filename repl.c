@@ -905,9 +905,6 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
             : val;
         LLVMValueRef a[] = {get_fmt_int(&ctx->cg), v};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        /* Skip char annotation for I8 — byte values are numeric, not chars */
-        if (t->kind != TYPE_I8)
-            emit_numeric_annotation(ctx, v, true);
         break; }
 
     case TYPE_U8:
@@ -921,12 +918,6 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%lu\n", "fmt_uint");
         LLVMValueRef a[] = {fmt, v};
         LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
-        /* Only show char annotation for U8 — it's the only byte-sized
-         * unsigned type where the char interpretation is meaningful.
-         * Skip the annotation entirely for U8 since it shows misleading
-         * char representations for numeric byte values like 255.        */
-        if (t->kind != TYPE_U8)
-            emit_numeric_annotation(ctx, v, false);
         break; }
 
     case TYPE_I128:

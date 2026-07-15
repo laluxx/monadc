@@ -148,6 +148,11 @@ void *rt_closure_get_env(RuntimeValue *closure) {
     return closure->data.closure_val->env;
 }
 
+void *rt_closure_get_fn_ptr(RuntimeValue *closure) {
+    if (!closure || closure->type != RT_CLOSURE) return NULL;
+    return closure->data.closure_val->fn_ptr;
+}
+
 ///  Thunk forcing
 // two specialised versions for head and tail (Step 3)
 
@@ -2528,6 +2533,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_value_closure_named", ptr, ptr, ptr, i32, i32, ptr);  // fn_ptr, env, env_size, arity, name
     DECL("rt_closure_calln", ptr, ptr, i32, ptr);       // closure, n, args_array
     DECL("rt_closure_get_env", ptr, ptr);               // closure -> env ptr
+    DECL("rt_closure_get_fn_ptr", ptr, ptr);            // closure -> function ptr
 
     // --- Thunks ---
     DECL("rt_thunk_of_value", ptr, ptr);
@@ -2713,6 +2719,7 @@ GET_RUNTIME_FUNCTION(rt_ast_to_runtime_value)
 GET_RUNTIME_FUNCTION(rt_value_closure)
 GET_RUNTIME_FUNCTION(rt_value_closure_named)
 GET_RUNTIME_FUNCTION(rt_closure_calln)
+GET_RUNTIME_FUNCTION(rt_closure_get_fn_ptr)
 
 GET_RUNTIME_FUNCTION(rt_list_car)
 GET_RUNTIME_FUNCTION(rt_list_cdr)

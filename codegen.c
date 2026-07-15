@@ -144,6 +144,9 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
     ctx->test_mode = false;
     ctx->current_function_name = NULL;
     ctx->in_coalesce_depth = 0;
+    ctx->tail_position = false;
+    ctx->current_closure_abi = false;
+    ctx->current_closure_param_count = 0;
     // Initialize monomorphization cache
     ctx->mono_cache.entries  = NULL;
     ctx->mono_cache.count    = 0;
@@ -778,6 +781,76 @@ static CodegenResult codegen_body_expr_after(CodegenContext *ctx,
                                            expr->list.items[0]->symbol, expr);
     }
     return codegen_expr(ctx, expr);
+}
+
+static bool codegen_is_straight_closure_tail_site(CodegenContext *ctx,
+                                                  LLVMValueRef fn,
+                                                  LLVMBasicBlockRef block) {
+    if (!ctx || !fn || !block)
+        return false;
+    const char *block_name = LLVMGetBasicBlockName(block);
+    if (!block_name || strcmp(block_name, "entry") != 0)
+        return false;
+    if (LLVMCountParams(fn) != 3)
+        return false;
+    LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+    LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
+    return LLVMTypeOf(LLVMGetParam(fn, 0)) == ptr &&
+           LLVMTypeOf(LLVMGetParam(fn, 1)) == i32 &&
+           LLVMTypeOf(LLVMGetParam(fn, 2)) == ptr;
+}
+
+static bool codegen_function_types_match(LLVMTypeRef a, LLVMTypeRef b) {
+    if (!a || !b)
+        return false;
+    if (LLVMGetReturnType(a) != LLVMGetReturnType(b))
+        return false;
+    if (LLVMIsFunctionVarArg(a) != LLVMIsFunctionVarArg(b))
+        return false;
+
+    unsigned count = LLVMCountParamTypes(a);
+    if (count != LLVMCountParamTypes(b))
+        return false;
+
+    LLVMTypeRef *a_params = malloc(sizeof(LLVMTypeRef) * (count ? count : 1));
+    LLVMTypeRef *b_params = malloc(sizeof(LLVMTypeRef) * (count ? count : 1));
+    LLVMGetParamTypes(a, a_params);
+    LLVMGetParamTypes(b, b_params);
+
+    bool match = true;
+    for (unsigned i = 0; i < count; i++) {
+        if (a_params[i] != b_params[i]) {
+            match = false;
+            break;
+        }
+    }
+
+    free(a_params);
+    free(b_params);
+    return match;
+}
+
+static void codegen_mark_direct_tail_return(CodegenContext *ctx,
+                                            LLVMValueRef ret_value) {
+    if (!ctx || !ret_value)
+        return;
+    if (LLVMGetInstructionOpcode(ret_value) != LLVMCall)
+        return;
+    const char *name = LLVMGetValueName(ret_value);
+    if (!name || strncmp(name, "tail_clo_call", 13) != 0)
+        return;
+
+    LLVMBasicBlockRef block = LLVMGetInsertBlock(ctx->builder);
+    LLVMValueRef current_fn = block ? LLVMGetBasicBlockParent(block) : NULL;
+    if (!current_fn)
+        return;
+
+    LLVMTypeRef caller_ft = LLVMGlobalGetValueType(current_fn);
+    LLVMTypeRef callee_ft = LLVMGetCalledFunctionType(ret_value);
+    if (!codegen_function_types_match(caller_ft, callee_ft))
+        return;
+
+    LLVMSetTailCallKind(ret_value, LLVMTailCallKindMustTail);
 }
 
 static Type *codegen_static_result_type(CodegenContext *ctx, AST *expr) {
@@ -7815,17 +7888,34 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             free_asm_instructions(asm_instructions, asm_inst_count);
                         } else {
                             const char *prev_fn = ctx->current_function_name;
+                            bool prev_tail_position = ctx->tail_position;
+                            bool prev_closure_abi = ctx->current_closure_abi;
+                            int prev_closure_param_count = ctx->current_closure_param_count;
                             char *owned_fn = strdup(var_name);
                             ctx->current_function_name = owned_fn;
+                            ctx->current_closure_abi = use_closure_abi;
+                            ctx->current_closure_param_count = total_params;
+                            int last_body_index = -1;
+                            for (int i = lambda->lambda.body_count - 1; i >= 0; i--) {
+                                if (lambda->lambda.body_count > 1 &&
+                                    codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
+                                    continue;
+                                last_body_index = i;
+                                break;
+                            }
                             for (int i = 0; i < lambda->lambda.body_count; i++) {
                                 if (lambda->lambda.body_count > 1 &&
                                     codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
                                     continue;
+                                ctx->tail_position = use_closure_abi && i == last_body_index;
                                 body_result = codegen_body_expr_after(
                                     ctx, body_result, lambda->lambda.body_exprs[i]);
                             }
 
 
+                            ctx->tail_position = prev_tail_position;
+                            ctx->current_closure_abi = prev_closure_abi;
+                            ctx->current_closure_param_count = prev_closure_param_count;
                             ctx->current_function_name = prev_fn;
                             free(owned_fn);
                             if (!body_result.type) {
@@ -7840,6 +7930,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         ret_value = body_result.value;
                         if (!ret_value) ret_value = LLVMConstNull(ret_llvm_type);
                         else ret_value = emit_type_cast(ctx, ret_value, ret_llvm_type);
+                        codegen_mark_direct_tail_return(ctx, ret_value);
                         LLVMBuildRet(ctx->builder, ret_value);
                     }
 
@@ -8252,7 +8343,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     if (!var) {
                         var = LLVMAddGlobal(ctx->module, llvm_type, var_name);
                         LLVMSetInitializer(var, LLVMConstNull(llvm_type));
-                        LLVMSetLinkage(var, LLVMInternalLinkage);
+                        LLVMLinkage linkage = LLVMExternalLinkage;
+                        if (ctx->module_ctx &&
+                            !should_export_symbol(ctx->module_ctx, var_name)) {
+                            linkage = LLVMInternalLinkage;
+                        }
+                        LLVMSetLinkage(var, linkage);
                     }
                     LLVMBuildStore(ctx->builder, stored_value, var);
                 } else {
@@ -13397,6 +13493,57 @@ if (ast->list.count >= 5) {
                                                       type_to_llvm(ctx, entry->type),
                                                       entry->value, head->symbol);
 
+                LLVMBasicBlockRef cur_block = LLVMGetInsertBlock(ctx->builder);
+                LLVMValueRef cur_fn = cur_block ? LLVMGetBasicBlockParent(cur_block) : NULL;
+                if (ctx->tail_position &&
+                    ctx->current_closure_abi &&
+                    cur_fn &&
+                    codegen_is_straight_closure_tail_site(ctx, cur_fn, cur_block) &&
+                    n_args <= ctx->current_closure_param_count) {
+                    LLVMValueRef *boxed_args = malloc(sizeof(LLVMValueRef) * (n_args ? n_args : 1));
+                    bool saved_tail = ctx->tail_position;
+                    ctx->tail_position = false;
+                    for (int i = 0; i < n_args; i++) {
+                        CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
+                        boxed_args[i] = codegen_box(ctx, ar.value, ar.type);
+                    }
+                    ctx->tail_position = saved_tail;
+
+                    LLVMValueRef args_ptr = LLVMGetParam(cur_fn, 2);
+                    LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                    for (int i = 0; i < n_args; i++) {
+                        LLVMValueRef idx = LLVMConstInt(i64_t, (unsigned long long)i, 0);
+                        LLVMValueRef slot = LLVMBuildGEP2(ctx->builder, ptr,
+                                                           args_ptr, &idx, 1, "tail_arg");
+                        LLVMBuildStore(ctx->builder, boxed_args[i], slot);
+                    }
+                    free(boxed_args);
+
+                    LLVMTypeRef get_ptr_ft = LLVMFunctionType(ptr, &ptr, 1, 0);
+                    LLVMValueRef get_env_fn = LLVMGetNamedFunction(ctx->module, "rt_closure_get_env");
+                    if (!get_env_fn) {
+                        get_env_fn = LLVMAddFunction(ctx->module, "rt_closure_get_env", get_ptr_ft);
+                        LLVMSetLinkage(get_env_fn, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef get_fn_fn = get_rt_closure_get_fn_ptr(ctx);
+                    LLVMValueRef clo_env = LLVMBuildCall2(ctx->builder, get_ptr_ft,
+                                                          get_env_fn, &clo_val, 1, "tail_clo_env");
+                    LLVMValueRef clo_fn = LLVMBuildCall2(ctx->builder, get_ptr_ft,
+                                                         get_fn_fn, &clo_val, 1, "tail_clo_fn");
+
+                    LLVMTypeRef calln_p[] = {ptr, i32, ptr};
+                    LLVMTypeRef calln_ft  = LLVMFunctionType(ptr, calln_p, 3, 0);
+                    LLVMValueRef calln_a[] = {
+                        clo_env,
+                        LLVMConstInt(i32, n_args, 0),
+                        args_ptr
+                    };
+                    result.value = LLVMBuildCall2(ctx->builder, calln_ft,
+                                                  clo_fn, calln_a, 3, "tail_clo_call");
+                    result.type  = type_unknown();
+                    return result;
+                }
+
                 /* Build args array on stack — array of ptr_t (RuntimeValue*) */
                 LLVMTypeRef  arr_t   = LLVMArrayType(ptr, n_args ? n_args : 1);
                 LLVMValueRef arr_ptr = LLVMBuildAlloca(ctx->builder, arr_t, "clo_args");
@@ -13492,6 +13639,63 @@ if (ast->list.count >= 5) {
                     }
 
                     int n_args = (int)ast->list.count - 1;
+                    LLVMBasicBlockRef cur_block = LLVMGetInsertBlock(ctx->builder);
+                    LLVMValueRef cur_fn = cur_block ? LLVMGetBasicBlockParent(cur_block) : NULL;
+                    if (ctx->tail_position &&
+                        ctx->current_closure_abi &&
+                        cur_fn &&
+                        codegen_is_straight_closure_tail_site(ctx, cur_fn, cur_block) &&
+                        n_args <= ctx->current_closure_param_count) {
+                        LLVMValueRef *boxed_args = malloc(sizeof(LLVMValueRef) * (n_args ? n_args : 1));
+                        bool saved_tail = ctx->tail_position;
+                        ctx->tail_position = false;
+                        for (int i = 0; i < n_args; i++) {
+                            CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
+                            boxed_args[i] = codegen_box(ctx, ar.value, ar.type);
+                        }
+                        ctx->tail_position = saved_tail;
+
+                        LLVMValueRef args_ptr = LLVMGetParam(cur_fn, 2);
+                        LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                        for (int i = 0; i < n_args; i++) {
+                            LLVMValueRef idx = LLVMConstInt(i64_t, (unsigned long long)i, 0);
+                            LLVMValueRef slot = LLVMBuildGEP2(ctx->builder, ptr_t,
+                                                               args_ptr, &idx, 1, "tail_arg");
+                            LLVMBuildStore(ctx->builder, boxed_args[i], slot);
+                        }
+                        free(boxed_args);
+
+                        LLVMTypeRef get_ptr_ft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                        LLVMValueRef get_env_fn = LLVMGetNamedFunction(ctx->module, "rt_closure_get_env");
+                        if (!get_env_fn) {
+                            get_env_fn = LLVMAddFunction(ctx->module, "rt_closure_get_env", get_ptr_ft);
+                            LLVMSetLinkage(get_env_fn, LLVMExternalLinkage);
+                        }
+                        LLVMValueRef get_fn_fn = get_rt_closure_get_fn_ptr(ctx);
+                        LLVMValueRef clo_env = LLVMBuildCall2(ctx->builder, get_ptr_ft,
+                                                              get_env_fn, &fn_value, 1, "tail_clo_env");
+                        LLVMValueRef clo_fn = LLVMBuildCall2(ctx->builder, get_ptr_ft,
+                                                             get_fn_fn, &fn_value, 1, "tail_clo_fn");
+
+                        LLVMTypeRef calln_p[] = {ptr_t, i32_t, ptr_t};
+                        LLVMTypeRef calln_ft = LLVMFunctionType(ptr_t, calln_p, 3, 0);
+                        LLVMValueRef calln_a[] = {
+                            clo_env,
+                            LLVMConstInt(i32_t, n_args, 0),
+                            args_ptr
+                        };
+                        result.value = LLVMBuildCall2(ctx->builder,
+                                                      calln_ft,
+                                                      clo_fn,
+                                                      calln_a,
+                                                      3,
+                                                      "tail_clo_call");
+                        result.type = ast->inferred_type
+                            ? type_clone(ast->inferred_type)
+                            : type_unknown();
+                        return result;
+                    }
+
                     LLVMTypeRef arr_t = LLVMArrayType(ptr_t, n_args > 0 ? n_args : 1);
                     LLVMValueRef arr_ptr = LLVMBuildAlloca(ctx->builder, arr_t, "call_args");
 
