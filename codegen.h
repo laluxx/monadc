@@ -63,6 +63,7 @@ typedef struct CodegenContext {
     bool tail_position;
     bool current_closure_abi;
     int current_closure_param_count;
+    bool repl_host_globals;
 
     // Monomorphization cache
     MonoCache mono_cache;

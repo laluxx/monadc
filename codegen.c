@@ -8370,9 +8370,10 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     var = LLVMGetNamedGlobal(ctx->module, var_name);
                     if (!var) {
                         var = LLVMAddGlobal(ctx->module, llvm_type, var_name);
-                        LLVMSetInitializer(var, LLVMConstNull(llvm_type));
                         LLVMLinkage linkage = LLVMExternalLinkage;
-                        if (ctx->module_ctx &&
+                        if (!ctx->repl_host_globals)
+                            LLVMSetInitializer(var, LLVMConstNull(llvm_type));
+                        if (!ctx->repl_host_globals && ctx->module_ctx &&
                             !should_export_symbol(ctx->module_ctx, var_name)) {
                             linkage = LLVMInternalLinkage;
                         }

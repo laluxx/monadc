@@ -444,6 +444,16 @@ typedef struct { char name[256]; void *addr; } ImportedSym;
 static ImportedSym g_imported[MAX_IMPORTED];
 static int         g_imported_count = 0;
 
+typedef struct {
+    char name[256];
+    void *addr;
+    size_t size;
+} ReplHostGlobal;
+
+#define MAX_REPL_HOST_GLOBALS 1024
+static ReplHostGlobal g_repl_host_globals[MAX_REPL_HOST_GLOBALS];
+static int g_repl_host_global_count = 0;
+
 static void register_imported_sym(const char *name, void *addr) {
     if (!name || !*name || !addr) return;
 
@@ -460,6 +470,81 @@ static void register_imported_sym(const char *name, void *addr) {
     g_imported[g_imported_count].name[255] = '\0';
     g_imported[g_imported_count].addr = addr;
     g_imported_count++;
+}
+
+static size_t repl_host_global_size(Type *t) {
+    if (!t) return sizeof(void *);
+    switch (t->kind) {
+    case TYPE_CHAR:
+    case TYPE_BYTE:
+    case TYPE_BOOL:
+    case TYPE_I8:
+    case TYPE_U8:
+        return 1;
+    case TYPE_I16:
+    case TYPE_U16:
+        return 2;
+    case TYPE_I32:
+    case TYPE_U32:
+    case TYPE_F32:
+        return 4;
+    case TYPE_INT:
+    case TYPE_HEX:
+    case TYPE_BIN:
+    case TYPE_OCT:
+    case TYPE_I64:
+    case TYPE_U64:
+    case TYPE_FLOAT:
+        return 8;
+    case TYPE_I128:
+    case TYPE_U128:
+        return 16;
+    case TYPE_LAYOUT:
+        if (t->layout_is_scalar && t->layout_total_size > 0)
+            return (size_t)t->layout_total_size;
+        return sizeof(void *);
+    default:
+        return sizeof(void *);
+    }
+}
+
+static bool repl_ensure_host_global(REPLContext *ctx, EnvEntry *e) {
+    if (!ctx || !e || e->kind != ENV_VAR || !e->value)
+        return true;
+
+    const char *name = LLVMGetValueName(e->value);
+    if (!name || !*name)
+        return true;
+
+    for (int i = 0; i < g_repl_host_global_count; i++) {
+        if (strcmp(g_repl_host_globals[i].name, name) == 0)
+            return true;
+    }
+
+    if (g_repl_host_global_count >= MAX_REPL_HOST_GLOBALS) {
+        fprintf(stderr, "REPL: too many persisted value bindings\n");
+        return false;
+    }
+
+    size_t size = repl_host_global_size(e->type);
+    if (size == 0) size = sizeof(void *);
+    void *addr = calloc(1, size);
+    if (!addr) {
+        fprintf(stderr, "REPL: could not allocate persisted value storage for %s\n", name);
+        return false;
+    }
+
+    if (!repl_orc_define_absolute(ctx, name, addr, false)) {
+        free(addr);
+        return false;
+    }
+
+    ReplHostGlobal *slot = &g_repl_host_globals[g_repl_host_global_count++];
+    strncpy(slot->name, name, sizeof(slot->name) - 1);
+    slot->name[sizeof(slot->name) - 1] = '\0';
+    slot->addr = addr;
+    slot->size = size;
+    return true;
 }
 
 static bool repl_file_exists(const char *path) {
@@ -2051,6 +2136,7 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.fmt_float = ctx->cg.fmt_hex = ctx->cg.fmt_bin =
     ctx->cg.fmt_oct = NULL;
     ctx->cg.error_jmp_set = false;
+    ctx->cg.repl_host_globals = true;
     memset(ctx->cg.error_msg, 0, sizeof(ctx->cg.error_msg));
     ctx->cg.current_function_name = NULL;
     ctx->cg.tc_registry = tc_registry_create();
@@ -2902,6 +2988,12 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         AST *name_expr = ast->list.items[1];
         if (name_expr->type == AST_SYMBOL) {
             EnvEntry *e = env_lookup(ctx->cg.env, name_expr->symbol);
+            if (!repl_ensure_host_global(ctx, e)) {
+                if (ast) ast_free(ast);
+                recover_module(ctx);
+                fresh_module(ctx, "__repl_recover");
+                return false;
+            }
             repl_define_value_getter(ctx, e);
         }
     }
