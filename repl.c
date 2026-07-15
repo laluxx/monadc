@@ -1559,20 +1559,9 @@ static bool close_and_run(REPLContext *ctx) {
         defined_names[defined_count][sizeof(defined_names[defined_count]) - 1] = '\0';
         defined_count++;
     }
-    for (LLVMValueRef gv = LLVMGetFirstGlobal(mod);
-         gv && defined_count < 512;
-         gv = LLVMGetNextGlobal(gv)) {
-        const char *name = LLVMGetValueName(gv);
-        if (!name || !*name) continue;
-        if (!LLVMGetInitializer(gv)) continue;
-        LLVMLinkage linkage = LLVMGetLinkage(gv);
-        if (linkage == LLVMPrivateLinkage || linkage == LLVMInternalLinkage)
-            continue;
-        strncpy(defined_names[defined_count], name,
-                sizeof(defined_names[defined_count]) - 1);
-        defined_names[defined_count][sizeof(defined_names[defined_count]) - 1] = '\0';
-        defined_count++;
-    }
+    /* Do not LLJITLookup data symbols here. LLVM 18's ORC path can fault on
+     * cross-module data lookups in this REPL shape; value definitions expose
+     * exported getter functions instead, and those are covered above. */
 
     LLVMOrcThreadSafeModuleRef tsm =
         LLVMOrcCreateNewThreadSafeModule(mod, ctx->tsc);
