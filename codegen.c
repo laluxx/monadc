@@ -6323,6 +6323,15 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                           parser_get_filename(), ast->line, ast->column, ast->symbol);
         }
 
+        if (ctx->repl_host_globals && entry->source_ast &&
+            (entry->source_ast->type == AST_NUMBER ||
+             entry->source_ast->type == AST_STRING ||
+             entry->source_ast->type == AST_CHAR)) {
+            CodegenResult literal = codegen_expr(ctx, entry->source_ast);
+            if (literal.value)
+                return literal;
+        }
+
         /* fprintf(stderr, "[symbol load] name=‘%s’ entry=%p entry->value=%p is_global=%d\n", */
         /*         ast->symbol, (void*)entry, (void*)entry->value, */
         /*         entry->value ? (LLVMIsAGlobalVariable(entry->value) != NULL) : -1); */

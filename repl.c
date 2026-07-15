@@ -800,6 +800,48 @@ static bool expr_is_silent(AST *ast) {
            strcmp(s, "for")     == 0;
 }
 
+static bool repl_try_record_literal_define(REPLContext *ctx, AST *ast, const char *line) {
+    if (!ctx || !ast || ast->type != AST_LIST || ast->list.count < 3)
+        return false;
+    if (ast->list.items[0]->type != AST_SYMBOL ||
+        strcmp(ast->list.items[0]->symbol, "define") != 0)
+        return false;
+
+    AST *name_expr = ast->list.items[1];
+    AST *value_expr = ast->list.items[2];
+    if (!name_expr || name_expr->type != AST_SYMBOL || !value_expr)
+        return false;
+
+    Type *t = NULL;
+    switch (value_expr->type) {
+    case AST_NUMBER:
+        t = (value_expr->literal_str && strchr(value_expr->literal_str, '.'))
+            ? type_float()
+            : type_int();
+        break;
+    case AST_STRING:
+        t = type_string();
+        break;
+    case AST_CHAR:
+        t = type_char();
+        break;
+    default:
+        return false;
+    }
+
+    env_insert(ctx->cg.env, name_expr->symbol, t, NULL);
+    EnvEntry *e = env_lookup(ctx->cg.env, name_expr->symbol);
+    if (e) {
+        if (e->source_ast) ast_free(e->source_ast);
+        e->source_ast = ast_clone(value_expr);
+        free(e->source_text);
+        e->source_text = line ? strdup(line) : NULL;
+        free(e->llvm_name);
+        e->llvm_name = strdup(name_expr->symbol);
+    }
+    return true;
+}
+
 /* -------------------------------------------------------------------------
  * build_proc_description — format:
  *
@@ -2826,6 +2868,11 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         bool ok = handle_import(ctx, ast);
         ast_free(ast);
         return ok;
+    }
+
+    if (repl_try_record_literal_define(ctx, ast, line)) {
+        ast_free(ast);
+        return true;
     }
 
     bool silent = expr_is_silent(ast);
