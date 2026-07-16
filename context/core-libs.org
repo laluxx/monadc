@@ -163,6 +163,24 @@
   sound generic API; spelling =sum :: [a] -> a= without a constraint would hide
   the required identity and addition laws.
 
+[FIX id:fix.core-libs.total-list-lookup-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Data/List.mon conf:high]
+  =Data.List.at :: [a] -> Int -> Maybe a= is the total, preferred indexing API:
+  negative and out-of-range indices return =Nothing=. The historical partial
+  =nth= remains temporarily for compatibility. =reduce= now exposes its actual
+  polymorphic reducer type =(b -> a -> b)= instead of erasing it to =Fn=, with
+  executable =Int= and =Float= specialization coverage.
+
+[FIX id:fix.core-libs.generic-set-elements-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Data/Set.mon conf:high]
+  Set construction and algebra no longer hard-code =Int= elements. =singleton=
+  is polymorphic, and =union=/=difference= use polymorphic insertion/removal
+  helpers. Runtime coverage exercises both =Int= and =Float= sets.
+
+[TODO id:todo.core-libs.parameterized-set-2026-07-16 owner:codex status:open]
+  Promote the compiler's opaque =Set= representation to =Set a= so homogeneous
+  element types are tracked rather than merely accepted by polymorphic helper
+  functions. This needs compiler/runtime representation work and should land
+  with rejection tests for mixed-element sets.
+
 [FIX id:fix.coll.any-tested-2026-06-27 date:2026-06-27 by:codex]
   =any?= now has active runtime tests for success, miss, and empty-list
   behavior in =core/prelude/Coll.mon=.

@@ -7,8 +7,16 @@ module Data.Set
 import Coll
 
 
-define singleton :: Int -> Set
+define singleton :: a -> Set
   x -> set x
+
+
+define set-conj :: Set -> a -> Set
+  acc x -> conj acc x
+
+
+define set-disj :: Set -> a -> Set
+  acc x -> disj acc x
 
 
 define singleton? :: Set -> Bool
@@ -16,11 +24,11 @@ define singleton? :: Set -> Bool
 
 
 define union :: Set -> Set -> Set
-  a b -> foldl (lambda ([acc : Set] [x : Int] -> Set) (conj acc x)) a b
+  a b -> foldl set-conj a b
 
 
 define difference :: Set -> Set -> Set
-  a b -> foldl (lambda ([acc : Set] [x : Int] -> Set) (disj acc x)) a b
+  a b -> foldl set-disj a b
 
 
 define intersection :: Set -> Set -> Set
@@ -53,10 +61,13 @@ define disjoint? :: Set -> Set -> Bool
 
 tests
   assert-eq (singleton 1) {1} "Data.Set singleton"
+  assert-eq (singleton 1.5) {1.5} "Data.Set singleton Float"
   assert-eq (singleton? {1}) True "Data.Set singleton?"
   assert-eq (union {1 2} {2 3}) {1 2 3} "Data.Set union"
+  assert-eq (union {1.5 2.5} {2.5 3.5}) {1.5 2.5 3.5} "Data.Set union Float"
   assert-eq (intersection {1 2 3} {2 3 4}) {2 3} "Data.Set intersection"
   assert-eq (difference {1 2 3} {2 3}) {1} "Data.Set difference"
+  assert-eq (difference {1.5 2.5 3.5} {2.5 3.5}) {1.5} "Data.Set difference Float"
   assert-eq (symmetric-difference {1 2} {2 3}) {1 3} "Data.Set symmetric difference"
   assert-eq (subset? {1 2} {1 2 3}) True "Data.Set subset"
   assert-eq (proper-subset? {1 2} {1 2 3}) True "Data.Set proper subset"

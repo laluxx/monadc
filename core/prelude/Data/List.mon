@@ -14,8 +14,10 @@
 
 module Data.List
   [list-null? list-length list-drop list-take list-append list-reverse
-   length reverse nth reduce
+   length reverse at nth reduce
    caar cadr cdar cddr caddr cdddr list-tail]
+
+import Data.Maybe
 
 
 define list-null? :: [a] -> Bool
@@ -36,13 +38,20 @@ define reverse :: [a] -> [a]
   xs -> list-reverse xs
 
 
+define at :: [a] -> Int -> Maybe a
+  _ n      | n < 0 -> Nothing
+  [] _             -> Nothing
+  [x|xs] 0         -> Just x
+  [x|xs] n         -> at xs (n - 1)
+
+
 define nth :: [a] -> Int -> a
   [] _              -> error "Data.List.nth: index out of bounds"
   [x|xs] n | n <= 0 -> x
   [x|xs] n          -> nth xs (n - 1)
 
 
-define reduce :: Fn -> b -> [a] -> b
+define reduce :: (b -> a -> b) -> b -> [a] -> b
   _ acc []     -> acc
   f acc [x|xs] -> reduce f (f acc x) xs
 
@@ -133,6 +142,9 @@ tests
   :reverse:
 
   :nth:
+  assert-eq (show (at (list 5 6 7) 0)) "(Just 5)" "Data.List at first"
+  assert-eq (show (at (list 5 6 7) 9)) "Nothing" "Data.List at out of bounds"
+  assert-eq (show (at (list 5 6 7) -1)) "Nothing" "Data.List at negative"
   assert-eq (nth (list 5 6 7) 0) 5 "Data.List nth first"
   assert-eq (nth (list 5 6 7) 2) 7 "Data.List nth last"
   :nth:
@@ -140,6 +152,7 @@ tests
   :reduce:
   assert-eq (reduce (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)) 10 "Data.List reduce sum"
   assert-eq (reduce (lambda (acc x) (* acc x)) 1 (list 2 3 4)) 24 "Data.List reduce product"
+  assert-eq (reduce (lambda ([acc : Float] [x : Float] -> Float) (+ acc x)) 0.0 (list 1.5 2.5)) 4.0 "Data.List reduce Float"
   :reduce:
 
   :legacy-accessors:
