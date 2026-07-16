@@ -123,7 +123,7 @@ target_link_options(monad PRIVATE ${LLVM_CONFIG_LDFLAGS_LIST})
 if(WIN32)
   # Core loading and dependent inference are deeply recursive. Reserve ample
   # virtual stack so address-layout variation cannot make Windows CI flaky.
-  target_link_options(monad PRIVATE "-Wl,--stack,268435456")
+  target_link_options(monad PRIVATE "-Wl,--stack,1073741824")
 endif()
 target_link_libraries(monad PRIVATE monad_runtime
   ${READLINE_LIBRARY}
