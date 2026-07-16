@@ -1196,7 +1196,13 @@ static int do_build(const BuildInfo *bi, const CompilerFlags *flags) {
             strncat(trace_flags, " -v", sizeof(trace_flags) - strlen(trace_flags) - 1);
     }
 
+#if defined(_WIN32)
+    /* Windows cmd.exe requires an outer quote when the command itself starts
+     * with a quoted executable path; otherwise it discards the opening quote. */
+    snprintf(cmd, sizeof(cmd), "\"%s %s -o %s%s%s%s%s%s\"",
+#else
     snprintf(cmd, sizeof(cmd), "%s %s -o %s%s%s%s%s%s",
+#endif
              quoted_self, quoted_main, quoted_out,
              bi->monad_options[0] ? " " : "",
              bi->monad_options[0] ? bi->monad_options : "",

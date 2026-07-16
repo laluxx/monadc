@@ -409,7 +409,9 @@
 [FIX id:fix.buildsystem.windows-package-shell-quoting-2026-07-16 date:2026-07-16 by:codex src:cli.c,tests/test_checkout_local_paths.py conf:high]
   Package builds now quote the recursively invoked compiler, source, and output
   paths for the host shell.  Native Windows uses =cmd.exe= quoting even inside
-  an MSYS2 CI job; Unix hosts retain POSIX single-quote escaping.  This fixes
+  an MSYS2 CI job and wraps the complete command in the extra outer quote that
+  =cmd.exe= requires when a quoted executable begins the command; Unix hosts
+  retain POSIX single-quote escaping.  This fixes
   checkout package builds when =GetModuleFileNameA= returns a drive-letter path
   with backslashes, and also supports checkout paths containing spaces.
 

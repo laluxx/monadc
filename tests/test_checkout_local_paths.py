@@ -102,6 +102,8 @@ class CheckoutLocalPathTests(unittest.TestCase):
         self.assertIn("shell_quote_arg(bi->main_file", cli_c)
         self.assertIn("shell_quote_arg(bi->out_path", cli_c)
         self.assertIn("quoted_self, quoted_main, quoted_out", cli_c)
+        self.assertIn("Windows cmd.exe requires an outer quote", cli_c)
+        self.assertIn('"\\\"%s %s -o %s%s%s%s%s%s\\\""', cli_c)
 
     def test_repl_module_import_link_uses_runtime_archive_resolver(self):
         repl_c = read("repl.c")
