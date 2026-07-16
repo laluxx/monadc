@@ -2061,14 +2061,14 @@ skip_primitive_type_autoload:
     return cm;
 }
 
-static void compile(CompilerFlags *flags) {
+static bool compile(CompilerFlags *flags) {
     g_ffi_link_libs[0]  = '\0';
     g_ffi_link_libs_len = 0;
     codegen_set_trace(flags->trace_codegen || flags->verbose_level > 0);
     infer_set_trace(flags->trace_dep || flags->verbose_level > 1);
 
     CompiledModule *main_mod = compile_one(flags->input_file, flags, true);
-    if (!main_mod) return;  /* emit-json mode, no linking needed */
+    if (!main_mod) return true;  /* emit-json/JIT mode, no linking needed */
 
     // Collect .o files: registry is prepend (newest first), reverse to get
     // deps first so linker resolves symbols correctly. Deduplicate by realpath
@@ -2197,6 +2197,7 @@ static void compile(CompilerFlags *flags) {
     registry_free_all();
     wisp_clear_arities();
     if (g_ffi) { ffi_context_free(g_ffi); g_ffi = NULL; }
+    return rc == 0;
 }
 
 bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {
@@ -2265,7 +2266,6 @@ int main(int argc, char **argv) {
     case CMD_DEBUG:   cmd_debug(&flags);                 return 0;
     case CMD_COMPILE:
     default:
-        compile(&flags);
-        return 0;
+        return compile(&flags) ? 0 : 1;
     }
 }

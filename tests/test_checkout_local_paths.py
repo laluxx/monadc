@@ -162,6 +162,30 @@ class CheckoutLocalPathTests(unittest.TestCase):
             self.assertEqual(run_result.returncode, 0, run_result.stdout)
             self.assertTrue(run_result.stdout.endswith("42\n"), run_result.stdout)
 
+    def test_compiler_returns_failure_when_linker_fails(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-link-failure-") as td:
+            temp = Path(td)
+            source = temp / "main.mon"
+            output = temp / "main"
+            source.write_text("(module Main)\nshow 42\n", encoding="utf-8")
+
+            env = os.environ.copy()
+            env["HOME"] = str(temp)
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(temp / "missing-libmonad.a")
+            result = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("linking failed", result.stdout)
+
     def test_package_build_finds_checkout_core_from_project_directory(self):
         with tempfile.TemporaryDirectory(prefix="monadc-package-checkout-") as td:
             project = Path(td)

@@ -421,6 +421,14 @@
   producing intermittent =0xC00000FD= failures in package and how-to smoke
   compilation after otherwise identical invocations had passed.
 
+[FIX id:fix.buildsystem.compiler-link-exit-status-2026-07-16 date:2026-07-16 by:codex src:main.c,tests/test_checkout_local_paths.py conf:high]
+  Direct compilation now returns a nonzero process status when the external
+  linker fails.  Previously =compile= printed =[error] linking failed=, cleaned
+  up, and =main= unconditionally returned success, allowing tests and package
+  tooling to mistake a missing executable for a successful build.  The
+  regression supplies a deliberately missing runtime archive and checks both
+  the diagnostic and failure status.
+
 [THINK id:think.buildsystem.project-vs-single-file conf:medium]
   The build system supports two modes: single-file compilation
   (=monadc build file.mon=) and project compilation (=monadc build= in

@@ -169,6 +169,7 @@ set(MONADC_CHECKOUT_LOCAL_TESTS
   test_legacy_buildsystem_links_runtime_archive_not_object_file
   test_repl_module_import_link_uses_runtime_archive_resolver
   test_checkout_compiler_can_compile_program_without_install_env
+  test_compiler_returns_failure_when_linker_fails
   test_package_build_finds_checkout_core_from_project_directory
 )
 
