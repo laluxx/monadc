@@ -139,6 +139,30 @@
   duplicate archive foundations. Disabled experiments, duplicate definitions,
   untested platform assembly, and commented sketches were not public contracts.
 
+[FIX id:fix.core-libs.numeric-abstraction-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Numeric.mon,core/prelude/Data/Int.mon,core/prelude/Data/Float.mon,core/prelude/Data/Foldable.mon,core/prelude/Coll.mon,codegen.c conf:high]
+  Numeric convenience operations =inc=, =dec=, =double=, =square=, and =cube=
+  are part of the =Num= algebra and have executable =Int= and =Float=
+  instances. Concrete type modules expose the same vocabulary through
+  =Int.*= and =Float.*= until imported typeclass dictionaries can be resolved
+  across module boundaries. =sumWith= and =productWith= provide fully
+  polymorphic element folding by making the identity and algebra explicit;
+  the concrete =Math.sum :: [Int] -> Int= and =Math.product= APIs were removed.
+  Collection combinators now state their actual function types instead of
+  erasing higher-order arguments to =Fn=.
+
+[FIX id:fix.core-libs.list-monomorphization-2026-07-16 date:2026-07-16 by:codex src:codegen.c,core/prelude/Data/Foldable.mon conf:high]
+  Monomorphization now structurally unifies =TYPE_LIST= element types and uses
+  recursive type equality for specialization cache keys. A generic fold can
+  therefore specialize independently for =[Int]= and =[Float]= instead of
+  reusing the first list specialization by outer type kind alone.
+
+[TODO id:todo.core-libs.constrained-foldable-numeric-2026-07-16 owner:codex status:open]
+  Add constrained top-level signatures and imported dictionary propagation so
+  the canonical API can be =sum :: (Foldable t, Num a) => t a -> a= and Num
+  methods can be used unqualified across modules. Until then, =sumWith= is the
+  sound generic API; spelling =sum :: [a] -> a= without a constraint would hide
+  the required identity and addition laws.
+
 [FIX id:fix.coll.any-tested-2026-06-27 date:2026-06-27 by:codex]
   =any?= now has active runtime tests for success, miss, and empty-list
   behavior in =core/prelude/Coll.mon=.

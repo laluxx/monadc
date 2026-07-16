@@ -1,31 +1,16 @@
 ;;; Math.mon --- Integer mathematics and common constants
 
 module Math
-  [pi tau half-pi e phi inc dec double square cube sign
+  [pi tau half-pi e phi sign
    zero? positive? negative? even? odd? divisible?
    gcd lcm factorial fib prime? clamp min max
-   sum product sum-range product-range pow]
+   sum-range product-range pow]
 
 define [pi :: Float] 3.141592653589793
 define [tau :: Float] 6.283185307179586
 define [half-pi :: Float] 1.5707963267948966
 define [e :: Float] 2.718281828459045
 define [phi :: Float] 1.6180339887498949
-
-define inc :: Int -> Int
-  x -> x + 1
-
-define dec :: Int -> Int
-  x -> x - 1
-
-define double :: Int -> Int
-  x -> x * 2
-
-define square :: Int -> Int
-  x -> x * x
-
-define cube :: Int -> Int
-  x -> x * x * x
 
 define sign :: Int -> Int
   x | x < 0     -> -1
@@ -90,14 +75,6 @@ define max :: Int -> Int -> Int
   a b | a >= b     -> a
       | otherwise  -> b
 
-define sum :: [Int] -> Int
-  []     -> 0
-  [x|xs] -> x + (sum xs)
-
-define product :: [Int] -> Int
-  []     -> 1
-  [x|xs] -> x * (product xs)
-
 define sum-range :: Int -> Int -> Int
   lo hi | lo > hi    -> 0
         | otherwise  -> lo + (sum-range (lo + 1) hi)
@@ -111,8 +88,8 @@ define pow :: Int -> Int -> Int
                 | otherwise     -> base * (pow base (exponent - 1))
 
 tests
-  assert-eq (inc 4) 5 "Math inc"
-  assert-eq (cube 3) 27 "Math cube"
+  assert-eq (Int.inc 4) 5 "Math uses Data.Int inc"
+  assert-eq (Int.cube 3) 27 "Math uses Data.Int cube"
   assert-eq (sign -9) -1 "Math sign"
   assert-eq (gcd 54 24) 6 "Math gcd"
   assert-eq (lcm 6 8) 24 "Math lcm"
@@ -121,8 +98,6 @@ tests
   assert-eq (prime? 29) True "Math prime"
   assert-eq (prime? 21) False "Math composite"
   assert-eq (clamp 12 0 10) 10 "Math clamp"
-  assert-eq (sum (list 1 2 3 4)) 10 "Math sum"
-  assert-eq (product (list 2 3 4)) 24 "Math product"
   assert-eq (sum-range 1 100) 5050 "Math sum range"
   assert-eq (product-range 2 5) 120 "Math product range"
   assert-eq (pow 3 4) 81 "Math pow"

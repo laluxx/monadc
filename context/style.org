@@ -143,6 +143,13 @@
   equation-style definitions, type signatures, pattern clauses, and guards
   instead of parenthesized Lisp forms for the main program shape.
 
+[DEC id:dec.style.two-blank-lines-between-functions-2026-07-16 date:2026-07-16 by:human src:user-request conf:high]
+  Monad source uses exactly two blank lines between top-level function, method,
+  class, instance, data, and value declarations. Apply this convention to files
+  as they are touched; do not require an immediate repository-wide whitespace
+  rewrite. Tests and declaration bodies remain compact according to their local
+  structure.
+
 #+BEGIN_SRC monad
 define take :: Int -> [a] -> [a]
   _ []            -> []

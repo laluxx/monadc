@@ -14,9 +14,30 @@
 ;;; Code:
 
 module Data.Int
-  [zero? nonzero? positive? negative?
+  [inc dec double square cube
+   zero? nonzero? positive? negative?
    abs signum min max clamp between?
    strict-between? even? odd?]
+
+
+method inc :: Self -> Self
+  x -> x + 1
+
+
+method dec :: Self -> Self
+  x -> x - 1
+
+
+method double :: Self -> Self
+  x -> x * 2
+
+
+method square :: Self -> Self
+  x -> x * x
+
+
+method cube :: Self -> Self
+  x -> x * x * x
 
 
 method zero? :: Self -> Bool
@@ -85,6 +106,14 @@ method odd? :: Self -> Bool
 
 
 tests
+  :arithmetic:
+  assert-eq (Int.inc 4) 5 "Data.Int inc"
+  assert-eq (Int.dec 4) 3 "Data.Int dec"
+  assert-eq (Int.double 4) 8 "Data.Int double"
+  assert-eq (Int.square 4) 16 "Data.Int square"
+  assert-eq (Int.cube 4) 64 "Data.Int cube"
+  :arithmetic:
+
   :predicates:
   assert-eq (Int.zero? 0) True "Data.Int zero? true"
   assert-eq (Int.zero? 3) False "Data.Int zero? false"

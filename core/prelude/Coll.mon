@@ -32,40 +32,40 @@ define drop :: Int -> [a] -> [a]
   n [x|xs] | otherwise         -> (x ++ xs)
 
 
-define takeWhile :: Fn -> [a] -> [a]
+define takeWhile :: (a -> Bool) -> [a] -> [a]
   _ []                         -> []
   p [x|xs] | p x               -> (x ++ (takeWhile p xs))
   p [x|xs] | otherwise         -> []
 
 
-define dropWhile :: Fn -> [a] -> [a]
+define dropWhile :: (a -> Bool) -> [a] -> [a]
   _ []                         -> []
   p [x|xs] | p x               -> dropWhile p xs
   p [x|xs] | otherwise         -> (x ++ xs)
 
 
-define map :: Fn -> [a] -> [b]
+define map :: (a -> b) -> [a] -> [b]
   _ []     -> []
   f [x|xs] -> ((f x) ++ (map f xs))
 
 
-define any? :: Fn -> [a] -> Bool
+define any? :: (a -> Bool) -> [a] -> Bool
   _ []     -> False
   p [x|xs] -> if p x then True else any? p xs
 
 
-define all? :: Fn -> [a] -> Bool
+define all? :: (a -> Bool) -> [a] -> Bool
   _ []                         -> True
   p [x|xs] | p x               -> all? p xs
   p [x|xs] | otherwise         -> False
 
 
-define foldl :: Fn -> b -> [a] -> b
+define foldl :: (b -> a -> b) -> b -> [a] -> b
   _ acc []     -> acc
   f acc [x|xs] -> foldl f (f acc x) xs
 
 
-define foldr :: Fn -> b -> [a] -> b
+define foldr :: (a -> b -> b) -> b -> [a] -> b
   _ acc []     -> acc
   f acc [x|xs] -> (f x (foldr f acc xs))
 
@@ -76,7 +76,7 @@ define zip :: [a] -> [b] -> [c]
   [x|xs] [y|ys] -> ((list x y) ++ (zip xs ys))
 
 
-define zipwith :: Fn -> [a] -> [b] -> [c]
+define zipwith :: (a -> b -> c) -> [a] -> [b] -> [c]
   _ [] _          -> []
   _ _ []          -> []
   f [x|xs] [y|ys] -> ((f x y) ++ (zipwith f xs ys))
@@ -91,14 +91,14 @@ define append :: [a] -> a -> [a]
 ;;   xs <- (append *xs val)
 
 
-define filter :: Fn -> [a] -> [a]
+define filter :: (a -> Bool) -> [a] -> [a]
   _ []                         -> []
   p [x|xs] | p x               -> (x ++ (filter p xs))
   p [x|xs] | otherwise         -> filter p xs
 
 
 ;; TODO Move in Applicative and make variadic
-define both :: Fn -> Fn -> Fn
+define both :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
   f g -> (lambda (x) (and (f x) (g x)))
 
 

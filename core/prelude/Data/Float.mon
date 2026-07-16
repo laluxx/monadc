@@ -13,9 +13,30 @@
 ;;; Code:
 
 module Data.Float
-  [zero? nonzero? positive? negative?
+  [inc dec double square cube
+   zero? nonzero? positive? negative?
    abs signum min max clamp
    between? strict-between?]
+
+
+method inc :: Self -> Self
+  x -> x + 1.0
+
+
+method dec :: Self -> Self
+  x -> x - 1.0
+
+
+method double :: Self -> Self
+  x -> x * 2.0
+
+
+method square :: Self -> Self
+  x -> x * x
+
+
+method cube :: Self -> Self
+  x -> x * x * x
 
 
 method zero? :: Self -> Bool
@@ -74,6 +95,14 @@ method strict-between? :: Self -> Self -> Self -> Bool
 
 
 tests
+  :arithmetic:
+  assert-eq (Float.inc 1.5) 2.5 "Data.Float inc"
+  assert-eq (Float.dec 1.5) 0.5 "Data.Float dec"
+  assert-eq (Float.double 1.5) 3.0 "Data.Float double"
+  assert-eq (Float.square 1.5) 2.25 "Data.Float square"
+  assert-eq (Float.cube 2.0) 8.0 "Data.Float cube"
+  :arithmetic:
+
   :predicates:
   assert-eq (Float.zero? 0.0) True "Data.Float zero? true"
   assert-eq (Float.zero? 0.5) False "Data.Float zero? false"

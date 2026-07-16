@@ -8,7 +8,18 @@
 
 module Data.Foldable
   [Foldable foldr foldl foldl-strict foldr1 foldl1 foldMap null? length elem? not-elem? toList
-   FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey]
+   FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey
+   sumWith productWith]
+
+
+define sumWith :: a -> (a -> a -> a) -> [a] -> a
+  identity _ []       -> identity
+  identity add [x|xs] -> sumWith (add identity x) add xs
+
+
+define productWith :: a -> (a -> a -> a) -> [a] -> a
+  identity _ []       -> identity
+  identity mul [x|xs] -> productWith (mul identity x) mul xs
 
 
 class Foldable t where
@@ -39,6 +50,13 @@ class Foldable t => FoldableWithKey t where
 
 
 tests
+  :generic-numeric-folds:
+  assert-eq (sumWith 0 (lambda (x y) (+ x y)) (list 1 2 3 4)) 10 "Foldable sumWith Int"
+  assert-eq (sumWith 0.0 (lambda ([x : Float] [y : Float] -> Float) (+ x y)) (list 1.5 2.5)) 4.0 "Foldable sumWith Float"
+  assert-eq (productWith 1 (lambda (x y) (* x y)) (list 2 3 4)) 24 "Foldable productWith Int"
+  assert-eq (productWith 1.0 (lambda ([x : Float] [y : Float] -> Float) (* x y)) (list 1.5 2.0)) 3.0 "Foldable productWith Float"
+  :generic-numeric-folds:
+
   :registration:
   assert-eq 1 1 "Foldable registers Foldable"
   assert-eq 1 1 "Foldable registers FoldableWithKey"

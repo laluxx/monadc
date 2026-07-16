@@ -175,9 +175,7 @@ void codegen_init(CodegenContext *ctx, const char *module_name) {
 static bool mono_types_match(Type **a, Type **b, int count) {
     for (int i = 0; i < count; i++) {
         if (!a[i] || !b[i]) return false;
-        if (a[i]->kind != b[i]->kind) return false;
-        /* For ground types, kind equality is enough.
-         * For compound types we'd recurse — add as needed. */
+        if (!types_equal(a[i], b[i])) return false;
     }
     return true;
 }
@@ -365,6 +363,16 @@ static void mono_unify_formal_actual(Type *formal, Type *actual, TypeSubst *ts) 
             mono_unify_formal_actual(formal->element_type, actual->element_type, ts);
         else if (actual->kind == TYPE_ARR && actual->arr_element_type)
             mono_unify_formal_actual(formal->element_type, actual->arr_element_type, ts);
+        return;
+    }
+
+    if (formal->kind == TYPE_LIST && actual->kind == TYPE_LIST &&
+        formal->list_count > 0 && actual->list_count > 0) {
+        /* A source annotation such as [a] stores one homogeneous element
+         * shape. A list literal may retain one or more observed element
+         * types; the first has already been unified with the rest by HM. */
+        mono_unify_formal_actual(formal->list_types[0],
+                                 actual->list_types[0], ts);
         return;
     }
 
