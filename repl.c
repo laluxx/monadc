@@ -2056,7 +2056,7 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
             w += snprintf(cmd + w, sizeof(cmd) - w, " \"%s\"", all_objs[i]);
         w += snprintf(cmd + w, sizeof(cmd) - w,
                       " -Wl,--unresolved-symbols=ignore-all"
-                      " \"%s\" %s -lm 2>&1", runtime_archive, llvm_flags);
+                      " \"%s\" %s -lm -lgmp 2>&1", runtime_archive, llvm_flags);
         free(runtime_archive);
         free(all_objs);
 

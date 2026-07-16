@@ -363,10 +363,10 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   isolated from the compiler typedef. Windows REPL imports build a DLL in the
   native temporary directory and load symbols through =LoadLibraryA= and
   =GetProcAddress=. Imported modules link the runtime archive's LLVM C API
-  references explicitly using captured =llvm-config= flags, which PE linkers
-  cannot defer to the host process as ELF linkers can. Cross-platform compiler
-  smoke tests resolve generated executables with the host suffix because MinGW
-  appends =.exe= to explicit output names.
+  references explicitly using captured =llvm-config= flags plus GMP, which PE
+  linkers cannot defer to the host process as ELF linkers can. Cross-platform
+  compiler smoke tests resolve generated executables with the host suffix
+  because MinGW appends =.exe= to explicit output names.
 
 [FIX id:fix.build.windows-crlf-bulk-read-2026-07-12 date:2026-07-12 by:codex]
   Bulk source/config readers must open files in binary mode and terminate at

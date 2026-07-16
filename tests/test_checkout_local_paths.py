@@ -113,6 +113,7 @@ class CheckoutLocalPathTests(unittest.TestCase):
         self.assertIn('"libmonad.a"', repl_c)
         self.assertIn('popen("llvm-config --ldflags --libs core", "r")', repl_c)
         self.assertNotIn("`llvm-config --ldflags --libs core`", repl_c)
+        self.assertIn('" \\"%s\\" %s -lm -lgmp 2>&1"', repl_c)
         self.assertNotIn(" /usr/local/lib/libmonad.a -lm 2>&1", repl_c)
 
     def test_checkout_compiler_can_compile_program_without_install_env(self):
