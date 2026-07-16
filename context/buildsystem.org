@@ -415,6 +415,12 @@
   checkout package builds when =GetModuleFileNameA= returns a drive-letter path
   with backslashes, and also supports checkout paths containing spaces.
 
+[FIX id:fix.buildsystem.windows-compiler-stack-2026-07-16 date:2026-07-16 by:codex src:CMakeLists.txt,tests/test_windows_portability.py conf:high]
+  The Windows CMake compiler target reserves an 8 MiB stack.  Core bootstrap
+  and dependent inference can exceed MinGW's small default stack, previously
+  producing intermittent =0xC00000FD= failures in package and how-to smoke
+  compilation after otherwise identical invocations had passed.
+
 [THINK id:think.buildsystem.project-vs-single-file conf:medium]
   The build system supports two modes: single-file compilation
   (=monadc build file.mon=) and project compilation (=monadc build= in

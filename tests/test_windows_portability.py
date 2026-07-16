@@ -49,6 +49,12 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("HEADERS = $(wildcard *.h)", makefile)
         self.assertIn("%.o: %.c $(HEADERS)", makefile)
 
+    def test_cmake_gives_compiler_a_nontrivial_windows_stack(self):
+        cmake = read("CMakeLists.txt")
+
+        self.assertIn("if(WIN32)", cmake)
+        self.assertIn('target_link_options(monad PRIVATE "-Wl,--stack,8388608")', cmake)
+
     def test_compiler_link_paths_do_not_hardcode_posix_flags_for_windows(self):
         main_c = read("main.c")
         buildsystem_c = read("buildsystem.c")

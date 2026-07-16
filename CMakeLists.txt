@@ -117,6 +117,10 @@ target_include_directories(monad PRIVATE
   ${LIBCLANG_INCLUDE_DIRS}
 )
 target_link_options(monad PRIVATE ${LLVM_CONFIG_LDFLAGS_LIST})
+if(WIN32)
+  # Core loading and dependent inference exceed MinGW's small default stack.
+  target_link_options(monad PRIVATE "-Wl,--stack,8388608")
+endif()
 target_link_libraries(monad PRIVATE monad_runtime
   ${READLINE_LIBRARY}
   ${GMP_LIBRARY}
