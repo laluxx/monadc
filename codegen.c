@@ -12269,17 +12269,12 @@ if (ast->list.count >= 5) {
                     LLVMValueRef args_ptr = LLVMBuildBitCast(ctx->builder,
                                                arr_ptr, ptr_t, "tc_args_ptr");
 
-                    /* Look up the env entry to determine ABI */
-                    const char *impl_fn_name = LLVMGetValueName(fn);
-                    EnvEntry   *impl_entry   = env_lookup(ctx->env, impl_fn_name);
-                    bool        impl_is_clo  = impl_entry && impl_entry->is_closure_abi;
-                    /* { */
-                    /*     char *ir = LLVMPrintValueToString(fn); */
-                    /*     fprintf(stderr, "DEBUG tc dispatch: fn=‘%s’ is_clo=%d\n  IR: %s\n", */
-                    /*             impl_fn_name, (int)impl_is_clo, ir); */
-                    /*     LLVMDisposeMessage(ir); */
-                    /* } */
-
+                    /* Determine the implementation ABI from its emitted signature. */
+                    /* Instance registration can retain closure metadata after
+                     * specialization has emitted a concrete two-argument
+                     * function.  The LLVM signature is authoritative here:
+                     * closure ABI methods always have (env, argc, argv). */
+                    bool impl_is_clo = LLVMCountParams(fn) == 3;
                     LLVMValueRef call_r;
                     if (impl_is_clo) {
                         /* Closure ABI: fn(null_env, 2, args[]) -> ptr */
@@ -14005,13 +14000,20 @@ if (ast->list.count >= 5) {
                                 if (strcmp(inst->method_names[_mi], op) == 0) {
                                     const char *impl_name                = NULL;
                                     char        constructed_name[256];
+                                    snprintf(constructed_name, sizeof(constructed_name),
+                                             "__impl_%s_%s_%s", cls, type_name, op);
                                     if (inst->method_funcs[_mi]) {
                                         impl_name                        = LLVMGetValueName(inst->method_funcs[_mi]);
                                     } else {
-                                        snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
                                         impl_name                        = constructed_name;
                                     }
-                                    EnvEntry *impl_entry  = env_lookup(ctx->env, impl_name);
+                                    /* Module qualification can change the emitted
+                                     * LLVM name, while the defining environment
+                                     * retains the canonical instance symbol. */
+                                    EnvEntry *impl_entry = env_lookup(ctx->env,
+                                                                      constructed_name);
+                                    if (!impl_entry && impl_name)
+                                        impl_entry = env_lookup(ctx->env, impl_name);
                                     if (impl_entry) entry = impl_entry;
                                     break;
                                 }
@@ -14026,8 +14028,10 @@ if (ast->list.count >= 5) {
                     }
                 }
 
-                /* Re-resolve non-ASCII names via mangled entry */
-                {
+                /* Re-resolve ordinary non-ASCII names via their mangled entry.
+                 * A typeclass method has already selected its concrete instance
+                 * above; resolving the plain method name again would discard it. */
+                if (!tc_is_method(ctx->tc_registry, head->symbol)) {
                     char         *mangled = mangle_unicode_name(head->symbol);
                     if (mangled) {
                         EnvEntry *me      = env_lookup(ctx->env, mangled);
@@ -14036,6 +14040,9 @@ if (ast->list.count >= 5) {
                         free(mangled);
                     }
                 }
+                if (tc_is_method(ctx->tc_registry, head->symbol) &&
+                    entry->func_ref && LLVMCountParams(entry->func_ref) != 3)
+                    entry->is_closure_abi = false;
                 // Check argument count
                 int    declared_params = entry->param_count - entry->lifted_count;
                 size_t arg_count       = ast->list.count - 1;
