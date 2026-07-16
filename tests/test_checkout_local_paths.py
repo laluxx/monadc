@@ -252,6 +252,9 @@ class CheckoutLocalPathTests(unittest.TestCase):
                     f"MONAD={MONAD}\nproject={project}\n{build_result.stdout}",
                 )
             self.assertEqual(build_result.returncode, 0, build_result.stdout)
+            self.assertNotIn("[dep] Warning:", build_result.stdout)
+            self.assertNotIn("Class:", build_result.stdout)
+            self.assertNotIn("compiled method:", build_result.stdout)
 
             exe = generated_executable(project / "build" / "checkout-smoke")
             run_result = subprocess.run(

@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import tempfile
 import unittest
 
 from monad_binary import resolve_monad_binary
@@ -81,6 +82,28 @@ class ReplTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(clean_output(result.stdout).splitlines(), ["10", "5"])
+
+    def test_repl_imported_set_method_runs_without_debug_noise(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-repl-import-") as td:
+            env = os.environ.copy()
+            env["HOME"] = td
+            env["MONAD_NO_PROMPT"] = "1"
+            result = subprocess.run(
+                [str(MONAD), "repl"],
+                input="import Data.Set\n({1 2}.union {2 3})\n",
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=15,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("DEBUG nm:", result.stdout)
+        self.assertNotIn("[dep] Warning:", result.stdout)
+        self.assertNotIn("Class:", result.stdout)
+        self.assertTrue(clean_output(result.stdout).endswith("{1 2 3}"), result.stdout)
 
 
 if __name__ == "__main__":

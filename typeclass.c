@@ -345,15 +345,17 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
         c->default_bodies[i] = ast_clone(ast->class_decl.default_bodies[i]);
     }
 
-    printf("Class: %s %s (%d methods, %d defaults)\n",
-           c->name, c->type_var, c->method_count, c->default_count);
-    for (int i = 0; i < c->superclass_count; i++)
-        printf("  superclass: %s %s\n",
-               c->superclass_names[i], c->superclass_type_vars[i]);
-    for (int i = 0; i < c->method_count; i++)
-        printf("  method: %s :: %s\n", c->methods[i].name, c->methods[i].type_str);
-    for (int i = 0; i < c->default_count; i++)
-        printf("  default: %s\n", c->default_names[i]);
+    if (getenv("MONAD_TYPECLASS_DEBUG")) {
+        printf("Class: %s %s (%d methods, %d defaults)\n",
+               c->name, c->type_var, c->method_count, c->default_count);
+        for (int i = 0; i < c->superclass_count; i++)
+            printf("  superclass: %s %s\n",
+                   c->superclass_names[i], c->superclass_type_vars[i]);
+        for (int i = 0; i < c->method_count; i++)
+            printf("  method: %s :: %s\n", c->methods[i].name, c->methods[i].type_str);
+        for (int i = 0; i < c->default_count; i++)
+            printf("  default: %s\n", c->default_names[i]);
+    }
 }
 
 static Type *my_type_parse_fn_arrow(const char *sig) {
@@ -614,7 +616,8 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         inst->method_funcs[mi] = fn;
         inst->method_symbols[mi] = strdup(fn_name);
 
-        printf("  compiled method: %s -> %s\n", mname, fn_name);
+        if (getenv("MONAD_TYPECLASS_DEBUG"))
+            printf("  compiled method: %s -> %s\n", mname, fn_name);
     }
 
     /* ── Step 2: build the dictionary global ───────────────────────────── */
@@ -692,8 +695,9 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         }
     }
 
-    printf("Instance: %s %s -> dict %s\n",
-           class_name, type_name, dict_gname);
+    if (getenv("MONAD_TYPECLASS_DEBUG"))
+        printf("Instance: %s %s -> dict %s\n",
+               class_name, type_name, dict_gname);
 }
 
 /// Method dispatch

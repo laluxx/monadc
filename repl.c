@@ -2073,7 +2073,6 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
             void *addr = dlsym(handle, sym);
             if (!addr) continue;
             register_imported_sym(sym, addr);
-            fprintf(stderr, "DEBUG nm: sym='%s' addr=%p\n", sym, addr);
             /* Also register under any further-mangled name that
              * mangle_unicode_name would produce for this symbol */
             char *remangled = mangle_unicode_name(sym);

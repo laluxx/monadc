@@ -344,6 +344,14 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   regression compiles =core/prelude/Data/Set.mon= through =--emit-obj= without
   installation environment overrides.
 
+[FIX id:fix.build.clean-default-compiler-output-2026-07-16 date:2026-07-16 by:codex src:dep.c,typeclass.c,repl.c,tests/test_checkout_local_paths.py,tests/test_repl.py conf:high]
+  Default user workflows must not print compiler-internal bootstrap hole dumps,
+  typeclass registration traces, or imported-symbol address diagnostics.
+  Dependent elaboration details remain available through
+  =MONAD_DEP_WARNINGS=1= and typeclass registration through
+  =MONAD_TYPECLASS_DEBUG=1=. Fresh =monad run= and REPL module-import tests
+  enforce clean output while still exercising real compilation and execution.
+
 [FIX id:fix.build.windows-crlf-bulk-read-2026-07-12 date:2026-07-12 by:codex]
   Bulk source/config readers must open files in binary mode and terminate at
   the actual =fread= byte count, not the =ftell= size. On Windows text-mode

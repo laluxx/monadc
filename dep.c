@@ -3804,19 +3804,21 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
         for (int i = 0; i < ctx->mctx->count; i++)
             if (ctx->mctx->entries[i].state == META_UNSOLVED) unsolved++;
 
-        fprintf(stderr, "\n  \033[33m[dep] Warning: %d unsolved metavariable(s) remain\033[0m\n", unsolved);
-        for (int i = 0; i < ctx->mctx->count; i++) {
-            if (ctx->mctx->entries[i].state == META_UNSOLVED) {
-                MetaEntry *e = &ctx->mctx->entries[i];
-                fprintf(stderr, "    • ?%d [%s] at depth %d\n", e->id, e->hint ? e->hint : "unknown", e->depth);
-                if (e->type) {
-                    Term *ty_term = dep_quote(e->type, 0, ctx->mctx);
-                    fprintf(stderr, "      Expected type: %s\n", term_to_string(ty_term));
-                    term_free(ty_term);
+        if (getenv("MONAD_DEP_WARNINGS")) {
+            fprintf(stderr, "\n  \033[33m[dep] Warning: %d unsolved metavariable(s) remain\033[0m\n", unsolved);
+            for (int i = 0; i < ctx->mctx->count; i++) {
+                if (ctx->mctx->entries[i].state == META_UNSOLVED) {
+                    MetaEntry *e = &ctx->mctx->entries[i];
+                    fprintf(stderr, "    • ?%d [%s] at depth %d\n", e->id, e->hint ? e->hint : "unknown", e->depth);
+                    if (e->type) {
+                        Term *ty_term = dep_quote(e->type, 0, ctx->mctx);
+                        fprintf(stderr, "      Expected type: %s\n", term_to_string(ty_term));
+                        term_free(ty_term);
+                    }
                 }
             }
+            fprintf(stderr, "  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.\n\n");
         }
-        fprintf(stderr, "  - Hint: This is expected during bootstrap. Untyped library functions (like '>=') generate holes.\n\n");
     }
 
     // 4. (HM Bridging is now natively executed during elaboration!)
