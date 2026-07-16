@@ -186,7 +186,7 @@ class CheckoutLocalPathTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stdout)
-            self.assertTrue(output.exists(), result.stdout)
+            self.assertTrue(generated_executable(output).exists(), result.stdout)
 
     def test_compiler_returns_failure_when_linker_fails(self):
         with tempfile.TemporaryDirectory(prefix="monadc-link-failure-") as td:

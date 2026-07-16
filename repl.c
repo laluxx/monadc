@@ -36,6 +36,7 @@
 #if !defined(_WIN32)
 #include <dlfcn.h>
 #else
+#include <windows.h>
 #define RTLD_DEFAULT NULL
 #define RTLD_NOW 0
 #define RTLD_GLOBAL 0
@@ -558,6 +559,33 @@ static char *repl_runtime_archive_path(void) {
 
     if (repl_file_exists("libmonad.a"))
         return strdup("libmonad.a");
+
+    char self_path[1024] = {0};
+#if defined(_WIN32)
+    DWORD self_len = GetModuleFileNameA(NULL, self_path,
+                                        (DWORD)sizeof(self_path));
+    if (self_len == 0 || self_len >= sizeof(self_path))
+        self_path[0] = '\0';
+#else
+    ssize_t self_len = readlink("/proc/self/exe", self_path,
+                                sizeof(self_path) - 1);
+    if (self_len > 0)
+        self_path[self_len] = '\0';
+    else
+        self_path[0] = '\0';
+#endif
+    if (self_path[0]) {
+        char *slash = strrchr(self_path, '/');
+        char *backslash = strrchr(self_path, '\\');
+        if (!slash || (backslash && backslash > slash)) slash = backslash;
+        if (slash) {
+            slash[1] = '\0';
+            char adjacent[1200];
+            snprintf(adjacent, sizeof(adjacent), "%slibmonad.a", self_path);
+            if (repl_file_exists(adjacent))
+                return strdup(adjacent);
+        }
+    }
 
     return strdup("/usr/local/lib/libmonad.a");
 }
