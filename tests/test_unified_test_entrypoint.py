@@ -69,10 +69,16 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
 
     def test_runner_suite_covers_core_runner_contracts(self):
         test_main = read("tests/main.py")
+        runner = test_main[test_main.index('"runner": Suite('):
+                           test_main.index('"core": Suite(')]
+        windows = test_main[test_main.index('"windows": Suite('):
+                            test_main.index('"cmake": Suite(')]
 
         self.assertIn('py("tests/test_run_core.py")', test_main)
         self.assertIn('py("tests/test_repl.py")', test_main)
         self.assertIn('py("tests/test_tail_calls.py")', test_main)
+        self.assertNotIn('py("tests/test_checkout_local_paths.py")', runner)
+        self.assertIn('py("tests/test_checkout_local_paths.py")', windows)
 
     def test_readme_advertises_unified_test_entrypoint(self):
         readme = read("README.md")

@@ -34,7 +34,6 @@ SUITES: dict[str, Suite] = {
             py("tests/test_tuple_commas.py"),
             py("tests/test_windows_portability.py"),
             py("tests/test_cmake_build.py"),
-            py("tests/test_checkout_local_paths.py"),
             py("tests/test_readme_product.py"),
             py("tests/test_unified_test_entrypoint.py"),
             py("tests/test_repl.py"),

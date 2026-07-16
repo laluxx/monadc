@@ -1280,7 +1280,10 @@ Test-driven observations and failure records for the corresponding subsystem.
   MSYS2/Windows portability and checkout-local executable resolution checks.
   CTest includes =unified_test_entrypoint_contract= and =monad_test_suite_menu=,
   and the Makefile delegates =test-runner= and =test-how-to= through the
-  compiler binary instead of invoking individual scripts directly.
+  compiler binary instead of invoking individual scripts directly. Stateful
+  checkout-local compiler journeys remain in the dedicated =windows= suite and
+  individual CTest contracts; =runner= does not repeat them after CTest because
+  rapid duplicate MinGW package builds can contend with recently used files.
 
 [FIX id:fix.tests.issue-1-msys2-regressions-2026-07-14 date:2026-07-14 by:codex]
   GitHub issue #1 regressions are covered by tests: MSYS2 builds exclude
