@@ -1,84 +1,83 @@
 ;;; Set.mon --- Mathematical set operations
 
 module Data.Set
-  [set-singleton set-singleton? set-union set-intersection set-difference
-   set-symmetric-difference set-subset? set-proper-subset? set-superset?
-   set-proper-superset? set-disjoint?]
+  [singleton singleton? union intersection difference symmetric-difference
+   subset? proper-subset? superset? proper-superset? disjoint?]
 
 import Coll
 import Data.Eq
 
 
-method set-singleton :: a -> Set
+method singleton :: a -> Set
   x -> set x
 
 
-method set-singleton? :: Set -> Bool
+method singleton? :: Set -> Bool
   x | empty? x -> False
   x -> empty? (disj x (head x))
 
 
-method set-union :: Set -> Set -> Set
+method union :: Set -> Set -> Set
   a b -> coll-foldl (lambda (acc x) (conj acc x)) a b
 
 
-method set-difference :: Set -> Set -> Set
+method difference :: Set -> Set -> Set
   a b -> coll-foldl (lambda (acc x) (disj acc x)) a b
 
 
-method set-intersection :: Set -> Set -> Set
-  a b -> set-difference a (set-difference a b)
+method intersection :: Set -> Set -> Set
+  a b -> difference a (difference a b)
 
 
-method set-symmetric-difference :: Set -> Set -> Set
-  a b -> set-difference (set-union a b) (set-intersection a b)
+method symmetric-difference :: Set -> Set -> Set
+  a b -> difference (union a b) (intersection a b)
 
 
-method set-subset? :: Set -> Set -> Bool
-  a b -> empty? (set-difference a b)
+method subset? :: Set -> Set -> Bool
+  a b -> empty? (difference a b)
 
 
-method set-proper-subset? :: Set -> Set -> Bool
-  a b -> and (empty? (set-difference a b))
-             (not (empty? (set-difference b a)))
+method proper-subset? :: Set -> Set -> Bool
+  a b -> and (empty? (difference a b))
+             (not (empty? (difference b a)))
 
 
-method set-superset? :: Set -> Set -> Bool
-  a b -> set-subset? b a
+method superset? :: Set -> Set -> Bool
+  a b -> subset? b a
 
 
-method set-proper-superset? :: Set -> Set -> Bool
-  a b -> set-proper-subset? b a
+method proper-superset? :: Set -> Set -> Bool
+  a b -> proper-subset? b a
 
 
-method set-disjoint? :: Set -> Set -> Bool
-  a b -> empty? (set-intersection a b)
+method disjoint? :: Set -> Set -> Bool
+  a b -> empty? (intersection a b)
 
 
 instance Eq Set
-  (eq? x y) => and (empty? (set-difference x y))
-                   (empty? (set-difference y x))
-  (not-eq? x y) => not (and (empty? (set-difference x y))
-                            (empty? (set-difference y x)))
+  (eq? x y) => and (empty? (difference x y))
+                   (empty? (difference y x))
+  (not-eq? x y) => not (and (empty? (difference x y))
+                            (empty? (difference y x)))
 
 
 tests
-  assert-eq (eq? {1 2} {2 1}) True "Data.Set Eq ignores insertion order"
-  assert-eq (not-eq? {1 2} {1 3}) True "Data.Set Eq distinguishes members"
-  assert-eq (set-singleton 1) {1} "Data.Set singleton"
-  assert-eq (set-singleton 1.5) {1.5} "Data.Set singleton Float"
-  assert-eq (set-singleton? {}) False "Data.Set empty is not singleton"
-  assert-eq (set-singleton? {1}) True "Data.Set singleton?"
-  assert-eq (set-singleton? {1 2}) False "Data.Set pair is not singleton"
-  assert-eq (set-union {1 2} {2 3}) {1 2 3} "Data.Set union"
-  assert-eq ({1 2}.set-union {2 3}) {1 2 3} "Data.Set union method syntax"
-  assert-eq (set-union {1.5 2.5} {2.5 3.5}) {1.5 2.5 3.5} "Data.Set union Float"
-  assert-eq (set-intersection {1 2 3} {2 3 4}) {2 3} "Data.Set intersection"
-  assert-eq (set-difference {1 2 3} {2 3}) {1} "Data.Set difference"
-  assert-eq (set-difference {1.5 2.5 3.5} {2.5 3.5}) {1.5} "Data.Set difference Float"
-  assert-eq (set-symmetric-difference {1 2} {2 3}) {1 3} "Data.Set symmetric difference"
-  assert-eq (set-subset? {1 2} {1 2 3}) True "Data.Set subset"
-  assert-eq (set-proper-subset? {1 2} {1 2 3}) True "Data.Set proper subset"
-  assert-eq (set-superset? {1 2 3} {1 2}) True "Data.Set superset"
-  assert-eq (set-proper-superset? {1 2 3} {1 2}) True "Data.Set proper superset"
-  assert-eq (set-disjoint? {1 2} {3 4}) True "Data.Set disjoint"
+  assert-eq (eq? {1 2} {2 1})                         True          "Data.Set Eq ignores insertion order"
+  assert-eq (not-eq? {1 2} {1 3})                     True          "Data.Set Eq distinguishes members"
+  assert-eq (singleton 1)                              {1}           "Data.Set singleton"
+  assert-eq (singleton 1.5)                            {1.5}         "Data.Set singleton Float"
+  assert-eq (singleton? {})                            False         "Data.Set empty is not singleton"
+  assert-eq (singleton? {1})                           True          "Data.Set singleton?"
+  assert-eq (singleton? {1 2})                         False         "Data.Set pair is not singleton"
+  assert-eq (union {1 2} {2 3})                        {1 2 3}       "Data.Set union"
+  assert-eq ({1 2}.union {2 3})                        {1 2 3}       "Data.Set union method syntax"
+  assert-eq (union {1.5 2.5} {2.5 3.5})                {1.5 2.5 3.5} "Data.Set union Float"
+  assert-eq (intersection {1 2 3} {2 3 4})             {2 3}         "Data.Set intersection"
+  assert-eq (difference {1 2 3} {2 3})                 {1}           "Data.Set difference"
+  assert-eq (difference {1.5 2.5 3.5} {2.5 3.5})       {1.5}         "Data.Set difference Float"
+  assert-eq (symmetric-difference {1 2} {2 3})          {1 3}         "Data.Set symmetric difference"
+  assert-eq (subset? {1 2} {1 2 3})                    True          "Data.Set subset"
+  assert-eq (proper-subset? {1 2} {1 2 3})             True          "Data.Set proper subset"
+  assert-eq (superset? {1 2 3} {1 2})                  True          "Data.Set superset"
+  assert-eq (proper-superset? {1 2 3} {1 2})           True          "Data.Set proper superset"
+  assert-eq (disjoint? {1 2} {3 4})                    True          "Data.Set disjoint"

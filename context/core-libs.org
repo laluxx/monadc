@@ -174,13 +174,14 @@
 
 [FIX id:fix.core-libs.generic-set-elements-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Data/Set.mon conf:high]
   Set construction and algebra no longer hard-code =Int= elements.
-  =set-singleton= is polymorphic, and =set-union=/=set-difference= preserve
+  =singleton= is polymorphic, and =union=/=difference= preserve
   generic elements. Runtime coverage exercises both =Int= and =Float= sets.
 
 [DEC id:dec.core-libs.set-api-methods-2026-07-16 date:2026-07-16 by:human src:user-request conf:high]
-  =Data.Set= owns a method-oriented, namespace-safe API: exported operations
-  use the =set-= prefix and are declared with =method=, supporting prefix and
-  dot-call syntax. =Eq Set= is mathematical and insertion-order independent.
+  =Data.Set= owns a method-oriented API modeled after =Data.Char=: exported
+  operations use concise names without a =set-= prefix and are declared with
+  =method=, supporting prefix and dot-call syntax. =Eq Set= is mathematical
+  and insertion-order independent.
   Set predicates use difference, equality, membership, and emptiness rather
   than cardinality/count checks.
 
