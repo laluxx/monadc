@@ -2038,6 +2038,17 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
     {
         const char **all_objs = repl_get_compiled_obj_paths();
         char *runtime_archive = repl_runtime_archive_path();
+        char llvm_flags[2048] = "";
+        FILE *llvm_pipe = popen("llvm-config --ldflags --libs core", "r");
+        if (llvm_pipe) {
+            size_t used = fread(llvm_flags, 1, sizeof(llvm_flags) - 1,
+                                llvm_pipe);
+            pclose(llvm_pipe);
+            llvm_flags[used] = '\0';
+            for (size_t i = 0; i < used; i++)
+                if (llvm_flags[i] == '\r' || llvm_flags[i] == '\n')
+                    llvm_flags[i] = ' ';
+        }
 
         char cmd[16384];
         int w = snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -o \"%s\"", so_path);
@@ -2045,7 +2056,7 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
             w += snprintf(cmd + w, sizeof(cmd) - w, " \"%s\"", all_objs[i]);
         w += snprintf(cmd + w, sizeof(cmd) - w,
                       " -Wl,--unresolved-symbols=ignore-all"
-                      " \"%s\" -lm 2>&1", runtime_archive);
+                      " \"%s\" %s -lm 2>&1", runtime_archive, llvm_flags);
         free(runtime_archive);
         free(all_objs);
 
