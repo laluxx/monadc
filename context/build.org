@@ -346,13 +346,15 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   environment overrides; Set compilation and execution remain covered by the
   REPL import contract.
 
-[FIX id:fix.build.clean-default-compiler-output-2026-07-16 date:2026-07-16 by:codex src:dep.c,typeclass.c,repl.c,tests/test_checkout_local_paths.py,tests/test_repl.py conf:high]
+[FIX id:fix.build.clean-default-compiler-output-2026-07-16 date:2026-07-16 by:codex src:codegen.c,dep.c,typeclass.c,repl.c,tests/test_checkout_local_paths.py,tests/test_repl.py conf:high]
   Default user workflows must not print compiler-internal bootstrap hole dumps,
   typeclass registration traces, or imported-symbol address diagnostics.
   Dependent elaboration details remain available through
   =MONAD_DEP_WARNINGS=1= and typeclass registration through
   =MONAD_TYPECLASS_DEBUG=1=. Fresh =monad run= and REPL module-import tests
   enforce clean output while still exercising real compilation and execution.
+  Monomorph selection traces require =MONAD_MONO_DEBUG=1=, while constructor
+  and data-layout announcements require =MONAD_DATA_DEBUG=1=.
 
 [FIX id:fix.build.cmake-repl-adjacent-runtime-2026-07-16 date:2026-07-16 by:codex src:CMakeLists.txt,repl.c,tests/test_cmake_build.py,tests/test_repl.py,tests/test_checkout_local_paths.py,tests/test_windows_portability.py conf:high]
   An uninstalled CMake compiler must link imported REPL modules against the

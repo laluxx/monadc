@@ -3419,13 +3419,16 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
         free(env_params);
         free(field_type_objs);
 
-        printf("Constructor: %s", ctor->name);
-        for (int fi = 0; fi < nfields; fi++)
-            printf(" %s", ctor->field_types[fi]);
-        printf(" -> %s\n", type_name);
+        if (getenv("MONAD_DATA_DEBUG")) {
+            printf("Constructor: %s", ctor->name);
+            for (int fi = 0; fi < nfields; fi++)
+                printf(" %s", ctor->field_types[fi]);
+            printf(" -> %s\n", type_name);
+        }
     }
 
-    printf("Data type: %s (%d constructors)\n", type_name, nctors);
+    if (getenv("MONAD_DATA_DEBUG"))
+        printf("Data type: %s (%d constructors)\n", type_name, nctors);
 
     /* Auto-derive requested typeclasses */
     for (int di = 0; di < ast->data.deriving_count; di++) {
@@ -14492,9 +14495,10 @@ if (ast->list.count >= 5) {
 
                                 result.type = type_clone(spec_e->return_type);
 
-                                fprintf(stderr, "MONO [%s :: %s]\n",
-                                        spec_e->name ? spec_e->name : "?",
-                                        type_to_string(spec_e->return_type));
+                                if (getenv("MONAD_MONO_DEBUG"))
+                                    fprintf(stderr, "MONO [%s :: %s]\n",
+                                            spec_e->name ? spec_e->name : "?",
+                                            type_to_string(spec_e->return_type));
 
                                 free(call_args);
                                 free(call_types);

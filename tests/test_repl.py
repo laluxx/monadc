@@ -144,6 +144,26 @@ class ReplTests(unittest.TestCase):
             self.assertEqual(process.returncode, 0, output)
             self.assertTrue(clean_output(output).endswith("{1 2 3}"), output)
 
+    def test_eval_data_list_import_hides_codegen_diagnostics(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-eval-list-") as td:
+            env = os.environ.copy()
+            env["HOME"] = td
+            result = subprocess.run(
+                [str(MONAD), "eval", "import Data.List\n1"],
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=20,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("MONO [", result.stdout)
+        self.assertNotIn("Constructor:", result.stdout)
+        self.assertNotIn("Data type:", result.stdout)
+        self.assertTrue(clean_output(result.stdout).endswith("1"), result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
