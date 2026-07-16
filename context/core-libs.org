@@ -1359,3 +1359,11 @@
   with codegen widening the narrow receiver to the inherited method ABI. This
   keeps the method definition traceable to =core/prelude/Data/Int.mon= while
   preserving an optimized direct call.
+
+[FIX id:fix.core-libs.collection-class-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Coll.mon,infer.c conf:high]
+  =Collection c= is now declared by core with constructor-preserving =map= and
+  =filter= plus =foldl/foldr=. The compiler no longer installs public HM schemes
+  for those four operation names; the =Coll= instance owns their implementations.
+  Concrete set algorithms temporarily use exported =coll-foldl= because imported
+  polymorphic higher-order wrappers do not yet retain a complete ABI signature.
+  The full core sweep passes 33 modules and 662 assertions.

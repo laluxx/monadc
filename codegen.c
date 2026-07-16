@@ -1731,6 +1731,9 @@ static const char *tc_instance_type_name_from_type(Type *t) {
     case TYPE_BOOL:   return "Bool";
     case TYPE_STRING: return "String";
     case TYPE_CHAR:   return "Char";
+    case TYPE_COLL:
+    case TYPE_LIST:
+    case TYPE_ARR:    return "Coll";
     case TYPE_LAYOUT: return t->layout_name;
     case TYPE_APP:    return t->app_constructor;
     default:          return NULL;
@@ -1753,6 +1756,14 @@ static const char *tc_instance_type_name_from_ast(CodegenContext *ctx, AST *ast)
     case AST_SYMBOL:
         if (strcmp(ast->symbol, "True") == 0 || strcmp(ast->symbol, "False") == 0)
             return "Bool";
+        break;
+    case AST_LIST:
+        if (ast->list.count > 0 &&
+            ast->list.items[0]->type == AST_SYMBOL) {
+            const char *constructor = ast->list.items[0]->symbol;
+            if (strcmp(constructor, "list") == 0)
+                return "Coll";
+        }
         break;
     default:
         break;
@@ -12941,7 +12952,7 @@ if (ast->list.count >= 5) {
                         (entry && entry->type) ? (int)entry->type->kind : -1);
             }
 
-            if (!entry) {
+            if (!entry && !tc_is_method(ctx->tc_registry, head->symbol)) {
                 char *type_method_call_name =
                     codegen_type_method_call_name(ctx, ast, head->symbol);
 
@@ -12990,7 +13001,8 @@ if (ast->list.count >= 5) {
             }
 
             /* Typeclass instance resolution for non-operator methods */
-            if (entry && entry->kind == ENV_FUNC && entry->func_ref == NULL && tc_is_method(ctx->tc_registry, head->symbol)) {
+            if (tc_is_method(ctx->tc_registry, head->symbol) &&
+                (!entry || (entry->kind == ENV_FUNC && entry->func_ref == NULL))) {
                 const char *op = head->symbol;
                 const char *cls = tc_method_class(ctx->tc_registry, op);
                 const char *type_name = NULL;
@@ -12998,13 +13010,17 @@ if (ast->list.count >= 5) {
                 for (size_t i = 1; i < ast->list.count; i++) {
                     AST *arg = ast->list.items[i];
                     const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
-                    if (inferred_type_name) {
+                    if (inferred_type_name &&
+                        tc_find_instance(ctx->tc_registry, cls,
+                                         inferred_type_name)) {
                         type_name = inferred_type_name; break;
                     }
                     if (arg->type == AST_SYMBOL) {
                         EnvEntry *e = env_lookup(ctx->env, arg->symbol);
                         const char *env_type_name = e ? tc_instance_type_name_from_type(e->type) : NULL;
-                        if (env_type_name) {
+                        if (env_type_name &&
+                            tc_find_instance(ctx->tc_registry, cls,
+                                             env_type_name)) {
                             type_name = env_type_name; break;
                         }
                     }
@@ -13012,7 +13028,7 @@ if (ast->list.count >= 5) {
                 if (!type_name)
                     type_name = tc_instance_type_name_from_type(ast->inferred_type);
 
-                if (!type_name && ast->list.count == 1) {
+                if (!type_name) {
                     TCInstance *unique =
                         tc_unique_instance_for_method(ctx->tc_registry, cls, op);
                     if (unique)
@@ -13052,14 +13068,25 @@ if (ast->list.count >= 5) {
                             if (strcmp(inst->method_names[_mi], op) == 0) {
                                 const char *impl_name = NULL;
                                 char constructed_name[256];
-                                if (inst->method_funcs[_mi]) {
+                                if (inst->method_symbols[_mi]) {
+                                    impl_name = inst->method_symbols[_mi];
+                                } else if (inst->method_funcs[_mi]) {
                                     impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
                                 } else {
                                     snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
                                     impl_name = constructed_name;
                                 }
                                 EnvEntry *impl_entry = env_lookup(ctx->env, impl_name);
-                                if (impl_entry) entry = impl_entry;
+                                if (impl_entry) {
+                                    entry = impl_entry;
+                                } else {
+                                    /* Imported instance implementations are
+                                     * deliberately not ordinary public API
+                                     * entries. Call their exported dictionary
+                                     * implementation symbol directly. */
+                                    return codegen_forward_declared_call(ctx, ast,
+                                                                         impl_name);
+                                }
                                 break;
                             }
                         }

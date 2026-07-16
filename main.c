@@ -1842,6 +1842,15 @@ skip_primitive_type_autoload:
             if (ent->kind == ENV_BUILTIN || ent->module_name != NULL ||
                 ent->name[0] == '*') { ent = ent->next; continue; }
 
+            /* A class method declaration is registry metadata, not an
+             * ordinary linkable function. Instance implementation symbols
+             * and dictionaries are emitted separately. */
+            if (ent->kind == ENV_FUNC && ent->func_ref == NULL &&
+                tc_is_method(ctx.tc_registry, ent->name)) {
+                ent = ent->next;
+                continue;
+            }
+
             /* Canonicalize the public export name before export filtering.
              *
              * Type-module methods are defined internally as "Char.upcase",

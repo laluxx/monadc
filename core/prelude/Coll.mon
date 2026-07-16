@@ -14,10 +14,21 @@
 ;;; Code:
 
 module Coll
- [take      drop
+ [Collection map filter foldl foldr coll-foldl
+  take      drop
   takeWhile dropWhile
-  map any? all? foldl foldr
-  zip zipwith append filter both]
+  any? all?
+  zip zipwith append both]
+
+
+class Collection c where
+  map    :: (a -> b) -> c a -> c b
+  filter :: (a -> Bool) -> c a -> c a
+  foldl  :: (b -> a -> b) -> b -> c a -> b
+  foldr  :: (a -> b -> b) -> b -> c a -> b
+
+  ;; law: map id = id
+  ;; law: map (compose f g) = compose (map f) (map g)
 
 
 define take :: Int -> [a] -> [a]
@@ -44,9 +55,15 @@ define dropWhile :: (a -> Bool) -> [a] -> [a]
   p [x|xs] | otherwise         -> (x ++ xs)
 
 
-define map :: (a -> b) -> [a] -> [b]
+define coll-map :: (a -> b) -> [a] -> [b]
   _ []     -> []
-  f [x|xs] -> ((f x) ++ (map f xs))
+  f [x|xs] -> ((f x) ++ (coll-map f xs))
+
+
+define coll-filter :: (a -> Bool) -> [a] -> [a]
+  _ []                         -> []
+  p [x|xs] | p x               -> (x ++ (coll-filter p xs))
+  p [x|xs] | otherwise         -> coll-filter p xs
 
 
 define any? :: (a -> Bool) -> [a] -> Bool
@@ -60,14 +77,21 @@ define all? :: (a -> Bool) -> [a] -> Bool
   p [x|xs] | otherwise         -> False
 
 
-define foldl :: (b -> a -> b) -> b -> [a] -> b
+define coll-foldl :: (b -> a -> b) -> b -> [a] -> b
   _ acc []     -> acc
-  f acc [x|xs] -> foldl f (f acc x) xs
+  f acc [x|xs] -> coll-foldl f (f acc x) xs
 
 
-define foldr :: (a -> b -> b) -> b -> [a] -> b
+define coll-foldr :: (a -> b -> b) -> b -> [a] -> b
   _ acc []     -> acc
-  f acc [x|xs] -> (f x (foldr f acc xs))
+  f acc [x|xs] -> (f x (coll-foldr f acc xs))
+
+
+instance Collection Coll
+  (map f xs)       => coll-map f xs
+  (filter p xs)    => coll-filter p xs
+  (foldl f acc xs) => coll-foldl f acc xs
+  (foldr f acc xs) => coll-foldr f acc xs
 
 
 define zip :: [a] -> [b] -> [c]
@@ -89,12 +113,6 @@ define append :: [a] -> a -> [a]
 ;; TODO unit type () pointer *dereferencing and fix wisp
 ;; define append! :: [xs -> [a]] -> [val :: a] -> ()
 ;;   xs <- (append *xs val)
-
-
-define filter :: (a -> Bool) -> [a] -> [a]
-  _ []                         -> []
-  p [x|xs] | p x               -> (x ++ (filter p xs))
-  p [x|xs] | otherwise         -> filter p xs
 
 
 ;; TODO Move in Applicative and make variadic

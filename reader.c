@@ -5989,7 +5989,11 @@ static AST *parse_list(Parser *p) {
                         Token cur = p->current;
                         p->current = lexer_next_token(p->lexer);
                         const char *tok_str = cur.value ? cur.value
-                                            : (cur.type == TOK_ARROW ? "->" : NULL);
+                                            : (cur.type == TOK_ARROW  ? "->"
+                                            : (cur.type == TOK_LPAREN ? "("
+                                            : (cur.type == TOK_RPAREN ? ")"
+                                            : (cur.type == TOK_LBRACKET ? "["
+                                            : (cur.type == TOK_RBRACKET ? "]" : NULL)))));
                         if (tok_str) {
                             size_t cur_len = strlen(type_buf);
                             size_t tok_len = strlen(tok_str);

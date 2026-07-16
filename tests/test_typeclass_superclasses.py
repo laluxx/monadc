@@ -34,7 +34,7 @@ class TypeclassSuperclassTests(unittest.TestCase):
                 check=False,
             )
             run_output = ""
-            if result.returncode == 0:
+            if result.returncode == 0 and output.exists():
                 run = subprocess.run(
                     [str(output)],
                     cwd=ROOT,
@@ -46,6 +46,47 @@ class TypeclassSuperclassTests(unittest.TestCase):
                 run_output = run.stdout
                 if run.returncode != 0:
                     self.fail(f"compiled program failed with {run.returncode}:\n{run.stdout}")
+            elif result.returncode == 0:
+                run_output = "<compiler returned success without creating output>\n" + result.stdout
+            return result, run_output
+
+    def run_monad_modules(self, modules: dict[str, str], main_source: str):
+        with tempfile.TemporaryDirectory(prefix="monadc-typeclass-modules-") as td:
+            root = Path(td)
+            core = root / "core"
+            home = root / "home"
+            core.mkdir()
+            home.mkdir()
+            for module_path, source in modules.items():
+                fixture = core / module_path
+                fixture.parent.mkdir(parents=True, exist_ok=True)
+                fixture.write_text(textwrap.dedent(source).strip() + "\n", encoding="utf-8")
+            main = root / "Main.mon"
+            output = root / "out"
+            main.write_text(textwrap.dedent(main_source).strip() + "\n", encoding="utf-8")
+            env = os.environ.copy()
+            env["MONAD_CORE"] = str(core)
+            env["HOME"] = str(home)
+            result = subprocess.run(
+                [str(MONAD), str(main), "-o", str(output)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            run_output = ""
+            if result.returncode == 0 and output.exists():
+                run = subprocess.run(
+                    [str(output)], cwd=ROOT, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+                )
+                run_output = run.stdout
+                if run.returncode != 0:
+                    self.fail(f"compiled program failed with {run.returncode}:\n{run.stdout}")
+            elif result.returncode == 0:
+                run_output = "<compiler returned success without creating output>\n" + result.stdout
             return result, run_output
 
     def test_superclass_instance_requires_parent_instance(self):
@@ -253,6 +294,30 @@ class TypeclassSuperclassTests(unittest.TestCase):
             (define (inc x) (+ x 1))
             (show (transform inc 41))
             """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("42\n"), run_output)
+
+    def test_imported_user_collection_map_instance_preserves_constructor(self):
+        result, run_output = self.run_monad_modules(
+            {
+                "User/Collection.mon": """
+                    (module User.Collection [Collection map Optional Empty Present getOr])
+                    (data Optional a Empty | Present a)
+                    (class Collection c where (map) :: (a -> b) -> c a -> c b)
+                    (instance Collection Optional where
+                      (map f value) => (match value with | Empty -> Empty | (Present x) -> (Present (f x))))
+                    (define (getOr [fallback : Int] [value : Optional Int] -> Int)
+                      (match value with | Empty -> fallback | (Present x) -> x))
+                """,
+            },
+            """
+                (module Main)
+                (import User.Collection)
+                (define (inc x) (+ x 1))
+                (show (getOr 0 (map inc (Present 41))))
+            """,
         )
 
         self.assertEqual(result.returncode, 0, result.stdout)

@@ -72,8 +72,11 @@ void tc_registry_free(TypeClassRegistry *reg) {
         if (inst->assoc_values) free(inst->assoc_values);
         for (int j = 0; j < inst->method_count; j++)
             free(inst->method_names[j]);
+        for (int j = 0; j < inst->method_count; j++)
+            free(inst->method_symbols[j]);
         free(inst->method_names);
         free(inst->method_funcs);
+        free(inst->method_symbols);
     }
     free(reg->instances);
     free(reg);
@@ -156,9 +159,15 @@ static void tc_copy_instance_into(TypeClassRegistry *dst,
     inst->method_count = src->method_count;
     inst->method_names = malloc(sizeof(char*) * (src->method_count ? src->method_count : 1));
     inst->method_funcs = malloc(sizeof(LLVMValueRef) * (src->method_count ? src->method_count : 1));
+    inst->method_symbols = malloc(sizeof(char*) * (src->method_count ? src->method_count : 1));
     for (int i = 0; i < src->method_count; i++) {
         inst->method_names[i] = src->method_names[i] ? strdup(src->method_names[i]) : NULL;
-        inst->method_funcs[i] = src->method_funcs[i];
+        inst->method_funcs[i] = NULL;
+        const char *live_name = src->method_funcs[i]
+            ? LLVMGetValueName(src->method_funcs[i]) : NULL;
+        inst->method_symbols[i] = live_name && live_name[0]
+            ? strdup(live_name)
+            : (src->method_symbols[i] ? strdup(src->method_symbols[i]) : NULL);
     }
 }
 
@@ -458,6 +467,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     inst->method_count = c->method_count; /* all methods, including defaults */
     inst->method_names = malloc(sizeof(char*)        * c->method_count);
     inst->method_funcs = malloc(sizeof(LLVMValueRef) * c->method_count);
+    inst->method_symbols = malloc(sizeof(char*) * c->method_count);
 
     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
 
@@ -465,6 +475,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     for (int mi = 0; mi < c->method_count; mi++) {
         inst->method_names[mi] = strdup(c->methods[mi].name);
         inst->method_funcs[mi] = NULL;
+        inst->method_symbols[mi] = NULL;
     }
     /* ── Step 1: compile each explicitly provided method ───────────────── */
     for (int mi = 0; mi < c->method_count; mi++) {
@@ -601,6 +612,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
             if (e) fn = e->func_ref ? e->func_ref : e->value;
         }
         inst->method_funcs[mi] = fn;
+        inst->method_symbols[mi] = strdup(fn_name);
 
         printf("  compiled method: %s -> %s\n", mname, fn_name);
     }

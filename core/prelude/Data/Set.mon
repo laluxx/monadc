@@ -24,11 +24,11 @@ define singleton? :: Set -> Bool
 
 
 define union :: Set -> Set -> Set
-  a b -> foldl set-conj a b
+  a b -> coll-foldl set-conj a b
 
 
 define difference :: Set -> Set -> Set
-  a b -> foldl set-disj a b
+  a b -> coll-foldl set-disj a b
 
 
 define intersection :: Set -> Set -> Set

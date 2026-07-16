@@ -2510,35 +2510,10 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "map?",        set_pred_sc);
     infer_env_insert(ctx->env, "collection?", set_pred_sc);
 
-    /* ∀a b. (a → b → a) → a → Coll → a   (foldl — generic collection) */
-    Type *acc_t  = infer_fresh(ctx);
-    Type *elem_t = infer_fresh(ctx);
-    TypeScheme *foldl_sc = infer_generalise(ctx,
-        type_arrow(
-            type_arrow(acc_t, type_arrow(elem_t, acc_t)),
-            type_arrow(acc_t,
-                type_arrow(type_coll(), acc_t))),
-        ctx->env);
-    infer_env_insert(ctx->env, "foldl", foldl_sc);
-
-    /* ∀a b. (a → b) → List a → List b   (map) */
-    Type *ma = infer_fresh(ctx);
-    Type *mb = infer_fresh(ctx);
-    TypeScheme *map_sc = infer_generalise(ctx,
-        type_arrow(
-            type_arrow(ma, mb),
-            type_arrow(type_list(&ma, 1), type_list(&mb, 1))),
-        ctx->env);
-    infer_env_insert(ctx->env, "map", map_sc);
-
-    /* ∀a. (a → Bool) → List a → List a   (filter) */
-    Type *fa = infer_fresh(ctx);
-    TypeScheme *filter_sc = infer_generalise(ctx,
-        type_arrow(
-            type_arrow(fa, type_bool()),
-            type_arrow(type_list(&fa, 1), type_list(&fa, 1))),
-        ctx->env);
-    infer_env_insert(ctx->env, "filter", filter_sc);
+    /* Keep bootstrap variable IDs stable while public collection operations
+     * are supplied by core class declarations. */
+    for (int i = 0; i < 5; i++)
+        (void)infer_fresh(ctx);
 
     /* ∀a. a -> [a] -> [a]   (cons / .) */
     Type *cons_a = infer_fresh(ctx);

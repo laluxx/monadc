@@ -55,6 +55,7 @@ typedef struct TCInstance {
     LLVMValueRef  dict_global;   // @__dict_Eq_TrafficLight global
     char        **method_names;  // method names in this instance
     LLVMValueRef *method_funcs;  // LLVM functions implementing each method
+    char        **method_symbols; // stable names across LLVM module lifetimes
     int           method_count;
 } TCInstance;
 

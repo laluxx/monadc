@@ -29,7 +29,7 @@ class Semigroup a => Monoid a where
 
 instance Semigroup Int
   (append x y) => x + y
-  (sconcat x)  => x
+  (sconcat xs) => head xs
 
 
 tests

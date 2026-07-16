@@ -470,3 +470,18 @@
   when copied into lambda annotations. Regression coverage executes a
   higher-order instance method through
   =test_instance_method_preserves_higher_order_parameter_type=.
+
+[FIX id:fix.typeclass.imported-instance-symbols-2026-07-16 date:2026-07-16 by:codex src:typeclass.c,typeclass.h,codegen.c,main.c,tests/test_typeclass_superclasses.py conf:high]
+  Imported instance registries retain stable implementation symbol names rather
+  than stale LLVM values from the producing module. Typeclass calls can forward
+  declare those private implementation symbols, and class placeholders are no
+  longer exported as ordinary functions. An executable multi-module regression
+  defines a user collection and verifies that imported =map= dispatch preserves
+  its =Optional= constructor.
+
+[TODO id:todo.typeclass.imported-higher-order-wrapper-abi-2026-07-16 date:2026-07-16 by:codex]
+  Imported instance calls with both higher-order arguments and polymorphic
+  accumulators still need ABI metadata from the producing module. A provisional
+  =Collection Set= fold wrapper compiled and linked but lost the set accumulator
+  at runtime. Keep concrete representation helpers for built-in sets until the
+  exported instance-method signature can drive forward declarations exactly.
