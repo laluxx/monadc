@@ -16,6 +16,7 @@ class CMakeBuildTests(unittest.TestCase):
         self.assertIn("project(monadc C)", cmake)
         self.assertIn("add_library(monad_runtime STATIC", cmake)
         self.assertIn("OUTPUT_NAME monad", cmake)
+        self.assertIn("POSITION_INDEPENDENT_CODE ON", cmake)
         self.assertIn("add_executable(monad", cmake)
         self.assertIn("target_link_libraries(monad PRIVATE monad_runtime", cmake)
 

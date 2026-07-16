@@ -352,12 +352,15 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   =MONAD_TYPECLASS_DEBUG=1=. Fresh =monad run= and REPL module-import tests
   enforce clean output while still exercising real compilation and execution.
 
-[FIX id:fix.build.cmake-repl-adjacent-runtime-2026-07-16 date:2026-07-16 by:codex src:repl.c,tests/test_repl.py,tests/test_checkout_local_paths.py conf:high]
+[FIX id:fix.build.cmake-repl-adjacent-runtime-2026-07-16 date:2026-07-16 by:codex src:CMakeLists.txt,repl.c,tests/test_cmake_build.py,tests/test_repl.py,tests/test_checkout_local_paths.py,tests/test_windows_portability.py conf:high]
   An uninstalled CMake compiler must link imported REPL modules against the
   =libmonad.a= beside its executable before falling back to =/usr/local/lib=.
-  This keeps =build/monad repl= usable on Linux and Windows without environment
-  overrides. Cross-platform compiler smoke tests resolve generated executables
-  with the host suffix because MinGW appends =.exe= to explicit output names.
+  The archive is position-independent so its objects can also link into REPL
+  shared modules. This keeps =build/monad repl= usable on Linux and Windows
+  without environment overrides. The Windows SDK's =TokenType= enum member is
+  isolated from the compiler typedef, and cross-platform compiler smoke tests
+  resolve generated executables with the host suffix because MinGW appends
+  =.exe= to explicit output names.
 
 [FIX id:fix.build.windows-crlf-bulk-read-2026-07-12 date:2026-07-12 by:codex]
   Bulk source/config readers must open files in binary mode and terminate at

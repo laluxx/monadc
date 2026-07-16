@@ -148,6 +148,8 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("#if !defined(_WIN32)", repl_c)
         self.assertIn('#include "compat.h"', repl_c)
         self.assertIn("#if defined(_WIN32)", repl_c)
+        self.assertIn("#define TokenType WindowsTokenType", repl_c)
+        self.assertIn("#undef TokenType", repl_c)
         self.assertIn("signal(SIGSEGV, repl_signal_handler)", repl_c)
         self.assertIn("struct sigaction", repl_c)
         self.assertIn('#include "compat.h"', types_c)

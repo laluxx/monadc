@@ -103,7 +103,10 @@ if(WIN32)
 endif()
 
 add_library(monad_runtime STATIC ${MONADC_RUNTIME_SOURCES})
-set_target_properties(monad_runtime PROPERTIES OUTPUT_NAME monad)
+set_target_properties(monad_runtime PROPERTIES
+  OUTPUT_NAME monad
+  POSITION_INDEPENDENT_CODE ON
+)
 target_compile_options(monad_runtime PRIVATE ${MONADC_WARNING_FLAGS})
 target_include_directories(monad_runtime PRIVATE
   ${LLVM_INCLUDE_DIRS}

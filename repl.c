@@ -36,7 +36,11 @@
 #if !defined(_WIN32)
 #include <dlfcn.h>
 #else
+/* winnt.h declares an enum member named TokenType, which collides with the
+ * compiler's TokenType typedef.  Keep the Windows SDK name out of this TU. */
+#define TokenType WindowsTokenType
 #include <windows.h>
+#undef TokenType
 #define RTLD_DEFAULT NULL
 #define RTLD_NOW 0
 #define RTLD_GLOBAL 0
