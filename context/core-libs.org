@@ -73,9 +73,10 @@
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.coll.export-list src:core/prelude/Coll.mon:16-19 conf:high]
-  Module Coll exports: take, drop, takeWhile, dropWhile, map, any?, all?,
-  foldl, foldr, zip, zipwith, append, filter, and both.
+[OBS id:obs.coll.export-list src:core/prelude/Coll.mon:16-20 conf:high]
+  Module Coll exports the =Collection= class and its =map=, =filter=,
+  =foldl=, and =foldr= methods, plus concrete sequence utilities and the
+  temporary representation helper =coll-foldl= used by built-in set algebra.
 
 [OBS id:obs.coll.define-syntax src:core/prelude/Coll.mon:23-105 conf:high]
   Uses alternative define syntax =(define fn :: Type ...)= with pattern
@@ -86,13 +87,14 @@
   =(take n list)= and =(drop n list)= — basic sequence prefix/suffix.
   Pattern matches on list cons =[x|xs]=.
 
-[OBS id:obs.coll.map-filter src:core/prelude/Coll.mon:51-53,100-106 conf:high]
-  =(map f list)= — applies f to each element. =(filter p list)= —
-  keeps elements satisfying predicate.
+[OBS id:obs.coll.map-filter src:core/prelude/Coll.mon:23-29,55-67 conf:high]
+  =map= and =filter= are core-owned =Collection= methods. The =Coll= instance
+  delegates to =coll-map= and =coll-filter=, preserving the input constructor
+  selected by instance dispatch.
 
-[OBS id:obs.coll.foldl-foldr src:core/prelude/Coll.mon:69-76 conf:high]
-  =(foldl f acc list)= — left-associative fold. =(foldr f acc list)= —
-  right-associative fold. These are the core reduction primitives.
+[OBS id:obs.coll.foldl-foldr src:core/prelude/Coll.mon:26-29,77-94 conf:high]
+  =foldl= and =foldr= are core-owned =Collection= methods. The concrete
+  =coll-foldl/coll-foldr= functions implement the built-in =Coll= instance.
 
 [OBS id:obs.coll.takeWhile-dropWhile src:core/prelude/Coll.mon:37-47 conf:high]
   =(takeWhile p list)= — take prefix while predicate holds.
@@ -188,15 +190,14 @@
   in core classes and instances; the compiler should retain only representation
   primitives, type checking, instance dispatch, and syntax lowering.
 
-[TODO id:todo.core-libs-extensible-collection-dispatch-2026-07-16 owner:codex status:open]
-  Complete the executable migration from compiler collection built-ins to core:
-  support ADT pattern matching inside higher-kinded instance methods, propagate
-  imported classes and instance dictionaries across modules, add constrained
-  top-level signatures, then define lawful core collection capabilities and
-  built-in instances before removing =map=/=foldl=/=count=/=head=/=tail= schemes
-  from =infer_register_legacy_collection_builtins=. The acceptance contract is
-  a user-defined collection whose =map= instance is imported and called by an
-  unrelated module while preserving its concrete collection constructor.
+[FIX id:fix.core-libs-extensible-collection-dispatch-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Coll.mon,tests/test_typeclass_superclasses.py conf:high]
+  The executable collection-dispatch acceptance contract is complete: an
+  unrelated module imports a user-defined =Optional= collection, calls its
+  =map= instance, and observes =Present 42= with the constructor preserved.
+  =map=, =filter=, and the folds are no longer installed as public compiler HM
+  built-ins. Representation operations and the separately documented imported
+  higher-order-wrapper ABI limitation remain compiler work, not blockers for
+  user-defined collection instances.
 
 [FIX id:fix.coll.any-tested-2026-06-27 date:2026-06-27 by:codex]
   =any?= now has active runtime tests for success, miss, and empty-list
