@@ -2102,7 +2102,9 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
     // Check if it's a qualified symbol (contains '.' like "M.phi")
     const char *dot = strchr(symbol_name, '.');
 
-    if (dot) {
+    /* A dot is a module separator only when both sides are non-empty.
+     * The standalone `.` collection constructor is an ordinary symbol. */
+    if (dot && dot != symbol_name && dot[1] != '\0') {
         size_t prefix_len = (size_t)(dot - symbol_name);
         /* Module-local type methods are already registered under their exact
          * qualified name (for example Probe.identity).  Resolve that entry
@@ -10463,7 +10465,11 @@ if (ast->list.count >= 5) {
             if (strcmp(head->symbol, "list-empty?") == 0 || strcmp(head->symbol, "empty?") == 0) {
                 REQUIRE_ARGS(1);
                 CodegenResult lr = codegen_expr(ctx, ast->list.items[1]);
-                LLVMValueRef res = emit_call_1(ctx, get_rt_list_is_empty(ctx), LLVMInt32TypeInContext(ctx->context), lr.value, "is_empty");
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef raw_list = emit_call_1(ctx, get_rt_unbox_list(ctx),
+                                                     ptr, lr.value,
+                                                     "empty_raw_list");
+                LLVMValueRef res = emit_call_1(ctx, get_rt_list_is_empty(ctx), LLVMInt32TypeInContext(ctx->context), raw_list, "is_empty");
                 result.value = LLVMBuildTrunc(ctx->builder, res, LLVMInt1TypeInContext(ctx->context), "list_empty");
                 result.type = type_bool(); return result;
             }
@@ -10478,7 +10484,11 @@ if (ast->list.count >= 5) {
             if (strcmp(head->symbol, "append!") == 0) {
                 REQUIRE_ARGS(2);
                 CodegenResult lr = codegen_expr(ctx, ast->list.items[1]), vr = codegen_expr(ctx, ast->list.items[2]);
-                emit_call_2(ctx, get_rt_list_append(ctx), LLVMVoidTypeInContext(ctx->context), lr.value, codegen_box(ctx, vr.value, vr.type), "");
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef raw_list = emit_call_1(ctx, get_rt_unbox_list(ctx),
+                                                     ptr, lr.value,
+                                                     "append_raw_list");
+                emit_call_2(ctx, get_rt_list_append(ctx), LLVMVoidTypeInContext(ctx->context), raw_list, codegen_box(ctx, vr.value, vr.type), "");
                 result.value = lr.value; result.type = type_list(NULL, 0); return result;
             }
 

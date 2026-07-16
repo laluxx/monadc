@@ -95,6 +95,14 @@ class CheckoutLocalPathTests(unittest.TestCase):
         self.assertIn('"libmonad.a"', buildsystem_c)
         self.assertNotIn('strcat(cmd, "runtime.o -o ");', buildsystem_c)
 
+    def test_package_build_shell_quotes_compiler_and_project_paths(self):
+        cli_c = read("cli.c")
+
+        self.assertIn("shell_quote_arg(self", cli_c)
+        self.assertIn("shell_quote_arg(bi->main_file", cli_c)
+        self.assertIn("shell_quote_arg(bi->out_path", cli_c)
+        self.assertIn("quoted_self, quoted_main, quoted_out", cli_c)
+
     def test_repl_module_import_link_uses_runtime_archive_resolver(self):
         repl_c = read("repl.c")
 

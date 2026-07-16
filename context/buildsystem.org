@@ -406,6 +406,13 @@
   package build layer compatible with the CMake build, where the runtime output
   is an archive and not a root-level object file.
 
+[FIX id:fix.buildsystem.windows-package-shell-quoting-2026-07-16 date:2026-07-16 by:codex src:cli.c,tests/test_checkout_local_paths.py conf:high]
+  Package builds now quote the recursively invoked compiler, source, and output
+  paths for the host shell.  Native Windows uses =cmd.exe= quoting even inside
+  an MSYS2 CI job; Unix hosts retain POSIX single-quote escaping.  This fixes
+  checkout package builds when =GetModuleFileNameA= returns a drive-letter path
+  with backslashes, and also supports checkout paths containing spaces.
+
 [THINK id:think.buildsystem.project-vs-single-file conf:medium]
   The build system supports two modes: single-file compilation
   (=monadc build file.mon=) and project compilation (=monadc build= in

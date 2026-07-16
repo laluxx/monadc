@@ -51,6 +51,39 @@ static void host_self_path(char *buf, size_t size) {
 #endif
 }
 
+/* Quote one argument for the host shell used by system().  Native Windows
+ * uses cmd.exe (even when launched by MSYS2), while Unix hosts use sh. */
+static bool shell_quote_arg(const char *arg, char *out, size_t size) {
+    if (!arg || !out || size < 3) return false;
+
+    size_t used = 0;
+#if defined(_WIN32)
+    out[used++] = '"';
+    for (const char *p = arg; *p; p++) {
+        if (used + (*p == '"' ? 2 : 1) + 2 > size) return false;
+        if (*p == '"') out[used++] = '\\';
+        out[used++] = *p;
+    }
+    out[used++] = '"';
+#else
+    out[used++] = '\'';
+    for (const char *p = arg; *p; p++) {
+        const char *escaped = *p == '\'' ? "'\\''" : NULL;
+        size_t needed = escaped ? 4 : 1;
+        if (used + needed + 2 > size) return false;
+        if (escaped) {
+            memcpy(out + used, escaped, needed);
+            used += needed;
+        } else {
+            out[used++] = *p;
+        }
+    }
+    out[used++] = '\'';
+#endif
+    out[used] = '\0';
+    return true;
+}
+
 static void make_dir(const char *path) {
     if (host_mkdir(path) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: cannot create directory '%s': %s\n", path, strerror(errno));
@@ -1108,6 +1141,15 @@ static int do_build(const BuildInfo *bi, const CompilerFlags *flags) {
         if (buf[0]) strncpy(self, buf, sizeof(self) - 1);
     }
     char cmd[4096];
+    char quoted_self[2048];
+    char quoted_main[2048];
+    char quoted_out[2048];
+    if (!shell_quote_arg(self, quoted_self, sizeof(quoted_self)) ||
+        !shell_quote_arg(bi->main_file, quoted_main, sizeof(quoted_main)) ||
+        !shell_quote_arg(bi->out_path, quoted_out, sizeof(quoted_out))) {
+        fprintf(stderr, "Error: package build path is too long\n");
+        return 1;
+    }
     char opt_flag[8] = "";
     char emit_flags[512] = "";
     char trace_flags[128] = "";
@@ -1155,7 +1197,7 @@ static int do_build(const BuildInfo *bi, const CompilerFlags *flags) {
     }
 
     snprintf(cmd, sizeof(cmd), "%s %s -o %s%s%s%s%s%s",
-             self, bi->main_file, bi->out_path,
+             quoted_self, quoted_main, quoted_out,
              bi->monad_options[0] ? " " : "",
              bi->monad_options[0] ? bi->monad_options : "",
              opt_flag,

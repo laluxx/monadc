@@ -1368,3 +1368,10 @@
   Concrete set algorithms temporarily use exported =coll-foldl= because imported
   polymorphic higher-order wrappers do not yet retain a complete ABI signature.
   The full core sweep passes 33 modules and 662 assertions.
+
+[FIX id:fix.core-libs.boxed-list-primitives-2026-07-16 date:2026-07-16 by:codex src:codegen.c conf:high]
+  Legacy =empty?= and =append!= lowering now unboxes the language-level list
+  value before calling raw runtime list functions.  Standalone =.= is also
+  resolved as the collection constructor rather than an empty module prefix.
+  The list primitive spectrum, mutable append, and collection workflow runtime
+  regressions cover these representation boundaries.
