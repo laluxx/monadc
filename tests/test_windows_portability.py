@@ -53,7 +53,7 @@ class WindowsPortabilityTests(unittest.TestCase):
         cmake = read("CMakeLists.txt")
 
         self.assertIn("if(WIN32)", cmake)
-        self.assertIn('target_link_options(monad PRIVATE "-Wl,--stack,67108864")', cmake)
+        self.assertIn('target_link_options(monad PRIVATE "-Wl,--stack,268435456")', cmake)
 
     def test_compiler_link_paths_do_not_hardcode_posix_flags_for_windows(self):
         main_c = read("main.c")

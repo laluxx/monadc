@@ -416,10 +416,11 @@
   with backslashes, and also supports checkout paths containing spaces.
 
 [FIX id:fix.buildsystem.windows-compiler-stack-2026-07-16 date:2026-07-16 by:codex src:CMakeLists.txt,tests/test_windows_portability.py conf:high]
-  The Windows CMake compiler target reserves a 64 MiB stack.  Core bootstrap
-  and dependent inference can exceed MinGW's small default stack, previously
-  producing intermittent =0xC00000FD= failures in package and how-to smoke
-  compilation after otherwise identical invocations had passed.
+  The Windows CMake compiler target reserves a 256 MiB virtual stack. Core
+  bootstrap and dependent inference can exceed both MinGW's small default and
+  the earlier 64 MiB reserve depending on address layout, producing intermittent
+  =0xC00000FD= failures in package and core-module smoke compilation after
+  otherwise identical invocations had passed.
 
 [FIX id:fix.buildsystem.compiler-link-exit-status-2026-07-16 date:2026-07-16 by:codex src:main.c,tests/test_checkout_local_paths.py conf:high]
   Direct compilation now returns a nonzero process status when the external

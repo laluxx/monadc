@@ -121,8 +121,9 @@ target_include_directories(monad PRIVATE
 )
 target_link_options(monad PRIVATE ${LLVM_CONFIG_LDFLAGS_LIST})
 if(WIN32)
-  # Core loading and dependent inference exceed MinGW's small default stack.
-  target_link_options(monad PRIVATE "-Wl,--stack,67108864")
+  # Core loading and dependent inference are deeply recursive. Reserve ample
+  # virtual stack so address-layout variation cannot make Windows CI flaky.
+  target_link_options(monad PRIVATE "-Wl,--stack,268435456")
 endif()
 target_link_libraries(monad PRIVATE monad_runtime
   ${READLINE_LIBRARY}
