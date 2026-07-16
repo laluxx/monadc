@@ -168,7 +168,7 @@ class CheckoutLocalPathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="monadc-local-core-module-") as td:
             temp = Path(td)
             home = temp / "home"
-            output = temp / "Set.o"
+            output = temp / "Distributive.o"
             home.mkdir()
 
             env = os.environ.copy()
@@ -177,7 +177,8 @@ class CheckoutLocalPathTests(unittest.TestCase):
             env.pop("MONAD_RUNTIME_LIB", None)
 
             result = subprocess.run(
-                [str(MONAD), "--emit-obj", str(ROOT / "core/prelude/Data/Set.mon"),
+                [str(MONAD), "--emit-obj",
+                 str(ROOT / "core/prelude/Data/Distributive.mon"),
                  "-o", str(output)],
                 cwd=ROOT,
                 env=env,

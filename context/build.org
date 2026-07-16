@@ -341,8 +341,10 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   for explicit imports even when =MONAD_CORE= is unset. Module resolution and
   implicit prelude discovery now match =main.c='s checkout discovery instead
   of mixing local sources with =/usr/local/lib/monad/core=. The executable
-  regression compiles =core/prelude/Data/Set.mon= through =--emit-obj= without
-  installation environment overrides.
+  regression compiles the small, importing
+  =core/prelude/Data/Distributive.mon= through =--emit-obj= without installation
+  environment overrides; Set compilation and execution remain covered by the
+  REPL import contract.
 
 [FIX id:fix.build.clean-default-compiler-output-2026-07-16 date:2026-07-16 by:codex src:dep.c,typeclass.c,repl.c,tests/test_checkout_local_paths.py,tests/test_repl.py conf:high]
   Default user workflows must not print compiler-internal bootstrap hole dumps,
