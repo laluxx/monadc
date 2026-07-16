@@ -44,9 +44,21 @@
 #define RTLD_DEFAULT NULL
 #define RTLD_NOW 0
 #define RTLD_GLOBAL 0
-static void *dlopen(const char *path, int flags) { (void)path; (void)flags; return NULL; }
-static void *dlsym(void *handle, const char *name) { (void)handle; (void)name; return NULL; }
-static const char *dlerror(void) { return "dynamic loading is not available on this Windows build"; }
+static void *dlopen(const char *path, int flags) {
+    (void)flags;
+    HMODULE module = path ? LoadLibraryA(path) : GetModuleHandleA(NULL);
+    return (void *)(uintptr_t)module;
+}
+static void *dlsym(void *handle, const char *name) {
+    FARPROC proc = GetProcAddress((HMODULE)(uintptr_t)handle, name);
+    return (void *)(uintptr_t)proc;
+}
+static const char *dlerror(void) {
+    static char message[128];
+    snprintf(message, sizeof(message), "Windows loader error %lu",
+             (unsigned long)GetLastError());
+    return message;
+}
 #endif
 
 #include <signal.h>
@@ -2009,7 +2021,18 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
     /* registry.  No find glob, no path exclusions, no duplicates.         */
     /* ------------------------------------------------------------------ */
     char so_path[512];
+#if defined(_WIN32)
+    char temp_dir[384];
+    DWORD temp_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
+    if (temp_len == 0 || temp_len >= sizeof(temp_dir)) {
+        strcpy(temp_dir, ".\\");
+    }
+    for (char *p = temp_dir; *p; p++)
+        if (*p == '\\') *p = '/';
+    snprintf(so_path, sizeof(so_path), "%s__mrepl_%s.dll", temp_dir, mod_name);
+#else
     snprintf(so_path, sizeof(so_path), "/tmp/__mrepl_%s.so", mod_name);
+#endif
     if (file_exists_r(so_path)) remove(so_path);
 
     {
@@ -2017,12 +2040,12 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         char *runtime_archive = repl_runtime_archive_path();
 
         char cmd[16384];
-        int w = snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -o %s", so_path);
+        int w = snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -o \"%s\"", so_path);
         for (int i = 0; all_objs[i]; i++)
-            w += snprintf(cmd + w, sizeof(cmd) - w, " %s", all_objs[i]);
+            w += snprintf(cmd + w, sizeof(cmd) - w, " \"%s\"", all_objs[i]);
         w += snprintf(cmd + w, sizeof(cmd) - w,
                       " -Wl,--unresolved-symbols=ignore-all"
-                      " %s -lm 2>&1", runtime_archive);
+                      " \"%s\" -lm 2>&1", runtime_archive);
         free(runtime_archive);
         free(all_objs);
 
@@ -2092,7 +2115,8 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
     size_t prefix_len = ml + 2;
 
     char nm_cmd[512];
-    snprintf(nm_cmd, sizeof(nm_cmd), "nm -D --defined-only %s 2>/dev/null", so_path);
+    snprintf(nm_cmd, sizeof(nm_cmd),
+             "nm -D --defined-only \"%s\" 2>/dev/null", so_path);
     FILE *nm = popen(nm_cmd, "r");
     int count = 0;
     if (nm) {
