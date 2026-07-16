@@ -24,12 +24,13 @@ class HowToExampleTests(unittest.TestCase):
         for example in self.EXAMPLES:
             with self.subTest(example=example):
                 with tempfile.TemporaryDirectory(prefix="monadc-howto-home-") as home:
+                    output = Path(home) / Path(example).stem
                     env = os.environ.copy()
                     env["HOME"] = home
                     env["MONAD_CORE"] = str(ROOT / "core")
                     env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
                     result = subprocess.run(
-                        [str(MONAD), str(ROOT / example)],
+                        [str(MONAD), str(ROOT / example), "-o", str(output)],
                         cwd=ROOT,
                         env=env,
                         text=True,
@@ -43,6 +44,29 @@ class HowToExampleTests(unittest.TestCase):
                     0,
                     msg=f"{example} failed with {MONAD}\n{result.stdout[-4000:]}",
                 )
+
+    def test_syntax_example_links_to_requested_output(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-syntax-example-") as td:
+            temp = Path(td)
+            output = temp / "Syntax"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD), str(ROOT / "how_to/Syntax.mon"), "-o", str(output)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+
+            executable = Path(str(output) + ".exe") if os.name == "nt" else output
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+            self.assertTrue(executable.exists(), result.stdout[-4000:])
 
 
 if __name__ == "__main__":

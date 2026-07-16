@@ -1,3 +1,6 @@
+module Main
+
+
 ;; DONE
 (define [var :: Int] 3)
 define var :: Int 3

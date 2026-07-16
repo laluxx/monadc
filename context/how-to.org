@@ -147,6 +147,14 @@
   =(define [arr :: Arr :: 3 :: Int] ...)= vs =define arr :: Arr :: 3 :: Int ...=,
   =(define (my-count String -> Int) x -> ...)= vs =define (my-count String -> Int) x -> count x=.
 
+[FIX id:fix.how-to.syntax-explicit-main-module-2026-07-16 date:2026-07-16 by:codex src:how_to/Syntax.mon,tests/test_how_to_examples.py conf:high]
+  =Syntax.mon= declares =module Main= so imported core typeclass methods retain
+  their defining symbols during linking instead of being remangled under a
+  path-derived =Syntax= module.  The how-to harness now gives every example a
+  temporary output path, and separately requires =Syntax.mon= to produce the
+  requested executable; this also prevents example-smoke binaries from being
+  left in the checkout.
+
 [OBS id:obs.syntax.return-type src:how_to/Syntax.mon:19-20 conf:high]
   =(define return-string -> String) "ciao"= — function with return type
   annotation only (no parameters).
