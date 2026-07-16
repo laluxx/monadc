@@ -216,6 +216,13 @@
   linker to resolve symbols when JIT-compiling modules that depend on
   compiled native code.
 
+[FIX id:fix.repl.process-unique-import-module-2026-07-16 date:2026-07-16 by:codex src:repl.c,tests/test_checkout_local_paths.py,tests/test_repl.py conf:high]
+  Native shared modules produced for REPL imports include the evaluator process
+  ID in their temporary filename. Concurrent =repl= or =eval= processes must
+  never truncate or replace one another's loaded module; the source contract
+  guards the process-unique naming invariant and a parallel evaluator stress
+  test exercises it end to end.
+
 * Readline Integration
 :PROPERTIES:
 :ID: monadc.context.repl.readline

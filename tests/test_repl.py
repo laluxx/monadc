@@ -105,6 +105,45 @@ class ReplTests(unittest.TestCase):
         self.assertNotIn("Class:", result.stdout)
         self.assertTrue(clean_output(result.stdout).endswith("{1 2 3}"), result.stdout)
 
+    def test_eval_runs_import_then_expression_in_one_source_argument(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-eval-import-") as td:
+            env = os.environ.copy()
+            env["HOME"] = td
+            result = subprocess.run(
+                [str(MONAD), "eval", "import Data.Set\n({1 2}.union {2 3})"],
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=15,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(clean_output(result.stdout).endswith("{1 2 3}"), result.stdout)
+
+    def test_parallel_eval_imports_use_independent_shared_modules(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-eval-parallel-") as td:
+            processes = []
+            for index in range(6):
+                home = os.path.join(td, str(index))
+                os.mkdir(home)
+                env = os.environ.copy()
+                env["HOME"] = home
+                processes.append(subprocess.Popen(
+                    [str(MONAD), "eval", "import Data.Set\n({1 2}.union {2 3})"],
+                    env=env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                ))
+
+            results = [process.communicate(timeout=20) for process in processes]
+
+        for process, (output, _) in zip(processes, results):
+            self.assertEqual(process.returncode, 0, output)
+            self.assertTrue(clean_output(output).endswith("{1 2 3}"), output)
+
 
 if __name__ == "__main__":
     unittest.main()

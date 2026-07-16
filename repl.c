@@ -2029,9 +2029,11 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
     }
     for (char *p = temp_dir; *p; p++)
         if (*p == '\\') *p = '/';
-    snprintf(so_path, sizeof(so_path), "%s__mrepl_%s.dll", temp_dir, mod_name);
+    snprintf(so_path, sizeof(so_path), "%s__mrepl_%ld_%s.dll", temp_dir,
+             (long)getpid(), mod_name);
 #else
-    snprintf(so_path, sizeof(so_path), "/tmp/__mrepl_%s.so", mod_name);
+    snprintf(so_path, sizeof(so_path), "/tmp/__mrepl_%ld_%s.so",
+             (long)getpid(), mod_name);
 #endif
     if (file_exists_r(so_path)) remove(so_path);
 

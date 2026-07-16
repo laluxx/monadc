@@ -225,6 +225,12 @@
   in =CompilerFlags.eval_code= and dispatch through =cmd_eval=, which evaluates
   it with =repl_eval_line= and exits with success/failure status.
 
+[FIX id:fix.cli.eval-leading-imports-2026-07-16 date:2026-07-16 by:codex src:main.c,tests/test_repl.py conf:high]
+  One-shot evaluation accepts leading Wisp =import= lines followed by one
+  expression. Each import is evaluated in the same =REPLContext= before the
+  remaining, potentially multiline expression, so =monad eval= can exercise
+  core methods without requiring a separate interactive session.
+
 [OBS id:obs.cli.base-executable-name src:cli.c:284 conf:high]
   =char *get_base_executable_name(const char *path)= — Extracts the base
   executable name from a path (e.g. =/usr/bin/monadc= → =monadc=). Used

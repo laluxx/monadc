@@ -2242,7 +2242,31 @@ void cmd_eval(const char *code) {
 
     REPLContext ctx;
     repl_init(&ctx);
-    bool ok = repl_eval_line(&ctx, code);
+    bool ok = true;
+    char *source = strdup(code);
+    char *cursor = source;
+
+    /* Imports are stateful top-level forms. Allow one-shot evaluation to use
+     * the same natural "imports, then expression" shape as a source file while
+     * leaving the remaining expression intact for multiline parsing. */
+    while (ok) {
+        while (*cursor == ' ' || *cursor == '\t' ||
+               *cursor == '\r' || *cursor == '\n') cursor++;
+        if (strncmp(cursor, "import", 6) != 0 ||
+            (cursor[6] != ' ' && cursor[6] != '\t')) break;
+
+        char *line_end = strchr(cursor, '\n');
+        if (!line_end) break;
+        *line_end = '\0';
+        ok = repl_eval_line(&ctx, cursor);
+        cursor = line_end + 1;
+    }
+    while (*cursor == ' ' || *cursor == '\t' ||
+           *cursor == '\r' || *cursor == '\n') cursor++;
+    if (ok && *cursor)
+        ok = repl_eval_line(&ctx, cursor);
+
+    free(source);
     repl_dispose(&ctx);
     exit(ok ? 0 : 1);
 }

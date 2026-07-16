@@ -153,7 +153,7 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("GetTempPathA", repl_c)
         self.assertIn("LoadLibraryA", repl_c)
         self.assertIn("GetProcAddress", repl_c)
-        self.assertIn('"%s__mrepl_%s.dll"', repl_c)
+        self.assertIn('"%s__mrepl_%ld_%s.dll"', repl_c)
         self.assertIn("signal(SIGSEGV, repl_signal_handler)", repl_c)
         self.assertIn("struct sigaction", repl_c)
         self.assertIn('#include "compat.h"', types_c)
