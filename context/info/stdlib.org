@@ -187,10 +187,11 @@ Relevant sections from Main.mon:
 See [[file:../context/main-mon.org][context/main-mon.org]] for detailed analysis of Main.mon.
 See [[file:core.org][Core Library]] for the built-in functions always available.
 
-4. old-core/ (Aspirational / Pre-Rewrite)
+4. Retired old-core staging area
 
-The =old-core/= directory contains aspirational library modules from a
-previous compiler era. They are NOT currently importable:
+The former =old-core/= directory held aspirational modules from a previous
+compiler era. It was retired on 2026-07-16 after durable behavior gained active,
+tested owners under =core/=:
 
 | File               | Contents                             |
 |--------------------+--------------------------------------|
@@ -203,8 +204,9 @@ previous compiler era. They are NOT currently importable:
 | =old-core/Random.mon= | Random number generation             |
 | =old-core/Assert.mon= | Assertion utilities                  |
 
-These files use older syntax and are not compiled by the current
-compiler. They serve as design references for future library work.
+These historical paths describe provenance only. Current owners are =Math=,
+=Data.Set=, =Data.List=, =Data.String=, =Data.Char=, =Coll=, =Function=, and
+=Text.Parser=; see =context/core-libs.org= for the migration record.
 
 5. Modules
 
@@ -240,8 +242,7 @@ Key Points
 - Explicit =import= required — no automatic prelude import yet.
 - Known compilation issues: =takeWhile= in =Coll.mon= fails, variadic
   =gcd= in =Math.mon= fails.
-- =old-core/= contains aspirational library designs from a previous era
-  (not currently compilable).
+- Retired =old-core/= designs survive only where active core tests establish a contract.
 
 6. Related Pages
 

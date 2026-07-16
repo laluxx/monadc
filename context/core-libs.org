@@ -130,6 +130,15 @@
   fallback. The next design step is to make =for= target any type with an
   enumeration contract, not only countable/indexable collections.
 
+[FIX id:fix.core-libs.old-core-retirement-2026-07-16 date:2026-07-16 by:codex src:core/Math.mon,core/prelude/Data/Set.mon,core/prelude/Data/List.mon,core/prelude/Data/String.mon conf:high]
+  Retired the =old-core/= staging tree after moving its durable behavior into
+  active, tested owners. =Math= owns integer arithmetic and number theory;
+  =Data.Set= owns pure set algebra; =Data.List= owns stable accessors and
+  =list-tail=; and =Data.String= owns boundary queries and construction aliases.
+  Existing =Coll=, =Data.Char=, =Function=, and =Text.Parser= already supersede
+  duplicate archive foundations. Disabled experiments, duplicate definitions,
+  untested platform assembly, and commented sketches were not public contracts.
+
 [FIX id:fix.coll.any-tested-2026-06-27 date:2026-06-27 by:codex]
   =any?= now has active runtime tests for success, miss, and empty-list
   behavior in =core/prelude/Coll.mon=.

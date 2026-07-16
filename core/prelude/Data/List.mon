@@ -14,7 +14,8 @@
 
 module Data.List
   [list-null? list-length list-drop list-take list-append list-reverse
-   length reverse nth reduce]
+   length reverse nth reduce
+   caar cadr cdar cddr caddr cdddr list-tail]
 
 
 define list-null? :: [a] -> Bool
@@ -44,6 +45,34 @@ define nth :: [a] -> Int -> a
 define reduce :: Fn -> b -> [a] -> b
   _ acc []     -> acc
   f acc [x|xs] -> reduce f (f acc x) xs
+
+
+define caar :: [[a]] -> a
+  xs -> head (head xs)
+
+
+define cadr :: [a] -> a
+  xs -> head (tail xs)
+
+
+define cdar :: [[a]] -> [a]
+  xs -> tail (head xs)
+
+
+define cddr :: [a] -> [a]
+  xs -> tail (tail xs)
+
+
+define caddr :: [a] -> a
+  xs -> head (tail (tail xs))
+
+
+define cdddr :: [a] -> [a]
+  xs -> tail (tail (tail xs))
+
+
+define list-tail :: [a] -> Int -> [a]
+  xs k -> list-drop k xs
 
 
 define list-drop :: Int -> [a] -> [a]
@@ -112,3 +141,11 @@ tests
   assert-eq (reduce (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)) 10 "Data.List reduce sum"
   assert-eq (reduce (lambda (acc x) (* acc x)) 1 (list 2 3 4)) 24 "Data.List reduce product"
   :reduce:
+
+  :legacy-accessors:
+  assert-eq (caar (list (list 7 8))) 7 "Data.List caar"
+  assert-eq (cadr (list 1 2 3)) 2 "Data.List cadr"
+  assert-eq (caddr (list 1 2 3 4)) 3 "Data.List caddr"
+  assert-eq (show (cdddr (list 1 2 3 4 5))) "(4 5)" "Data.List cdddr"
+  assert-eq (show (list-tail (list 1 2 3 4) 2)) "(3 4)" "Data.List list-tail"
+  :legacy-accessors:

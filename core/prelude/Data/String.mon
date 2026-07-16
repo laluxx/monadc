@@ -9,7 +9,8 @@
 module Data.String
   [IsString fromString
    IsList Item fromList fromListN
-   concat]
+   concat string-prefix? string-suffix? string-contains?
+   string-copy string-append]
 
 
 class IsString a where
@@ -29,6 +30,27 @@ class IsList l where
 define concat :: String -> String -> String
   a b -> (++ a b)
 
+
+define string-prefix? :: String -> String -> Bool
+  prefix s -> starts-with? s prefix
+
+
+define string-suffix? :: String -> String -> Bool
+  suffix s -> ends-with? s suffix
+
+
+define string-contains? :: String -> String -> Bool
+  s fragment -> contains? s fragment
+
+
+define string-copy :: String -> String
+  s -> ++ "" s
+
+
+define string-append :: String -> String -> String
+  a b -> ++ a b
+
+
 tests
   :registration:
   assert-eq 1 1 "String registers IsString"
@@ -38,3 +60,13 @@ tests
   :concat:
   assert-eq (show (concat "ab" "cd")) "abcd" "Data.String concat"
   :concat:
+
+  :queries:
+  assert-eq (string-prefix? "he" "hello") True "Data.String prefix"
+  assert-eq (string-suffix? "lo" "hello") True "Data.String suffix"
+  assert-eq (string-contains? "hello" "ell") True "Data.String contains"
+  :queries:
+
+  :construction:
+  assert-eq (show (string-append "hello" " world")) "hello world" "Data.String append"
+  :construction:

@@ -1,0 +1,128 @@
+;;; Math.mon --- Integer mathematics and common constants
+
+module Math
+  [pi tau half-pi e phi inc dec double square cube sign
+   zero? positive? negative? even? odd? divisible?
+   gcd lcm factorial fib prime? clamp min max
+   sum product sum-range product-range pow]
+
+define [pi :: Float] 3.141592653589793
+define [tau :: Float] 6.283185307179586
+define [half-pi :: Float] 1.5707963267948966
+define [e :: Float] 2.718281828459045
+define [phi :: Float] 1.6180339887498949
+
+define inc :: Int -> Int
+  x -> x + 1
+
+define dec :: Int -> Int
+  x -> x - 1
+
+define double :: Int -> Int
+  x -> x * 2
+
+define square :: Int -> Int
+  x -> x * x
+
+define cube :: Int -> Int
+  x -> x * x * x
+
+define sign :: Int -> Int
+  x | x < 0     -> -1
+    | x > 0     -> 1
+    | otherwise -> 0
+
+define zero? :: Int -> Bool
+  x -> x = 0
+
+define positive? :: Int -> Bool
+  x -> x > 0
+
+define negative? :: Int -> Bool
+  x -> x < 0
+
+define even? :: Int -> Bool
+  x -> (x % 2) = 0
+
+define odd? :: Int -> Bool
+  x -> (x % 2) != 0
+
+define divisible? :: Int -> Int -> Bool
+  x y -> (x % y) = 0
+
+define gcd :: Int -> Int -> Int
+  a b | (b = 0) and (a < 0) -> 0 - a
+      | b = 0           -> a
+      | otherwise       -> gcd b (a % b)
+
+define lcm :: Int -> Int -> Int
+  a b | (a = 0) or (b = 0) -> 0
+      | otherwise      -> (a / (gcd a b)) * b
+
+define factorial :: Int -> Int
+  n | n <= 1    -> 1
+    | otherwise -> n * (factorial (n - 1))
+
+define fib :: Int -> Int
+  n | n <= 0    -> 0
+    | n = 1     -> 1
+    | otherwise -> fib (n - 1) + fib (n - 2)
+
+define prime-check? :: Int -> Int -> Bool
+  n divisor | divisor * divisor > n -> True
+            | (n % divisor) = 0     -> False
+            | otherwise             -> prime-check? n (divisor + 1)
+
+define prime? :: Int -> Bool
+  n | n < 2     -> False
+    | otherwise -> prime-check? n 2
+
+define clamp :: Int -> Int -> Int -> Int
+  x lo hi | x < lo     -> lo
+          | x > hi     -> hi
+          | otherwise  -> x
+
+define min :: Int -> Int -> Int
+  a b | a <= b     -> a
+      | otherwise  -> b
+
+define max :: Int -> Int -> Int
+  a b | a >= b     -> a
+      | otherwise  -> b
+
+define sum :: [Int] -> Int
+  []     -> 0
+  [x|xs] -> x + (sum xs)
+
+define product :: [Int] -> Int
+  []     -> 1
+  [x|xs] -> x * (product xs)
+
+define sum-range :: Int -> Int -> Int
+  lo hi | lo > hi    -> 0
+        | otherwise  -> lo + (sum-range (lo + 1) hi)
+
+define product-range :: Int -> Int -> Int
+  lo hi | lo > hi    -> 1
+        | otherwise  -> lo * (product-range (lo + 1) hi)
+
+define pow :: Int -> Int -> Int
+  base exponent | exponent <= 0 -> 1
+                | otherwise     -> base * (pow base (exponent - 1))
+
+tests
+  assert-eq (inc 4) 5 "Math inc"
+  assert-eq (cube 3) 27 "Math cube"
+  assert-eq (sign -9) -1 "Math sign"
+  assert-eq (gcd 54 24) 6 "Math gcd"
+  assert-eq (lcm 6 8) 24 "Math lcm"
+  assert-eq (factorial 6) 720 "Math factorial"
+  assert-eq (fib 10) 55 "Math fib"
+  assert-eq (prime? 29) True "Math prime"
+  assert-eq (prime? 21) False "Math composite"
+  assert-eq (clamp 12 0 10) 10 "Math clamp"
+  assert-eq (sum (list 1 2 3 4)) 10 "Math sum"
+  assert-eq (product (list 2 3 4)) 24 "Math product"
+  assert-eq (sum-range 1 100) 5050 "Math sum range"
+  assert-eq (product-range 2 5) 120 "Math product range"
+  assert-eq (pow 3 4) 81 "Math pow"
