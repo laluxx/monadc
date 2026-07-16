@@ -460,3 +460,13 @@
   deriving, recursive =Show= deriving for fielded constructors, lawful
   =showsPrec/showList= defaults, and parser preservation of list method
   signatures such as =[a] -> String=.
+
+[FIX id:fix.typeclass.higher-order-instance-signatures-2026-07-16 date:2026-07-16 by:codex src:typeclass.c,tests/test_typeclass_superclasses.py conf:high]
+  Instance-method specialization preserves compound type applications such as
+  =Box a= instead of truncating them at whitespace. The specialized class
+  signature is authoritative for every implementation parameter and return;
+  reader-seeded head-type annotations can no longer turn a higher-order
+  parameter =(a -> b)= into the instance type. Arrow parameters remain grouped
+  when copied into lambda annotations. Regression coverage executes a
+  higher-order instance method through
+  =test_instance_method_preserves_higher_order_parameter_type=.

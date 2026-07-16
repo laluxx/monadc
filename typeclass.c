@@ -395,12 +395,9 @@ static Type *my_type_parse_fn_arrow(const char *sig) {
         return my_type_parse_fn_arrow(start);
     }
 
-    for (int i = 0; start[i]; i++) {
-        if (start[i] == ' ' || start[i] == '\t') {
-            start[i] = '\0';
-            break;
-        }
-    }
+    /* Preserve type application arguments (for example `Box a`).
+     * type_from_name owns parsing compound types; truncating at whitespace
+     * silently collapsed higher-kinded instance methods to bare constructors. */
     Type *t = type_from_name(start);
     if (!t) return type_unknown();
     return t;
@@ -553,12 +550,26 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         Type *t_iter = method_sig;
 
         for (int pi = 0; pi < typed_lam->lambda.param_count; pi++) {
-            if (!typed_lam->lambda.params[pi].type_name) {
-                if (t_iter && t_iter->kind == TYPE_ARROW) {
-                    typed_lam->lambda.params[pi].type_name = strdup(type_to_string(t_iter->arrow_param));
-                } else if (t_iter) {
-                    typed_lam->lambda.params[pi].type_name = strdup(type_to_string(t_iter));
+            /* The specialized class contract is authoritative. The reader's
+             * instance lowering may seed every parameter with the head type
+             * (`Box`), which is wrong for higher-order parameters such as the
+             * mapping function in `(a -> b) -> Box a -> Box b`. */
+            if (t_iter && t_iter->kind == TYPE_ARROW) {
+                if (t_iter->arrow_param &&
+                    t_iter->arrow_param->kind != TYPE_UNKNOWN) {
+                    const char *param_type = type_to_string(t_iter->arrow_param);
+                    free(typed_lam->lambda.params[pi].type_name);
+                    if (t_iter->arrow_param->kind == TYPE_ARROW) {
+                        char grouped[512];
+                        snprintf(grouped, sizeof(grouped), "(%s)", param_type);
+                        typed_lam->lambda.params[pi].type_name = strdup(grouped);
+                    } else {
+                        typed_lam->lambda.params[pi].type_name = strdup(param_type);
+                    }
                 }
+            } else if (t_iter && t_iter->kind != TYPE_UNKNOWN) {
+                free(typed_lam->lambda.params[pi].type_name);
+                typed_lam->lambda.params[pi].type_name = strdup(type_to_string(t_iter));
             }
             if (t_iter && t_iter->kind == TYPE_ARROW) {
                 t_iter = t_iter->arrow_ret;
@@ -566,7 +577,8 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
                 t_iter = NULL;
             }
         }
-        if (!typed_lam->lambda.return_type && t_iter) {
+        if (t_iter && t_iter->kind != TYPE_UNKNOWN) {
+            free(typed_lam->lambda.return_type);
             typed_lam->lambda.return_type = strdup(type_to_string(t_iter));
         }
 

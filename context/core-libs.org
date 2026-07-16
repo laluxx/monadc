@@ -181,6 +181,23 @@
   functions. This needs compiler/runtime representation work and should land
   with rejection tests for mixed-element sets.
 
+[DEC id:dec.core-libs.collection-abstraction-in-core-2026-07-16 date:2026-07-16 by:human src:user-request conf:high]
+  =[a]= is Monad's abstract collection-of-=a= type, not Haskell list syntax.
+  Lists, arrays, strings, tuples, sets, and user-defined collection types may
+  refine or implement this abstraction. Collection algorithms and laws belong
+  in core classes and instances; the compiler should retain only representation
+  primitives, type checking, instance dispatch, and syntax lowering.
+
+[TODO id:todo.core-libs-extensible-collection-dispatch-2026-07-16 owner:codex status:open]
+  Complete the executable migration from compiler collection built-ins to core:
+  support ADT pattern matching inside higher-kinded instance methods, propagate
+  imported classes and instance dictionaries across modules, add constrained
+  top-level signatures, then define lawful core collection capabilities and
+  built-in instances before removing =map=/=foldl=/=count=/=head=/=tail= schemes
+  from =infer_register_legacy_collection_builtins=. The acceptance contract is
+  a user-defined collection whose =map= instance is imported and called by an
+  unrelated module while preserving its concrete collection constructor.
+
 [FIX id:fix.coll.any-tested-2026-06-27 date:2026-06-27 by:codex]
   =any?= now has active runtime tests for success, miss, and empty-list
   behavior in =core/prelude/Coll.mon=.

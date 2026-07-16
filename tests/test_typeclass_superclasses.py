@@ -243,6 +243,21 @@ class TypeclassSuperclassTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertTrue(run_output.endswith("Red\n"), run_output)
 
+    def test_instance_method_preserves_higher_order_parameter_type(self):
+        result, run_output = self.run_monad(
+            """
+            (module Main)
+            (class Transform c where (transform) :: (a -> b) -> a -> b)
+            (instance Transform Int where
+              (transform f value) => (f value))
+            (define (inc x) (+ x 1))
+            (show (transform inc 41))
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(run_output.endswith("42\n"), run_output)
+
 
 if __name__ == "__main__":
     unittest.main()
