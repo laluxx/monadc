@@ -336,6 +336,14 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   to emit. =main.c= now maps either separator to =_= before writing cached core
   object files, and =tests/test_windows_portability.py= asserts the rule.
 
+[FIX id:fix.build.checkout-core-module-resolution-2026-07-16 date:2026-07-16 by:codex src:module.c,tests/test_checkout_local_paths.py conf:high]
+  Normal compilation of a checkout core module must use the checkout's =core/=
+  for explicit imports even when =MONAD_CORE= is unset. Module resolution and
+  implicit prelude discovery now match =main.c='s checkout discovery instead
+  of mixing local sources with =/usr/local/lib/monad/core=. The executable
+  regression compiles =core/prelude/Data/Set.mon= through =--emit-obj= without
+  installation environment overrides.
+
 [FIX id:fix.build.windows-crlf-bulk-read-2026-07-12 date:2026-07-12 by:codex]
   Bulk source/config readers must open files in binary mode and terminate at
   the actual =fread= byte count, not the =ftell= size. On Windows text-mode

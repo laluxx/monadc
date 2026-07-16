@@ -162,6 +162,32 @@ class CheckoutLocalPathTests(unittest.TestCase):
             self.assertEqual(run_result.returncode, 0, run_result.stdout)
             self.assertTrue(run_result.stdout.endswith("42\n"), run_result.stdout)
 
+    def test_checkout_compiler_can_compile_core_module_with_imports(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-local-core-module-") as td:
+            temp = Path(td)
+            home = temp / "home"
+            output = temp / "Set.o"
+            home.mkdir()
+
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env.pop("MONAD_CORE", None)
+            env.pop("MONAD_RUNTIME_LIB", None)
+
+            result = subprocess.run(
+                [str(MONAD), "--emit-obj", str(ROOT / "core/prelude/Data/Set.mon"),
+                 "-o", str(output)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue(output.exists(), result.stdout)
+
     def test_compiler_returns_failure_when_linker_fails(self):
         with tempfile.TemporaryDirectory(prefix="monadc-link-failure-") as td:
             temp = Path(td)

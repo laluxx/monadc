@@ -320,6 +320,9 @@ static bool module_context_is_core_library_file(ModuleContext *ctx)
     if (env_core && strncmp(ctx->current_file, env_core, strlen(env_core)) == 0)
         return true;
 
+    if (strncmp(ctx->current_file, "core/", 5) == 0)
+        return true;
+
     const char *system_core = "/usr/local/lib/monad/core/";
     return strncmp(ctx->current_file, system_core, strlen(system_core)) == 0;
 }
@@ -379,6 +382,11 @@ void module_context_add_prelude_imports(ModuleContext *ctx)
         char path[1024];
         snprintf(path, sizeof(path), "%s/prelude", env_core);
         module_context_add_prelude_dir(ctx, path);
+        return;
+    }
+
+    if (access("core/prelude", F_OK) == 0) {
+        module_context_add_prelude_dir(ctx, "core/prelude");
         return;
     }
 
@@ -839,6 +847,23 @@ char *module_name_to_path(const char *module_name)
         if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
 
         char *found = find_mon_recursive(env_core, module_name);
+        if (found) return found;
+    }
+
+    /* 2b. Checkout core. Keep module resolution consistent with main.c's
+       monad_core_dir(), which selects ./core for an uninstalled compiler. */
+    if (access("core", F_OK) == 0) {
+        snprintf(candidate, sizeof(candidate), "core/%s.mon", rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "core/%s.monad", rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
+        snprintf(candidate, sizeof(candidate), "core/prelude/%s.mon", rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "core/prelude/%s.monad", rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
+        char *found = find_mon_recursive("core", module_name);
         if (found) return found;
     }
 
