@@ -20,15 +20,47 @@ module Data.Enum
 
 
 class Enum a where
-  succ           :: a -> a
-  pred           :: a -> a
   toEnum         :: Int -> a
   fromEnum       :: a -> Int
+  succ           :: a -> a
+  pred           :: a -> a
   enumFromTo     :: a -> a -> [a]
   enumFromThenTo :: a -> a -> a -> [a]
 
+  (succ x) => (toEnum (+ (fromEnum x) 1))
+  (pred x) => (toEnum (- (fromEnum x) 1))
+  (enumFromTo start end) =>
+    (if (> (fromEnum start) (fromEnum end))
+        (list)
+        (if (= (fromEnum start) (fromEnum end))
+            (start ++ (list))
+            (start ++ (enumFromTo (succ start) end))))
+  (enumFromThenTo start next end) =>
+    (if (= (fromEnum start) (fromEnum next))
+        (error "enumFromThenTo: zero step")
+        (if (> (fromEnum next) (fromEnum start))
+            (if (> (fromEnum start) (fromEnum end))
+                (list)
+                (if (>= (fromEnum next) (fromEnum end))
+                    (if (= (fromEnum next) (fromEnum end))
+                        (start ++ (next ++ (list)))
+                        (start ++ (list)))
+                    (start ++ (enumFromThenTo next
+                               (toEnum (- (* 2 (fromEnum next)) (fromEnum start)))
+                               end))))
+            (if (< (fromEnum start) (fromEnum end))
+                (list)
+                (if (<= (fromEnum next) (fromEnum end))
+                    (if (= (fromEnum next) (fromEnum end))
+                        (start ++ (next ++ (list)))
+                        (start ++ (list)))
+                    (start ++ (enumFromThenTo next
+                               (toEnum (- (* 2 (fromEnum next)) (fromEnum start)))
+                               end))))))
+
   ;; law: succ x = toEnum (fromEnum x + 1)
   ;; law: pred x = toEnum (fromEnum x - 1)
+  ;; minimal complete definition: toEnum and fromEnum
 
 
 class Bounded a where
@@ -37,34 +69,8 @@ class Bounded a where
 
 
 instance Enum Int
-  (succ x) => x + 1
-  (pred x) => x - 1
   (toEnum x) => x
   (fromEnum x) => x
-  (enumFromTo start end) => enumIntFromTo start end
-  (enumFromThenTo start next end) => enumIntFromThenTo start next end
-
-
-define enumIntFromTo :: Int -> Int -> [Int]
-  start end | start > end -> []
-  start end -> (start ++ (enumIntFromTo (start + 1) end))
-
-
-define enumIntFromThenTo :: Int -> Int -> Int -> [Int]
-  start next end | next >= start -> enumIntFromThenToUp start (next - start) end
-  start next end -> enumIntFromThenToDown start (start - next) end
-
-
-define enumIntFromThenToUp :: Int -> Int -> Int -> [Int]
-  start step end | step <= 0 -> error "enumFromThenTo: zero step"
-  start step end | start > end -> []
-  start step end -> (start ++ (enumIntFromThenToUp (start + step) step end))
-
-
-define enumIntFromThenToDown :: Int -> Int -> Int -> [Int]
-  start step end | step <= 0 -> error "enumFromThenTo: zero step"
-  start step end | start < end -> []
-  start step end -> (start ++ (enumIntFromThenToDown (start - step) step end))
 
 
 define range :: Int -> Int -> [Int]

@@ -1549,6 +1549,8 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
         case RT_MAP:
             if (b->type != RT_MAP) return 0;
             return rt_map_equal(a->data.map_val, b->data.map_val);
+        case RT_OPAQUE:
+            return a->data.opaque_val == b->data.opaque_val;
         case RT_ARRAY: {
             if (b->type != RT_ARRAY) return 0;
             if (a->data.array_val.length != b->data.array_val.length) return 0;
@@ -1663,6 +1665,13 @@ RuntimeValue *rt_value_float(double val) {
 RuntimeValue *rt_value_char(char val) {
     RuntimeValue *v = alloc_value();
     v->type = RT_CHAR; v->data.char_val = val; return v;
+}
+
+RuntimeValue *rt_value_opaque(void *p) {
+    RuntimeValue *v = alloc_value();
+    v->type = RT_OPAQUE;
+    v->data.opaque_val = p;
+    return v;
 }
 
 RuntimeValue *rt_value_list(RuntimeList *val) {
@@ -1805,6 +1814,9 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
                 printf("%s/%d", val->data.closure_val->name, val->data.closure_val->arity);
             else
                 printf("#<function/%d>", val->data.closure_val->arity);
+            break;
+        case RT_OPAQUE:
+            printf("#<opaque:%p>", val->data.opaque_val);
             break;
         case RT_RATIO:
             if (val->data.ratio_val.denominator == 1)
@@ -2612,6 +2624,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- Array ---
     DECL("rt_value_array",  ptr, i64);
+    DECL("rt_value_opaque", ptr, ptr);
     DECL("rt_array_set",    void_t, ptr, i64, ptr);
     DECL("rt_array_get",    ptr, ptr, i64);
     DECL("rt_array_length", i64, ptr);
@@ -2769,6 +2782,7 @@ GET_RUNTIME_FUNCTION(rt_ratio_to_int)
 GET_RUNTIME_FUNCTION(rt_ratio_to_float)
 
 GET_RUNTIME_FUNCTION(rt_value_array)
+GET_RUNTIME_FUNCTION(rt_value_opaque)
 GET_RUNTIME_FUNCTION(rt_array_set)
 GET_RUNTIME_FUNCTION(rt_array_get)
 GET_RUNTIME_FUNCTION(rt_array_length)

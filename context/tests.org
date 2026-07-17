@@ -1223,9 +1223,10 @@ Test-driven observations and failure records for the corresponding subsystem.
   instance through constructor-safe generated methods.
 
 [FIX id:fix.tests.user-enum-instance-dispatch-2026-07-17 date:2026-07-17 by:codex src:tests/codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.user.instance.defaults conf:high]
-  =tests.codegen.stateful.adt.enum.user.instance.defaults= defines an explicit
-  =Enum Dial= instance and proves =succ= and =pred= dispatch to that instance,
-  rather than treating the ADT value as an =Int= or dependent =Nat=.
+  =tests.codegen.stateful.adt.enum.user.instance.defaults= defines =Enum Dial=
+  using only =toEnum= and =fromEnum=, then proves inherited =succ=, =pred=,
+  =enumFromTo=, and =enumFromThenTo= behavior.  The derived-Enum regression
+  covers the same finite defaults for compiler-generated instances.
 
 [FIX id:fix.tests.core-maybe-either-runtime-contracts-2026-06-27 date:2026-06-27 by:codex]
   =core/prelude/Data/Maybe.mon= and =core/prelude/Data/Either.mon= now use

@@ -7,8 +7,8 @@
 ;; TEST-QUALITY: branch-state-regression
 ;; TEST-CODEGEN-ATOM: atom.codegen.stateful.adt.enum.user.instance.defaults
 ;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: User Enum instances own successor and predecessor dispatch.
-;; TEST-ATOM: A user-defined Enum instance can expose succ and pred for its own type.
+;; TEST-PURPOSE: User Enum instances inherit lawful stepping and finite-range defaults.
+;; TEST-ATOM: Integer conversion is the minimal complete Enum definition.
 ;; TEST-EXPECT: compile, run
 ;; TEST-CODEGEN-PATH: codegen.adt
 ;; TEST-COVERAGE: core/prelude/Data/Enum.mon default methods and user instance dispatch
@@ -22,11 +22,9 @@
 (import Data.Enum)
 (data Dial D0 | D1 | D2)
 (instance Enum Dial
-  (succ x) => (match x with | D0 -> D1 | D1 -> D2 | D2 -> D2)
-  (pred x) => (match x with | D0 -> D0 | D1 -> D0 | D2 -> D1)
-  (toEnum n) => (if (= n 0) D0 (if (= n 1) D1 D2))
-  (fromEnum x) => (match x with | D0 -> 0 | D1 -> 1 | D2 -> 2)
-  (enumFromTo start end) => []
-  (enumFromThenTo start next end) => [])
-(show (= (succ D0) D1))
-(show (= (pred D2) D1))
+  (toEnum n) => (if (= n 0) D0 (if (= n 1) D1 (if (= n 2) D2 (error "Dial.toEnum: out of bounds"))))
+  (fromEnum x) => (match x with | D0 -> 0 | D1 -> 1 | D2 -> 2))
+(show (fromEnum (succ D0)))
+(show (fromEnum (pred D2)))
+(show (count (enumFromTo D0 D2)))
+(show (count (enumFromThenTo D0 D2 D2)))

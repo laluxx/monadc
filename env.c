@@ -665,6 +665,23 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     if (ctx->had_error) {
         Type *sig = hm_signature_from_lambda(ctx, lambda_ast);
 
+        /* Class defaults have already been checked once in their generic
+         * class context.  Their specialized signature is authoritative here;
+         * recursive defaults synthesized while deriving an instance may not
+         * be representable in the ordinary source HM environment yet. */
+        bool trusted_default = lambda_ast->type == AST_LAMBDA &&
+            lambda_ast->lambda.docstring &&
+            strcmp(lambda_ast->lambda.docstring,
+                   "__monad_typeclass_default__") == 0;
+        if (trusted_default && sig) {
+            scheme = infer_generalise(ctx, sig, ienv);
+            infer_env_insert(ienv, name, scheme);
+            env_set_scheme(env, name, scheme_clone(scheme));
+            infer_ctx_free(ctx);
+            infer_env_free(child);
+            return scheme;
+        }
+
         if (inferred && inferred->kind == TYPE_ARROW && sig && sig->kind == TYPE_ARROW) {
             Type *inf_ret = inferred; while(inf_ret->kind == TYPE_ARROW) inf_ret = inf_ret->arrow_ret;
             Type *sig_ret = sig; while(sig_ret->kind == TYPE_ARROW) sig_ret = sig_ret->arrow_ret;

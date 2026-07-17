@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
 
 static void tc_codegen_error(CodegenContext *ctx, const char *fmt, ...) {
     va_list args;
@@ -410,6 +411,13 @@ static Type *my_type_parse_fn_arrow(const char *sig) {
      * type_from_name owns parsing compound types; truncating at whitespace
      * silently collapsed higher-kinded instance methods to bare constructors. */
     Type *t = type_from_name(start);
+    /* User ADTs are registered in the compilation environment rather than the
+     * builtin type-name table.  A specialized instance signature such as
+     * `Dial -> Dial` must retain pointer/layout ABI instead of degrading to
+     * TYPE_UNKNOWN (which lowers as an integer). */
+    if (!t && start[0] && !strchr(start, ' ') &&
+        isupper((unsigned char)start[0]))
+        t = type_layout_ref(start);
     if (!t) return type_unknown();
     return t;
 }
@@ -485,6 +493,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
 
         /* Find this method in the instance declaration */
         AST *body_lam = NULL;
+        bool uses_default = false;
         for (int ji = 0; ji < ast->instance_decl.method_count; ji++) {
             if (!ast->instance_decl.method_names[ji]) continue;
             if (strcmp(ast->instance_decl.method_names[ji], mname) == 0) {
@@ -498,6 +507,7 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
             for (int di = 0; di < c->default_count; di++) {
                 if (strcmp(c->default_names[di], mname) == 0) {
                     body_lam = c->default_bodies[di];
+                    uses_default = true;
                     break;
                 }
             }
@@ -516,6 +526,10 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         /* Clone the lambda and annotate each param with the concrete
          * instance type so codegen uses typed ABI instead of poly stub */
         AST *typed_lam = ast_clone(body_lam);
+        if (uses_default) {
+            free(typed_lam->lambda.docstring);
+            typed_lam->lambda.docstring = strdup("__monad_typeclass_default__");
+        }
         char sig_buf[512];
         snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
 

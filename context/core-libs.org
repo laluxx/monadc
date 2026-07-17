@@ -142,6 +142,15 @@
   The dependent shadow pass defers typeclass calls to HM/typeclass checking so
   =Enum.succ= is not mistaken for the dependent =Nat= constructor.
 
+[FIX id:fix.core-libs.enum-minimal-defaults-2026-07-17 date:2026-07-17 by:codex src:core/prelude/Data/Enum.mon,typeclass.c,codegen.c,env.c,runtime.c,runtime.h conf:high]
+  The minimal complete =Enum= definition is now =toEnum= plus =fromEnum=.
+  =succ=, =pred=, contiguous finite ranges, and stepped finite ranges are lawful
+  class defaults specialized to each instance.  Result-directed calls such as
+  =toEnum :: Int -> a= prefer the enclosing instance, recursive defaults retain
+  their concrete ADT ABI, zero-step finite ranges fail explicitly, and range
+  termination avoids converting values beyond the endpoint.  Runtime opaque
+  boxing lets user ADT values inhabit generic core collections safely.
+
 [FIX id:fix.core-libs.old-core-retirement-2026-07-16 date:2026-07-16 by:codex src:core/Math.mon,core/prelude/Data/Set.mon,core/prelude/Data/List.mon,core/prelude/Data/String.mon conf:high]
   Retired the =old-core/= staging tree after moving its durable behavior into
   active, tested owners. =Math= owns integer arithmetic and number theory;

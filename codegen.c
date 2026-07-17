@@ -1756,6 +1756,12 @@ static const char *tc_instance_type_name_from_ast(CodegenContext *ctx, AST *ast)
     case AST_SYMBOL:
         if (strcmp(ast->symbol, "True") == 0 || strcmp(ast->symbol, "False") == 0)
             return "Bool";
+        {
+            EnvEntry *entry = env_lookup(ctx->env, ast->symbol);
+            const char *env_type = entry
+                ? tc_instance_type_name_from_type(entry->type) : NULL;
+            if (env_type) return env_type;
+        }
         break;
     case AST_LIST:
         if (ast->list.count > 0 &&
@@ -1763,6 +1769,17 @@ static const char *tc_instance_type_name_from_ast(CodegenContext *ctx, AST *ast)
             const char *constructor = ast->list.items[0]->symbol;
             if (strcmp(constructor, "list") == 0)
                 return "Coll";
+            if (tc_is_method(ctx->tc_registry, constructor)) {
+                const char *class_name = tc_method_class(ctx->tc_registry,
+                                                         constructor);
+                for (size_t i = 1; i < ast->list.count; i++) {
+                    const char *nested = tc_instance_type_name_from_ast(
+                        ctx, ast->list.items[i]);
+                    if (nested && tc_find_instance(ctx->tc_registry,
+                                                   class_name, nested))
+                        return nested;
+                }
+            }
         }
         break;
     default:
@@ -1770,6 +1787,30 @@ static const char *tc_instance_type_name_from_ast(CodegenContext *ctx, AST *ast)
     }
 
     return NULL;
+}
+
+static const char *tc_enclosing_instance_type(CodegenContext *ctx,
+                                               const char *class_name) {
+    if (!ctx || !class_name || !ctx->current_function_name ||
+        strncmp(ctx->current_function_name, "__impl_", 7) != 0)
+        return NULL;
+
+    const char *class_start = ctx->current_function_name + 7;
+    const char *class_end = strchr(class_start, '_');
+    if (!class_end || (size_t)(class_end - class_start) != strlen(class_name) ||
+        strncmp(class_start, class_name, strlen(class_name)) != 0)
+        return NULL;
+
+    const char *type_start = class_end + 1;
+    const char *type_end = strchr(type_start, '_');
+    if (!type_end || type_end == type_start) return NULL;
+
+    static char type_name[256];
+    size_t len = (size_t)(type_end - type_start);
+    if (len >= sizeof(type_name)) return NULL;
+    memcpy(type_name, type_start, len);
+    type_name[len] = '\0';
+    return type_name;
 }
 
 static bool codegen_is_cast_target_name(const char *name, Type **out_type) {
@@ -2736,6 +2777,9 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
         case TYPE_BOOL:
             return emit_call_1(ctx, get_rt_value_int(ctx), ptr,
                 LLVMBuildZExt(ctx->builder, val, i64, "bool_to_int"), "boxed_bool");
+        case TYPE_LAYOUT:
+            return emit_call_1(ctx, get_rt_value_opaque(ctx), ptr, val,
+                               "boxed_layout");
         case TYPE_ARR: {
             LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
             LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
@@ -13037,16 +13081,10 @@ if (ast->list.count >= 5) {
                 (!entry || (entry->kind == ENV_FUNC && entry->func_ref == NULL))) {
                 const char *op = head->symbol;
                 const char *cls = tc_method_class(ctx->tc_registry, op);
-                const char *type_name = NULL;
+                const char *type_name = tc_enclosing_instance_type(ctx, cls);
 
-                for (size_t i = 1; i < ast->list.count; i++) {
+                for (size_t i = 1; !type_name && i < ast->list.count; i++) {
                     AST *arg = ast->list.items[i];
-                    const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
-                    if (inferred_type_name &&
-                        tc_find_instance(ctx->tc_registry, cls,
-                                         inferred_type_name)) {
-                        type_name = inferred_type_name; break;
-                    }
                     if (arg->type == AST_SYMBOL) {
                         EnvEntry *e = env_lookup(ctx->env, arg->symbol);
                         const char *env_type_name = e ? tc_instance_type_name_from_type(e->type) : NULL;
@@ -13055,6 +13093,12 @@ if (ast->list.count >= 5) {
                                              env_type_name)) {
                             type_name = env_type_name; break;
                         }
+                    }
+                    const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
+                    if (inferred_type_name &&
+                        tc_find_instance(ctx->tc_registry, cls,
+                                         inferred_type_name)) {
+                        type_name = inferred_type_name; break;
                     }
                 }
                 if (!type_name)
@@ -13105,7 +13149,10 @@ if (ast->list.count >= 5) {
                                 } else if (inst->method_funcs[_mi]) {
                                     impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
                                 } else {
-                                    break;
+                                    snprintf(constructed_name, sizeof(constructed_name),
+                                             "__impl_%s_%s_%s", cls, type_name, op);
+                                    if (!env_lookup(ctx->env, constructed_name)) break;
+                                    impl_name = constructed_name;
                                 }
                                 const char *stable_impl = strstr(impl_name, "__impl_");
                                 if (stable_impl) impl_name = stable_impl;
@@ -13976,20 +14023,20 @@ if (ast->list.count >= 5) {
                 if (tc_is_method(ctx->tc_registry, head->symbol)) {
                     const char *op        = head->symbol;
                     const char *cls       = tc_method_class(ctx->tc_registry, op);
-                    const char *type_name = NULL;
+                    const char *type_name = tc_enclosing_instance_type(ctx, cls);
 
-                    for (size_t i = 1; i < ast->list.count; i++) {
+                    for (size_t i = 1; !type_name && i < ast->list.count; i++) {
                         AST *arg = ast->list.items[i];
-                        const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
-                        if (inferred_type_name) {
-                            type_name = inferred_type_name; break;
-                        }
                         if (arg->type == AST_SYMBOL) {
                             EnvEntry *e   = env_lookup(ctx->env, arg->symbol);
                             const char *env_type_name = e ? tc_instance_type_name_from_type(e->type) : NULL;
                             if (env_type_name) {
                                 type_name = env_type_name; break;
                             }
+                        }
+                        const char *inferred_type_name = tc_instance_type_name_from_ast(ctx, arg);
+                        if (inferred_type_name) {
+                            type_name = inferred_type_name; break;
                         }
                     }
                     if (!type_name)
@@ -14035,7 +14082,8 @@ if (ast->list.count >= 5) {
                                     } else if (inst->method_funcs[_mi]) {
                                         impl_name                        = LLVMGetValueName(inst->method_funcs[_mi]);
                                     } else {
-                                        break;
+                                        if (!env_lookup(ctx->env, constructed_name)) break;
+                                        impl_name = constructed_name;
                                     }
                                     const char *stable_impl = strstr(impl_name, "__impl_");
                                     if (stable_impl) impl_name = stable_impl;

@@ -20,7 +20,9 @@
 ;; TEST-CLI-TARGET: codegen branches data-layout adts
 
 (import Data.Enum)
-(data T A | B | C deriving [Enum Show])
+(data Traffic A | B | C deriving [Enum Show])
 (show (fromEnum A))
-(show (= (succ A) B))
-(show (= (pred C) B))
+(show (fromEnum (succ A)))
+(show (fromEnum (pred C)))
+(show (count (enumFromTo A C)))
+(show (count (enumFromThenTo A C C)))

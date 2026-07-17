@@ -30,6 +30,7 @@ typedef enum {
     RT_BIGNUM,
     RT_SET,
     RT_MAP,
+    RT_OPAQUE,
     RT_CLOSURE,
 } RuntimeValueType;
 
@@ -78,6 +79,7 @@ typedef struct RuntimeValue {
         struct RuntimeMap   *map_val;
         RuntimeThunk        *thunk_val;
         RuntimeClosure      *closure_val;
+        void                *opaque_val;
 
         struct {
             int64_t numerator;
@@ -274,6 +276,7 @@ RuntimeValue *rt_value_ratio(int64_t numerator, int64_t denominator);
 RuntimeValue *rt_value_array(size_t length);
 RuntimeValue *rt_value_set(RuntimeSet *s);
 RuntimeValue *rt_value_map(RuntimeMap *m);
+RuntimeValue *rt_value_opaque(void *p);
 
 
 /// Unboxing
@@ -478,6 +481,7 @@ LLVMValueRef get_rt_value_nil(CodegenContext *ctx);
 LLVMValueRef get_rt_value_thunk(CodegenContext *ctx);
 LLVMValueRef get_rt_value_ratio(CodegenContext *ctx);
 LLVMValueRef get_rt_value_array(CodegenContext *ctx);
+LLVMValueRef get_rt_value_opaque(CodegenContext *ctx);
 
 //// Array
 
