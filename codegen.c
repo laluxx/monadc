@@ -3123,27 +3123,45 @@ static AST *derive_eq_nullary_lambda(AST *data_ast, const char *type_name,
 
 static AST *derive_enum_step_nullary_lambda(AST *data_ast, const char *type_name,
                                             bool forward) {
+    int nctors = data_ast->data.constructor_count;
+    ASTPMatchClause *clauses = malloc(sizeof(ASTPMatchClause) * nctors);
+
+    for (int ci = 0; ci < nctors; ci++) {
+        ASTPattern *pat = calloc(1, sizeof(ASTPattern));
+        pat->kind = PAT_CONSTRUCTOR;
+        pat->var_name = strdup(data_ast->data.constructors[ci].name);
+
+        clauses[ci].patterns = pat;
+        clauses[ci].pattern_count = 1;
+        clauses[ci].guard_conds = NULL;
+        clauses[ci].guard_bodies = NULL;
+        clauses[ci].guard_count = 0;
+
+        int target = forward ? ci + 1 : ci - 1;
+        if (target >= 0 && target < nctors) {
+            clauses[ci].body = ast_new_symbol(
+                data_ast->data.constructors[target].name);
+        } else {
+            AST *err = ast_new_list();
+            ast_list_append(err, ast_new_symbol("error"));
+            ast_list_append(err, ast_new_string(
+                forward ? "succ: out of bounds" : "pred: out of bounds"));
+            clauses[ci].body = err;
+        }
+    }
+
     ASTParam *params = malloc(sizeof(ASTParam));
     params[0].name = strdup("__p0");
     params[0].type_name = strdup(type_name);
     params[0].is_rest = false;
     params[0].is_anon = false;
 
-    AST *offset = ast_new_list();
-    ast_list_append(offset, ast_new_symbol(forward ? "+" : "-"));
-    ast_list_append(offset, ast_new_symbol("__p0.__tag"));
-    AST *one = ast_new_number(1.0, NULL);
-    one->has_raw_int = true;
-    one->raw_int = 1;
-    ast_list_append(offset, one);
-
-    AST *body = ast_new_list();
-    ast_list_append(body, ast_new_symbol("toEnum"));
-    ast_list_append(body, offset);
+    AST *pm = ast_new_pmatch(clauses, nctors);
+    AST *body = pmatch_desugar(pm, params, 1);
+    free(pm);
 
     AST **body_exprs = malloc(sizeof(AST*));
     body_exprs[0] = body;
-    (void)data_ast;
     return ast_new_lambda(params, 1, type_name, NULL, NULL, false,
                           body, body_exprs, 1);
 }
@@ -5698,6 +5716,12 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
         entry->source_ast = NULL;
         entry->lifted_count = 0;
         entry->is_closure_abi = false;
+
+        /* Imported instance implementations intentionally keep their stable
+         * linker symbol.  Treat them as imported so the current module's
+         * export-mangling phase cannot rename them. */
+        if (!entry->module_name && strncmp(name, "__impl_", 7) == 0)
+            entry->module_name = strdup("__instance__");
 
         if (!entry->module_name) {
             const char *dot = strchr(name, '.');
@@ -13081,11 +13105,12 @@ if (ast->list.count >= 5) {
                                 } else if (inst->method_funcs[_mi]) {
                                     impl_name = LLVMGetValueName(inst->method_funcs[_mi]);
                                 } else {
-                                    snprintf(constructed_name, sizeof(constructed_name), "__impl_%s_%s_%s", cls, type_name, op);
-                                    impl_name = constructed_name;
+                                    break;
                                 }
+                                const char *stable_impl = strstr(impl_name, "__impl_");
+                                if (stable_impl) impl_name = stable_impl;
                                 EnvEntry *impl_entry = env_lookup(ctx->env, impl_name);
-                                if (impl_entry) {
+                                if (impl_entry && !impl_entry->module_name) {
                                     entry = impl_entry;
                                 } else {
                                     /* Imported instance implementations are
@@ -14005,11 +14030,15 @@ if (ast->list.count >= 5) {
                                     char        constructed_name[256];
                                     snprintf(constructed_name, sizeof(constructed_name),
                                              "__impl_%s_%s_%s", cls, type_name, op);
-                                    if (inst->method_funcs[_mi]) {
+                                    if (inst->method_symbols[_mi]) {
+                                        impl_name = inst->method_symbols[_mi];
+                                    } else if (inst->method_funcs[_mi]) {
                                         impl_name                        = LLVMGetValueName(inst->method_funcs[_mi]);
                                     } else {
-                                        impl_name                        = constructed_name;
+                                        break;
                                     }
+                                    const char *stable_impl = strstr(impl_name, "__impl_");
+                                    if (stable_impl) impl_name = stable_impl;
                                     /* Module qualification can change the emitted
                                      * LLVM name, while the defining environment
                                      * retains the canonical instance symbol. */
@@ -14017,7 +14046,12 @@ if (ast->list.count >= 5) {
                                                                       constructed_name);
                                     if (!impl_entry && impl_name)
                                         impl_entry = env_lookup(ctx->env, impl_name);
-                                    if (impl_entry) entry = impl_entry;
+                                    if (impl_entry && !impl_entry->module_name) {
+                                        entry = impl_entry;
+                                    } else {
+                                        return codegen_forward_declared_call(ctx, ast,
+                                                                             impl_name);
+                                    }
                                     break;
                                 }
                             }

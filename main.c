@@ -69,6 +69,22 @@ typedef struct CompiledModule {
 
 static CompiledModule *g_compiled = NULL;
 
+/* The dependent checker is currently a shadow pass; typeclass applications
+ * are checked by HM inference and resolved by the typeclass registry.  Do not
+ * reinterpret a class method such as Enum.succ as the dependent Nat
+ * constructor with the same spelling. */
+static bool ast_list_contains_typeclass_call(AST *ast, TypeClassRegistry *registry) {
+    if (!ast || ast->type != AST_LIST) return false;
+    if (ast->list.count > 0 && ast->list.items[0]->type == AST_SYMBOL &&
+        tc_is_method(registry, ast->list.items[0]->symbol)) {
+        return true;
+    }
+    for (size_t i = 0; i < ast->list.count; i++) {
+        if (ast_list_contains_typeclass_call(ast->list.items[i], registry)) return true;
+    }
+    return false;
+}
+
 /* FFI libraries to link, accumulated during compile_one */
 static char  g_ffi_link_libs[2048] = {0};
 static int   g_ffi_link_libs_len   = 0;
@@ -1712,6 +1728,8 @@ skip_primitive_type_autoload:
             const char *h = expr->list.items[0]->symbol;
             if (strcmp(h, "module") == 0 || strcmp(h, "import") == 0) continue;
         }
+
+        if (ast_list_contains_typeclass_call(expr, ctx.tc_registry)) continue;
 
         Term *out_type = NULL;
         Term *elaborated = dep_toplevel(dep_ctx, expr, &out_type);

@@ -30,11 +30,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from monad_binary import resolve_monad_binary
+
 
 ROOT = Path(__file__).resolve().parent.parent
 TEST_ROOT = ROOT / "tests"
 CONTEXT_ROOT = ROOT / "context"
-MONAD = ROOT / "monad"
+MONAD = resolve_monad_binary()
 RESULTS_FILE = TEST_ROOT / ".test-results.json"
 FIRST_FAILURE_FILE = TEST_ROOT / ".last-first-failure.org"
 FAILURE_DIR = TEST_ROOT / ".last-failures"

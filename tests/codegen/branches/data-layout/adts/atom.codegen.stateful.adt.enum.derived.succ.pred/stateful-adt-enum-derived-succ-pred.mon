@@ -22,5 +22,5 @@
 (import Data.Enum)
 (data T A | B | C deriving [Enum Show])
 (show (fromEnum A))
-(show (fromEnum (succ A)))
-(show (fromEnum (pred C)))
+(show (= (succ A) B))
+(show (= (pred C) B))

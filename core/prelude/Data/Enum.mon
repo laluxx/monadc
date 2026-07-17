@@ -1,4 +1,4 @@
-;;; Enum.mon --- Integer enumeration helpers
+;;; Enum.mon --- Extensible enumeration typeclasses and helpers
 
 ;; Author: Laluxx
 ;; Version: 1.0.0
@@ -6,18 +6,16 @@
 
 ;;; Commentary:
 
-;; Haskell-style enumeration vocabulary for the active core.  The Enum and
-;; Bounded typeclass contracts live here because this is their domain. The
-;; concrete helpers below are Int-based until dictionary dispatch is ready in
-;; the core path.
+;; Haskell-style enumeration vocabulary for the active core.  Enumeration is
+;; owned by the Enum typeclass: user-defined instances receive lawful defaults
+;; for stepping and finite ranges from their integer representation.  Int is a
+;; regular instance, not a set of functions shadowing the class methods.
 
 ;;; Code:
 
 module Data.Enum
-  [Enum succ pred toEnum fromEnum enumFrom enumFromThen enumFromTo enumFromThenTo
+  [Enum succ pred toEnum fromEnum enumFromTo enumFromThenTo
    Bounded minBound maxBound
-   succ pred toEnum fromEnum
-   enumFromTo enumFromThenTo
    range rangeBy]
 
 
@@ -26,8 +24,6 @@ class Enum a where
   pred           :: a -> a
   toEnum         :: Int -> a
   fromEnum       :: a -> Int
-  enumFrom       :: a -> [a]
-  enumFromThen   :: a -> a -> [a]
   enumFromTo     :: a -> a -> [a]
   enumFromThenTo :: a -> a -> a -> [a]
 
@@ -40,42 +36,35 @@ class Bounded a where
   maxBound :: a
 
 
-define succ :: Int -> Int
-  x -> x + 1
+instance Enum Int
+  (succ x) => x + 1
+  (pred x) => x - 1
+  (toEnum x) => x
+  (fromEnum x) => x
+  (enumFromTo start end) => enumIntFromTo start end
+  (enumFromThenTo start next end) => enumIntFromThenTo start next end
 
 
-define pred :: Int -> Int
-  x -> x - 1
-
-
-define toEnum :: Int -> Int
-  x -> x
-
-
-define fromEnum :: Int -> Int
-  x -> x
-
-
-define enumFromTo :: Int -> Int -> [Int]
+define enumIntFromTo :: Int -> Int -> [Int]
   start end | start > end -> []
-  start end               -> (start ++ (enumFromTo (start + 1) end))
+  start end -> (start ++ (enumIntFromTo (start + 1) end))
 
 
-define enumFromThenTo :: Int -> Int -> Int -> [Int]
-  start next end | next >= start -> enumFromThenToUp start (next - start) end
-  start next end                 -> enumFromThenToDown start (start - next) end
+define enumIntFromThenTo :: Int -> Int -> Int -> [Int]
+  start next end | next >= start -> enumIntFromThenToUp start (next - start) end
+  start next end -> enumIntFromThenToDown start (start - next) end
 
 
-define enumFromThenToUp :: Int -> Int -> Int -> [Int]
-  start step end | step <= 0   -> error "enumFromThenTo: zero step"
+define enumIntFromThenToUp :: Int -> Int -> Int -> [Int]
+  start step end | step <= 0 -> error "enumFromThenTo: zero step"
   start step end | start > end -> []
-  start step end               -> (start ++ (enumFromThenToUp (start + step) step end))
+  start step end -> (start ++ (enumIntFromThenToUp (start + step) step end))
 
 
-define enumFromThenToDown :: Int -> Int -> Int -> [Int]
-  start step end | step <= 0   -> error "enumFromThenTo: zero step"
+define enumIntFromThenToDown :: Int -> Int -> Int -> [Int]
+  start step end | step <= 0 -> error "enumFromThenTo: zero step"
   start step end | start < end -> []
-  start step end               -> (start ++ (enumFromThenToDown (start - step) step end))
+  start step end -> (start ++ (enumIntFromThenToDown (start - step) step end))
 
 
 define range :: Int -> Int -> [Int]

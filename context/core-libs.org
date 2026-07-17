@@ -132,6 +132,16 @@
   fallback. The next design step is to make =for= target any type with an
   enumeration contract, not only countable/indexable collections.
 
+[FIX id:fix.core-libs.enum-instance-ownership-2026-07-17 date:2026-07-17 by:codex src:core/prelude/Data/Enum.mon,codegen.c,main.c conf:high]
+  =succ=, =pred=, =toEnum=, =fromEnum=, and finite enumeration are owned by
+  the =Enum= typeclass.  =Int= is now an ordinary =Enum Int= instance rather
+  than a set of monomorphic definitions shadowing those methods, so users can
+  define and call =Enum= methods for their own types.  The eager core exposes
+  only finite enumeration methods; Haskell's infinite =enumFrom= operations
+  require a lazy stream abstraction and must not masquerade as strict lists.
+  The dependent shadow pass defers typeclass calls to HM/typeclass checking so
+  =Enum.succ= is not mistaken for the dependent =Nat= constructor.
+
 [FIX id:fix.core-libs.old-core-retirement-2026-07-16 date:2026-07-16 by:codex src:core/Math.mon,core/prelude/Data/Set.mon,core/prelude/Data/List.mon,core/prelude/Data/String.mon conf:high]
   Retired the =old-core/= staging tree after moving its durable behavior into
   active, tested owners. =Math= owns integer arithmetic and number theory;
