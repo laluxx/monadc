@@ -12,9 +12,17 @@ module Wisp.ClassMethodArrow []
 
 class Step a where
   step :: a -> a
+  classify :: a -> Int
 
   step x ->
     x + 1
+
+  classify x ->
+    if x > 0
+    then if x > 1
+         then 20
+         else 10
+    else 0
 
 
 instance Step Int
@@ -22,3 +30,6 @@ instance Step Int
 
 tests
   assert-eq (step 4) 5 "Wisp class default uses ->"
+  assert-eq (classify 2) 20 "nested multiline if takes inner true branch"
+  assert-eq (classify 1) 10 "nested multiline if takes inner false branch"
+  assert-eq (classify 0) 0  "nested multiline if takes outer false branch"

@@ -630,6 +630,20 @@ Test-driven observations and failure records for the corresponding subsystem.
   fixtures and TSV rows remain the source of executable truth; this node
   makes TEST-CONTEXT links resolvable and searchable from the context graph.
 
+[FIX id:fix.wisp.nested-layout-if-method-body-2026-07-17 date:2026-07-17 by:codex src:wisp.c,tests/wisp_class_method_arrow.mon,core/prelude/Data/Enum.mon conf:high]
+  Class and instance method-body collection preserves indentation relative to
+  the first body line.  Multiline =if= branches beginning with another =if=
+  are recursively expanded as one layout expression rather than treating
+  =then= and =else= as values.  Bare keyword lines accept the newline retained
+  by the logical-line collector, and branch expressions run through normal
+  Wisp infix expansion before being wrapped.
+
+  A string beginning with a grouped form is considered fully grouped only when
+  its matching delimiter consumes the entire string.  This prevents conditions
+  such as =(fromEnum x) > (fromEnum y)= from bypassing infix lowering.  The
+  canonical deeply nested example is =Data.Enum.enumFromThenTo=, now written
+  entirely in layout Wisp with no S-expression implementation fallback.
+
 * Wisp Infix Operators
 :PROPERTIES:
 :ID: monadc.context.wisp.infix-operators

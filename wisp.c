@@ -1886,6 +1886,38 @@ static char *wisp_expand_expr_snippet(ArityTable *at, const char *src) {
     return sb_take(&sb);
 }
 
+static bool wisp_is_single_grouped_form(const char *src) {
+    if (!src || (src[0] != '(' && src[0] != '[' && src[0] != '{'))
+        return false;
+
+    int depth = 0;
+    bool in_string = false;
+
+    for (const char *p = src; *p; p++) {
+        if (in_string) {
+            if (*p == '\\' && p[1]) p++;
+            else if (*p == '"') in_string = false;
+            continue;
+        }
+
+        if (*p == '"') {
+            in_string = true;
+            continue;
+        }
+
+        if (*p == '(' || *p == '[' || *p == '{') depth++;
+        else if (*p == ')' || *p == ']' || *p == '}') {
+            if (--depth == 0) {
+                p++;
+                while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+                return *p == '\0';
+            }
+        }
+    }
+
+    return false;
+}
+
 static const char *wisp_find_top_level_fat_arrow_range(const char *start,
                                                        const char *end) {
     int depth = 0;
@@ -7651,6 +7683,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                     SB body_src;
                     sb_init(&body_src);
+                    int body_base_indent = -1;
 
                     if (body_start < lt_end) {
                         for (const char *bc = body_start; bc < lt_end; bc++)
@@ -7687,8 +7720,18 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             bt_end--;
                         }
 
+                        if (body_base_indent < 0)
+                            body_base_indent = b_indent;
+
                         if (body_src.len > 0)
                             sb_putc(&body_src, '\n');
+
+                        /* Keep layout relative to the first method-body line.
+                         * Nested if/then/else belongs to Wisp's indentation
+                         * grammar; flattening every line here changes which
+                         * else belongs to which if. */
+                        for (int pad = body_base_indent; pad < b_indent; pad++)
+                            sb_putc(&body_src, ' ');
 
                         for (const char *bc = bt; bc < bt_end; bc++)
                             sb_putc(&body_src, *bc);
@@ -7703,34 +7746,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     free(body_src_text);
 
                     char *body_expanded = NULL;
-                    bool body_grouped = false;
-                    if (body_core[0] == '(' || body_core[0] == '[' ||
-                        body_core[0] == '{') {
-                        char open = body_core[0];
-                        char close = open == '(' ? ')' : (open == '[' ? ']' : '}');
-                        int depth = 0;
-                        bool in_string = false;
-                        const char *tail = body_core;
-
-                        for (const char *q = body_core; *q; q++) {
-                            if (in_string) {
-                                if (*q == '\\' && q[1]) q++;
-                                else if (*q == '"') in_string = false;
-                                continue;
-                            }
-                            if (*q == '"') {
-                                in_string = true;
-                                continue;
-                            }
-                            if (*q == open) depth++;
-                            else if (*q == close && --depth == 0) {
-                                tail = q + 1;
-                                break;
-                            }
-                        }
-                        while (*tail == ' ' || *tail == '\t' || *tail == '\n') tail++;
-                        body_grouped = depth == 0 && *tail == '\0';
-                    }
+                    bool body_grouped = wisp_is_single_grouped_form(body_core);
                     bool body_single_token =
                         strchr(body_core, ' ') == NULL &&
                         strchr(body_core, '\t') == NULL;
@@ -10029,7 +10045,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
             /* Helper: wrap a string in parens if multi-token and not grouped */
             #define WRAP(src, dst) do { \
-                bool _ag = ((src)[0]=='('||(src)[0]=='['||(src)[0]=='{'); \
+                bool _ag = wisp_is_single_grouped_form(src); \
                 bool _st = (strchr((src),' ')==NULL && strchr((src),'\n')==NULL); \
                 if (_ag || _st) { (dst) = strdup(src); } \
                 else { \
@@ -10048,16 +10064,20 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 if ((count) == 0) { \
                     (out) = strdup("(undefined)"); \
                 } else if ((count) == 1) { \
-                    WRAP((lines)[0], (out)); \
+                    char *_expanded = wisp_expand_expr_snippet(at, (lines)[0]); \
+                    WRAP(_expanded, (out)); \
+                    free(_expanded); \
                 } else { \
                     SB _bsb; sb_init(&_bsb); \
                     sb_puts(&_bsb, "(begin"); \
                     for (int _bi = 0; _bi < (count); _bi++) { \
                         sb_putc(&_bsb, ' '); \
+                        char *_expanded = wisp_expand_expr_snippet(at, (lines)[_bi]); \
                         char *_bw = NULL; \
-                        WRAP((lines)[_bi], _bw); \
+                        WRAP(_expanded, _bw); \
                         sb_puts(&_bsb, _bw); \
                         free(_bw); \
+                        free(_expanded); \
                     } \
                     sb_putc(&_bsb, ')'); \
                     (out) = sb_take(&_bsb); \
@@ -10163,7 +10183,8 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                         if (li2 == indent &&
                             strncmp(lt2, "else", 4) == 0 &&
-                            (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\0')) {
+                            (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\n'||
+                             lt2[4]=='\r'||lt2[4]=='\0')) {
                             const char *ea = lt2 + 4;
                             while (*ea==' '||*ea=='\t') ea++;
                             if (*ea) {
@@ -10225,6 +10246,8 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 char **then_lines = NULL; int then_count = 0; int then_cap = 0;
                 char **else_lines = NULL; int else_count = 0; int else_cap = 0;
                 bool in_else = false;
+                int then_layout_base = -1;
+                int else_layout_base = -1;
 
                 while (*p) {
                     const char *ls = p;
@@ -10240,7 +10263,8 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     /* Same-indent 'then' keyword (Form 2) */
                     if (li2 == indent &&
                         strncmp(lt2,"then",4)==0 &&
-                        (lt2[4]==' '||lt2[4]=='\t')) {
+                        (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\n'||
+                         lt2[4]=='\r'||lt2[4]=='\0')) {
                         const char *ta = lt2 + 4;
                         while (*ta==' '||*ta=='\t') ta++;
                         const char *te = get_logical_line_end(ta);
@@ -10256,7 +10280,8 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     /* Same-indent 'else' keyword (Form 1 and Form 2) */
                     if (li2 == indent &&
                         strncmp(lt2,"else",4)==0 &&
-                        (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\0')) {
+                        (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\n'||
+                         lt2[4]=='\r'||lt2[4]=='\0')) {
                         in_else = true;
                         /* If 'else' has content on same line, grab it */
                         if (lt2[4]==' '||lt2[4]=='\t') {
@@ -10278,18 +10303,30 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     /* Deeper indent = body line for current branch */
                     if (li2 > indent) {
                         const char *le2 = get_logical_line_end(lt2);
+                        int *layout_base = in_else
+                            ? &else_layout_base
+                            : &then_layout_base;
+                        if (*layout_base < 0)
+                            *layout_base = li2;
+                        int relative_indent = li2 - *layout_base;
+                        size_t content_len = (size_t)(le2 - lt2);
+                        char *layout_line = malloc((size_t)relative_indent +
+                                                   content_len + 1);
+                        memset(layout_line, ' ', (size_t)relative_indent);
+                        memcpy(layout_line + relative_indent, lt2, content_len);
+                        layout_line[relative_indent + content_len] = '\0';
                         if (!in_else) {
                             if (then_count >= then_cap) {
                                 then_cap = then_cap ? then_cap*2 : 4;
                                 then_lines = realloc(then_lines, sizeof(char*)*then_cap);
                             }
-                            then_lines[then_count++] = strndup(lt2, le2 - lt2);
+                            then_lines[then_count++] = layout_line;
                         } else {
                             if (else_count >= else_cap) {
                                 else_cap = else_cap ? else_cap*2 : 4;
                                 else_lines = realloc(else_lines, sizeof(char*)*else_cap);
                             }
-                            else_lines[else_count++] = strndup(lt2, le2 - lt2);
+                            else_lines[else_count++] = layout_line;
                         }
                         free(lraw2); lineno++;
                         continue;
@@ -10301,8 +10338,42 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     break;
                 }
 
-                BUILD_BODY(then_lines, then_count, then_body);
-                BUILD_BODY(else_lines, else_count, else_body);
+                /* A branch beginning with `if` owns its following layout
+                 * lines.  Expanding those lines separately turns `then` and
+                 * `else` into ordinary identifiers and changes association.
+                 * Re-run the complete branch through Wisp so nested
+                 * conditionals are lowered recursively. */
+                if (then_count > 1 &&
+                    strncmp(then_lines[0], "if", 2) == 0 &&
+                    (then_lines[0][2] == ' ' || then_lines[0][2] == '\t')) {
+                    SB nested;
+                    sb_init(&nested);
+                    for (int i = 0; i < then_count; i++) {
+                        if (i > 0) sb_putc(&nested, '\n');
+                        sb_puts(&nested, then_lines[i]);
+                    }
+                    char *nested_src = sb_take(&nested);
+                    then_body = wisp_expand_expr_snippet(at, nested_src);
+                    free(nested_src);
+                } else {
+                    BUILD_BODY(then_lines, then_count, then_body);
+                }
+
+                if (else_count > 1 &&
+                    strncmp(else_lines[0], "if", 2) == 0 &&
+                    (else_lines[0][2] == ' ' || else_lines[0][2] == '\t')) {
+                    SB nested;
+                    sb_init(&nested);
+                    for (int i = 0; i < else_count; i++) {
+                        if (i > 0) sb_putc(&nested, '\n');
+                        sb_puts(&nested, else_lines[i]);
+                    }
+                    char *nested_src = sb_take(&nested);
+                    else_body = wisp_expand_expr_snippet(at, nested_src);
+                    free(nested_src);
+                } else {
+                    BUILD_BODY(else_lines, else_count, else_body);
+                }
 
                 for (int _i = 0; _i < then_count; _i++) free(then_lines[_i]);
                 for (int _i = 0; _i < else_count; _i++) free(else_lines[_i]);

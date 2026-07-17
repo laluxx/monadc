@@ -1306,4 +1306,7 @@ Test-driven observations and failure records for the corresponding subsystem.
   =step x -> x + 1= syntax, uses that default from an empty =Step Int=
   instance, and asserts the dispatched result.  This protects class-block
   arrow detection, unparenthesized method-pattern grouping, and default-method
-  registration independently of the core Enum module.
+  registration independently of the core Enum module.  The same fixture now
+  exercises nested multiline conditionals across inner-true, inner-false, and
+  outer-false paths.  =Data.Enum= adds singleton and bidirectional overshoot
+  assertions; the full core sweep passes 33 modules and 670 assertions.
