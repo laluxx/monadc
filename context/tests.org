@@ -1300,3 +1300,10 @@ Test-driven observations and failure records for the corresponding subsystem.
   =tests/test_how_to_examples.py=. The how_to smoke runs with temporary =HOME=,
   checkout-local =MONAD_CORE=, and resolved =MONAD_RUNTIME_LIB= so examples do
   not depend on an installed compiler or writable user cache.
+
+[FIX id:fix.tests.wisp-class-method-arrow-2026-07-17 date:2026-07-17 by:codex src:tests/wisp_class_method_arrow.mon conf:high]
+  A runtime regression declares a class default with regular Wisp
+  =step x -> x + 1= syntax, uses that default from an empty =Step Int=
+  instance, and asserts the dispatched result.  This protects class-block
+  arrow detection, unparenthesized method-pattern grouping, and default-method
+  registration independently of the core Enum module.

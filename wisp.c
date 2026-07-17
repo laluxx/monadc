@@ -1928,7 +1928,9 @@ static const char *wisp_find_top_level_fat_arrow_range(const char *start,
             continue;
         }
 
-        if (depth == 0 && *p == '=' && p[1] == '>')
+        if (depth == 0 &&
+            ((*p == '=' && p[1] == '>') ||
+             (*p == '-' && p[1] == '>')))
             return p;
     }
 
@@ -7607,8 +7609,9 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     snprintf(line_tag, sizeof(line_tag),
                              " (#line %d 1) ", lineno);
 
-                const char *fat_arrow =
-                    wisp_find_top_level_fat_arrow_range(lt, lt_end);
+                const char *fat_arrow = strstr(lt, "::")
+                    ? NULL
+                    : wisp_find_top_level_fat_arrow_range(lt, lt_end);
 
                 if (fat_arrow || pending_pattern) {
                     char *pattern = NULL;
@@ -7624,6 +7627,20 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         free(lraw);
                         lineno++;
                         continue;
+                    }
+
+                    /* Regular Wisp writes method clauses as `method args ->`.
+                     * The core reader's class AST uses `(method args) =>`, so
+                     * group an unparenthesized Wisp pattern during lowering. */
+                    if (pattern[0] != '(') {
+                        size_t pattern_len = strlen(pattern);
+                        char *grouped_pattern = malloc(pattern_len + 3);
+                        grouped_pattern[0] = '(';
+                        memcpy(grouped_pattern + 1, pattern, pattern_len);
+                        grouped_pattern[pattern_len + 1] = ')';
+                        grouped_pattern[pattern_len + 2] = '\0';
+                        free(pattern);
+                        pattern = grouped_pattern;
                     }
 
                     const char *body_start = fat_arrow ? fat_arrow + 2 : lt;
@@ -7686,10 +7703,34 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     free(body_src_text);
 
                     char *body_expanded = NULL;
-                    bool body_grouped =
-                        body_core[0] == '(' ||
-                        body_core[0] == '[' ||
-                        body_core[0] == '{';
+                    bool body_grouped = false;
+                    if (body_core[0] == '(' || body_core[0] == '[' ||
+                        body_core[0] == '{') {
+                        char open = body_core[0];
+                        char close = open == '(' ? ')' : (open == '[' ? ']' : '}');
+                        int depth = 0;
+                        bool in_string = false;
+                        const char *tail = body_core;
+
+                        for (const char *q = body_core; *q; q++) {
+                            if (in_string) {
+                                if (*q == '\\' && q[1]) q++;
+                                else if (*q == '"') in_string = false;
+                                continue;
+                            }
+                            if (*q == '"') {
+                                in_string = true;
+                                continue;
+                            }
+                            if (*q == open) depth++;
+                            else if (*q == close && --depth == 0) {
+                                tail = q + 1;
+                                break;
+                            }
+                        }
+                        while (*tail == ' ' || *tail == '\t' || *tail == '\n') tail++;
+                        body_grouped = depth == 0 && *tail == '\0';
+                    }
                     bool body_single_token =
                         strchr(body_core, ' ') == NULL &&
                         strchr(body_core, '\t') == NULL;

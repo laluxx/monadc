@@ -1402,3 +1402,17 @@
   resolved as the collection constructor rather than an empty module prefix.
   The list primitive spectrum, mutable append, and collection workflow runtime
   regressions cover these representation boundaries.
+
+[FIX id:fix.core-libs.sequence-class-wisp-defaults-2026-07-17 date:2026-07-17 by:codex src:core/prelude/Coll.mon,core/prelude/Data/Enum.mon,wisp.c conf:high]
+  The ordered, constructor-preserving abstraction for lists, arrays, and strings
+  is named =Sequence= rather than =Collection=.  Its order-sensitive operations
+  (=take=, =drop=, =zip=) make that contract narrower than the compiler/runtime
+  use of “collection” for maps and sets.  =Traversable= remains a separate
+  effectful traversal abstraction.
+
+  Wisp class and instance blocks accept ordinary =method args -> body= clauses;
+  lowering groups the method pattern and emits the reader's internal ==>= form.
+  Type signatures containing =->= are excluded from clause detection, and a
+  multi-form method body is grouped as one call.  =Data.Enum= and the =Sequence
+  Coll= instance exercise this syntax during the full core sweep (33 modules,
+  667 assertions).

@@ -1,0 +1,24 @@
+;; TEST-ID: tests.wisp.class-method-arrow
+;; TEST-CONTEXT: monadc.context.core-libs.sequence-class-wisp-defaults
+;; TEST-PURPOSE: Class defaults and instance methods accept ordinary Wisp arrows.
+;; TEST-EXPECT: pass
+;; TEST-TIER: regression
+;; TEST-MENU: wisp
+;; TEST-MENU-PATH: wisp/class-method-arrow
+;; TEST-CLI-TARGET: wisp class-method-arrow
+
+module Wisp.ClassMethodArrow []
+
+
+class Step a where
+  step :: a -> a
+
+  step x ->
+    x + 1
+
+
+instance Step Int
+
+
+tests
+  assert-eq (step 4) 5 "Wisp class default uses ->"

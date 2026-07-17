@@ -27,15 +27,20 @@ class Enum a where
   enumFromTo     :: a -> a -> [a]
   enumFromThenTo :: a -> a -> a -> [a]
 
-  (succ x) => (toEnum (+ (fromEnum x) 1))
-  (pred x) => (toEnum (- (fromEnum x) 1))
-  (enumFromTo start end) =>
+  succ x ->
+    toEnum ((fromEnum x) + 1)
+
+  pred x ->
+    toEnum ((fromEnum x) - 1)
+
+  enumFromTo start end ->
     (if (> (fromEnum start) (fromEnum end))
         (list)
         (if (= (fromEnum start) (fromEnum end))
             (start ++ (list))
             (start ++ (enumFromTo (succ start) end))))
-  (enumFromThenTo start next end) =>
+
+  enumFromThenTo start next end ->
     (if (= (fromEnum start) (fromEnum next))
         (error "enumFromThenTo: zero step")
         (if (> (fromEnum next) (fromEnum start))
@@ -69,8 +74,8 @@ class Bounded a where
 
 
 instance Enum Int
-  (toEnum x) => x
-  (fromEnum x) => x
+  toEnum x   -> x
+  fromEnum x -> x
 
 
 define range :: Int -> Int -> [Int]

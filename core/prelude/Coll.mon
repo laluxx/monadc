@@ -1,4 +1,4 @@
-;;; Coll.mon --- Core Collection Utilities
+;;; Coll.mon --- Core Sequence Utilities
 
 ;; Author: Laluxx
 ;; Version: 0.1.0
@@ -14,14 +14,14 @@
 ;;; Code:
 
 module Coll
- [Collection map filter foldl foldr coll-foldl
+ [Sequence map filter foldl foldr coll-foldl
   take      drop
   takeWhile dropWhile
   any? all?
   zip zipwith append both]
 
 
-class Collection c where
+class Sequence c where
   map    :: (a -> b) -> c a -> c b
   filter :: (a -> Bool) -> c a -> c a
   foldl  :: (b -> a -> b) -> b -> c a -> b
@@ -87,11 +87,11 @@ define coll-foldr :: (a -> b -> b) -> b -> [a] -> b
   f acc [x|xs] -> (f x (coll-foldr f acc xs))
 
 
-instance Collection Coll
-  (map f xs)       => coll-map f xs
-  (filter p xs)    => coll-filter p xs
-  (foldl f acc xs) => coll-foldl f acc xs
-  (foldr f acc xs) => coll-foldr f acc xs
+instance Sequence Coll
+  map f xs       -> coll-map f xs
+  filter p xs    -> coll-filter p xs
+  foldl f acc xs -> coll-foldl f acc xs
+  foldr f acc xs -> coll-foldr f acc xs
 
 
 define zip :: [a] -> [b] -> [c]
