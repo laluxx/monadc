@@ -1163,10 +1163,8 @@ static CompiledModule *compile_one(const char *source_path,
         for (int _ti = 0; k_primitive_type_stems[_ti]; _ti++) {
             const char *stem = k_primitive_type_stems[_ti];
 
-            char type_paths[3][1024];
+            char type_paths[1][1024];
             int type_path_count = 0;
-            snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
-                     "%s/%s.mon", src_dir, stem);
             {
                 char *core_dir = monad_core_dir();
                 snprintf(type_paths[type_path_count++], sizeof(type_paths[0]),
