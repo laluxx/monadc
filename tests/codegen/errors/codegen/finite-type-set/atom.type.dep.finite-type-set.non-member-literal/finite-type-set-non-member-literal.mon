@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.type.dep.finite-type-set.non-member-literal
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: dependent-types
+;; TEST-SUBSET: finite-type-sets
+;; TEST-QUALITY: diagnostic-contract-regression
+;; TEST-CONTEXT: TODO.org Set-literal types
+;; TEST-PURPOSE: A numeric literal inhabits a finite set exactly when it is a listed singleton.
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: literal 9 is not an inhabitant of finite type 'Die'
+;; TEST-CODEGEN-PATH: types.dep.finite-type-set.membership
+;; TEST-MENU: errors/codegen/finite-type-set/atom.type.dep.finite-type-set.non-member-literal
+;; TEST-MENU-PATH: codegen/errors/codegen/finite-type-set/atom.type.dep.finite-type-set.non-member-literal
+;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.non-member-literal
+;; TEST-CLI-TARGET: codegen errors finite-type-sets
+
+(module Main)
+(type Die {1 2 3 4 5 6})
+(define (pip-name [pip : Die] -> String)
+  _ -> "pip")
+(show (pip-name 9))

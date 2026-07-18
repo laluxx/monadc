@@ -553,6 +553,18 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
 
     // Both ground — must match structurally
     if (a->kind != b->kind) {
+        /* A literal's ground representation may be checked against a finite
+         * set here; infer_validate_calls performs the value-level membership
+         * proof and annotates the literal with the finite type. */
+        if ((a->kind == TYPE_FINITE_SET &&
+             (b->kind == TYPE_INT || b->kind == TYPE_FLOAT ||
+              b->kind == TYPE_CHAR || b->kind == TYPE_STRING ||
+              b->kind == TYPE_KEYWORD)) ||
+            (b->kind == TYPE_FINITE_SET &&
+             (a->kind == TYPE_INT || a->kind == TYPE_FLOAT ||
+              a->kind == TYPE_CHAR || a->kind == TYPE_STRING ||
+              a->kind == TYPE_KEYWORD)))
+            return true;
         /* TYPE_FN (unannotated Fn) is compatible with any arrow type */
         if (a->kind == TYPE_FN && b->kind == TYPE_ARROW) return true;
 
@@ -1372,23 +1384,15 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
     }
 
     case AST_TYPE_SET: {
-        const char **members = calloc(ast->type_set.member_count,
-                                      sizeof(char*));
-        bool valid = true;
-        for (size_t i = 0; i < ast->type_set.member_count; i++) {
-            AST *member = ast->type_set.members[i];
-            if (member->type != AST_SYMBOL) { valid = false; break; }
-            members[i] = member->symbol;
-        }
-        if (!valid || !finite_type_set_register(ast->type_set.name, members,
-                                                ast->type_set.member_count)) {
+        if (!finite_type_set_register_ast(ast->type_set.name,
+                                          ast->type_set.members,
+                                          ast->type_set.member_count)) {
             ctx->had_error = true;
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                      "%s:%d:%d: error: finite type set '%s' has invalid or duplicate members",
                      ctx->filename, ast->line, ast->column,
                      ast->type_set.name);
         }
-        free(members);
         result = type_unit();
         break;
     }
@@ -2706,6 +2710,19 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                          * strict passes and codegen see the correctly coerced type */
                         if ((param_t->kind == TYPE_FLOAT || param_t->kind == TYPE_F80) &&
                             (arg_t->kind == TYPE_INT || arg_t->kind == TYPE_INT_ARBITRARY || arg_t->kind == TYPE_CHAR)) {
+                            arg->inferred_type = type_clone(param_t);
+                        }
+
+                        if (param_t->kind == TYPE_FINITE_SET &&
+                            (arg->type == AST_NUMBER || arg->type == AST_CHAR ||
+                             arg->type == AST_STRING || arg->type == AST_KEYWORD)) {
+                            size_t ordinal = 0;
+                            if (!finite_type_set_contains_literal(param_t->finite_name,
+                                                                  arg, &ordinal)) {
+                                READER_ERROR(arg->line, arg->column,
+                                             "literal is not an inhabitant of finite type '%s'",
+                                             param_t->finite_name);
+                            }
                             arg->inferred_type = type_clone(param_t);
                         }
 

@@ -58,7 +58,9 @@ class WindowsPortabilityTests(unittest.TestCase):
     def test_prelude_detection_accepts_windows_path_separators(self):
         module_c = read("module.c")
 
-        self.assertIn('strstr(ctx->current_file, "\\\\prelude\\\\")', module_c)
+        self.assertIn("module_path_has_component", module_c)
+        self.assertIn("module_path_is_separator", module_c)
+        self.assertIn('module_path_has_component(ctx->current_file, "prelude")', module_c)
 
     def test_compiler_link_paths_do_not_hardcode_posix_flags_for_windows(self):
         main_c = read("main.c")

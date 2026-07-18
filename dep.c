@@ -1834,6 +1834,7 @@ static bool dep_conv_vals_internal(ConvCtx *cctx, Value *v1, Value *v2, Value *t
         // Allow Nat (literals < 64) to implicitly coerce to Int, Char, and Float signatures smoothly
         bool v1_nat = (v1->kind == VAL_NAT || v1->kind == VAL_SUCC || v1->kind == VAL_ZERO || v1->kind == VAL_NUM_LIT);
         bool v2_nat = (v2->kind == VAL_NAT || v2->kind == VAL_SUCC || v2->kind == VAL_ZERO || v2->kind == VAL_NUM_LIT);
+
         #define IS_NUMERIC_EMBED(v) ((v)->kind == VAL_EMBED && (v)->embed_type && \
             ((v)->embed_type->kind == TYPE_INT        || \
              (v)->embed_type->kind == TYPE_INT_ARBITRARY || \
@@ -2806,6 +2807,26 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     check_default:
     // ── Default: infer and compare ────────────────────────────────
     default: {
+        bool source_is_literal = t->source_ast &&
+            (t->source_ast->type == AST_NUMBER ||
+             t->source_ast->type == AST_STRING ||
+             t->source_ast->type == AST_CHAR ||
+             t->source_ast->type == AST_KEYWORD);
+        if (source_is_literal && expected_type->kind == VAL_EMBED &&
+            expected_type->embed_type &&
+            expected_type->embed_type->kind == TYPE_FINITE_SET) {
+            size_t ordinal = 0;
+            if (finite_type_set_contains_literal(
+                    expected_type->embed_type->finite_name,
+                    t->source_ast, &ordinal))
+                return true;
+            const char *literal = t->source_ast->literal_str
+                ? t->source_ast->literal_str : "value";
+            dep_error_set(ctx, t->line, t->col,
+                          ": literal %s is not an inhabitant of finite type '%s'",
+                          literal, expected_type->embed_type->finite_name);
+            return false;
+        }
         Value *inferred = dep_infer(ctx, t);
         if (!inferred) return false;
         ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
@@ -3567,39 +3588,161 @@ Value *dep_elab_and_infer(DepCtx *ctx, AST *ast) {
 
 /// Top-level pipeline
 
+static bool dep_finite_pattern_matches(const FiniteTypeMember *member,
+                                       const ASTPattern *pattern) {
+    if (pattern->kind == PAT_WILDCARD || pattern->kind == PAT_VAR) return true;
+    if (pattern->kind == PAT_CONSTRUCTOR && member->kind == FINITE_MEMBER_SYMBOL)
+        return strcmp(pattern->var_name, member->spelling) == 0;
+    if ((pattern->kind == PAT_LITERAL_INT || pattern->kind == PAT_LITERAL_FLOAT) &&
+        member->kind == FINITE_MEMBER_NUMBER)
+        return pattern->lit_value == member->number;
+    if (pattern->kind == PAT_LITERAL_INT && member->kind == FINITE_MEMBER_CHAR)
+        return (unsigned int)(unsigned char)pattern->lit_value == member->character;
+    if (pattern->kind == PAT_LITERAL_STRING && member->kind == FINITE_MEMBER_STRING)
+        return strcmp(pattern->var_name, member->spelling) == 0;
+    return false;
+}
+
+static bool dep_check_finite_coverage(DepCtx *ctx, AST *lambda) {
+    AST *pm = lambda->lambda.pattern_match;
+    if (!pm || pm->type != AST_PMATCH) return true;
+
+    const FiniteTypeSetEntry **domains = calloc((size_t)lambda->lambda.param_count,
+                                                sizeof(*domains));
+    size_t tuple_count = 1;
+    int finite_columns = 0;
+    for (int i = 0; i < lambda->lambda.param_count; i++) {
+        const char *type_name = lambda->lambda.params[i].type_name;
+        domains[i] = type_name ? finite_type_set_lookup(type_name) : NULL;
+        if (!domains[i]) continue;
+        finite_columns++;
+        if (domains[i]->member_count > 0 &&
+            tuple_count <= 1048576 / domains[i]->member_count)
+            tuple_count *= domains[i]->member_count;
+        else {
+            dep_error_set(ctx, lambda->line, lambda->column,
+                          ": finite pattern matrix is too large to check");
+            free(domains);
+            return false;
+        }
+    }
+    if (finite_columns == 0) { free(domains); return true; }
+
+    /* A finite projection cannot prove usefulness when another column has
+     * refutable patterns over an unknown/infinite domain. Defer until that
+     * domain also has a set semantics instead of emitting false positives. */
+    for (int ci = 0; ci < pm->pmatch.clause_count; ci++) {
+        ASTPMatchClause *clause = &pm->pmatch.clauses[ci];
+        for (int pi = 0; pi < clause->pattern_count &&
+                         pi < lambda->lambda.param_count; pi++) {
+            if (!domains[pi] && clause->patterns[pi].kind != PAT_WILDCARD &&
+                                clause->patterns[pi].kind != PAT_VAR) {
+                free(domains);
+                return true;
+            }
+        }
+    }
+
+    bool *covered = calloc(tuple_count, sizeof(bool));
+    for (int ci = 0; ci < pm->pmatch.clause_count; ci++) {
+        ASTPMatchClause *clause = &pm->pmatch.clauses[ci];
+        bool useful = false;
+        for (size_t tuple = 0; tuple < tuple_count; tuple++) {
+            size_t cursor = tuple;
+            bool matches = true;
+            for (int pi = lambda->lambda.param_count - 1; pi >= 0; pi--) {
+                const FiniteTypeSetEntry *domain = domains[pi];
+                if (!domain) continue;
+                size_t ordinal = cursor % domain->member_count;
+                cursor /= domain->member_count;
+                if (pi >= clause->pattern_count ||
+                    !dep_finite_pattern_matches(&domain->members[ordinal],
+                                                &clause->patterns[pi])) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches && !covered[tuple]) {
+                useful = true;
+                /* Guarded clauses are not total unless an unguarded clause
+                 * proves the same row; conservatively leave them uncovered. */
+                if (clause->guard_count == 0) covered[tuple] = true;
+            }
+        }
+        if (!useful && clause->guard_count == 0) {
+            const char *type_name = "finite product";
+            if (finite_columns == 1)
+                for (int pi = 0; pi < lambda->lambda.param_count; pi++)
+                    if (domains[pi]) { type_name = domains[pi]->name; break; }
+            const char *pattern_name = clause->patterns[0].var_name
+                ? clause->patterns[0].var_name : "_";
+            dep_error_set(ctx, lambda->line, lambda->column,
+                          ": redundant pattern clause %d for %s: %s",
+                          ci + 1, type_name, pattern_name);
+            free(covered); free(domains);
+            return false;
+        }
+    }
+
+    for (size_t tuple = 0; tuple < tuple_count; tuple++) {
+        if (covered[tuple]) continue;
+        if (finite_columns == 1) {
+            int column = 0;
+            while (column < lambda->lambda.param_count && !domains[column]) column++;
+            const FiniteTypeSetEntry *domain = domains[column];
+            dep_error_set(ctx, lambda->line, lambda->column,
+                          ": non-exhaustive patterns for %s; missing: %s",
+                          domain->name, domain->members[tuple].spelling);
+        } else {
+            dep_error_set(ctx, lambda->line, lambda->column,
+                          ": non-exhaustive patterns for finite product");
+        }
+        free(covered); free(domains);
+        return false;
+    }
+    free(covered); free(domains);
+    return true;
+}
+
+static bool dep_validate_pattern_coverage(DepCtx *ctx, AST *ast) {
+    if (!ast) return true;
+    if (ast->type == AST_LAMBDA && !dep_check_finite_coverage(ctx, ast))
+        return false;
+    if (ast->type == AST_LIST)
+        for (size_t i = 0; i < ast->list.count; i++)
+            if (!dep_validate_pattern_coverage(ctx, ast->list.items[i])) return false;
+    return true;
+}
+
 Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     if (!ast) return NULL;
 
+    if (!dep_validate_pattern_coverage(ctx, ast)) return NULL;
+
     if (ast->type == AST_TYPE_SET) {
-        const char **members = calloc(ast->type_set.member_count,
-                                      sizeof(char*));
-        for (size_t i = 0; i < ast->type_set.member_count; i++) {
-            if (ast->type_set.members[i]->type != AST_SYMBOL) {
-                free(members);
-                return NULL;
-            }
-            members[i] = ast->type_set.members[i]->symbol;
-        }
-        if (!finite_type_set_register(ast->type_set.name, members,
-                                      ast->type_set.member_count)) {
-            free(members);
+        if (!finite_type_set_register_ast(ast->type_set.name,
+                                          ast->type_set.members,
+                                          ast->type_set.member_count)) {
             return NULL;
         }
-        free(members);
 
         Type *finite = type_finite_set(ast->type_set.name,
                                        ast->type_set.member_count);
         dep_env_define(ctx->globals, ast->type_set.name, val_universe_n(0),
                        term_embed(type_clone(finite)), val_embed(type_clone(finite)), true);
         for (size_t i = 0; i < ast->type_set.member_count; i++) {
+            if (ast->type_set.members[i]->type != AST_SYMBOL) continue;
             const char *member = ast->type_set.members[i]->symbol;
             dep_env_define(ctx->globals, member, val_embed(type_clone(finite)),
                            term_embed(type_clone(finite)),
                            val_embed(type_clone(finite)), true);
         }
-        type_free(finite);
         if (out_type) *out_type = term_type_n(0);
-        return term_fvar(ast->type_set.members[0]->symbol);
+        Term *witness = ast->type_set.members[0]->type == AST_SYMBOL
+            ? term_fvar(ast->type_set.members[0]->symbol)
+            : term_embed(type_clone(finite));
+        type_free(finite);
+        return witness;
     }
 
     /* Intercept top-level (type Name { x in T | pred }) refinement definitions */

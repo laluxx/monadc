@@ -197,6 +197,7 @@ typedef struct AST {
             struct AST *body;  // last expression (return value) - kept for compatibility
             struct AST **body_exprs; // all body expressions
             int body_count;
+            struct AST *pattern_match; // original clauses retained for dep coverage
         } lambda;
 
         // AST_ASM - inline assembly block

@@ -149,9 +149,24 @@ typedef struct TypeAlias {
 extern TypeAlias *g_aliases;
 
 
+typedef enum {
+    FINITE_MEMBER_SYMBOL,
+    FINITE_MEMBER_NUMBER,
+    FINITE_MEMBER_STRING,
+    FINITE_MEMBER_CHAR,
+    FINITE_MEMBER_KEYWORD,
+} FiniteMemberKind;
+
+typedef struct FiniteTypeMember {
+    FiniteMemberKind kind;
+    char *spelling;
+    double number;
+    unsigned int character;
+} FiniteTypeMember;
+
 typedef struct FiniteTypeSetEntry {
     char *name;
-    char **members;
+    FiniteTypeMember *members;
     size_t member_count;
     struct FiniteTypeSetEntry *next;
 } FiniteTypeSetEntry;
@@ -160,9 +175,15 @@ extern FiniteTypeSetEntry *g_finite_type_sets;
 
 bool finite_type_set_register(const char *name, const char **members,
                               size_t member_count);
+bool finite_type_set_register_ast(const char *name, struct AST **members,
+                                  size_t member_count);
 const FiniteTypeSetEntry *finite_type_set_lookup(const char *name);
 const FiniteTypeSetEntry *finite_type_set_lookup_member(const char *member,
                                                         size_t *ordinal);
+const FiniteTypeSetEntry *finite_type_set_lookup_literal(const struct AST *member,
+                                                         size_t *ordinal);
+bool finite_type_set_contains_literal(const char *name, const struct AST *member,
+                                      size_t *ordinal);
 void finite_type_set_free_all(void);
 Type *type_finite_set(const char *name, size_t member_count);
 

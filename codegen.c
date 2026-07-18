@@ -2454,7 +2454,7 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
 
         LLVMTypeRef tag_type = LLVMTypeOf(val);
         LLVMValueRef rendered = LLVMBuildGlobalStringPtr(
-            ctx->builder, finite->members[finite->member_count - 1],
+            ctx->builder, finite->members[finite->member_count - 1].spelling,
             "finite_member");
         for (size_t i = finite->member_count - 1; i-- > 0;) {
             LLVMValueRef is_member = LLVMBuildICmp(
@@ -2462,7 +2462,7 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
                 LLVMConstInt(tag_type, i, 0), "finite_tag_match");
             rendered = LLVMBuildSelect(
                 ctx->builder, is_member,
-                LLVMBuildGlobalStringPtr(ctx->builder, finite->members[i],
+                LLVMBuildGlobalStringPtr(ctx->builder, finite->members[i].spelling,
                                          "finite_member"),
                 rendered, "finite_rendered");
         }
@@ -6000,6 +6000,23 @@ static CodegenResult codegen_if_switch(CodegenContext *ctx, AST *ast, bool *hand
     return result;
 }
 
+static bool codegen_finite_literal(CodegenContext *ctx, AST *ast,
+                                   CodegenResult *out) {
+    if (!ast->inferred_type || ast->inferred_type->kind != TYPE_FINITE_SET)
+        return false;
+    size_t ordinal = 0;
+    const FiniteTypeSetEntry *finite =
+        finite_type_set_lookup(ast->inferred_type->finite_name);
+    if (!finite || !finite_type_set_contains_literal(finite->name, ast, &ordinal))
+        return false;
+    out->type = type_clone(ast->inferred_type);
+    uint64_t tag = ordinal;
+    if (strcmp(finite->name, "Bool") == 0)
+        tag = strcmp(finite->members[ordinal].spelling, "True") == 0 ? 1 : 0;
+    out->value = LLVMConstInt(type_to_llvm(ctx, out->type), tag, 0);
+    return true;
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -6012,6 +6029,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     switch (ast->type) {
     case AST_NUMBER: {
+        if (codegen_finite_literal(ctx, ast, &result)) return result;
         /* fprintf(stderr, ">>> CODEGEN NUMBER: literal_str=‘%s’, number=%g\n", */
         /*         ast->literal_str ? ast->literal_str : "NULL", ast->number); */
 
@@ -6044,6 +6062,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         return result;
     }
     case AST_CHAR: {
+        if (codegen_finite_literal(ctx, ast, &result)) return result;
         result.type = type_char();
         result.value = LLVMConstInt(LLVMInt8TypeInContext(ctx->context), ast->character, 0);
         return result;
@@ -6128,8 +6147,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
         // ── Normal variable / module-qualified symbol ────────────────────────
         if (strcmp(ast->symbol, "undefined") == 0) {
-            result.value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0);
-            result.type = type_unknown();
+            result.type = ast->inferred_type
+                ? type_clone(ast->inferred_type) : type_unknown();
+            LLVMTypeRef undefined_type = type_to_llvm(ctx, result.type);
+            result.value = LLVMGetTypeKind(undefined_type) == LLVMIntegerTypeKind
+                ? LLVMConstInt(undefined_type, 0, 0)
+                : LLVMConstNull(undefined_type);
             return result;
         }
 
@@ -6453,6 +6476,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_STRING: {
+        if (codegen_finite_literal(ctx, ast, &result)) return result;
         result.type = type_string();
         result.value = LLVMBuildGlobalStringPtr(ctx->builder, ast->string, "__monad_str_lit");
         return result;
@@ -6473,6 +6497,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_KEYWORD: {
+        if (codegen_finite_literal(ctx, ast, &result)) return result;
         // Keywords are represented as strings with a special marker
         // For now, just return the keyword name as a string
         result.type = type_keyword();
@@ -10880,7 +10905,15 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef phi_llvm_type;
                 Type       *phi_type;
 
-                if (then_is_ptr || else_is_ptr ||
+                if (ast->inferred_type &&
+                    ast->inferred_type->kind == TYPE_FINITE_SET) {
+                    /* A generated non-exhaustive fallback is represented by
+                     * `undefined`, whose dead value is deliberately opaque.
+                     * The enclosing expression still has an exact inferred
+                     * finite type, so use that type as the PHI contract. */
+                    phi_type = ast->inferred_type;
+                    phi_llvm_type = type_to_llvm(ctx, phi_type);
+                } else if (then_is_ptr || else_is_ptr ||
                     then_result.type->kind == TYPE_COLL || else_result.type->kind == TYPE_COLL) {
                     phi_llvm_type = ptr;
                     if (then_result.type->kind == TYPE_OPTIONAL) {
@@ -16715,18 +16748,13 @@ if (ast->list.count >= 5) {
     }
 
     case AST_TYPE_SET: {
-        const char **members = calloc(ast->type_set.member_count,
-                                      sizeof(char*));
-        for (size_t i = 0; i < ast->type_set.member_count; i++)
-            members[i] = ast->type_set.members[i]->symbol;
-        if (!finite_type_set_register(ast->type_set.name, members,
-                                      ast->type_set.member_count)) {
-            free(members);
+        if (!finite_type_set_register_ast(ast->type_set.name,
+                                          ast->type_set.members,
+                                          ast->type_set.member_count)) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: finite type set '%s' has duplicate members",
                           parser_get_filename(), ast->line, ast->column,
                           ast->type_set.name);
         }
-        free(members);
         result.type = NULL;
         result.value = NULL;
         return result;

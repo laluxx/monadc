@@ -1,0 +1,22 @@
+;; TEST-ID: tests.codegen.type.dep.finite-type-set.non-exhaustive
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: dependent-types
+;; TEST-SUBSET: finite-type-sets
+;; TEST-QUALITY: diagnostic-contract-regression
+;; TEST-CONTEXT: TODO.org Set-literal types
+;; TEST-PURPOSE: Dependent coverage checking rejects a function missing a finite-set inhabitant.
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: non-exhaustive patterns for Signal; missing: Green
+;; TEST-CODEGEN-PATH: types.dep.finite-type-set.coverage
+;; TEST-MENU: errors/codegen/finite-type-set/atom.type.dep.finite-type-set.non-exhaustive
+;; TEST-MENU-PATH: codegen/errors/codegen/finite-type-set/atom.type.dep.finite-type-set.non-exhaustive
+;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.non-exhaustive
+;; TEST-CLI-TARGET: codegen errors finite-type-sets
+
+(module Main)
+(type Signal {Red Amber Green})
+(define (signal-code [s : Signal] -> Int)
+  Red   -> 0
+  Amber -> 1)

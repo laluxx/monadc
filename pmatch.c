@@ -1,5 +1,6 @@
 #include "pmatch.h"
 #include "reader.h"
+#include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -561,6 +562,48 @@ static AST *make_eq_float(AST *expr, double f) {
     return make_list(items, 3);
 }
 
+static bool finite_pattern_ordinal(const FiniteTypeSetEntry *finite,
+                                   const ASTPattern *pat, size_t *ordinal) {
+    if (!finite || !pat) return false;
+    for (size_t i = 0; i < finite->member_count; i++) {
+        const FiniteTypeMember *member = &finite->members[i];
+        bool matches = false;
+        if (pat->kind == PAT_CONSTRUCTOR && member->kind == FINITE_MEMBER_SYMBOL)
+            matches = strcmp(pat->var_name, member->spelling) == 0;
+        else if ((pat->kind == PAT_LITERAL_INT || pat->kind == PAT_LITERAL_FLOAT) &&
+                 member->kind == FINITE_MEMBER_NUMBER)
+            matches = pat->lit_value == member->number;
+        else if (pat->kind == PAT_LITERAL_INT && member->kind == FINITE_MEMBER_CHAR)
+            matches = (unsigned int)(unsigned char)pat->lit_value == member->character;
+        else if (pat->kind == PAT_LITERAL_STRING && member->kind == FINITE_MEMBER_STRING)
+            matches = strcmp(pat->var_name, member->spelling) == 0;
+        if (matches) {
+            if (ordinal) *ordinal = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static AST *finite_member_ast(const FiniteTypeMember *member) {
+    switch (member->kind) {
+    case FINITE_MEMBER_SYMBOL: return ast_new_symbol(member->spelling);
+    case FINITE_MEMBER_NUMBER: return ast_new_number(member->number, member->spelling);
+    case FINITE_MEMBER_STRING: return ast_new_string(member->spelling);
+    case FINITE_MEMBER_CHAR: return ast_new_char((char)member->character);
+    case FINITE_MEMBER_KEYWORD: return ast_new_keyword(member->spelling);
+    }
+    return ast_new_symbol("undefined");
+}
+
+static AST *make_eq_finite_member(const char *param_name,
+                                  const FiniteTypeSetEntry *finite,
+                                  size_t ordinal) {
+    AST *items[] = {sym("="), sym(param_name),
+                    finite_member_ast(&finite->members[ordinal])};
+    return make_list(items, 3);
+}
+
 // Helper: True literal
 static AST *make_true(void) {
     return sym("True");
@@ -933,7 +976,14 @@ static void build_pattern_conditions(
         break;
 
     case PAT_LITERAL_INT:
-        PUSH_GUARD(make_eq_int(sym(param_name), (long long)pat->lit_value));
+        {
+            const FiniteTypeSetEntry *finite = finite_type_set_lookup(elem_type_name);
+            size_t ordinal = 0;
+            if (finite_pattern_ordinal(finite, pat, &ordinal))
+                PUSH_GUARD(make_eq_finite_member(param_name, finite, ordinal));
+            else
+                PUSH_GUARD(make_eq_int(sym(param_name), (long long)pat->lit_value));
+        }
         break;
 
     case PAT_RANGE_INT:
@@ -943,12 +993,25 @@ static void build_pattern_conditions(
         break;
 
     case PAT_LITERAL_FLOAT:
-        PUSH_GUARD(make_eq_float(sym(param_name), pat->lit_value));
+        {
+            const FiniteTypeSetEntry *finite = finite_type_set_lookup(elem_type_name);
+            size_t ordinal = 0;
+            if (finite_pattern_ordinal(finite, pat, &ordinal))
+                PUSH_GUARD(make_eq_finite_member(param_name, finite, ordinal));
+            else
+                PUSH_GUARD(make_eq_float(sym(param_name), pat->lit_value));
+        }
         break;
 
     case PAT_LITERAL_STRING: {
-        AST *items[] = {sym("="), sym(param_name), ast_new_string(pat->var_name)};
-        PUSH_GUARD(make_list(items, 3));
+        const FiniteTypeSetEntry *finite = finite_type_set_lookup(elem_type_name);
+        size_t ordinal = 0;
+        if (finite_pattern_ordinal(finite, pat, &ordinal)) {
+            PUSH_GUARD(make_eq_finite_member(param_name, finite, ordinal));
+        } else {
+            AST *items[] = {sym("="), sym(param_name), ast_new_string(pat->var_name)};
+            PUSH_GUARD(make_list(items, 3));
+        }
         break;
     }
 
@@ -960,6 +1023,13 @@ static void build_pattern_conditions(
         break;
 
     case PAT_CONSTRUCTOR: {
+        const FiniteTypeSetEntry *finite = finite_type_set_lookup(elem_type_name);
+        size_t ordinal = 0;
+        if (pat->ctor_field_count == 0 &&
+            finite_pattern_ordinal(finite, pat, &ordinal)) {
+            PUSH_GUARD(make_eq_finite_member(param_name, finite, ordinal));
+            break;
+        }
         /* Guard: (= param.__tag __adt_tag_CtorName)
          * Use the fused string form so codegen_dot_chain handles it
          * exactly as it did before — it parses the dot-chain itself. */

@@ -307,11 +307,28 @@ static bool module_context_has_import(ModuleContext *ctx, const char *module_nam
     return false;
 }
 
+static bool module_path_is_separator(char c)
+{
+    return c == '/' || c == '\\';
+}
+
+static bool module_path_has_component(const char *path, const char *component)
+{
+    if (!path || !component || !*component) return false;
+    size_t component_len = strlen(component);
+    for (const char *at = path; (at = strstr(at, component)) != NULL; at++) {
+        bool left_boundary = at == path || module_path_is_separator(at[-1]);
+        bool right_boundary = at[component_len] == '\0' ||
+                              module_path_is_separator(at[component_len]);
+        if (left_boundary && right_boundary) return true;
+    }
+    return false;
+}
+
 static bool module_context_is_prelude_file(ModuleContext *ctx)
 {
     return ctx->current_file &&
-           (strstr(ctx->current_file, "/prelude/") ||
-            strstr(ctx->current_file, "\\prelude\\"));
+           module_path_has_component(ctx->current_file, "prelude");
 }
 
 static bool module_context_is_core_library_file(ModuleContext *ctx)

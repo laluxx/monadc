@@ -1,0 +1,23 @@
+;; TEST-ID: tests.codegen.type.dep.finite-type-set.redundant
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: dependent-types
+;; TEST-SUBSET: finite-type-sets
+;; TEST-QUALITY: diagnostic-contract-regression
+;; TEST-CONTEXT: TODO.org Set-literal types
+;; TEST-PURPOSE: Dependent coverage checking rejects unreachable finite-set clauses.
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: redundant pattern clause 2 for Signal: Red
+;; TEST-CODEGEN-PATH: types.dep.finite-type-set.coverage
+;; TEST-MENU: errors/codegen/finite-type-set/atom.type.dep.finite-type-set.redundant
+;; TEST-MENU-PATH: codegen/errors/codegen/finite-type-set/atom.type.dep.finite-type-set.redundant
+;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.redundant
+;; TEST-CLI-TARGET: codegen errors finite-type-sets
+
+(module Main)
+(type Signal {Red Amber Green})
+(define (signal-code [s : Signal] -> Int)
+  Red   -> 0
+  Red   -> 1
+  _     -> 2)

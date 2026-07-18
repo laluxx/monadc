@@ -263,43 +263,111 @@ RefinementEntry *g_refinements = NULL;
 
 FiniteTypeSetEntry *g_finite_type_sets = NULL;
 
-bool finite_type_set_register(const char *name, const char **members,
-                              size_t member_count) {
+static bool finite_member_from_ast(const AST *ast, FiniteTypeMember *out) {
+    memset(out, 0, sizeof(*out));
+    if (!ast) return false;
+    switch (ast->type) {
+    case AST_SYMBOL:
+        out->kind = FINITE_MEMBER_SYMBOL;
+        out->spelling = strdup(ast->symbol);
+        return true;
+    case AST_NUMBER:
+        out->kind = FINITE_MEMBER_NUMBER;
+        out->number = ast->number;
+        out->spelling = strdup(ast->literal_str ? ast->literal_str : "0");
+        return true;
+    case AST_STRING:
+        out->kind = FINITE_MEMBER_STRING;
+        out->spelling = strdup(ast->string ? ast->string : "");
+        return true;
+    case AST_CHAR: {
+        out->kind = FINITE_MEMBER_CHAR;
+        out->character = (unsigned int)(unsigned char)ast->character;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "'%c'", ast->character);
+        out->spelling = strdup(buf);
+        return true;
+    }
+    case AST_KEYWORD:
+        out->kind = FINITE_MEMBER_KEYWORD;
+        out->spelling = strdup(ast->keyword);
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool finite_members_equal(const FiniteTypeMember *a,
+                                 const FiniteTypeMember *b) {
+    if (a->kind != b->kind) return false;
+    if (a->kind == FINITE_MEMBER_NUMBER) return a->number == b->number;
+    if (a->kind == FINITE_MEMBER_CHAR) return a->character == b->character;
+    return strcmp(a->spelling, b->spelling) == 0;
+}
+
+static bool finite_type_set_register_members(const char *name,
+                                             FiniteTypeMember *members,
+                                             size_t member_count) {
     if (!name || !members || member_count == 0) return false;
+    for (size_t i = 0; i < member_count; i++)
+        for (size_t j = 0; j < i; j++)
+            if (finite_members_equal(&members[i], &members[j])) return false;
+
     for (FiniteTypeSetEntry *existing = g_finite_type_sets;
          existing; existing = existing->next) {
         if (strcmp(existing->name, name) == 0) {
             if (existing->member_count != member_count) return false;
             for (size_t i = 0; i < member_count; i++)
-                if (strcmp(existing->members[i], members[i]) != 0)
+                if (!finite_members_equal(&existing->members[i], &members[i]))
                     return false;
             return true;
         }
         for (size_t i = 0; i < existing->member_count; i++)
             for (size_t j = 0; j < member_count; j++)
-                if (strcmp(existing->members[i], members[j]) == 0)
+                if (members[j].kind == FINITE_MEMBER_SYMBOL &&
+                    finite_members_equal(&existing->members[i], &members[j]))
                     return false;
     }
 
     FiniteTypeSetEntry *e = calloc(1, sizeof(*e));
     e->name = strdup(name);
-    e->members = calloc(member_count, sizeof(char*));
+    e->members = calloc(member_count, sizeof(*e->members));
     e->member_count = member_count;
     for (size_t i = 0; i < member_count; i++) {
-        for (size_t j = 0; j < i; j++)
-            if (strcmp(members[i], members[j]) == 0) {
-                for (size_t k = 0; k < i; k++) free(e->members[k]);
-                free(e->members); free(e->name); free(e);
-                return false;
-            }
-        e->members[i] = strdup(members[i]);
+        e->members[i] = members[i];
+        e->members[i].spelling = strdup(members[i].spelling);
     }
     e->next = g_finite_type_sets;
     g_finite_type_sets = e;
     return true;
 }
 
+bool finite_type_set_register(const char *name, const char **members,
+                              size_t member_count) {
+    FiniteTypeMember *converted = calloc(member_count, sizeof(*converted));
+    for (size_t i = 0; i < member_count; i++) {
+        converted[i].kind = FINITE_MEMBER_SYMBOL;
+        converted[i].spelling = (char *)members[i];
+    }
+    bool ok = finite_type_set_register_members(name, converted, member_count);
+    free(converted);
+    return ok;
+}
+
+bool finite_type_set_register_ast(const char *name, AST **members,
+                                  size_t member_count) {
+    FiniteTypeMember *converted = calloc(member_count, sizeof(*converted));
+    bool valid = member_count > 0;
+    for (size_t i = 0; valid && i < member_count; i++)
+        valid = finite_member_from_ast(members[i], &converted[i]);
+    bool ok = valid && finite_type_set_register_members(name, converted, member_count);
+    for (size_t i = 0; i < member_count; i++) free(converted[i].spelling);
+    free(converted);
+    return ok;
+}
+
 const FiniteTypeSetEntry *finite_type_set_lookup(const char *name) {
+    if (!name) return NULL;
     for (FiniteTypeSetEntry *e = g_finite_type_sets; e; e = e->next)
         if (strcmp(e->name, name) == 0) return e;
     return NULL;
@@ -307,20 +375,53 @@ const FiniteTypeSetEntry *finite_type_set_lookup(const char *name) {
 
 const FiniteTypeSetEntry *finite_type_set_lookup_member(const char *member,
                                                         size_t *ordinal) {
+    if (!member) return NULL;
     for (FiniteTypeSetEntry *e = g_finite_type_sets; e; e = e->next)
         for (size_t i = 0; i < e->member_count; i++)
-            if (strcmp(e->members[i], member) == 0) {
+            if (e->members[i].kind == FINITE_MEMBER_SYMBOL &&
+                strcmp(e->members[i].spelling, member) == 0) {
                 if (ordinal) *ordinal = i;
                 return e;
             }
     return NULL;
 }
 
+const FiniteTypeSetEntry *finite_type_set_lookup_literal(const AST *member,
+                                                         size_t *ordinal) {
+    FiniteTypeMember needle;
+    if (!finite_member_from_ast(member, &needle)) return NULL;
+    for (FiniteTypeSetEntry *e = g_finite_type_sets; e; e = e->next)
+        for (size_t i = 0; i < e->member_count; i++)
+            if (finite_members_equal(&e->members[i], &needle)) {
+                if (ordinal) *ordinal = i;
+                free(needle.spelling);
+                return e;
+            }
+    free(needle.spelling);
+    return NULL;
+}
+
+bool finite_type_set_contains_literal(const char *name, const AST *member,
+                                      size_t *ordinal) {
+    const FiniteTypeSetEntry *finite = finite_type_set_lookup(name);
+    FiniteTypeMember needle;
+    if (!finite || !finite_member_from_ast(member, &needle)) return false;
+    for (size_t i = 0; i < finite->member_count; i++) {
+        if (finite_members_equal(&finite->members[i], &needle)) {
+            if (ordinal) *ordinal = i;
+            free(needle.spelling);
+            return true;
+        }
+    }
+    free(needle.spelling);
+    return false;
+}
+
 void finite_type_set_free_all(void) {
     FiniteTypeSetEntry *e = g_finite_type_sets;
     while (e) {
         FiniteTypeSetEntry *next = e->next;
-        for (size_t i = 0; i < e->member_count; i++) free(e->members[i]);
+        for (size_t i = 0; i < e->member_count; i++) free(e->members[i].spelling);
         free(e->members); free(e->name); free(e);
         e = next;
     }

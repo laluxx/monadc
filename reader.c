@@ -1,6 +1,7 @@
 #include "reader.h"
 #include "features.h"
 #include "pmatch.h"
+#include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -928,6 +929,7 @@ AST *ast_clone(AST *ast) {
         c->lambda.body_exprs  = malloc(sizeof(AST*) * (ast->lambda.body_count ? ast->lambda.body_count : 1));
         for (int i = 0; i < ast->lambda.body_count; i++)
             c->lambda.body_exprs[i] = ast_clone(ast->lambda.body_exprs[i]);
+        c->lambda.pattern_match = ast_clone(ast->lambda.pattern_match);
         c->lambda.body        = c->lambda.body_exprs[c->lambda.body_count - 1];
         break;
     }
@@ -1161,6 +1163,7 @@ void ast_free(AST *ast) {
             ast_free(ast->lambda.body_exprs[i]);
         free(ast->lambda.body_exprs);
     }
+    ast_free(ast->lambda.pattern_match);
     // body points into body_exprs so do NOT free it separately
     break;
 
@@ -3631,6 +3634,7 @@ static AST *parse_lambda(Parser *p) {
     // desugar them into a single if-chain body expression.
     AST **body_exprs = NULL;
     int   body_count = 0;
+    AST  *pattern_match = NULL;
 
     // Peek ahead to detect pmatch body: look for '->' at depth 0 before ')'
     bool lambda_has_pmatch = false;
@@ -3680,6 +3684,7 @@ static AST *parse_lambda(Parser *p) {
         pm->column = p->current.column;
         pmatch_validate_ignored_signature_params(pm, params, count);
         pmatch_rename_anon_params(pm, params, count);
+        pattern_match = ast_clone(pm);
         AST *desugared = pmatch_desugar(pm, params, count);
         for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
             ASTPMatchClause *cl = &pm->pmatch.clauses[_i];
@@ -3728,6 +3733,7 @@ static AST *parse_lambda(Parser *p) {
 
     AST *result = ast_new_lambda(params, count, ret_type, docstring, NULL, false,
                                   body, body_exprs, body_count);
+    result->lambda.pattern_match = pattern_match;
     if (body && body->end_column > 0)
         result->end_column = body->end_column;
     free(docstring);
@@ -3869,6 +3875,12 @@ static DefineMetadata parse_define_metadata(Parser *p) {
          * If the string is the last thing before ')' or EOF it is the body,
          * not a docstring, so we stop and let the caller parse it.         */
         if (p->current.type == TOK_STRING && !m.docstring) {
+            Lexer next_lex = *p->lexer;
+            Token next_tok = lexer_next_token(&next_lex);
+            bool string_is_pattern = next_tok.type == TOK_ARROW;
+            free(next_tok.value);
+            if (string_is_pattern) break;
+
             Lexer saved_lex = *p->lexer;
             Token saved_cur = p->current;
             char *s = my_strdup(p->current.value);
@@ -4953,6 +4965,7 @@ static AST *parse_list(Parser *p) {
             AST **body_exprs = NULL;
             int   body_count = 0;
             int   body_cap   = 0;
+            AST  *pattern_match = NULL;
             g_scope_depth++;
 
             // Pattern matching sugar: body does not start with (
@@ -5032,6 +5045,7 @@ static AST *parse_list(Parser *p) {
                     pm->column = fname->column;
                     pmatch_validate_ignored_signature_params(pm, params, count);
                     pmatch_rename_anon_params(pm, params, count);
+                    pattern_match = ast_clone(pm);
                     ASTParam *pm_params = params;
                     AST *desugared = pmatch_desugar(pm, pm_params, count);
                     for (int _i = 0; _i < pm->pmatch.clause_count; _i++) {
@@ -5122,6 +5136,7 @@ static AST *parse_list(Parser *p) {
             AST *lambda = ast_new_lambda(params, count, ret_type,
                                          meta.docstring, meta.alias_name, meta.naked,
                                          body, body_exprs, body_count);
+            lambda->lambda.pattern_match = pattern_match;
 
             free(meta.docstring);
             free(meta.alias_name);
@@ -5496,6 +5511,13 @@ static AST *parse_list(Parser *p) {
                 ast_free(body);
 
                 AST *type_set = ast_new_type_set(type_name, members, member_count);
+                /* Make the declaration available to later clauses in this
+                 * parse unit. dep.c re-registers and validates it as the
+                 * semantic authority before accepting the program. */
+                if (!finite_type_set_register_ast(type_name, members, member_count))
+                    compiler_error(tline, tcol,
+                                   "Finite type set '%s' conflicts with an existing definition",
+                                   type_name);
                 free(type_name);
                 if (p->current.type != TOK_RPAREN)
                     compiler_error(p->current.line, p->current.column,

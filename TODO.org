@@ -53,14 +53,15 @@ This file is the canonical work queue for humans and coding agents.
 - Code view
 
 
-** DOING Set-literal types: {v1, v2, ...} as finite type sets [4/6]
+** DOING Set-literal types: {v1, v2, ...} as finite type sets [6/6]
   - [X] Specify the grammar and AST separately from refinement sets.
   - [X] Parse symbolic finite type sets and reject empty/duplicate-invalid forms.
   - [X] Infer singleton members and finite unions without nominal-type coercions.
   - [X] Define =Bool = {True, False}= in the core and remove semantic Bool
         hardcoding only after the core definition bootstraps cleanly.
-  - [ ] Use source order for deterministic constructor tags and exhaustiveness.
-  - [ ] Add parser, inference, diagnostics, core, runtime, and Windows coverage.
+  - [X] Use source order for deterministic constructor tags and dependent
+        exhaustiveness/redundancy checking over finite pattern products.
+  - [X] Add parser, inference, diagnostics, core, runtime, and Windows coverage.
 
   - [X] {True, False} etc. desugars to an anonymous sum of singleton types.
         Bool becomes DEFINED as {True, False}, not a separate nominal type
