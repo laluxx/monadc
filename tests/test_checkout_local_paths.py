@@ -95,6 +95,19 @@ class CheckoutLocalPathTests(unittest.TestCase):
         self.assertIn('"libmonad.a"', buildsystem_c)
         self.assertNotIn('strcat(cmd, "runtime.o -o ");', buildsystem_c)
 
+    def test_standalone_error_handlers_are_strong_separate_archive_members(self):
+        cmake = read("CMakeLists.txt")
+        makefile = read("Makefile")
+        runtime_c = read("runtime.c")
+        runtime_errors_c = read("runtime_errors.c")
+
+        self.assertIn("runtime_errors.c", cmake)
+        self.assertIn("runtime_errors.c", makefile)
+        self.assertNotIn("void __monad_runtime_error(", runtime_c)
+        self.assertNotIn("__attribute__((weak))", runtime_errors_c)
+        self.assertIn("void __monad_runtime_error(", runtime_errors_c)
+        self.assertIn("void __monad_assert_fail(", runtime_errors_c)
+
     def test_package_build_shell_quotes_compiler_and_project_paths(self):
         cli_c = read("cli.c")
 

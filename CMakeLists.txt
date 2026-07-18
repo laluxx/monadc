@@ -66,6 +66,7 @@ set(MONADC_WARNING_FLAGS
 set(MONADC_RUNTIME_SOURCES
   arena.c
   runtime.c
+  runtime_errors.c
 )
 
 set(MONADC_COMPILER_SOURCES

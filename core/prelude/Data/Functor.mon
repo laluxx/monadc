@@ -7,19 +7,18 @@
 ;;; Code:
 
 module Data.Functor
-  [Functor fmap replace map-void
+  [Functor map
    Contravariant contramap
    Bifunctor bimap first-map second-map]
 
 
 class Functor f where
-  fmap     :: (a -> b) -> f a -> f b
-  replace  :: a -> f b -> f a
-  map-void :: f a -> f ()
+  map :: (a -> b) -> f a -> f b
 
   ;; higher-kinded: f :: Type -> Type
-  ;; law: fmap id = id
-  ;; law: fmap (compose f g) = compose (fmap f) (fmap g)
+  ;; minimal complete definition: map
+  ;; law: map id = id
+  ;; law: map (compose f g) = compose (map f) (map g)
 
 
 class Contravariant f where

@@ -1,8 +1,7 @@
 ;;; Math.mon --- Integer mathematics and common constants
 
 module Math
-  [pi tau half-pi e phi sign
-   zero? positive? negative? divisible?
+  [pi tau half-pi e phi
    factorial fib prime?
    sum-range product-range pow]
 
@@ -11,23 +10,6 @@ define [tau :: Float] 6.283185307179586
 define [half-pi :: Float] 1.5707963267948966
 define [e :: Float] 2.718281828459045
 define [phi :: Float] 1.6180339887498949
-
-define sign :: Int -> Int
-  x | x < 0     -> -1
-    | x > 0     -> 1
-    | otherwise -> 0
-
-define zero? :: Int -> Bool
-  x -> x = 0
-
-define positive? :: Int -> Bool
-  x -> x > 0
-
-define negative? :: Int -> Bool
-  x -> x < 0
-
-define divisible? :: Int -> Int -> Bool
-  x y -> (x % y) = 0
 
 define factorial :: Int -> Int
   n | n <= 1    -> 1
@@ -60,7 +42,6 @@ define pow :: Int -> Int -> Int
                 | otherwise     -> base * (pow base (exponent - 1))
 
 tests
-  assert-eq (sign -9) -1 "Math sign"
   assert-eq (factorial 6) 720 "Math factorial"
   assert-eq (fib 10) 55 "Math fib"
   assert-eq (prime? 29) True "Math prime"

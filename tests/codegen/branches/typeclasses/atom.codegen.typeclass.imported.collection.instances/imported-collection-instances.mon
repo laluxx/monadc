@@ -1,0 +1,25 @@
+;; TEST-ID: tests.codegen.typeclass.imported.collection.instances
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: typeclasses
+;; TEST-SUBSET: imports
+;; TEST-QUALITY: branch-state-regression
+;; TEST-CODEGEN-ATOM: atom.codegen.typeclass.imported.collection.instances
+;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
+;; TEST-PURPOSE: Imported core typeclass instances retain stable implementation symbols and exact arities.
+;; TEST-ATOM: Functor, Foldable, and Sequence methods dispatch through an imported Coll instance.
+;; TEST-EXPECT: compile, run
+;; TEST-CODEGEN-PATH: codegen.typeclass.import
+;; TEST-COVERAGE: main.c instance export naming and typeclass.c imported method signatures
+;; TEST-USES-ATOM: atom.codegen.category.typeclasses
+;; TEST-USES-ATOM: atom.codegen.subset.typeclasses.imports
+;; TEST-MENU: branches/typeclasses/atom.codegen.typeclass.imported.collection.instances
+;; TEST-MENU-PATH: codegen/branches/typeclasses/atom.codegen.typeclass.imported.collection.instances
+;; TEST-ATOM-LEAF: atom.codegen.typeclass.imported.collection.instances
+;; TEST-CLI-TARGET: codegen branches typeclasses imports
+
+(import Coll)
+(show (map (lambda (x) (+ x 1)) (list 1 2 3)))
+(show (foldl (lambda (acc x) (+ acc x)) 0 (list 1 2 3)))
+(show (filter (lambda (x) (< x 3)) (list 1 2 3)))

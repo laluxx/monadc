@@ -2284,33 +2284,6 @@ void __print_u128(unsigned __int128 v) {
 }
 
 
-//  Assert failure handler
-/* void __monad_runtime_error(const char *file, long line, long col, const char *msg) { */
-/*     fprintf(stderr, "%s:%ld:%ld: \x1b[31;1merror:\x1b[0m %s\n", */
-/*             file ? file : "<input>", line, col, msg); */
-/*     abort(); */
-/* } */
-
-__attribute__((weak))
-void __monad_runtime_error(const char *file, long line, long col, const char *msg) {
-    fprintf(stderr, "%s:%ld:%ld: \x1b[31;1merror:\x1b[0m %s\n",
-            file ? file : "<input>", line, col, msg);
-    abort();
-}
-
-__attribute__((weak))
-void __monad_assert_fail(const char *label) {
-    fprintf(stderr, "<input>:0:0: \x1b[31;1merror:\x1b[0m Assertion failed: %s\n", label);
-    abort();
-}
-
-/* __attribute__((weak)) */
-/* void __monad_assert_fail(const char *label) { */
-/*     fprintf(stderr, "\x1b[31;1mAssertion failed:\x1b[0m %s\n", label); */
-/*     abort(); */
-/* } */
-
-
 // Called directly from JIT code — builds a RuntimeValue* list from an AST*
 // entirely in C so all allocations use heap (survive arena reset).
 

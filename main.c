@@ -917,6 +917,17 @@ static CompiledModule *compile_one(const char *source_path,
                                     CompilerFlags *flags,
                                     bool is_main_module) {
 
+    /* Resolve the checkout/install core once and expose the same path to the
+     * module resolver. Without this, prelude discovery can find a core beside
+     * build/monad while explicit imports inside that prelude still search the
+     * package working directory. */
+    if (!getenv("MONAD_CORE")) {
+        char *resolved_core = monad_core_dir();
+        if (resolved_core && dir_exists(resolved_core))
+            monad_setenv("MONAD_CORE", resolved_core);
+        free(resolved_core);
+    }
+
     struct timespec _phase_t0, _phase_t1;
     #define PHASE_START() clock_gettime(CLOCK_MONOTONIC, &_phase_t0)
     #define PHASE_END(name) do { \
@@ -1905,15 +1916,42 @@ skip_primitive_type_autoload:
                 if (!alias_exported) { ent = ent->next; continue; }
             }
 
-            char *ms = mangle(mod_name, _local_name);
+            char *ms = NULL;
+            if (ent->kind == ENV_FUNC && ent->func_ref) {
+                const char *implementation_name = LLVMGetValueName(ent->func_ref);
+                if (implementation_name &&
+                    strncmp(implementation_name, "__impl_", 7) == 0) {
+                    /* Public class-method entries point at the instance
+                     * implementation. Keep that stable symbol: renaming it
+                     * to Module__method breaks the instance metadata used by
+                     * importing modules. */
+                    ms = strdup(implementation_name);
+                }
+            }
+            if (!ms)
+                ms = mangle(mod_name, _local_name);
 
             if (ent->kind == ENV_FUNC || ent->kind == ENV_ADT_CTOR) {
                 /* Never rename FFI functions — they must keep their original
                  * symbol names so the linker can find them in libraylib etc. */
                 if (ent->is_ffi) { free(ms); ent = ent->next; continue; }
+                EnvEntry *export_signature = ent;
+                if (ent->func_ref) {
+                    const char *implementation_name = LLVMGetValueName(ent->func_ref);
+                    if (implementation_name &&
+                        strncmp(implementation_name, "__impl_", 7) == 0) {
+                        EnvEntry *implementation =
+                            env_lookup(ctx.env, implementation_name);
+                        if (implementation)
+                            export_signature = implementation;
+                    }
+                }
                 registry_push_func(cm, _local_name, ms,
-                                   ent->return_type ? ent->return_type : ent->type,
-                                   ent->params, ent->param_count,
+                                   export_signature->return_type
+                                       ? export_signature->return_type
+                                       : export_signature->type,
+                                   export_signature->params,
+                                   export_signature->param_count,
                                    ent->func_ref);
                 if (ent->func_ref) {
                     const char *cur = LLVMGetValueName(ent->func_ref);

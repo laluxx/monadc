@@ -30,4 +30,13 @@ static inline int monad_mkdir(const char *path)
 #endif
 }
 
+static inline int monad_setenv(const char *name, const char *value)
+{
+#if defined(_WIN32)
+    return _putenv_s(name, value);
+#else
+    return setenv(name, value, 1);
+#endif
+}
+
 #endif

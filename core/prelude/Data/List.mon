@@ -14,7 +14,7 @@
 
 module Data.List
   [list-null? list-length list-drop list-take list-append list-reverse
-   length reverse at nth reduce
+   reverse at nth reduce
    caar cadr cdar cddr caddr cdddr list-tail]
 
 import Data.Maybe
@@ -28,10 +28,6 @@ define list-null? :: [a] -> Bool
 define list-length :: [a] -> Int
   []     -> 0
   [x|xs] -> 1 + (list-length xs)
-
-
-define length :: [a] -> Int
-  xs -> list-length xs
 
 
 define reverse :: [a] -> [a]
@@ -115,7 +111,6 @@ tests
   :length:
   assert-eq (list-length []) 0 "Data.List list-length empty"
   assert-eq (list-length (list 1 2 3)) 3 "Data.List list-length values"
-  assert-eq (length (list 1 2 3 4)) 4 "Data.List length wrapper"
   :length:
 
   :drop:

@@ -7,7 +7,7 @@
 ;;; Code:
 
 module Data.Foldable
-  [Foldable foldr foldl foldl-strict foldr1 foldl1 foldMap null? length elem? not-elem? toList
+  [Foldable foldr foldl
    FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey
    sumWith productWith]
 
@@ -23,20 +23,11 @@ define productWith :: a -> (a -> a -> a) -> [a] -> a
 
 
 class Foldable t where
-  foldr        :: (a -> b -> b) -> b -> t a -> b
-  foldl        :: (b -> a -> b) -> b -> t a -> b
-  foldl-strict :: (b -> a -> b) -> b -> t a -> b
-  foldr1       :: (a -> a -> a) -> t a -> a
-  foldl1       :: (a -> a -> a) -> t a -> a
-  foldMap      :: (a -> m) -> t a -> m
-  null?        :: t a -> Bool
-  length       :: t a -> Int
-  elem?        :: a -> t a -> Bool
-  not-elem?    :: a -> t a -> Bool
-  toList       :: t a -> [a]
+  foldr :: (a -> b -> b) -> b -> t a -> b
+  foldl :: (b -> a -> b) -> b -> t a -> b
 
   ;; higher-kinded: t :: Type -> Type
-  ;; foldMap requires a Monoid m instance at call sites.
+  ;; minimal complete definition: foldr and foldl
 
 
 class Foldable t => FoldableWithKey t where

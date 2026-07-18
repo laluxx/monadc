@@ -27,7 +27,7 @@ MAKEFLAGS += -j$(NPROCS)
 
 # Static archive — no rpath/ldconfig needed, works from any directory
 RUNTIME_LIB = libmonad.a
-RUNTIME_SRC = runtime.c arena.c
+RUNTIME_SRC = runtime.c runtime_errors.c arena.c
 RUNTIME_OBJ = $(RUNTIME_SRC:.c=.o)
 HEADERS = $(wildcard *.h)
 

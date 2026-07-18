@@ -14,7 +14,7 @@
 module Function
   [id identity const always flip compose pipe apply applyTo
    before after on argument result
-   twice thrice times repeatApply until]
+   twice thrice repeatApply until]
 
 
 define function-test-inc :: Int -> Int
@@ -113,13 +113,9 @@ define thrice :: (a -> a) -> a -> a
   f x -> f (f (f x))
 
 
-define times :: Int -> (a -> a) -> a -> a
-  n _ x | n <= 0    -> x
-  n f x | otherwise -> times (n - 1) f (f x)
-
-
 define repeatApply :: Int -> (a -> a) -> a -> a
-  n f x -> times n f x
+  n _ x | n <= 0    -> x
+  n f x | otherwise -> repeatApply (n - 1) f (f x)
 
 
 define until :: (a -> Bool) -> (a -> a) -> a -> a
@@ -160,7 +156,7 @@ tests
   :iteration:
   assert-eq (twice function-test-add2 10) 14 "Function twice"
   assert-eq (thrice function-test-add2 10) 16 "Function thrice"
-  assert-eq (times 4 function-test-inc 0) 4 "Function times"
+  assert-eq (repeatApply 4 function-test-inc 0) 4 "Function repeatApply"
   assert-eq (repeatApply 3 function-test-double 1) 8 "Function repeatApply"
   assert-eq (until function-test-at-least-10? function-test-add2 1) 11 "Function until"
   :iteration:

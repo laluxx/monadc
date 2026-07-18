@@ -23,7 +23,7 @@ import Data.Tuple
 
 module Numeric
   [Num Integral Fractional Floating Real RealFrac
-   Additive Multiplicative Pow Result]
+   Pow Result]
 
 
 class Num a where
@@ -56,24 +56,6 @@ class Num a => Integral a where
   odd?    :: a -> Bool
   gcd     :: a -> a -> a
   lcm     :: a -> a -> a
-
-  even? x ->
-    mod x (fromInt 2) = fromInt 0
-
-  odd? x ->
-    not (even? x)
-
-  gcd x y ->
-    if (= y (fromInt 0))
-      abs x
-    else
-      gcd y (mod x y)
-
-  lcm x y ->
-    if (or (= x (fromInt 0)) (= y (fromInt 0)))
-      fromInt 0
-    else
-      abs (mul (quot x (gcd x y)) y)
 
   ;; law: quotRem x y = (quot x y, rem x y)
   ;; law: divMod x y = (div x y, mod x y)
@@ -115,23 +97,6 @@ class (Real a, Fractional a) => RealFrac a where
   round          :: a -> Int
   ceiling        :: a -> Int
   floor          :: a -> Int
-
-
-class Additive a where
-  zero  :: a
-  plus  :: a -> a -> a
-  minus :: a -> a -> a
-
-  ;; Reusable additive monoid/group pattern for scalars, vectors, matrices,
-  ;; durations, points with displacement, and other algebraic structures.
-
-
-class Multiplicative a where
-  one   :: a
-  times :: a -> a -> a
-
-  ;; Reusable multiplicative monoid pattern. Not every Num should be forced to
-  ;; have division or ordering.
 
 
 class Pow a where
@@ -178,23 +143,16 @@ instance Num Float
 
 
 instance Integral Int
-  quot x y    -> x / y
-  rem x y     -> x % y
-  div x y     -> x / y
-  mod x y     -> x % y
-  quotRem x y -> pair (x / y) (x % y)
-  divMod x y  -> pair (x / y) (x % y)
-
-
-instance Additive Int
-  (zero)      => 0
-  (plus x y)  => x + y
-  (minus x y) => x - y
-
-
-instance Multiplicative Int
-  (one)       => 1
-  (times x y) => x * y
+  (quot x y)    => x / y
+  (rem x y)     => x % y
+  (div x y)     => x / y
+  (mod x y)     => x % y
+  (quotRem x y) => pair (x / y) (x % y)
+  (divMod x y)  => pair (x / y) (x % y)
+  (even? x)     => (x % 2) = 0
+  (odd? x)      => (x % 2) != 0
+  (gcd x y)     => if y = 0 then abs x else gcd y (x % y)
+  (lcm x y)     => if (or (= x 0) (= y 0)) then 0 else abs ((x / (gcd x y)) * y)
 
 
 tests
@@ -205,8 +163,6 @@ tests
   assert-eq 1 1 "Numeric registers Floating"
   assert-eq 1 1 "Numeric registers Real"
   assert-eq 1 1 "Numeric registers RealFrac"
-  assert-eq 1 1 "Numeric registers Additive"
-  assert-eq 1 1 "Numeric registers Multiplicative"
   assert-eq 1 1 "Numeric registers Pow"
   :registration:
 
@@ -235,19 +191,11 @@ tests
   assert-eq (cube 2.0) 8.0 "Numeric Num Float cube"
   :float-num:
 
-  :int-additive-multiplicative:
-  assert-eq zero 0 "Numeric Additive Int zero"
-  assert-eq (plus 2 3) 5 "Numeric Additive Int plus"
-  assert-eq (minus 7 4) 3 "Numeric Additive Int minus"
-  assert-eq one 1 "Numeric Multiplicative Int one"
-  assert-eq (times 3 4) 12 "Numeric Multiplicative Int times"
-  :int-additive-multiplicative:
-
   :int-integral:
   assert-eq (quot 7 3) 2 "Numeric Integral Int quot"
   assert-eq (rem 7 3) 1 "Numeric Integral Int rem"
-  assert-eq (even? 8) True "Numeric Integral default even?"
-  assert-eq (odd? 9) True "Numeric Integral default odd?"
-  assert-eq (gcd 54 24) 6 "Numeric Integral default gcd"
-  assert-eq (lcm 6 8) 24 "Numeric Integral default lcm"
+  assert-eq (even? 8) True "Numeric Integral Int even?"
+  assert-eq (odd? 9) True "Numeric Integral Int odd?"
+  assert-eq (gcd 54 24) 6 "Numeric Integral Int gcd"
+  assert-eq (lcm 6 8) 24 "Numeric Integral Int lcm"
   :int-integral:

@@ -3165,51 +3165,6 @@ static AST *derive_eq_nullary_lambda(AST *data_ast, const char *type_name,
                           desugared, body_exprs, 1);
 }
 
-static AST *derive_enum_step_nullary_lambda(AST *data_ast, const char *type_name,
-                                            bool forward) {
-    int nctors = data_ast->data.constructor_count;
-    ASTPMatchClause *clauses = malloc(sizeof(ASTPMatchClause) * nctors);
-
-    for (int ci = 0; ci < nctors; ci++) {
-        ASTPattern *pat = calloc(1, sizeof(ASTPattern));
-        pat->kind = PAT_CONSTRUCTOR;
-        pat->var_name = strdup(data_ast->data.constructors[ci].name);
-
-        clauses[ci].patterns = pat;
-        clauses[ci].pattern_count = 1;
-        clauses[ci].guard_conds = NULL;
-        clauses[ci].guard_bodies = NULL;
-        clauses[ci].guard_count = 0;
-
-        int target = forward ? ci + 1 : ci - 1;
-        if (target >= 0 && target < nctors) {
-            clauses[ci].body = ast_new_symbol(
-                data_ast->data.constructors[target].name);
-        } else {
-            AST *err = ast_new_list();
-            ast_list_append(err, ast_new_symbol("error"));
-            ast_list_append(err, ast_new_string(
-                forward ? "succ: out of bounds" : "pred: out of bounds"));
-            clauses[ci].body = err;
-        }
-    }
-
-    ASTParam *params = malloc(sizeof(ASTParam));
-    params[0].name = strdup("__p0");
-    params[0].type_name = strdup(type_name);
-    params[0].is_rest = false;
-    params[0].is_anon = false;
-
-    AST *pm = ast_new_pmatch(clauses, nctors);
-    AST *body = pmatch_desugar(pm, params, 1);
-    free(pm);
-
-    AST **body_exprs = malloc(sizeof(AST*));
-    body_exprs[0] = body;
-    return ast_new_lambda(params, 1, type_name, NULL, NULL, false,
-                          body, body_exprs, 1);
-}
-
 void codegen_data(CodegenContext *ctx, AST *ast) {
     // Each data type becomes a tagged union:
     // struct { i32 tag; [max-payload fields as i64] }
@@ -3631,12 +3586,10 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
                 continue;
             }
 
-            char **method_names = malloc(sizeof(char*) * 4);
-            AST **method_bodies = malloc(sizeof(AST*) * 4);
+            char **method_names = malloc(sizeof(char*) * 2);
+            AST **method_bodies = malloc(sizeof(AST*) * 2);
             method_names[0] = strdup("fromEnum");
             method_names[1] = strdup("toEnum");
-            method_names[2] = strdup("succ");
-            method_names[3] = strdup("pred");
 
             /* fromEnum body: (lambda ([__p0 :: Type]) __p0.__tag) */
             ASTParam *from_params = malloc(sizeof(ASTParam) * 1);
@@ -3681,10 +3634,7 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
             AST **to_exprs = malloc(sizeof(AST*));
             to_exprs[0] = cur;
             method_bodies[1] = ast_new_lambda(to_params, 1, type_name, NULL, NULL, false, cur, to_exprs, 1);
-            method_bodies[2] = derive_enum_step_nullary_lambda(ast, type_name, true);
-            method_bodies[3] = derive_enum_step_nullary_lambda(ast, type_name, false);
-
-            AST *inst_ast = ast_new_instance("Enum", type_name, NULL, NULL, 0, method_names, method_bodies, 4);
+            AST *inst_ast = ast_new_instance("Enum", type_name, NULL, NULL, 0, method_names, method_bodies, 2);
             tc_register_instance(ctx->tc_registry, inst_ast, ctx);
             ast_free(inst_ast);
 
