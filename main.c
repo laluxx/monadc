@@ -178,22 +178,45 @@ static void ffi_libs_add(FFIContext *ffi) {
     }
 }
 
+static const char *registry_path_tail(const char *name)
+{
+    const char *slash = strrchr(name, '/');
+    const char *backslash = strrchr(name, '\\');
+    const char *last = !slash || (backslash && backslash > slash)
+        ? backslash : slash;
+    return last ? last + 1 : name;
+}
+
+static bool registry_path_equal(const char *left, const char *right)
+{
+    if (!left || !right) return false;
+    while (*left && *right) {
+        bool left_sep = *left == '/' || *left == '\\';
+        bool right_sep = *right == '/' || *right == '\\';
+        if (left_sep && right_sep) {
+            left++;
+            right++;
+            continue;
+        }
+        if (*left++ != *right++) return false;
+    }
+    return *left == '\0' && *right == '\0';
+}
+
 static CompiledModule *registry_find(const char *name) {
     if (!name) return NULL;
 
     const char *name_dot = strrchr(name, '.');
-    const char *name_slash = strrchr(name, '/');
     const char *name_tail_dot = name_dot ? name_dot + 1 : name;
-    const char *name_tail_slash = name_slash ? name_slash + 1 : name;
+    const char *name_tail_slash = registry_path_tail(name);
 
     for (CompiledModule *m = g_compiled; m; m = m->next) {
         if (!m->module_name) continue;
 
         const char *mn = m->module_name;
         const char *mn_dot = strrchr(mn, '.');
-        const char *mn_slash = strrchr(mn, '/');
         const char *mn_tail_dot = mn_dot ? mn_dot + 1 : mn;
-        const char *mn_tail_slash = mn_slash ? mn_slash + 1 : mn;
+        const char *mn_tail_slash = registry_path_tail(mn);
 
         if (strcmp(mn, name) == 0) return m;
         if (strcmp(mn_tail_dot, name) == 0) return m;
@@ -209,7 +232,7 @@ static CompiledModule *registry_find(const char *name) {
 
 static CompiledModule *registry_find_by_obj(const char *obj_path) {
     for (CompiledModule *m = g_compiled; m; m = m->next)
-        if (strcmp(m->obj_path, obj_path) == 0) return m;
+        if (registry_path_equal(m->obj_path, obj_path)) return m;
     return NULL;
 }
 

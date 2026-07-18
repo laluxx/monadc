@@ -67,6 +67,8 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("bool            compiling", main_c)
         self.assertIn("_existing->compiling", main_c)
         self.assertIn("cm->compiling = false", main_c)
+        self.assertIn("registry_path_tail", main_c)
+        self.assertIn("registry_path_equal", main_c)
         self.assertNotIn('"%s/%s.mon", src_dir, stem', main_c)
 
     def test_compiler_link_paths_do_not_hardcode_posix_flags_for_windows(self):
