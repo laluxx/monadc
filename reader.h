@@ -104,6 +104,7 @@ typedef enum {
     PAT_WILDCARD,       // _
     PAT_VAR,            // x  (binds name)
     PAT_LITERAL_INT,    // 0, 42, -1
+    PAT_RANGE_INT,      // 48..57 (inclusive, interpreted through Enum)
     PAT_LITERAL_FLOAT,  // 3.14
     PAT_LITERAL_STRING, // "abc"
     PAT_LIST_EMPTY,     // []
@@ -115,6 +116,7 @@ typedef struct ASTPattern {
     PatternKind kind;
     char       *var_name;           // PAT_VAR: bound name
     double      lit_value;          // PAT_LITERAL_INT / PAT_LITERAL_FLOAT
+    double      range_end;          // PAT_RANGE_INT inclusive upper endpoint
     // PAT_LIST:
     struct ASTPattern *elements;    // per-element sub-patterns
     int                element_count;

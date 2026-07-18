@@ -1310,3 +1310,9 @@ Test-driven observations and failure records for the corresponding subsystem.
   exercises nested multiline conditionals across inner-true, inner-false, and
   outer-false paths.  =Data.Enum= adds singleton and bidirectional overshoot
   assertions; the full core sweep passes 33 modules and 670 assertions.
+
+[FIX id:fix.tests.range-pattern-and-core-ownership-2026-07-18 date:2026-07-18 by:codex src:tests/wisp_range_pattern.mon,tests/test_core_abstraction_ownership.py conf:high]
+  =wisp_range_pattern.mon= executes inclusive positive and negative ranges in
+  function clauses and checks that ordinary range expressions still use Enum.
+  =test_core_abstraction_ownership.py= prevents generic numeric and ordering
+  operations from being redeclared by =Math=, =Data.Int=, or =Data.Float=.

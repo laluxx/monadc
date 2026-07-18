@@ -240,6 +240,11 @@ void typst_emit_pattern(ASTPattern *pat, SB *out, const TypstEmitOpts *opts) {
         EMITF(out, "%lld", (long long)pat->lit_value);
         break;
 
+    case PAT_RANGE_INT:
+        EMITF(out, "%lld..%lld", (long long)pat->lit_value,
+              (long long)pat->range_end);
+        break;
+
     case PAT_LITERAL_FLOAT:
         EMITF(out, "%g", pat->lit_value);
         break;

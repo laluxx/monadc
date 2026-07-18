@@ -1409,6 +1409,8 @@ void ast_print(AST *ast) {
                 case PAT_WILDCARD: printf("_"); break;
                 case PAT_VAR:      printf("%s", pat->var_name); break;
                 case PAT_LITERAL_INT:   printf("%lld", (long long)pat->lit_value); break;
+                case PAT_RANGE_INT:     printf("%lld..%lld", (long long)pat->lit_value,
+                                                   (long long)pat->range_end); break;
                 case PAT_LITERAL_FLOAT: printf("%g",   pat->lit_value); break;
                 case PAT_LIST_EMPTY: printf("[]"); break;
                 case PAT_LIST:
@@ -9636,6 +9638,14 @@ static void json_pattern(SB *b, ASTPattern *p) {
     case PAT_LITERAL_INT:
         sb_puts(b, "\"literal_int\",\"value\":");
         { char buf[32]; snprintf(buf, sizeof(buf), "%lld", (long long)p->lit_value);
+          sb_puts(b, buf); }
+        break;
+    case PAT_RANGE_INT:
+        sb_puts(b, "\"range_int\",\"start\":");
+        { char buf[32]; snprintf(buf, sizeof(buf), "%lld", (long long)p->lit_value);
+          sb_puts(b, buf); }
+        sb_puts(b, ",\"end\":");
+        { char buf[32]; snprintf(buf, sizeof(buf), "%lld", (long long)p->range_end);
           sb_puts(b, buf); }
         break;
     case PAT_LITERAL_FLOAT:

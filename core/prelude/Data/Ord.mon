@@ -6,9 +6,9 @@
 
 ;;; Commentary:
 
-;; Concrete ordering vocabulary for the active core.  The future typeclass
-;; version can keep these names as methods; today these functions give users a
-;; reliable comparison toolkit for Int-heavy core code.
+;; Ord methods are the canonical ordering vocabulary. Primitive and user-defined
+;; instances inherit lawful defaults for comparison, extrema, clamping, and
+;; interval predicates instead of maintaining type-specific copies.
 
 ;;; Code:
 
@@ -33,6 +33,40 @@ class Ord a where
   min       :: a -> a -> a
   max       :: a -> a -> a
   comparing :: (a -> Int) -> a -> a -> Ordering
+  clamp           :: a -> a -> a -> a
+  between?        :: a -> a -> a -> Bool
+  strict-between? :: a -> a -> a -> Bool
+  outside?        :: a -> a -> a -> Bool
+
+  compare x y ->
+    if lt? x y
+      LT
+    else
+      if gt? x y then GT else EQ
+
+  min x y ->
+    if lte? x y then x else y
+
+  max x y ->
+    if gte? x y then x else y
+
+  comparing f x y ->
+    (compare (f x) (f y))
+
+  clamp lo hi x ->
+    if lt? x lo
+      lo
+    else
+      if gt? x hi then hi else x
+
+  between? lo hi x ->
+    (and (gte? x lo) (lte? x hi))
+
+  strict-between? lo hi x ->
+    (and (gt? x lo) (lt? x hi))
+
+  outside? lo hi x ->
+    (or (lt? x lo) (gt? x hi))
 
   ;; law: compare x y = LT when lt? x y, EQ when x and y are equal, GT otherwise
   ;; law: min and max agree with lte?/gte?
@@ -68,59 +102,25 @@ instance Ord Char
   (gte? x y)      => (>= (ord-char-rank x) (ord-char-rank y))
 
 
+instance Ord Float
+  lt? x y  -> x < y
+  lte? x y -> x <= y
+  gt? x y  -> x > y
+  gte? x y -> x >= y
+
+
 define ord-test-negate :: Int -> Int
   x -> 0 - x
 
 
-define compare :: Int -> Int -> Int
-  :doc "Return -1 when X < Y, 0 when equal, and 1 when X > Y."
-  x y | x < y     -> -1
-      | x > y     -> 1
-      | otherwise -> 0
-
-
-define min :: Int -> Int -> Int
-  :doc "Return the smaller integer."
-  x y | x <= y    -> x
-      | otherwise -> y
-
-
-define max :: Int -> Int -> Int
-  :doc "Return the larger integer."
-  x y | x >= y    -> x
-      | otherwise -> y
-
-
-define clamp :: Int -> Int -> Int -> Int
-  :doc "Clamp X into LO..HI."
-  lo hi x | x < lo    -> lo
-          | x > hi    -> hi
-          | otherwise -> x
-
-
-define between? :: Int -> Int -> Int -> Bool
-  :doc "Return True if X is between LO and HI inclusive."
-  lo hi x -> (lo <= x) and (x <= hi)
-
-
-define strict-between? :: Int -> Int -> Int -> Bool
-  :doc "Return True if X is strictly inside LO..HI."
-  lo hi x -> (lo < x) and (x < hi)
-
-
-define outside? :: Int -> Int -> Int -> Bool
-  :doc "Return True if X is outside LO..HI."
-  lo hi x -> (x < lo) or (x > hi)
-
-
 define min3 :: Int -> Int -> Int -> Int
   :doc "Return the smallest of three integers."
-  x y z -> min (min x y) z
+  x y z -> (min (min x y) z)
 
 
 define max3 :: Int -> Int -> Int -> Int
   :doc "Return the largest of three integers."
-  x y z -> max (max x y) z
+  x y z -> (max (max x y) z)
 
 
 define median3 :: Int -> Int -> Int -> Int
@@ -144,14 +144,9 @@ define greater-or-equal? :: Int -> Int -> Bool
   x y -> x >= y
 
 
-define comparing :: (a -> Int) -> a -> a -> Int
-  :doc "Compare values after projecting them to Int keys."
-  f x y -> compare (f x) (f y)
-
-
-define compareDown :: Int -> Int -> Int
+define compareDown :: Int -> Int -> Ordering
   :doc "Compare in descending order."
-  x y -> compare y x
+  x y -> (compare y x)
 
 
 tests
@@ -160,10 +155,10 @@ tests
   :registration:
 
   :compare:
-  assert-eq (compare 1 2)     -1  "Ord compare LT"
-  assert-eq (compare 2 1)      1  "Ord compare GT"
-  assert-eq (compare 2 2)      0  "Ord compare EQ"
-  assert-eq (compareDown 1 2)  1  "Ord compareDown"
+  assert-eq (show (compare 1 2))     "LT" "Ord compare LT"
+  assert-eq (show (compare 2 1))     "GT" "Ord compare GT"
+  assert-eq (show (compare 2 2))     "EQ" "Ord compare EQ"
+  assert-eq (show (compareDown 1 2)) "GT" "Ord compareDown"
   :compare:
 
   :min-max:
@@ -221,6 +216,13 @@ tests
   assert-eq (gte? 'A' 'B') False "Ord Char gte?"
   :char-instance:
 
+  :float-instance:
+  assert-eq (min 2.5 1.5)       1.5  "Ord Float min default"
+  assert-eq (max 2.5 1.5)       2.5  "Ord Float max default"
+  assert-eq (clamp 0.0 1.0 1.5) 1.0  "Ord Float clamp default"
+  assert-eq (between? 0.0 1.0 0.5) True "Ord Float between default"
+  :float-instance:
+
   :comparing:
-  assert-eq (comparing ord-test-negate 1 2) 1 "Ord comparing projected"
+  assert-eq (show (comparing ord-test-negate 1 2)) "GT" "Ord comparing projected"
   :comparing:

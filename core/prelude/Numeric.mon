@@ -7,8 +7,9 @@
 ;;; Commentary:
 
 ;; Numeric classes are separate from Class.mon so the non-numeric abstraction
-;; vocabulary stays dependency-light. Concrete arithmetic functions still live
-;; in Numeric.Math; this file names the typeclass contracts.
+;; vocabulary stays dependency-light. These typeclasses and their instances are
+;; the canonical home of generic arithmetic; concrete primitive modules must
+;; not publish parallel implementations of the same operations.
 ;;
 ;; Num is a typeclass, not a refinement: it describes an algebra of operations.
 ;; Refinements belong on values inside an instance, e.g. a non-zero divisor or a
@@ -17,6 +18,8 @@
 ;; them.
 
 ;;; Code:
+
+import Data.Tuple
 
 module Numeric
   [Num Integral Fractional Floating Real RealFrac
@@ -53,6 +56,24 @@ class Num a => Integral a where
   odd?    :: a -> Bool
   gcd     :: a -> a -> a
   lcm     :: a -> a -> a
+
+  even? x ->
+    mod x (fromInt 2) = fromInt 0
+
+  odd? x ->
+    not (even? x)
+
+  gcd x y ->
+    if (= y (fromInt 0))
+      abs x
+    else
+      gcd y (mod x y)
+
+  lcm x y ->
+    if (or (= x (fromInt 0)) (= y (fromInt 0)))
+      fromInt 0
+    else
+      abs (mul (quot x (gcd x y)) y)
 
   ;; law: quotRem x y = (quot x y, rem x y)
   ;; law: divMod x y = (div x y, mod x y)
@@ -156,6 +177,15 @@ instance Num Float
   (cube x)      => x * x * x
 
 
+instance Integral Int
+  quot x y    -> x / y
+  rem x y     -> x % y
+  div x y     -> x / y
+  mod x y     -> x % y
+  quotRem x y -> pair (x / y) (x % y)
+  divMod x y  -> pair (x / y) (x % y)
+
+
 instance Additive Int
   (zero)      => 0
   (plus x y)  => x + y
@@ -212,3 +242,12 @@ tests
   assert-eq one 1 "Numeric Multiplicative Int one"
   assert-eq (times 3 4) 12 "Numeric Multiplicative Int times"
   :int-additive-multiplicative:
+
+  :int-integral:
+  assert-eq (quot 7 3) 2 "Numeric Integral Int quot"
+  assert-eq (rem 7 3) 1 "Numeric Integral Int rem"
+  assert-eq (even? 8) True "Numeric Integral default even?"
+  assert-eq (odd? 9) True "Numeric Integral default odd?"
+  assert-eq (gcd 54 24) 6 "Numeric Integral default gcd"
+  assert-eq (lcm 6 8) 24 "Numeric Integral default lcm"
+  :int-integral:

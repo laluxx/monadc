@@ -1,42 +1,19 @@
-;;; Float.mon --- Float primitive contract and helpers
+;;; Float.mon --- Float-specific predicates
 
 ;; Author: Laluxx
-;; Version: 0.1.0
-;; Keywords: float primitive numeric core
+;; Version: 0.2.0
+;; Keywords: float primitive predicates
 
 ;;; Commentary:
 
-;; Float is still represented and optimized by the compiler, but the ordinary
-;; semantic vocabulary should be traceable through core.  This module starts
-;; that path without pulling in a larger runtime dependency.
+;; Float representation remains compiler-owned. Generic arithmetic is owned by
+;; Numeric.Num and generic ordering by Data.Ord; this module keeps only the
+;; predicates whose names are specifically useful on primitive Float values.
 
 ;;; Code:
 
 module Data.Float
-  [inc dec double square cube
-   zero? nonzero? positive? negative?
-   abs signum min max clamp
-   between? strict-between?]
-
-
-method inc :: Self -> Self
-  x -> x + 1.0
-
-
-method dec :: Self -> Self
-  x -> x - 1.0
-
-
-method double :: Self -> Self
-  x -> x * 2.0
-
-
-method square :: Self -> Self
-  x -> x * x
-
-
-method cube :: Self -> Self
-  x -> x * x * x
+  [zero? nonzero? positive? negative?]
 
 
 method zero? :: Self -> Bool
@@ -59,72 +36,9 @@ method negative? :: Self -> Bool
     | otherwise -> False
 
 
-method abs :: Self -> Self
-  x | (< x 0.0) -> 0.0 - x
-    | otherwise -> x
-
-
-method signum :: Self -> Self
-  x | (< x 0.0) -> 0.0 - 1.0
-    | (> x 0.0) -> 1.0
-    | otherwise -> 0.0
-
-
-method min :: Self -> Self -> Self
-  x y | (<= x y)  -> x
-      | otherwise -> y
-
-
-method max :: Self -> Self -> Self
-  x y | (>= x y)  -> x
-      | otherwise -> y
-
-
-method clamp :: Self -> Self -> Self -> Self
-  lo hi x | (< x lo)  -> lo
-          | (> x hi)  -> hi
-          | otherwise -> x
-
-
-method between? :: Self -> Self -> Self -> Bool
-  lo hi x -> (lo <= x) and (x <= hi)
-
-
-method strict-between? :: Self -> Self -> Self -> Bool
-  lo hi x -> (lo < x) and (x < hi)
-
-
 tests
-  :arithmetic:
-  assert-eq (Float.inc 1.5) 2.5 "Data.Float inc"
-  assert-eq (Float.dec 1.5) 0.5 "Data.Float dec"
-  assert-eq (Float.double 1.5) 3.0 "Data.Float double"
-  assert-eq (Float.square 1.5) 2.25 "Data.Float square"
-  assert-eq (Float.cube 2.0) 8.0 "Data.Float cube"
-  :arithmetic:
-
-  :predicates:
-  assert-eq (Float.zero? 0.0) True "Data.Float zero? true"
-  assert-eq (Float.zero? 0.5) False "Data.Float zero? false"
-  assert-eq (Float.nonzero? 0.5) True "Data.Float nonzero?"
-  assert-eq (Float.positive? 2.5) True "Data.Float positive?"
-  assert-eq (Float.negative? -2.5) True "Data.Float negative?"
-  :predicates:
-
-  :ordering:
-  assert-eq (Float.min 2.0 5.0) 2.0 "Data.Float min"
-  assert-eq (Float.max 2.0 5.0) 5.0 "Data.Float max"
-  assert-eq (Float.clamp 0.0 10.0 -3.0) 0.0 "Data.Float clamp low"
-  assert-eq (Float.clamp 0.0 10.0 12.0) 10.0 "Data.Float clamp high"
-  assert-eq (Float.clamp 0.0 10.0 7.0) 7.0 "Data.Float clamp inside"
-  assert-eq (Float.between? 0.0 10.0 7.0) True "Data.Float between?"
-  assert-eq (Float.strict-between? 0.0 10.0 0.0) False "Data.Float strict-between? edge"
-  :ordering:
-
-  :numeric:
-  assert-eq (Float.abs -4.25) 4.25 "Data.Float abs negative"
-  assert-eq (Float.abs 4.25) 4.25 "Data.Float abs positive"
-  assert-eq (Float.signum -5.0) -1.0 "Data.Float signum negative"
-  assert-eq (Float.signum 0.0) 0.0 "Data.Float signum zero"
-  assert-eq (Float.signum 5.0) 1.0 "Data.Float signum positive"
-  :numeric:
+  assert-eq (Float.zero? 0.0)      True  "Data.Float zero? true"
+  assert-eq (Float.zero? 0.5)      False "Data.Float zero? false"
+  assert-eq (Float.nonzero? 0.5)   True  "Data.Float nonzero?"
+  assert-eq (Float.positive? 2.5)  True  "Data.Float positive?"
+  assert-eq (Float.negative? -2.5) True  "Data.Float negative?"

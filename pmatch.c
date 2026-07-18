@@ -57,6 +57,19 @@ ASTPattern parse_single_pattern(Parser *p) {
         pat.lit_value = atof(val);
         pat.kind = is_float ? PAT_LITERAL_FLOAT : PAT_LITERAL_INT;
         parser_advance(p);
+
+        if (!is_float && parser_at(p, TOK_DOTDOT)) {
+            parser_advance(p);
+            if (parser_at(p, TOK_NUMBER)) {
+                const char *end = p->current.value;
+                bool end_is_float = strchr(end, '.') || strchr(end, 'e') || strchr(end, 'E');
+                if (!end_is_float) {
+                    pat.kind = PAT_RANGE_INT;
+                    pat.range_end = atof(end);
+                    parser_advance(p);
+                }
+            }
+        }
         return pat;
     }
 
@@ -721,6 +734,31 @@ static AST *make_and(AST **exprs, int count) {
     return list;
 }
 
+// Inclusive Enum range guard:
+//   fromEnum low <= fromEnum value && fromEnum value <= fromEnum high
+// Integer pattern endpoints are already their canonical Enum representations.
+static AST *make_enum_range_guard(AST *value, long long low, long long high) {
+    AST *from_call = ast_new_list();
+    ast_list_append(from_call, sym("fromEnum"));
+    ast_list_append(from_call, value);
+
+    char low_buf[32];
+    char high_buf[32];
+    snprintf(low_buf, sizeof(low_buf), "%lld", low);
+    snprintf(high_buf, sizeof(high_buf), "%lld", high);
+
+    AST *lower_items[] = {
+        sym(">="), ast_clone(from_call), ast_new_number((double)low, low_buf)
+    };
+    AST *upper_items[] = {
+        sym("<="), from_call, ast_new_number((double)high, high_buf)
+    };
+    AST *parts[] = {
+        make_list(lower_items, 3), make_list(upper_items, 3)
+    };
+    return make_and(parts, 2);
+}
+
 // Substitute all occurrences of names[i] with exprs[i] in body.
 // Returns a new AST with substitutions applied (deep clone with replacements).
 static AST *ast_substitute(AST *node,
@@ -896,6 +934,12 @@ static void build_pattern_conditions(
 
     case PAT_LITERAL_INT:
         PUSH_GUARD(make_eq_int(sym(param_name), (long long)pat->lit_value));
+        break;
+
+    case PAT_RANGE_INT:
+        PUSH_GUARD(make_enum_range_guard(sym(param_name),
+                                         (long long)pat->lit_value,
+                                         (long long)pat->range_end));
         break;
 
     case PAT_LITERAL_FLOAT:

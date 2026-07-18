@@ -1,0 +1,40 @@
+;; TEST-ID: tests.wisp.range-pattern
+;; TEST-CONTEXT: monadc.context.wisp.range-pattern, monadc.context.core-libs.enum
+;; TEST-PURPOSE: Inclusive range patterns use Enum ordering in ordinary Wisp clauses.
+;; TEST-EXPECT: pass
+;; TEST-TIER: regression
+;; TEST-MENU: wisp
+;; TEST-MENU-PATH: wisp/range-pattern
+;; TEST-CLI-TARGET: wisp range-pattern
+
+import Data.Enum
+
+module Wisp.RangePattern []
+
+
+define asciiDigit? :: Int -> Bool
+  48..57 -> True
+  _      -> False
+
+
+define decade :: Int -> Int
+  1..10 -> 1
+  _     -> 0
+
+
+define smallNegative? :: Int -> Bool
+  -3..-1 -> True
+  _      -> False
+
+
+tests
+  assert-eq (show (1..3)) "(1 2 3)" "range expression uses Enum"
+  assert-eq (asciiDigit? 48) True  "range pattern includes lower bound"
+  assert-eq (asciiDigit? 53) True  "range pattern includes interior"
+  assert-eq (asciiDigit? 57) True  "range pattern includes upper bound"
+  assert-eq (asciiDigit? 47) False "range pattern rejects below"
+  assert-eq (asciiDigit? 58) False "range pattern rejects above"
+  assert-eq (decade 10)       1    "1..10 pattern includes endpoint"
+  assert-eq (decade 11)       0    "1..10 pattern rejects outside"
+  assert-eq (smallNegative? -2) True  "negative range pattern includes interior"
+  assert-eq (smallNegative? 0)  False "negative range pattern rejects outside"

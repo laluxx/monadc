@@ -5,5 +5,5 @@ import Data.Int
 define [n :: U4] (U4 7)
 
 tests
-  assert-eq n.abs 7 "U4 value inherits Int.abs"
-  assert-eq (U4.abs 7) 7 "U4 type namespace inherits Int.abs"
+  assert-eq n.positive? True "U4 value inherits Int.positive?"
+  assert-eq (U4.positive? 7) True "U4 type namespace inherits Int.positive?"

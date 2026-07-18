@@ -2,8 +2,8 @@
 
 module Math
   [pi tau half-pi e phi sign
-   zero? positive? negative? even? odd? divisible?
-   gcd lcm factorial fib prime? clamp min max
+   zero? positive? negative? divisible?
+   factorial fib prime?
    sum-range product-range pow]
 
 define [pi :: Float] 3.141592653589793
@@ -26,23 +26,8 @@ define positive? :: Int -> Bool
 define negative? :: Int -> Bool
   x -> x < 0
 
-define even? :: Int -> Bool
-  x -> (x % 2) = 0
-
-define odd? :: Int -> Bool
-  x -> (x % 2) != 0
-
 define divisible? :: Int -> Int -> Bool
   x y -> (x % y) = 0
-
-define gcd :: Int -> Int -> Int
-  a b | (b = 0) and (a < 0) -> 0 - a
-      | b = 0           -> a
-      | otherwise       -> gcd b (a % b)
-
-define lcm :: Int -> Int -> Int
-  a b | (a = 0) or (b = 0) -> 0
-      | otherwise      -> (a / (gcd a b)) * b
 
 define factorial :: Int -> Int
   n | n <= 1    -> 1
@@ -62,19 +47,6 @@ define prime? :: Int -> Bool
   n | n < 2     -> False
     | otherwise -> prime-check? n 2
 
-define clamp :: Int -> Int -> Int -> Int
-  x lo hi | x < lo     -> lo
-          | x > hi     -> hi
-          | otherwise  -> x
-
-define min :: Int -> Int -> Int
-  a b | a <= b     -> a
-      | otherwise  -> b
-
-define max :: Int -> Int -> Int
-  a b | a >= b     -> a
-      | otherwise  -> b
-
 define sum-range :: Int -> Int -> Int
   lo hi | lo > hi    -> 0
         | otherwise  -> lo + (sum-range (lo + 1) hi)
@@ -88,16 +60,11 @@ define pow :: Int -> Int -> Int
                 | otherwise     -> base * (pow base (exponent - 1))
 
 tests
-  assert-eq (Int.inc 4) 5 "Math uses Data.Int inc"
-  assert-eq (Int.cube 3) 27 "Math uses Data.Int cube"
   assert-eq (sign -9) -1 "Math sign"
-  assert-eq (gcd 54 24) 6 "Math gcd"
-  assert-eq (lcm 6 8) 24 "Math lcm"
   assert-eq (factorial 6) 720 "Math factorial"
   assert-eq (fib 10) 55 "Math fib"
   assert-eq (prime? 29) True "Math prime"
   assert-eq (prime? 21) False "Math composite"
-  assert-eq (clamp 12 0 10) 10 "Math clamp"
   assert-eq (sum-range 1 100) 5050 "Math sum range"
   assert-eq (product-range 2 5) 120 "Math product range"
   assert-eq (pow 3 4) 81 "Math pow"

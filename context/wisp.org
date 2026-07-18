@@ -644,6 +644,15 @@ Test-driven observations and failure records for the corresponding subsystem.
   canonical deeply nested example is =Data.Enum.enumFromThenTo=, now written
   entirely in layout Wisp with no S-expression implementation fallback.
 
+[FIX id:fix.wisp.enum-range-pattern-2026-07-18 date:2026-07-18 by:codex src:pmatch.c,reader.h,reader.c,tests/wisp_range_pattern.mon conf:high]
+  Inclusive integer Enum ranges are valid patterns: =48..57 -> body= matches
+  both endpoints and every value between them. Pattern lowering compares the
+  scrutinee's =fromEnum= representation with the endpoint representations, so
+  it shares the Enum contract rather than introducing a separate runtime range
+  membership primitive. Positive, negative, endpoint, interior, and outside
+  cases have executable coverage; ordinary =(1..10)= expressions continue to
+  dispatch through =enumFromTo=.
+
 * Wisp Infix Operators
 :PROPERTIES:
 :ID: monadc.context.wisp.infix-operators
