@@ -57,6 +57,7 @@ typedef struct CompiledModule {
     char           *module_name;
     char           *obj_path;
     bool            was_skipped;    // compiled from .o timestamp, no LLVMValueRef
+    bool            compiling;      // reserved during recursive dependency scan
     CompiledExport *exports;
     size_t          export_count;
     size_t          export_cap;
@@ -223,6 +224,7 @@ static CompiledModule *registry_new(const char *name, const char *obj,
     m->module_name  = strdup(name);
     m->obj_path     = strdup(obj);
     m->was_skipped  = skipped;
+    m->compiling    = skipped;
     m->export_cap   = 8;
     m->exports      = malloc(sizeof(CompiledExport) * 8);
     m->layout_cap   = 8;
@@ -811,12 +813,20 @@ static bool source_is_prelude_file(const char *path)
     if (!path)
         return false;
 
-    if (strstr(path, "/prelude/"))
-        return true;
+    for (const char *p = path; (p = strstr(p, "prelude")) != NULL; p++) {
+        bool left = p == path || p[-1] == '/' || p[-1] == '\\';
+        bool right = p[7] == '\0' || p[7] == '/' || p[7] == '\\';
+        if (left && right) return true;
+    }
 
     char real[1024];
-    if (host_realpath(path, real) && strstr(real, "/prelude/"))
-        return true;
+    if (host_realpath(path, real)) {
+        for (const char *p = real; (p = strstr(p, "prelude")) != NULL; p++) {
+            bool left = p == real || p[-1] == '/' || p[-1] == '\\';
+            bool right = p[7] == '\0' || p[7] == '/' || p[7] == '\\';
+            if (left && right) return true;
+        }
+    }
 
     return false;
 }
@@ -980,7 +990,7 @@ static CompiledModule *compile_one(const char *source_path,
     // recursive pre-scan calls for the same file bail out before doing any work.
     if (!is_main_module) {
         CompiledModule *_existing = registry_find_by_obj(obj_path);
-        if (_existing && !_existing->was_skipped) {
+        if (_existing && (_existing->compiling || !_existing->was_skipped)) {
             /* Already fully compiled — safe to return immediately */
             free(base); free(obj_path); free(my_source_path);
             return _existing;
@@ -1860,6 +1870,7 @@ skip_primitive_type_autoload:
         free(cm->module_name);
         cm->module_name = strdup(mod_name);
         cm->was_skipped = false;
+        cm->compiling = false;
     } else {
         cm = registry_new(mod_name, obj_path, false);
     }
