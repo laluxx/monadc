@@ -325,6 +325,23 @@ static bool module_path_has_component(const char *path, const char *component)
     return false;
 }
 
+static bool module_path_has_prefix(const char *path, const char *prefix)
+{
+    if (!path || !prefix || !*prefix) return false;
+    while (*prefix) {
+        if (!*path) return false;
+        if (module_path_is_separator(*path) &&
+            module_path_is_separator(*prefix)) {
+            path++;
+            prefix++;
+            continue;
+        }
+        if (*path++ != *prefix++) return false;
+    }
+    return *path == '\0' || module_path_is_separator(*path) ||
+           module_path_is_separator(prefix[-1]);
+}
+
 static bool module_context_is_prelude_file(ModuleContext *ctx)
 {
     return ctx->current_file &&
@@ -336,14 +353,14 @@ static bool module_context_is_core_library_file(ModuleContext *ctx)
     if (!ctx || !ctx->current_file) return false;
 
     const char *env_core = getenv("MONAD_CORE");
-    if (env_core && strncmp(ctx->current_file, env_core, strlen(env_core)) == 0)
+    if (env_core && module_path_has_prefix(ctx->current_file, env_core))
         return true;
 
-    if (strncmp(ctx->current_file, "core/", 5) == 0)
+    if (module_path_has_prefix(ctx->current_file, "core"))
         return true;
 
     const char *system_core = "/usr/local/lib/monad/core/";
-    return strncmp(ctx->current_file, system_core, strlen(system_core)) == 0;
+    return module_path_has_prefix(ctx->current_file, system_core);
 }
 
 static bool mon_file_stem(const char *filename, char *out, size_t out_size)
