@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Float
   [zero? nonzero? positive? negative?]
 

@@ -13,6 +13,7 @@
 ;;; Code:
 
 import Data.List
+import Data.Bool
 
 module Text.Parser
   [ParseResult

@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Foldable
   [Foldable foldr foldl
    FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey

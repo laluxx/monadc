@@ -60,6 +60,7 @@ typedef enum {
     AST_CLASS,      // (class Eq a where ...)
     AST_INSTANCE,   // (instance Eq TrafficLight where ...)
     TOK_LAMBDA_LIT, // λx. — pure lambda calculus literal
+    AST_TYPE_SET,   // (type Bool {True False}) finite union of singleton types
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -220,6 +221,13 @@ typedef struct AST {
             char       *alias_name;  // NULL if absent
         } refinement;
 
+        // AST_TYPE_SET
+        struct {
+            char       *name;
+            struct AST **members;
+            size_t       member_count;
+        } type_set;
+
         struct {
             struct AST **assertions;
             int count;
@@ -345,6 +353,7 @@ AST *ast_new_type_alias(const char *alias_name, const char *target_name);
 AST *ast_new_refinement(const char *name, const char *var,
                         const char *base_type, AST *predicate,
                         const char *docstring, const char *alias_name);
+AST *ast_new_type_set(const char *name, AST **members, size_t member_count);
 AST *ast_new_address_of(AST *operand);
 AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array);
 AST *ast_new_layout(const char *name,

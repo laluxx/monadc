@@ -735,6 +735,15 @@ AST *ast_new_set(void) {
     return a;
 }
 
+AST *ast_new_type_set(const char *name, AST **members, size_t member_count) {
+    AST *a = calloc(1, sizeof(AST));
+    a->type = AST_TYPE_SET;
+    a->type_set.name = my_strdup(name);
+    a->type_set.members = members;
+    a->type_set.member_count = member_count;
+    return a;
+}
+
 AST *ast_new_map(void) {
     AST *a = calloc(1, sizeof(AST));
     a->type         = AST_MAP;
@@ -944,6 +953,15 @@ AST *ast_clone(AST *ast) {
         c->set.element_capacity = ast->set.element_capacity;
         for (size_t i = 0; i < ast->set.element_count; i++)
             c->set.elements[i] = ast_clone(ast->set.elements[i]);
+        break;
+    }
+    case AST_TYPE_SET: {
+        c->type_set.name = ast->type_set.name ? strdup(ast->type_set.name) : NULL;
+        c->type_set.member_count = ast->type_set.member_count;
+        c->type_set.members = malloc(sizeof(AST*) *
+            (ast->type_set.member_count ? ast->type_set.member_count : 1));
+        for (size_t i = 0; i < ast->type_set.member_count; i++)
+            c->type_set.members[i] = ast_clone(ast->type_set.members[i]);
         break;
     }
     case AST_MAP: {
@@ -1166,6 +1184,13 @@ void ast_free(AST *ast) {
         ast_free(ast->refinement.predicate);
         free(ast->refinement.docstring);
         free(ast->refinement.alias_name);
+        break;
+
+    case AST_TYPE_SET:
+        free(ast->type_set.name);
+        for (size_t i = 0; i < ast->type_set.member_count; i++)
+            ast_free(ast->type_set.members[i]);
+        free(ast->type_set.members);
         break;
 
     case AST_TESTS:
@@ -1464,6 +1489,15 @@ void ast_print(AST *ast) {
             ast_print(ast->set.elements[i]);
         }
         printf("}");
+        break;
+
+    case AST_TYPE_SET:
+        printf("(type %s {", ast->type_set.name ? ast->type_set.name : "?");
+        for (size_t i = 0; i < ast->type_set.member_count; i++) {
+            if (i > 0) printf(" ");
+            ast_print(ast->type_set.members[i]);
+        }
+        printf("})");
         break;
 
     case AST_MAP:
@@ -5415,15 +5449,67 @@ static AST *parse_list(Parser *p) {
         char *type_name = my_strdup(p->current.value);
         p->current = lexer_next_token(p->lexer);
 
-        /* Refinement type: { x ∈ Base | predicate }
-         * parse_expr → parse_set → parse_refinement_expr handles the {}
-         * we just need to extract var/base/pred from the result          */
+        /* Braced type definitions have two deliberately distinct forms:
+         *   { x ∈ Base | predicate }  predicate refinement
+         *   {Red Green Blue}          finite union of singleton types
+         * parse_set performs the syntactic disambiguation. */
         if (p->current.type == TOK_LBRACE) {
-            AST *ref = parse_expr(p); /* parse_set detects ∈ and returns AST_REFINEMENT */
-            if (!ref || ref->type != AST_REFINEMENT) {
+            AST *body = parse_expr(p);
+            if (!body || (body->type != AST_REFINEMENT &&
+                          body->type != AST_SET)) {
                 compiler_error(p->current.line, p->current.column,
-                               "Expected refinement type { x ∈ T | pred }");
+                               "Expected finite type set {v1 v2 ...} or "
+                               "refinement {x ∈ T | predicate}");
             }
+
+            if (body->type == AST_SET) {
+                if (body->set.element_count == 0)
+                    compiler_error(tline, tcol,
+                                   "Finite type set '%s' must have at least one member",
+                                   type_name);
+                for (size_t i = 0; i < body->set.element_count; i++) {
+                    ASTType kind = body->set.elements[i]->type;
+                    if (kind != AST_SYMBOL && kind != AST_NUMBER &&
+                        kind != AST_STRING && kind != AST_CHAR &&
+                        kind != AST_KEYWORD) {
+                        compiler_error(body->set.elements[i]->line,
+                                       body->set.elements[i]->column,
+                                       "Finite type-set members must be singleton literals");
+                    }
+                    if (kind == AST_SYMBOL) {
+                        for (size_t j = 0; j < i; j++)
+                            if (body->set.elements[j]->type == AST_SYMBOL &&
+                                strcmp(body->set.elements[j]->symbol,
+                                       body->set.elements[i]->symbol) == 0)
+                                compiler_error(body->set.elements[i]->line,
+                                               body->set.elements[i]->column,
+                                               "Finite type set '%s' has duplicate member '%s'",
+                                               type_name,
+                                               body->set.elements[i]->symbol);
+                    }
+                }
+
+                AST **members = body->set.elements;
+                size_t member_count = body->set.element_count;
+                body->set.elements = NULL;
+                body->set.element_count = 0;
+                ast_free(body);
+
+                AST *type_set = ast_new_type_set(type_name, members, member_count);
+                free(type_name);
+                if (p->current.type != TOK_RPAREN)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Expected ')' to close finite type-set definition");
+                int end_col = p->current.column + 1;
+                p->current = lexer_next_token(p->lexer);
+                ast_free(list);
+                type_set->line = tline;
+                type_set->column = tcol;
+                type_set->end_column = end_col;
+                return type_set;
+            }
+
+            AST *ref = body;
             /* set the name on the anonymous refinement */
             free(ref->refinement.name);
             ref->refinement.name = my_strdup(type_name);
@@ -9762,6 +9848,17 @@ static void ast_to_json_sb(SB *b, AST *ast) {
         for (size_t i = 0; i < ast->set.element_count; i++) {
             if (i) sb_putc(b, ',');
             ast_to_json_sb(b, ast->set.elements[i]);
+        }
+        sb_puts(b, "]");
+        break;
+
+    case AST_TYPE_SET:
+        sb_puts(b, "\"type_set\",\"name\":");
+        json_escape(b, ast->type_set.name ? ast->type_set.name : "");
+        sb_puts(b, ",\"members\":[");
+        for (size_t i = 0; i < ast->type_set.member_count; i++) {
+            if (i) sb_putc(b, ',');
+            ast_to_json_sb(b, ast->type_set.members[i]);
         }
         sb_puts(b, "]");
         break;

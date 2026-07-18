@@ -55,6 +55,11 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("if(WIN32)", cmake)
         self.assertIn('target_link_options(monad PRIVATE "-Wl,--stack,1073741824")', cmake)
 
+    def test_prelude_detection_accepts_windows_path_separators(self):
+        module_c = read("module.c")
+
+        self.assertIn('strstr(ctx->current_file, "\\\\prelude\\\\")', module_c)
+
     def test_compiler_link_paths_do_not_hardcode_posix_flags_for_windows(self):
         main_c = read("main.c")
         buildsystem_c = read("buildsystem.c")

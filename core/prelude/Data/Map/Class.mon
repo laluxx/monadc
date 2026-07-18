@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Map.Class
   [Lookup Key Value lookup member? keys values
    Associative insert delete adjust alter unionWith intersectionWith difference]

@@ -1,0 +1,21 @@
+;; TEST-ID: tests.codegen.type.dep.finite-type-set.duplicate-member
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: dependent-types
+;; TEST-SUBSET: finite-type-sets
+;; TEST-QUALITY: diagnostic-contract-regression
+;; TEST-CONTEXT: TODO.org Set-literal types
+;; TEST-PURPOSE: Finite type sets reject duplicate singleton inhabitants.
+;; TEST-ATOM: (type Broken {Same Same}) is not a valid finite union.
+;; TEST-EXPECT: fail:compile
+;; TEST-READER-ERROR: Finite type set 'Broken' has duplicate member 'Same'
+;; TEST-CODEGEN-PATH: types.dep.finite-type-set.validation
+;; TEST-COVERAGE: finite_type_set_register duplicate rejection
+;; TEST-MENU: errors/codegen/finite-type-set/atom.type.dep.finite-type-set.duplicate-member
+;; TEST-MENU-PATH: codegen/errors/codegen/finite-type-set/atom.type.dep.finite-type-set.duplicate-member
+;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.duplicate-member
+;; TEST-CLI-TARGET: codegen errors finite-type-sets
+
+(module Main)
+(type Broken {Same Same})

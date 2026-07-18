@@ -22,6 +22,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Tuple
  [fst snd swap pair dup
   curry uncurry

@@ -37,6 +37,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Char where
 
   :ascii

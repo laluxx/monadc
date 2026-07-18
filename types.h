@@ -49,6 +49,7 @@ typedef enum {
     TYPE_PATH,          // Path literal      -- filesystem path
     TYPE_ESCAPE,        // Escape literal    -- terminal/control escape sequence
     TYPE_UNIT,          // () / Unit         -- one-value unit return type
+    TYPE_FINITE_SET,    // {v1, v2, ...}     -- finite union of singleton types
 } TypeKind;
 
 
@@ -116,6 +117,10 @@ typedef struct Type {
     // TYPE_APP — type constructor application: M a
     char        *app_constructor;  // e.g. "Maybe"
     struct Type *app_arg;          // e.g. Float
+
+    // TYPE_FINITE_SET
+    char *finite_name;
+    size_t finite_member_count;
 } Type;
 
 #define list_elem element_type
@@ -142,6 +147,24 @@ typedef struct TypeAlias {
 } TypeAlias;
 
 extern TypeAlias *g_aliases;
+
+
+typedef struct FiniteTypeSetEntry {
+    char *name;
+    char **members;
+    size_t member_count;
+    struct FiniteTypeSetEntry *next;
+} FiniteTypeSetEntry;
+
+extern FiniteTypeSetEntry *g_finite_type_sets;
+
+bool finite_type_set_register(const char *name, const char **members,
+                              size_t member_count);
+const FiniteTypeSetEntry *finite_type_set_lookup(const char *name);
+const FiniteTypeSetEntry *finite_type_set_lookup_member(const char *member,
+                                                        size_t *ordinal);
+void finite_type_set_free_all(void);
+Type *type_finite_set(const char *name, size_t member_count);
 
 
 /// Constructors — ground types

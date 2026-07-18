@@ -1,5 +1,7 @@
 ;;; Set.mon --- Mathematical set operations
 
+import Data.Bool
+
 module Data.Set
   [singleton singleton? union intersection difference symmetric-difference
    subset? proper-subset? superset? proper-superset? disjoint?]

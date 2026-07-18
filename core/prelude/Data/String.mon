@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.String
   [IsString fromString
    IsList Item fromList fromListN

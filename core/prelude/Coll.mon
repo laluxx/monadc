@@ -15,6 +15,7 @@
 
 import Data.Functor
 import Data.Foldable
+import Data.Bool
 
 module Coll
  [Sequence map filter foldl foldr coll-foldl

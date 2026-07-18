@@ -133,7 +133,7 @@ static Type *type_parse_comma_tuple(const char *name) {
 static bool type_name_is_builtin_constructor(const char *name) {
     return strcmp(name, "Int") == 0 || strcmp(name, "Float") == 0 ||
            strcmp(name, "Char") == 0 || strcmp(name, "Byte") == 0 ||
-           strcmp(name, "String") == 0 || strcmp(name, "Bool") == 0 ||
+           strcmp(name, "String") == 0 ||
            strcmp(name, "Hex") == 0 || strcmp(name, "Bin") == 0 ||
            strcmp(name, "Oct") == 0 || strcmp(name, "Keyword") == 0 ||
            strcmp(name, "Ratio") == 0 || strcmp(name, "List") == 0 ||
@@ -260,6 +260,72 @@ void type_alias_free_all(void) {
 /// Refinement type
 
 RefinementEntry *g_refinements = NULL;
+
+FiniteTypeSetEntry *g_finite_type_sets = NULL;
+
+bool finite_type_set_register(const char *name, const char **members,
+                              size_t member_count) {
+    if (!name || !members || member_count == 0) return false;
+    for (FiniteTypeSetEntry *existing = g_finite_type_sets;
+         existing; existing = existing->next) {
+        if (strcmp(existing->name, name) == 0) {
+            if (existing->member_count != member_count) return false;
+            for (size_t i = 0; i < member_count; i++)
+                if (strcmp(existing->members[i], members[i]) != 0)
+                    return false;
+            return true;
+        }
+        for (size_t i = 0; i < existing->member_count; i++)
+            for (size_t j = 0; j < member_count; j++)
+                if (strcmp(existing->members[i], members[j]) == 0)
+                    return false;
+    }
+
+    FiniteTypeSetEntry *e = calloc(1, sizeof(*e));
+    e->name = strdup(name);
+    e->members = calloc(member_count, sizeof(char*));
+    e->member_count = member_count;
+    for (size_t i = 0; i < member_count; i++) {
+        for (size_t j = 0; j < i; j++)
+            if (strcmp(members[i], members[j]) == 0) {
+                for (size_t k = 0; k < i; k++) free(e->members[k]);
+                free(e->members); free(e->name); free(e);
+                return false;
+            }
+        e->members[i] = strdup(members[i]);
+    }
+    e->next = g_finite_type_sets;
+    g_finite_type_sets = e;
+    return true;
+}
+
+const FiniteTypeSetEntry *finite_type_set_lookup(const char *name) {
+    for (FiniteTypeSetEntry *e = g_finite_type_sets; e; e = e->next)
+        if (strcmp(e->name, name) == 0) return e;
+    return NULL;
+}
+
+const FiniteTypeSetEntry *finite_type_set_lookup_member(const char *member,
+                                                        size_t *ordinal) {
+    for (FiniteTypeSetEntry *e = g_finite_type_sets; e; e = e->next)
+        for (size_t i = 0; i < e->member_count; i++)
+            if (strcmp(e->members[i], member) == 0) {
+                if (ordinal) *ordinal = i;
+                return e;
+            }
+    return NULL;
+}
+
+void finite_type_set_free_all(void) {
+    FiniteTypeSetEntry *e = g_finite_type_sets;
+    while (e) {
+        FiniteTypeSetEntry *next = e->next;
+        for (size_t i = 0; i < e->member_count; i++) free(e->members[i]);
+        free(e->members); free(e->name); free(e);
+        e = next;
+    }
+    g_finite_type_sets = NULL;
+}
 
 void refinement_register(const char *name, const char *pred_name,
                           const char *base_type, void *pred_ast,
@@ -776,13 +842,15 @@ Type *type_from_name(const char *name) {
         }
     }
 
+    const FiniteTypeSetEntry *finite = finite_type_set_lookup(name);
+    if (finite) return type_finite_set(finite->name, finite->member_count);
+
     // Built-in types first
     if (strcmp(name, "Int")     == 0) return type_int();
     if (strcmp(name, "Float")   == 0) return type_float();
     if (strcmp(name, "Char")    == 0) return type_char();
     if (strcmp(name, "Byte")    == 0) return type_byte();
     if (strcmp(name, "String")  == 0) return type_string();
-    if (strcmp(name, "Bool")    == 0) return type_bool();
     if (strcmp(name, "Hex")     == 0) return type_hex();
     if (strcmp(name, "Bin")     == 0) return type_bin();
     if (strcmp(name, "Oct")     == 0) return type_oct();
@@ -856,6 +924,15 @@ Type *type_byte   (void) { return make_type(TYPE_BYTE);    }
 Type *type_string (void) { return make_type(TYPE_STRING);  }
 Type *type_symbol (void) { return make_type(TYPE_SYMBOL);  }
 Type *type_bool   (void) { return make_type(TYPE_BOOL);    }
+Type *type_finite_set(const char *name, size_t member_count) {
+    /* Bool is the two-point finite set's optimized machine representation.
+     * Its semantic ownership still comes from the registered core definition. */
+    if (name && strcmp(name, "Bool") == 0) return type_bool();
+    Type *t = make_type(TYPE_FINITE_SET);
+    t->finite_name = name ? strdup(name) : NULL;
+    t->finite_member_count = member_count;
+    return t;
+}
 Type *type_hex    (void) { return make_type(TYPE_HEX);     }
 Type *type_bin    (void) { return make_type(TYPE_BIN);     }
 Type *type_oct    (void) { return make_type(TYPE_OCT);     }
@@ -1005,6 +1082,9 @@ bool types_equal(Type *a, Type *b) {
 
     if (a->kind != b->kind) return false;
     switch (a->kind) {
+    case TYPE_FINITE_SET:
+        return a->finite_name && b->finite_name &&
+               strcmp(a->finite_name, b->finite_name) == 0;
     case TYPE_VAR:
         return a->var_id == b->var_id;
     case TYPE_ARROW:
@@ -1150,6 +1230,8 @@ Type *type_clone(Type *t) {
         case TYPE_PTR:          return type_ptr(type_clone(t->element_type));
         case TYPE_OPTIONAL:     return type_optional(type_clone(t->element_type));
         case TYPE_UNIT:         return type_unit();
+        case TYPE_FINITE_SET:   return type_finite_set(t->finite_name,
+                                                       t->finite_member_count);
         case TYPE_ESCAPE:       return type_escape();
         case TYPE_APP:          return type_app(t->app_constructor, type_clone(t->app_arg));
         case TYPE_F80:          return type_f80();
@@ -1202,6 +1284,7 @@ void type_free(Type *t) {
         free(t->layout_name);
         // layout_fields is shared with the registry — do not free it
     }
+    if (t->kind == TYPE_FINITE_SET) free(t->finite_name);
     if (t->kind == TYPE_ARROW) {
         type_free(t->arrow_param);
         type_free(t->arrow_ret);
@@ -1252,6 +1335,8 @@ const char *type_to_string(Type *t) {
     case TYPE_UNKNOWN: return "?";
     case TYPE_NIL:     return "Nil";
     case TYPE_UNIT:    return "()";
+    case TYPE_FINITE_SET:
+        return t->finite_name ? t->finite_name : "{?}";
     case TYPE_APP:
         if (t->app_constructor && t->app_arg) {
             snprintf(buf, 512, "%s %s", t->app_constructor, type_to_string(t->app_arg));

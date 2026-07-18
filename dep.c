@@ -3570,6 +3570,38 @@ Value *dep_elab_and_infer(DepCtx *ctx, AST *ast) {
 Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     if (!ast) return NULL;
 
+    if (ast->type == AST_TYPE_SET) {
+        const char **members = calloc(ast->type_set.member_count,
+                                      sizeof(char*));
+        for (size_t i = 0; i < ast->type_set.member_count; i++) {
+            if (ast->type_set.members[i]->type != AST_SYMBOL) {
+                free(members);
+                return NULL;
+            }
+            members[i] = ast->type_set.members[i]->symbol;
+        }
+        if (!finite_type_set_register(ast->type_set.name, members,
+                                      ast->type_set.member_count)) {
+            free(members);
+            return NULL;
+        }
+        free(members);
+
+        Type *finite = type_finite_set(ast->type_set.name,
+                                       ast->type_set.member_count);
+        dep_env_define(ctx->globals, ast->type_set.name, val_universe_n(0),
+                       term_embed(type_clone(finite)), val_embed(type_clone(finite)), true);
+        for (size_t i = 0; i < ast->type_set.member_count; i++) {
+            const char *member = ast->type_set.members[i]->symbol;
+            dep_env_define(ctx->globals, member, val_embed(type_clone(finite)),
+                           term_embed(type_clone(finite)),
+                           val_embed(type_clone(finite)), true);
+        }
+        type_free(finite);
+        if (out_type) *out_type = term_type_n(0);
+        return term_fvar(ast->type_set.members[0]->symbol);
+    }
+
     /* Intercept top-level (type Name { x in T | pred }) refinement definitions */
     if (ast->type == AST_REFINEMENT) {
         Type *base_ground = type_from_name(ast->refinement.base_type);
@@ -3856,19 +3888,9 @@ void dep_register_builtins(DepCtx *ctx) {
         dep_env_declare(env, "succ", succ_ty);
     }
 
-    // Bool : Type 0  (encoded as Nat: zero=False, succ zero=True)
-    {
-        Value *bool_ty = val_universe_n(0);
-        dep_env_declare(env, "Bool", bool_ty);
-    }
-    dep_env_define(env, "True",  val_embed(type_bool()),
-                   term_embed(type_bool()), val_embed(type_bool()), true);
-    dep_env_define(env, "False", val_embed(type_bool()),
-                   term_embed(type_bool()), val_embed(type_bool()), true);
-
     // Embed all ground types from types.h at universe 0
     const char *ground_names[] = {
-        "Int", "Float", "Char", "String", "Bool",
+        "Int", "Float", "Char", "String",
         "I8","U8","I16","U16","I32","U32","I64","U64","I128","U128",
         "F32","F80","Ratio","Symbol","Keyword",
         NULL

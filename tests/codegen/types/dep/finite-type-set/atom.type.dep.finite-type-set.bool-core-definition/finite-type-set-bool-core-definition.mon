@@ -1,0 +1,28 @@
+;; TEST-ID: tests.codegen.type.dep.finite-type-set.bool-core-definition
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: dependent-types
+;; TEST-SUBSET: finite-type-sets
+;; TEST-QUALITY: language-contract-regression
+;; TEST-CONTEXT: TODO.org Set-literal types
+;; TEST-PURPOSE: A named finite type set can define Bool without nominal-type coercion.
+;; TEST-ATOM: (type Bool {True False}) defines the finite type whose inhabitants are True and False.
+;; TEST-EXPECT: compile, run
+;; TEST-STDOUT-FILE: finite-type-set-bool-core-definition.stdout
+;; TEST-CODEGEN-PATH: types.dep.finite-type-set
+;; TEST-COVERAGE: reader finite type-set definition, dependent/HM registration, Bool lowering
+;; TEST-MENU: types/dep/finite-type-set/atom.type.dep.finite-type-set.bool-core-definition
+;; TEST-MENU-PATH: codegen/types/dep/finite-type-set/atom.type.dep.finite-type-set.bool-core-definition
+;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.bool-core-definition
+;; TEST-CLI-TARGET: codegen types dep finite-type-sets
+
+(module Main)
+(import Data.Bool)
+(type Signal {Red Amber Green})
+(define [signal :: Signal] Amber)
+(define [truth :: Bool] True)
+(define [falsehood :: Bool] False)
+(show signal)
+(show truth)
+(show falsehood)

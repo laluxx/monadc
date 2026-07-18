@@ -14,6 +14,7 @@
 ;;; Code:
 
 import System.Posix.Term
+import Data.Bool
 
 module Text.Readline
   [key-ctrl-a key-ctrl-b key-ctrl-d key-ctrl-e key-ctrl-f

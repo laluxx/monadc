@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.List
   [list-null? list-length list-drop list-take list-append list-reverse
    reverse at nth reduce

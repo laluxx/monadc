@@ -309,7 +309,9 @@ static bool module_context_has_import(ModuleContext *ctx, const char *module_nam
 
 static bool module_context_is_prelude_file(ModuleContext *ctx)
 {
-    return ctx->current_file && strstr(ctx->current_file, "/prelude/");
+    return ctx->current_file &&
+           (strstr(ctx->current_file, "/prelude/") ||
+            strstr(ctx->current_file, "\\prelude\\"));
 }
 
 static bool module_context_is_core_library_file(ModuleContext *ctx)

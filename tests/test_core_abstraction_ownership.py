@@ -11,6 +11,23 @@ def source(relative: str) -> str:
 
 
 class CoreAbstractionOwnershipTests(unittest.TestCase):
+    def test_bool_is_a_core_owned_finite_type_set(self):
+        bool_core = source("core/prelude/Data/Bool.mon")
+        infer_c = source("infer.c")
+        dep_c = source("dep.c")
+        types_c = source("types.c")
+
+        self.assertIn("type Bool {True False}", bool_core)
+        self.assertNotIn('strcmp(ast->symbol, "True")', infer_c)
+        self.assertNotIn('strcmp(ast->symbol, "False")', infer_c)
+        self.assertNotIn('dep_env_declare(env, "Bool"', dep_c)
+        self.assertNotIn('dep_env_define(env, "True"', dep_c)
+        self.assertNotIn('dep_env_define(env, "False"', dep_c)
+        self.assertNotIn(
+            'if (strcmp(name, "Bool")    == 0) return type_bool();',
+            types_c,
+        )
+
     def test_numeric_typeclass_methods_have_no_concrete_module_copies(self):
         forbidden = ("inc", "dec", "double", "square", "cube", "abs", "signum")
         for module in ("core/prelude/Data/Int.mon", "core/prelude/Data/Float.mon"):

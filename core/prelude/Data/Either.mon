@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Either
   [Either Left Right
    either left? right?

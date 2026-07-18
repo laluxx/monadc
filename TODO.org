@@ -1,100 +1,120 @@
 #+title: TODO.org
 
+* TODO workflow
 
-• Here is the next-session list I’d follow, in priority order.
+This file is the canonical work queue for humans and coding agents.
 
-  1. Finish = Through Eq
+** Rules
 
-  - Add a failing regression where a custom Eq instance changes equality behavior.
-  - Make (= x y) dispatch to Eq.eq? when an applicable instance exists.
-  - Keep primitive optimized lowering for built-in Int, Bool, Char, String, floats, etc.
-  - Avoid infinite recursion in Data.Eq, since Eq Int.eq? currently defines itself using (= x y).
-  - Likely solution: introduce an internal primitive equality op for core implementations, then make public = semantic sugar over Eq.
+1. Keep unfinished work above =Completed archive= and completed work below it.
+2. Use exactly one lifecycle keyword on actionable headings:
+   =TODO=, =NEXT=, =DOING=, =BLOCKED=, or =DONE=.
+3. At most one top-level item may be =DOING= at a time. An agent must mark the
+   item it is implementing before changing production code.
+4. Every actionable item must state an observable completion contract. Prefer
+   checkboxes naming syntax, semantics, diagnostics, and regression coverage.
+5. Implement test-first: add a focused failing regression, confirm the expected
+   failure, implement the smallest coherent change, then run broader suites.
+6. A task is =DONE= only when its completion contract passes and relevant CI is
+   green. Record the tests and commit under the item.
+7. When a task becomes =DONE=, move the whole entry to the bottom of
+   =Completed archive=. Do not leave completed projects mixed into active work.
+8. =BLOCKED= entries must name the blocking item or missing decision. Move them
+   back to =TODO= or =NEXT= as soon as the blocker is removed.
+9. Do not silently broaden an item. Add newly discovered work as a linked TODO
+   and keep the current task scoped to its stated contract.
+10. Preserve design rationale. Cleanup may reorganize or merge duplicates, but
+    must not discard decisions, test evidence, or unresolved questions.
 
-  2. Fix Data.Eq Core Ownership
+** Priority
 
-  - Change Data.Eq instances to call an internal primitive, not public =.
-  - Add explicit Eq instances for Float, maybe fixed/arbitrary integer subtypes through inheritance.
-  - Add tests proving U4, U8, etc. use inherited Eq Int.
+- =DOING=: currently being implemented.
+- =NEXT=: agreed next work; ordered from top to bottom.
+- =TODO=: accepted backlog, not yet scheduled.
+- =BLOCKED=: accepted work that cannot proceed yet.
+- Research-only ideas must say =[RESEARCH]= in the heading.
 
-  3. Derive Eq Correctly
+** Definition of done
 
-  - Existing deriving support appears partial and may still use "=" as the method name instead of eq?.
-  - Make data Color Red | Blue deriving [Eq] generate an Eq Color instance.
-  - Test nullary ADTs first.
-  - Then test ADTs with fields, where equality recursively calls Eq on fields.
-
-  4. Derive Enum / Bounded For Simple ADTs
-
-  - For data Color Red | Green | Blue deriving [Enum, Bounded]:
-      - fromEnum Red == 0
-      - toEnum 1 == Green
-      - minBound == Red
-      - maxBound == Blue
-
-  - Keep this limited to nullary enum-like ADTs first.
-
-  5. Split Primitive Equality From User Equality
-
-  - Add an internal compiler/core primitive name, maybe prim-eq? / prim-not-eq?.
-  - Public = should become the typeclass-aware operator.
-  - Core modules can use primitive equality where needed to define base instances safely.
-
-  6. Move More Builtins Into Core Modules
-  Obvious remaining hardcoded surface candidates:
-
-  - Set?, set, conj, disj, contains? -> Data.Set
-  - Map?, assoc, dissoc, keys, vals, merge -> Data.Map
-  - string helpers like substring, starts-with?, ends-with? -> Data.String
-  - list helpers still hardcoded: car, cdr, head, tail, cons, maybe empty?
-
-  7. Start Data.Set As Lazy Set Protocol
-
-  - Define the core-facing idea first:
-      - membership
-      - union/intersection/difference
-      - map/filter
-      - finite prefix enumeration
-
-  - Do not implement infinite refinement enumeration by brute force.
-  - Runtime C should only provide minimal iterator/thunk machinery.
-
-  8. Refinement Types As Lazy Sets
-
-  - Make a refinement type carry:
-      - base type
-      - predicate
-      - optional generator/enumerator
-
-  - Bare Email in REPL should eventually print a stream/prefix view.
-  - First implementation should probably work for finite/simple numeric refinements before strings/emails.
-
-  9. Subtype-Aware Method Lookup Beyond Int
-
-  - We did U4.abs -> Int.abs.
-  - Extend and test:
-      - F32.foo -> Float.foo
-      - refinement Positive.abs -> Int.abs
-      - aliases/refinement chains.
-
-  - Ensure Type.method and value.method behave the same.
-
-  10. Context/Test Hygiene
-
-  - Add each completed behavior to context/typeclass.org, context/types.org, or context/core-libs.org.
-  - Keep regression tests narrow.
-  - Run at minimum:
-      - make
-      - python3 -m unittest tests.test_typeclass_superclasses
-      - python3 tests/run_core.py
+- The user-facing behavior works from a clean checkout.
+- Focused regression coverage exists and passes.
+- The affected core/compiler suites pass on Linux and Windows where relevant.
+- Documentation and this TODO record describe the behavior that actually ships.
+- The implementation is committed and pushed; CI is green.
 
 
+* Active queue
+
+- You're building Idris in C with the discipline of a kernel developer and the ambitions of a category theorist,
+  and somehow it's actually working.
 
 
+- Dwarf
+- Code view
 
 
+** DOING Set-literal types: {v1, v2, ...} as finite type sets [4/6]
+  - [X] Specify the grammar and AST separately from refinement sets.
+  - [X] Parse symbolic finite type sets and reject empty/duplicate-invalid forms.
+  - [X] Infer singleton members and finite unions without nominal-type coercions.
+  - [X] Define =Bool = {True, False}= in the core and remove semantic Bool
+        hardcoding only after the core definition bootstraps cleanly.
+  - [ ] Use source order for deterministic constructor tags and exhaustiveness.
+  - [ ] Add parser, inference, diagnostics, core, runtime, and Windows coverage.
+
+  - [X] {True, False} etc. desugars to an anonymous sum of singleton types.
+        Bool becomes DEFINED as {True, False}, not a separate nominal type
+        proved equal to it -- avoids adding another ad hoc dep_conv
+        structural-equality special case on top of the existing Int≡Float
+        soundness hole.
+  - [X] Scope: literal-enumeration set syntax requires decidable equality
+        on elements and a small finite literal list. Large/infinite
+        domains (Byte, Even) stay on the existing { x ∈ T | P x }
+        predicate-refinement syntax -- two different mechanisms, don't
+        conflate them under one parser rule.
+  - [ ] Satisfies "anonymous Algebraic Data Types (tagged unions)" from
+        the Stuff [0/37] list -- {Ok, Retry, Fail} as an inline return
+        type needs no data declaration.
+  - [ ] Pin down tag/ordinal encoding: literal position in {...} determines
+        backend tag order, deterministic, no separate rule needed.
 
 
+** BLOCKED Typeclass laws: from comment to checked obligation [0/1]
+  - [ ] Right now class laws (e.g. Distributive/Representable's
+        `index (tabulate f) = f`) are documentation comments only.
+        tests blocks only assert-eq the class *registers*, never that
+        an instance obeys its law.
+  - [ ] Decide: property-tested (cheap, unsound) vs proof-obligation-at
+        instance-decl (uses dep_conv, sound in principle) vs
+        documentation-only forever (legitimate, matches Haskell).
+  - [ ] BLOCKED on Fix Soundness Holes [0/6] if going the proof route --
+        dep_conv's unsound coercions / broken occurs-check / unsound
+        Miller pattern unification must land first, or law-checking
+        gives false confidence on top of a checker that can prove False.
+
+
+** TODO Use musttail for closure tail calls [1/2]
+  - [X] Annotate straight-line closure-ABI tail dispatch with LLVM =musttail=
+        by jumping directly to the closure function pointer.
+  - [ ] Teach branch/if lowering to emit direct returns in tail branches so
+        branch-local closure tail calls can also satisfy LLVM's =musttail=
+        verifier rule.
+
+  Your closures capture environments and dispatch through function pointers.
+  Monadic bind chains like =maybe-bind (f x) g= create N-deep tail call
+  chains through =RuntimeClosure= dispatch. Without =musttail=, LLVM may
+  or may not optimize these as tail calls depending on ABI and the
+  presence of variadic args.
+
+  =musttail= is an LLVM IR directive (=musttail call ...) that forces the
+  backend to emit a jump instead of a call + ret. It's the difference
+  between =$ do x <- f; g x= O(n) and O(1) stack depth.
+
+  Concretely: in =codegen.c=, when emitting a call in tail position of
+  a function body (specifically the last expression in a =lambda= or
+  =define=), use =LLVMSetTailCall= and add the =musttail= attribute.
+  This is mechanical: walk =codegen_expr= for the tail-call positions
+  and emit =musttail call= instead of =call=.
 
 
 * TODO Dependent pattern matching [0/1]
@@ -102,7 +122,8 @@
         Everything beyond the Pleroma is caos the kenoma
 
 * TODO Dependent pattern matching [0/1]
-  - [ ] Do it
+  - [ ] Learn what it is
+  - [ ] Do it nicely
 
 * TODO Auto function constant bindings [0/1]
 - [ ] Just do it.
@@ -228,6 +249,33 @@ tests [1/5]
          BcTierPlan.loop_hot_threshold / call_hot_threshold as the signal,
          same engine, same module-accumulation model
 
+** TODO Bytecode: precompute branch targets instead of runtime rescans [0/1]
+   - [ ] find_else_or_end / find_end rescan the instruction stream from ip
+         on every if/else/loop taken at runtime. Precompute a target table
+         during bc_verify (which already walks the whole program once) and
+         store it on BcProgram, so bc_vm_run and the eventual LLVM lowering
+         both get O(1) branch dispatch instead of O(code_count) per branch.
+
+** TODO Bytecode: BC_OP_CALL / BC_OP_TAILCALL [0/1]
+   - [ ] No opcode exists for calling another BcProgram/closure -- only
+         CALL_NATIVE (fixed C function pointers) exists today. Tiering
+         plan assumes "pure arithmetic/control flow" forms only, but real
+         eval traffic (define, recursive functions) needs this before the
+         bytecode tier can cover more than leaf expressions.
+   - [ ] Must be tail-call-safe from day one to match the musttail TODO
+         above -- same O(1) stack-depth requirement applies to bytecode
+         tail position, not just the LLVM closure-ABI path.
+
+** TODO Bytecode: overflow paths abort() instead of BcError [0/1]
+   - [ ] bc_program_add_const/add_native/add_inline_cache/add_deopt_point
+         all abort() the whole process on count overflow (> UINT32_MAX)
+         rather than returning a recoverable BcError. Same "crash is worse
+         than always-LLVM" argument as the existing div-by-zero TODO
+         applies here, just less likely to trigger in practice.
+
+
+
+
 
 * TODO Program synthesis [0/1]
 - [ ] Full idris-like hole driven development
@@ -268,6 +316,7 @@ define const :: λx.λy.x
 * TODO Dependent types syntax [0/1]
 - [ ] Currently there is no way to write dependent types code
 - [ ] Think of one.
+
 #+begin_src monad
 data Vec (A : Type a) : ℕ -> Type a
   []  : Vec A zero
@@ -302,8 +351,9 @@ static const char *TOKEN_TYPE_NAMES[] = {
 #+end_src
 
 
-* TODO Postfix metadatas [0/1]
-- [ ] we should allow postfix metadatas alongside prefix
+* DONE Postfix metadatas [1/1]
+  CLOSED: [2026-07-18 Sat 21:31]
+- [X] we should allow postfix metadatas alongside prefix
 
 #+begin_src monad
 define read-char :: Int -> Int
@@ -315,11 +365,6 @@ define read-char :: Int -> Int
   :doc "Reads one byte from fd.
         Returns -1 on EOF or error."
 #+end_src
-
-
-
-
-
 
 
 * TODO Optimizations [0/2]
@@ -418,12 +463,17 @@ define incrementCounter :: IO ()
 define file readFile
 #+end_src
 
+
+
+
 * TODO Prolog
 
 This is the design, at least.
 
 #+begin_src monad
 define square x ↦ x²
+square x ↦ x²
+
 square x -> 9  ; it returns the set {-3 3}    (reads as square x returns 9)
 
 square x -> 9 AND x > 0 ; Conjunction and disjunction of constraints
@@ -438,6 +488,20 @@ grandparent? 'tom z -> true ; Returns the symbol 'ann directly not a set because
 parent 'tom 'ann -> ∅       ; the solution is the empty set, this returns True.
 
 #+end_src
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 * TODO DSLs
 
@@ -500,6 +564,9 @@ Default -> zero copy, pure.
 Even better, don't let the user think about move semantics, if he mutates a
 parameter, then it will be automatically copied for him.
 Keeping the function referentially transparent.
+
+You only lose on the guarantee of auto parallelization
+keeping the property of referential transparency
 
 
 
@@ -1054,3 +1121,52 @@ Point
 Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
+
+
+* Completed archive
+
+Completed entries are append-only. Keep their rationale and verification
+evidence here; new work discovered during completion belongs in the active
+queue as a separate linked item.
+
+** DONE Migrate from MCJIT to ORC JIT [1/1]
+  - [X] Replace =LLVMCreateExecutionEngineForModule= (MCJIT) with ORC JIT
+        in repl.c and codegen.c
+
+  MCJIT was removed from the REPL and refinement-evaluator paths. The REPL now
+  keeps one ORC LLJIT instance alive for the session, adds each fresh module to
+  the main JITDylib, and looks up the per-eval wrapper with
+  =LLVMOrcLLJITLookup=.
+
+  Tests:
+  - =tests/test_repl.py= covers piped REPL input and multiline Wisp typed
+    definitions.
+  - =tests/test_windows_portability.py= asserts ORC APIs are used and MCJIT APIs
+    are absent from repl/codegen.
+  - CI runs =monad test runner= on Linux and Windows MSYS2, so the REPL smoke
+    executes on both platforms.
+
+  Follow-up: the next pass-manager TODO is still open. ORC removed the MCJIT
+  engine boundary, but it does not yet add an explicit new-pass-manager
+  optimization pipeline.
+
+
+** DONE Migrate to LLVM New Pass Manager [1/1]
+  - [X] Replace the implicit legacy pass manager (inside MCJIT/ORC) with
+        an explicit =LLVMPassBuilderOptionsRef= pipeline
+
+  ORC materialization now sets target triple/data layout and runs an explicit
+  new-pass-manager pipeline with =LLVMRunPasses(..., "default<O0>", ...)=.
+
+  The new pass manager gives you:
+  - Per-function optimization without module overhead.
+  - Fine-grained control: run =InstCombine= and =GVN= but skip =LoopVectorize=
+    for tier-1 unoptimized code.
+  - Access to the new =LLVMCreatePassBuilder= API which takes the
+    =LLVMOrcThreadSafeModule= from ORC directly.
+
+  Concretely: after migrating to ORC (previous TODO), use
+  =LLVMCreatePassBuilder= with =LLVMPassBuilderOptionsCreate= to build
+  an explicit pipeline. Set =opt_level=0= for the unoptimized tier
+  and =opt_level=2= for the hot tier. No more relying on whatever
+  MCJIT's legacy pipeline happened to do.

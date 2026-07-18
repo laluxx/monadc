@@ -11,6 +11,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Function
   [id identity const always flip compose pipe apply applyTo
    before after on argument result

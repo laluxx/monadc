@@ -20,6 +20,7 @@
 ;;; Code:
 
 import Data.Tuple
+import Data.Bool
 
 module Numeric
   [Num Integral Fractional Floating Real RealFrac

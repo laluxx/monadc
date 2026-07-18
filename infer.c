@@ -1317,8 +1317,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         break;
 
     case AST_SYMBOL: {
-        if (strcmp(ast->symbol, "True")  == 0) { result = type_bool(); break; }
-        if (strcmp(ast->symbol, "False") == 0) { result = type_bool(); break; }
+        const FiniteTypeSetEntry *finite =
+            finite_type_set_lookup_member(ast->symbol, NULL);
+        if (finite) {
+            result = type_finite_set(finite->name, finite->member_count);
+            break;
+        }
         if (strcmp(ast->symbol, "nil")   == 0) { result = type_nil();  break; }
         if (strcmp(ast->symbol, "undefined") == 0) {
             result = infer_fresh(ctx);
@@ -1364,6 +1368,28 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             infer_constrain(ctx, et, elem_t, ast->line, ast->column);
         }
         result = type_set();
+        break;
+    }
+
+    case AST_TYPE_SET: {
+        const char **members = calloc(ast->type_set.member_count,
+                                      sizeof(char*));
+        bool valid = true;
+        for (size_t i = 0; i < ast->type_set.member_count; i++) {
+            AST *member = ast->type_set.members[i];
+            if (member->type != AST_SYMBOL) { valid = false; break; }
+            members[i] = member->symbol;
+        }
+        if (!valid || !finite_type_set_register(ast->type_set.name, members,
+                                                ast->type_set.member_count)) {
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: error: finite type set '%s' has invalid or duplicate members",
+                     ctx->filename, ast->line, ast->column,
+                     ast->type_set.name);
+        }
+        free(members);
+        result = type_unit();
         break;
     }
 

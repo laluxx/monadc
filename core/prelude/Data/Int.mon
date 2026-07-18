@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Int
   [zero? nonzero? positive? negative? divisible?]
 

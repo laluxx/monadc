@@ -1586,6 +1586,15 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
     }
     case TYPE_BOOL:
         return LLVMInt1TypeInContext(ctx->context);
+    case TYPE_FINITE_SET: {
+        unsigned bits = 1;
+        size_t capacity = 2;
+        while (capacity < t->finite_member_count) {
+            bits++;
+            capacity <<= 1;
+        }
+        return LLVMIntTypeInContext(ctx->context, bits);
+    }
     case TYPE_PTR:
     case TYPE_OPTIONAL:
     case TYPE_NIL:
@@ -2436,6 +2445,30 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
                                           LLVMBuildGlobalStringPtr(ctx->builder, "False", "f"),
                                           "bs");
         emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), bs, "");
+    } else if (type->kind == TYPE_FINITE_SET) {
+        const FiniteTypeSetEntry *finite = finite_type_set_lookup(type->finite_name);
+        if (!finite || finite->member_count == 0)
+            CODEGEN_ERROR(ctx, "%s: error: finite type '%s' has no registered members",
+                          parser_get_filename(),
+                          type->finite_name ? type->finite_name : "?");
+
+        LLVMTypeRef tag_type = LLVMTypeOf(val);
+        LLVMValueRef rendered = LLVMBuildGlobalStringPtr(
+            ctx->builder, finite->members[finite->member_count - 1],
+            "finite_member");
+        for (size_t i = finite->member_count - 1; i-- > 0;) {
+            LLVMValueRef is_member = LLVMBuildICmp(
+                ctx->builder, LLVMIntEQ, val,
+                LLVMConstInt(tag_type, i, 0), "finite_tag_match");
+            rendered = LLVMBuildSelect(
+                ctx->builder, is_member,
+                LLVMBuildGlobalStringPtr(ctx->builder, finite->members[i],
+                                         "finite_member"),
+                rendered, "finite_rendered");
+        }
+        emit_call_2(ctx, printf_fn, i32,
+                    newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx),
+                    rendered, "");
     } else if (type->kind == TYPE_COLL) {
         emit_call_1(ctx, get_rt_print_value(ctx), void_t, val, "");
         if (newline) emit_call_1(ctx, printf_fn, i32, nl_str, "");
@@ -6023,18 +6056,21 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             result.type     = type_unknown();
             return result;
         }
-        // Boolean literals
-        if (strcmp(ast->symbol, "True") == 0) {
-            result.value = LLVMConstInt(LLVMInt1TypeInContext(ctx->context), 1, 0);
-            result.type  = type_bool();
+        size_t finite_ordinal = 0;
+        const FiniteTypeSetEntry *finite =
+            finite_type_set_lookup_member(ast->symbol, &finite_ordinal);
+        if (finite) {
+            result.type = type_finite_set(finite->name, finite->member_count);
+            LLVMTypeRef repr = type_to_llvm(ctx, result.type);
+            uint64_t tag = finite_ordinal;
+            /* Bool keeps the target's native truth representation. This is a
+             * lowering choice after finite-set normalization, not its type
+             * identity: source-level Bool still comes from Data.Bool. */
+            if (strcmp(finite->name, "Bool") == 0)
+                tag = strcmp(ast->symbol, "True") == 0 ? 1 : 0;
+            result.value = LLVMConstInt(repr, tag, 0);
             return result;
         }
-        if (strcmp(ast->symbol, "False") == 0) {
-            result.value = LLVMConstInt(LLVMInt1TypeInContext(ctx->context), 0, 0);
-            result.type  = type_bool();
-            return result;
-        }
-
         // __adt_tag_CtorName — resolve to the integer tag index for that constructor
         if (strncmp(ast->symbol, "__adt_tag_", 10) == 0) {
             const char *ctor_name = ast->symbol + 10;
@@ -16676,6 +16712,24 @@ if (ast->list.count >= 5) {
 
         CODEGEN_ERROR(ctx, "%s:%d:%d: error: function call requires symbol in head position",
                 parser_get_filename(), ast->line, ast->column);
+    }
+
+    case AST_TYPE_SET: {
+        const char **members = calloc(ast->type_set.member_count,
+                                      sizeof(char*));
+        for (size_t i = 0; i < ast->type_set.member_count; i++)
+            members[i] = ast->type_set.members[i]->symbol;
+        if (!finite_type_set_register(ast->type_set.name, members,
+                                      ast->type_set.member_count)) {
+            free(members);
+            CODEGEN_ERROR(ctx, "%s:%d:%d: error: finite type set '%s' has duplicate members",
+                          parser_get_filename(), ast->line, ast->column,
+                          ast->type_set.name);
+        }
+        free(members);
+        result.type = NULL;
+        result.value = NULL;
+        return result;
     }
 
     case AST_REFINEMENT: {

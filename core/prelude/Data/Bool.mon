@@ -12,7 +12,10 @@
 ;;; Code:
 
 module Data.Bool
-  [bool not? and? or? xor? implies? iff?]
+  [Bool True False bool not? and? or? xor? implies? iff?]
+
+
+type Bool {True False}
 
 
 define bool :: a -> a -> Bool -> a

@@ -11,6 +11,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Maybe
   [Maybe Nothing Just
    maybe fromMaybe fromJust

@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Ord
   [Ordering LT EQ GT
    Ord lt? lte? gt? gte?
