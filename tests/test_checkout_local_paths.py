@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -303,6 +304,36 @@ class CheckoutLocalPathTests(unittest.TestCase):
                 )
             self.assertEqual(run_result.returncode, 0, run_result.stdout)
             self.assertTrue(run_result.stdout.endswith("42\n"), run_result.stdout)
+
+    def test_compiler_bootstraps_a_crlf_core_checkout(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-crlf-core-") as td:
+            temp = Path(td)
+            core = temp / "core"
+            home = temp / "home"
+            source = temp / "Main.mon"
+            output = temp / "main"
+            shutil.copytree(ROOT / "core", core)
+            home.mkdir()
+            source.write_text("(module Main)\nshow 42\n", encoding="utf-8")
+
+            for module in core.rglob("*.mon"):
+                data = module.read_bytes().replace(b"\r\n", b"\n")
+                module.write_bytes(data.replace(b"\n", b"\r\n"))
+
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["MONAD_CORE"] = str(core)
+            result = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

@@ -11472,6 +11472,24 @@ static int pure_is_known_function(const char *name) {
     return 0;
 }
 
+static void wisp_normalize_newlines_in_place(char *source) {
+    char *read = source;
+    char *write = source;
+
+    while (*read) {
+        if (read[0] == '\r' && read[1] == '\n') {
+            *write++ = '\n';
+            read += 2;
+        } else if (*read == '\r') {
+            *write++ = '\n';
+            read++;
+        } else {
+            *write++ = *read++;
+        }
+    }
+    *write = '\0';
+}
+
 ASTList wisp_parse_all(const char *source, const char *filename) {
     wisp_pending_type_clear();
 
@@ -11479,6 +11497,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
      * ordinary comment stripping so raw ASCII art and prose between
      * ;;; Commentary: and ;;; Code: never reach the lexer. */
     char *section_stripped = strdup(source);
+    wisp_normalize_newlines_in_place(section_stripped);
     strip_commentary_sections_in_place(section_stripped);
 
     /* Strip comments first, preserving line structure */

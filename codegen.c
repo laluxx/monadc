@@ -6217,8 +6217,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         }
 
         if (entry->kind == ENV_FUNC && entry->func_ref == NULL) {
-            fprintf(stderr, "DEBUG [AST_SYMBOL]: Resolving function '%s' but func_ref is NULL. tc_is_method=%d\n",
-                    ast->symbol, tc_is_method(ctx->tc_registry, ast->symbol));
             if (tc_is_method(ctx->tc_registry, ast->symbol)) {
                 const char *cls = tc_method_class(ctx->tc_registry, ast->symbol);
                 TCInstance *unique =
