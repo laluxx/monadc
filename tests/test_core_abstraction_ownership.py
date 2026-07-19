@@ -27,6 +27,11 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             'if (strcmp(name, "Bool")    == 0) return type_bool();',
             types_c,
         )
+        self.assertNotIn(
+            'if (name && strcmp(name, "Bool") == 0) return type_bool();',
+            types_c,
+            "the compiler must not turn the core finite-set declaration back into TYPE_BOOL",
+        )
 
     def test_numeric_typeclass_methods_have_no_concrete_module_copies(self):
         forbidden = ("inc", "dec", "double", "square", "cube", "abs", "signum")
@@ -97,6 +102,16 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertRegex(coll, r"(?m)^define\s+bothPredicates\s+::")
         self.assertNotRegex(function, r"(?m)^define\s+times\s+::")
         self.assertNotRegex(data_list, r"(?m)^define\s+length\s+::")
+
+    def test_set_membership_does_not_require_enumeration(self):
+        data_set = source("core/prelude/Data/Set.mon")
+        membership = data_set.split("class Membership s where", 1)[1].split(
+            "\n\ninstance Membership", 1
+        )[0]
+
+        self.assertRegex(membership, r"(?m)^\s*member\?\s+::")
+        self.assertNotRegex(membership, r"(?m)^\s*(?:count|foldl|foldr|elements)\s+::")
+        self.assertRegex(data_set, r"(?m)^instance Membership Set$")
 
 
 if __name__ == "__main__":

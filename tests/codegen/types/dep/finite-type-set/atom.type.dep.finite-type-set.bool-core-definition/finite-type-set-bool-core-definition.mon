@@ -7,7 +7,7 @@
 ;; TEST-QUALITY: language-contract-regression
 ;; TEST-CONTEXT: TODO.org Set-literal types
 ;; TEST-PURPOSE: A named finite type set can define Bool without nominal-type coercion.
-;; TEST-ATOM: (type Bool {True False}) defines the finite type whose inhabitants are True and False.
+;; TEST-ATOM: Optional commas in {Red, Amber, Green} are layout punctuation; Bool's space-separated form remains equivalent.
 ;; TEST-EXPECT: compile, run
 ;; TEST-STDOUT-FILE: finite-type-set-bool-core-definition.stdout
 ;; TEST-CODEGEN-PATH: types.dep.finite-type-set
@@ -19,7 +19,7 @@
 
 (module Main)
 (import Data.Bool)
-(type Signal {Red Amber Green})
+(type Signal {Red, Amber, Green})
 (define [signal :: Signal] Amber)
 (define [truth :: Bool] True)
 (define [falsehood :: Bool] False)

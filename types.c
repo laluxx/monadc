@@ -1046,11 +1046,21 @@ Type *type_char   (void) { return make_type(TYPE_CHAR);    }
 Type *type_byte   (void) { return make_type(TYPE_BYTE);    }
 Type *type_string (void) { return make_type(TYPE_STRING);  }
 Type *type_symbol (void) { return make_type(TYPE_SYMBOL);  }
-Type *type_bool   (void) { return make_type(TYPE_BOOL);    }
+Type *type_bool(void) {
+    /* Internal truth values keep their optimized machine representation.
+     * Source annotations named Bool resolve through the finite-set registry;
+     * type_is_bool is the sole bridge between these layers. */
+    return make_type(TYPE_BOOL);
+}
+
+bool type_is_bool(const Type *type) {
+    return type &&
+           (type->kind == TYPE_BOOL ||
+            (type->kind == TYPE_FINITE_SET && type->finite_name &&
+             strcmp(type->finite_name, "Bool") == 0));
+}
+
 Type *type_finite_set(const char *name, size_t member_count) {
-    /* Bool is the two-point finite set's optimized machine representation.
-     * Its semantic ownership still comes from the registered core definition. */
-    if (name && strcmp(name, "Bool") == 0) return type_bool();
     Type *t = make_type(TYPE_FINITE_SET);
     t->finite_name = name ? strdup(name) : NULL;
     t->finite_member_count = member_count;
@@ -1202,6 +1212,11 @@ bool types_equal(Type *a, Type *b) {
     if ((a->kind == TYPE_BYTE && b->kind == TYPE_CHAR) ||
         (a->kind == TYPE_CHAR && b->kind == TYPE_BYTE))
         return true;
+
+    /* TYPE_BOOL exists only during compiler bootstrap.  Once Data.Bool is
+     * loaded, Bool is the core-owned finite set; the two representations must
+     * remain compatible while bootstrap-created signatures are still live. */
+    if (type_is_bool(a) && type_is_bool(b)) return true;
 
     if (a->kind != b->kind) return false;
     switch (a->kind) {

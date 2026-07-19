@@ -8,7 +8,7 @@
 ;; TEST-SECTION: codegen
 ;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
 ;; TEST-PURPOSE: Runtime set predicates and count observe set literals.
-;; TEST-ATOM: Set?, collection?, and count recognize a literal set.
+;; TEST-ATOM: Set?, collection?, and count recognize a comma-separated literal set.
 ;; TEST-EXPECT: compile, run
 
 ;; TEST-COVERAGE: codegen.c:40-collections/sets branch family
@@ -18,7 +18,7 @@
 ;; TEST-ATOM-LEAF: atom.codegen.40.collections.sets.rt.set.literal.count
 ;; TEST-CLI-TARGET: codegen branches collections sets
 (module Main)
-(define s {1 2})
+(define s {1, 2})
 (show (Set? s))
 (show (collection? s))
 (show (count s))

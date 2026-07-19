@@ -2414,7 +2414,7 @@ static void codegen_show_value(CodegenContext *ctx, LLVMValueRef val, Type *type
     } else if (type->kind == TYPE_KEYWORD) {
         emit_call_1(ctx, printf_fn, i32, LLVMBuildGlobalStringPtr(ctx->builder, ":", "kw_colon"), "");
         emit_call_2(ctx, printf_fn, i32, newline ? get_fmt_str(ctx) : get_fmt_str_no_newline(ctx), val, "");
-    } else if (type->kind == TYPE_BOOL) {
+    } else if (type_is_bool(type)) {
         LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
         LLVMTypeRef val_t = LLVMTypeOf(val);
         LLVMValueRef pred = val;
@@ -3772,7 +3772,7 @@ static void check_predicate_name(CodegenContext *ctx, const char *name,
     size_t len = strlen(name);
     bool ends_with_q  = (len > 0 && name[len - 1] == '?');
     bool ends_with_qi = (len > 1 && name[len - 2] == '?' && name[len - 1] == '!');
-    bool returns_bool = (return_type->kind == TYPE_BOOL);
+    bool returns_bool = type_is_bool(return_type);
 
     if (returns_bool && !ends_with_q && !ends_with_qi) {
         CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ returns Bool, making it a "
@@ -4411,7 +4411,7 @@ static int jit_eval_refinement(CodegenContext *ctx,
             /* Only include Bool-returning functions (predicates).
              * Exclude Int/Float returning functions like constructors
              * which generate complex IR incompatible with the JIT module. */
-            if (e->return_type->kind != TYPE_BOOL) continue;
+            if (!type_is_bool(e->return_type)) continue;
             const char *fname = e->name;
             if (LLVMGetNamedFunction(tmp_mod, fname)) continue;
             int np = e->param_count;
@@ -4610,7 +4610,7 @@ static int jit_eval_refinement(CodegenContext *ctx,
                             EnvEntry *ue = env_lookup(ctx->env, fname);
                             if (ue && ue->kind == ENV_FUNC && ue->source_ast &&
                                 ue->return_type &&
-                                ue->return_type->kind == TYPE_BOOL) {
+                                type_is_bool(ue->return_type)) {
                                 AST *src = ue->source_ast;
                                 AST *lam = NULL;
                                 if (src->type == AST_LAMBDA) lam = src;
@@ -5878,7 +5878,7 @@ static bool collect_if_switch(CodegenContext *ctx,
 }
 
 static bool switch_selector_supported(Type *t) {
-    return t && (type_is_integer(t) || t->kind == TYPE_BOOL || t->kind == TYPE_UNKNOWN);
+    return t && (type_is_integer(t) || type_is_bool(t) || t->kind == TYPE_UNKNOWN);
 }
 
 static bool switch_result_supported(CodegenResult r) {
@@ -9616,7 +9616,7 @@ if (ast->list.count >= 5) {
                     }
                     cond = LLVMBuildFCmp(ctx->builder, LLVMRealOEQ, lhs, rhs, "eq");
 
-                } else if (actual.type && actual.type->kind == TYPE_BOOL) {
+                } else if (type_is_bool(actual.type) || type_is_bool(expected.type)) {
                     /* Bool result — compare as i1 directly, box expected if needed */
                     LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
 

@@ -201,6 +201,7 @@ Type *type_byte(void);
 Type *type_string(void);
 Type *type_symbol(void);
 Type *type_bool(void);
+bool type_is_bool(const Type *type);
 Type *type_hex(void);
 Type *type_bin(void);
 Type *type_oct(void);

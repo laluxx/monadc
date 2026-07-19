@@ -8765,6 +8765,14 @@ static AST *parse_set(Parser *p) {
     AST *node = ast_new_set();
     while (p->current.type != TOK_RBRACE &&
            p->current.type != TOK_EOF) {
+        /* Commas are optional layout punctuation in sets.  They do not become
+         * members, so {a,b}, {a, b}, and {a b} have the same AST. */
+        if (p->current.type == TOK_SYMBOL && p->current.value &&
+            strcmp(p->current.value, ",") == 0) {
+            p->current = lexer_next_token(p->lexer);
+            continue;
+        }
+
         AST *elem = parse_expr(p);
         if (node->set.element_count >= node->set.element_capacity) {
             node->set.element_capacity *= 2;

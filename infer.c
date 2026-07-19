@@ -551,6 +551,10 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         return true;
     }
 
+    /* Source-level Bool is the core finite set; TYPE_BOOL is the optimized
+     * compiler truth representation used by primitive operations. */
+    if (type_is_bool(a) && type_is_bool(b)) return true;
+
     // Both ground — must match structurally
     if (a->kind != b->kind) {
         /* A literal's ground representation may be checked against a finite
@@ -591,7 +595,7 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             if (bp && (bp->kind == TYPE_ARROW || bp->kind == TYPE_FN ||
                        bp->kind == TYPE_COLL  || bp->kind == TYPE_LIST ||
                        bp->kind == TYPE_ARR   || bp->kind == TYPE_STRING ||
-                       bp->kind == TYPE_BOOL  || bp->kind == TYPE_FLOAT)) {
+                       type_is_bool(bp)        || bp->kind == TYPE_FLOAT)) {
                 goto skip_coll_as_fn_ab;
             }
             {
@@ -609,7 +613,7 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             if (ap && (ap->kind == TYPE_ARROW || ap->kind == TYPE_FN ||
                        ap->kind == TYPE_COLL  || ap->kind == TYPE_LIST ||
                        ap->kind == TYPE_ARR   || ap->kind == TYPE_STRING ||
-                       ap->kind == TYPE_BOOL  || ap->kind == TYPE_FLOAT)) {
+                       type_is_bool(ap)        || ap->kind == TYPE_FLOAT)) {
                 goto skip_coll_as_fn_ba;
             }
             {
@@ -2453,7 +2457,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         if (dep_hint_trustworthy && result->kind != TYPE_VAR) {
             bool result_is_arrow = (result->kind == TYPE_ARROW ||
                                     result->kind == TYPE_FN);
-            bool hint_is_scalar  = (k == TYPE_BOOL || k == TYPE_INT ||
+            bool hint_is_scalar  = (type_is_bool(ast->inferred_type) || k == TYPE_INT ||
                                     k == TYPE_FLOAT || k == TYPE_CHAR ||
                                     k == TYPE_STRING);
             if (result_is_arrow && hint_is_scalar) {

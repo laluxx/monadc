@@ -3,11 +3,23 @@
 import Data.Bool
 
 module Data.Set
-  [singleton singleton? union intersection difference symmetric-difference
+  [Membership member?
+   singleton singleton? union intersection difference symmetric-difference
    subset? proper-subset? superset? proper-superset? disjoint?]
 
 import Coll
 import Data.Eq
+
+
+class Membership s where
+  member? :: a -> s -> Bool
+
+  ;; Membership is the minimal set interface.  It does not imply that S can
+  ;; be enumerated or counted: predicate sets and public types may be infinite.
+
+
+instance Membership Set
+  (member? x s) => contains? s x
 
 
 method singleton :: a -> Set
@@ -64,6 +76,8 @@ instance Eq Set
 
 
 tests
+  assert-eq (member? 2 {1, 2, 3})                     True          "Data.Set membership is core-owned"
+  assert-eq (member? 4 {1, 2, 3})                     False         "Data.Set membership rejects absent values"
   assert-eq (eq? {1 2} {2 1})                         True          "Data.Set Eq ignores insertion order"
   assert-eq (not-eq? {1 2} {1 3})                     True          "Data.Set Eq distinguishes members"
   assert-eq (singleton 1)                              {1}           "Data.Set singleton"
