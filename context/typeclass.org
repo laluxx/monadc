@@ -485,3 +485,19 @@
   =Collection Set= fold wrapper compiled and linked but lost the set accumulator
   at runtime. Keep concrete representation helpers for built-in sets until the
   exported instance-method signature can drive forward declarations exactly.
+
+[FIX id:fix.typeclass.maybe-categorical-hierarchy-2026-07-19 date:2026-07-19 by:codex src:core/prelude/Data/Maybe.mon,types.c conf:high]
+  The core-owned =Maybe= type now implements the full =Functor => Applicative =>
+  Monad= hierarchy. Instance registration compiles every required method, and
+  the first-order =maybe-join= compatibility operation delegates to the
+  canonical =join= method. Rendering a constructor applied to a function type
+  now preserves grouping as =Maybe (a -> b)=, which keeps the specialized
+  =applyA= contract intact when it is copied into implementation annotations.
+
+[TODO id:todo.typeclass.local-higher-order-wrapper-abi-2026-07-19 date:2026-07-19 by:codex]
+  The canonical S-expression test path still crashes when a typed compatibility
+  wrapper dispatches a typeclass method carrying a closure, as in =maybe-bind=
+  delegating to =bind=. Keep those higher-order wrappers direct until local and
+  imported instance calls share exact closure ABI metadata. The first-order
+  =maybe-join -> join= delegation is executable in both Wisp and canonical
+  S-expression test paths.

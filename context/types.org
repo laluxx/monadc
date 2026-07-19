@@ -1303,7 +1303,9 @@ Caller must not free. Key outputs:
   - TYPE_ARR: "Arr :: T :: N", "Arr :: T", "Heap :: T", or "Arr"
   - TYPE_PTR: "Pointer :: T"
   - TYPE_OPTIONAL: "T?"
-  - TYPE_APP: "Maybe Float" (constructor + arg)
+  - TYPE_APP: "Maybe Float" (constructor + arg); arrow/function arguments are
+    grouped, for example "Maybe (a -> b)", so rendering and reparsing preserve
+    the original type application.
   - TYPE_INT_ARBITRARY: "I3" or "U12"
   - TYPE_FN: "Fn (_ _ #:optional _ . _)" — prints param pattern
   - TYPE_LAYOUT: layout_name or "<layout>"

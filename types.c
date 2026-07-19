@@ -1475,7 +1475,11 @@ const char *type_to_string(Type *t) {
         return t->finite_name ? t->finite_name : "{?}";
     case TYPE_APP:
         if (t->app_constructor && t->app_arg) {
-            snprintf(buf, 512, "%s %s", t->app_constructor, type_to_string(t->app_arg));
+            const char *arg = type_to_string(t->app_arg);
+            if (t->app_arg->kind == TYPE_ARROW || t->app_arg->kind == TYPE_FN)
+                snprintf(buf, 512, "%s (%s)", t->app_constructor, arg);
+            else
+                snprintf(buf, 512, "%s %s", t->app_constructor, arg);
             return buf;
         }
         return t->app_constructor ? t->app_constructor : "?";
