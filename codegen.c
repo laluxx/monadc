@@ -6017,6 +6017,52 @@ static bool codegen_finite_literal(CodegenContext *ctx, AST *ast,
     return true;
 }
 
+/* Inline an imported core definition through the language's ordinary lambda
+ * application path.  Exported source is optimization metadata, not a second
+ * implementation: semantics remain owned by the defining .mon module. */
+static bool codegen_inline_imported(CodegenContext *ctx, AST *call,
+                                    EnvEntry *entry, CodegenResult *out) {
+    if (ctx->optimization_level <= 0 || ctx->core_inline_depth >= 8 ||
+        !entry || !entry->module_name || entry->is_ffi ||
+        entry->is_closure_abi || !entry->source_ast)
+        return false;
+
+    AST *lambda = entry->source_ast;
+    if (lambda->type == AST_LIST && lambda->list.count >= 3)
+        lambda = lambda->list.items[2];
+    if (!lambda || lambda->type != AST_LAMBDA ||
+        lambda->lambda.param_count != (int)call->list.count - 1)
+        return false;
+
+    Env *saved_env = ctx->env;
+    ctx->env = env_create_child(saved_env);
+    ctx->core_inline_depth++;
+
+    for (int i = 0; i < lambda->lambda.param_count; i++) {
+        CodegenResult init = codegen_expr(ctx, call->list.items[i + 1]);
+        ASTParam *param = &lambda->lambda.params[i];
+        LLVMTypeRef llvm_type = type_to_llvm(ctx, init.type);
+        LLVMValueRef slot = LLVMBuildAlloca(ctx->builder, llvm_type,
+                                            param->name ? param->name
+                                                        : "core_inline_arg");
+        LLVMBuildStore(ctx->builder, init.value, slot);
+        env_insert(ctx->env, param->name, type_clone(init.type), slot);
+    }
+
+    CodegenResult body = {0};
+    for (int i = 0; i < lambda->lambda.body_count; i++) {
+        if (lambda->lambda.body_count > 1 &&
+            codegen_ast_is_undefined_expr(lambda->lambda.body_exprs[i]))
+            continue;
+        body = codegen_expr(ctx, lambda->lambda.body_exprs[i]);
+    }
+
+    ctx->core_inline_depth--;
+    ctx->env = saved_env;
+    *out = body;
+    return body.value != NULL;
+}
+
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     CodegenResult result = {NULL, NULL};
 
@@ -14493,6 +14539,10 @@ if (ast->list.count >= 5) {
                                       ast->list.items[1]->column);
                     free(_atypes);
                 }
+
+                if (!has_rest && arg_count == (size_t)declared_params &&
+                    codegen_inline_imported(ctx, ast, entry, &result))
+                    return result;
 
                 /* ── Monomorphization: specialize if polymorphic ─────────── */
                 /* Skip mono for functions whose parameters include Arr —

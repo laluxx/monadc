@@ -46,6 +46,7 @@ typedef struct CompiledExport {
     EnvParam     *params;       // FUNC only, owned
     int           param_count;
     LLVMValueRef  func_ref;     // FUNC only — valid only when not skipped
+    AST          *source_ast;    // FUNC only — core-owned implementation metadata
 } CompiledExport;
 
 typedef struct CompiledLayout {
@@ -290,7 +291,8 @@ static Type *registry_function_return_type(Type *t) {
 
 static void registry_push_func(CompiledModule *m, const char *local,
                                 const char *mangled, Type *ret,
-                                EnvParam *params, int pc, LLVMValueRef fn) {
+                                EnvParam *params, int pc, LLVMValueRef fn,
+                                AST *source_ast) {
     registry_grow(m);
     CompiledExport *e = &m->exports[m->export_count++];
     memset(e, 0, sizeof(*e));
@@ -303,6 +305,7 @@ static void registry_push_func(CompiledModule *m, const char *local,
     e->return_type  = type_clone(abi_ret);
     e->param_count  = pc;
     e->func_ref     = fn;
+    e->source_ast   = ast_clone(source_ast);
     if (pc > 0 && params) {
         e->params = malloc(sizeof(EnvParam) * pc);
         for (int i = 0; i < pc; i++) {
@@ -364,6 +367,7 @@ static void registry_free_all(void) {
             free(e->mangled_name);
             type_free(e->type);
             type_free(e->return_type);
+            ast_free(e->source_ast);
             if (e->params) {
                 for (int j = 0; j < e->param_count; j++) {
                     free(e->params[j].name);
@@ -760,7 +764,8 @@ static void declare_externals(CodegenContext *ctx,
                             e->param_count, type_clone(e->return_type), fn, NULL, NULL);
             EnvEntry *ent = env_lookup(ctx->env, qn);
             if (ent) { ent->module_name = strdup(dep->module_name);
-                       ent->llvm_name   = strdup(e->mangled_name); }
+                       ent->llvm_name   = strdup(e->mangled_name);
+                       ent->source_ast  = ast_clone(e->source_ast); }
 
             if (import->mode != IMPORT_QUALIFIED) {
                 env_insert_func(ctx->env, e->local_name,
@@ -768,7 +773,8 @@ static void declare_externals(CodegenContext *ctx,
                                 e->param_count, type_clone(e->return_type), fn, NULL, NULL);
                 EnvEntry *ent2 = env_lookup(ctx->env, e->local_name);
                 if (ent2) { ent2->module_name = strdup(dep->module_name);
-                            ent2->llvm_name   = strdup(e->mangled_name); }
+                            ent2->llvm_name   = strdup(e->mangled_name);
+                            ent2->source_ast  = ast_clone(e->source_ast); }
             }
         }
     }
@@ -1623,6 +1629,7 @@ skip_primitive_type_autoload:
     codegen_init(&ctx, mod_name);
     ctx.module_ctx = mod_ctx;
     ctx.test_mode  = flags->test_mode;
+    ctx.optimization_level = flags->optimization_level;
     ctx.ffi        = get_global_ffi();
 
     DepCtx *dep_ctx = dep_ctx_create(my_source_path);
@@ -2004,7 +2011,8 @@ skip_primitive_type_autoload:
                                        : export_signature->type,
                                    export_signature->params,
                                    export_signature->param_count,
-                                   ent->func_ref);
+                                   ent->func_ref,
+                                   export_signature->source_ast);
                 if (ent->func_ref) {
                     const char *cur = LLVMGetValueName(ent->func_ref);
                     if (!cur || strcmp(cur, ms) != 0)
@@ -2025,7 +2033,10 @@ skip_primitive_type_autoload:
                             registry_push_func(cm, other_local_name, ms,
                                                ent->return_type ? ent->return_type : ent->type,
                                                ent->params, ent->param_count,
-                                               ent->func_ref);
+                                               ent->func_ref,
+                                               other->source_ast
+                                                   ? other->source_ast
+                                                   : ent->source_ast);
                         }
                     }
                 }

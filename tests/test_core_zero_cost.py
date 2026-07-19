@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from monad_binary import resolve_monad_binary
+from monad_binary import generated_executable, resolve_monad_binary
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +13,6 @@ MONAD = resolve_monad_binary()
 
 
 class CoreZeroCostTests(unittest.TestCase):
-    @unittest.expectedFailure
     def test_core_bool_method_specializes_without_runtime_dispatch(self):
         source = """\
 (module Main)
@@ -43,6 +42,19 @@ class CoreZeroCostTests(unittest.TestCase):
                 timeout=30,
             )
             self.assertEqual(result.returncode, 0, result.stdout)
+
+            execution = subprocess.run(
+                [str(generated_executable(out))],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=10,
+            )
+            self.assertEqual(execution.returncode, 0, execution.stdout)
+            self.assertEqual(execution.stdout.strip(), "False")
 
             ir = src.with_suffix(".ll").read_text(encoding="utf-8")
             invert = re.search(

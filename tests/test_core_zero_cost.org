@@ -1,0 +1,16 @@
+#+title: Core Zero-Cost Regression Contract
+
+* Core definitions remain the implementation
+
+Public core functions carry their source lambda through the compiled-module
+registry.  At optimization levels above zero, an eligible imported definition
+is lowered through ordinary lambda application in the caller.  This is a
+generic optimization mechanism; the compiler must not contain a semantic
+rewrite specifically for =Bool.not?= or another core method.
+
+The executable regression in [[file:test_core_zero_cost.py]] verifies both
+observable behavior and generated LLVM IR.  Run it against the current build:
+
+#+begin_src sh
+MONAD_BINARY="$PWD/build/monad" python3 tests/test_core_zero_cost.py -v
+#+end_src
