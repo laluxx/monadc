@@ -1238,6 +1238,7 @@ static RuntimeSet *set_alloc(size_t cap) {
     s->capacity     = cap;
     s->count        = 0;
     s->tombstones   = 0;
+    s->membership_predicate = NULL;
     return s;
 }
 
@@ -1295,9 +1296,20 @@ RuntimeSet *rt_set_new(void) {
     return set_alloc(SET_INITIAL_CAP);
 }
 
+RuntimeSet *rt_set_from_predicate(RuntimeValue *predicate) {
+    RuntimeSet *set = rt_set_new();
+    if (predicate && predicate->type == RT_CLOSURE)
+        set->membership_predicate = predicate;
+    return set;
+}
 
 int rt_set_contains(RuntimeSet *s, RuntimeValue *val) {
     if (!s || !val) return 0;
+    if (s->membership_predicate) {
+        RuntimeValue *args[] = {val};
+        RuntimeValue *result = rt_closure_calln(s->membership_predicate, 1, args);
+        if (rt_unbox_int(result) != 0) return 1;
+    }
     uint64_t h    = rt_hash_value(val);
     size_t   mask = s->capacity - 1;
     size_t   idx  = (size_t)(h & mask);
@@ -1364,6 +1376,7 @@ static RuntimeSet *set_remove(RuntimeSet *s, RuntimeValue *val) {
 /* Internal: shallow copy of s into a new set of the same capacity. */
 static RuntimeSet *set_copy(RuntimeSet *s) {
     RuntimeSet *copy = set_alloc(s->capacity);
+    copy->membership_predicate = s->membership_predicate;
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
         if (v && v != TOMBSTONE)
@@ -1390,7 +1403,9 @@ RuntimeSet *rt_set_disj_mut(RuntimeSet *s, RuntimeValue *val)
 
 
 int64_t rt_set_count(RuntimeSet *s) {
-    return s ? (int64_t)s->count : 0;
+    if (!s) return 0;
+    if (s->membership_predicate) return -1;
+    return (int64_t)s->count;
 }
 
 RuntimeList *rt_set_seq(RuntimeSet *s) {
@@ -1408,6 +1423,8 @@ RuntimeList *rt_set_seq(RuntimeSet *s) {
 int rt_set_equal(RuntimeSet *a, RuntimeSet *b) {
     if (!a && !b) return 1;
     if (!a || !b) return 0;
+    if (a->membership_predicate || b->membership_predicate)
+        return a == b;
     if (a->count != b->count) return 0;
     for (size_t i = 0; i < a->capacity; i++) {
         RuntimeValue *v = a->buckets[i];
@@ -2604,6 +2621,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- Set ---
     DECL0("rt_set_new",        ptr);
+    DECL("rt_set_from_predicate", ptr, ptr);
     DECL("rt_set_of",          ptr, ptr, i64);
     DECL("rt_set_from_list",   ptr, ptr);
     DECL("rt_set_from_array",  ptr, ptr);
@@ -2768,6 +2786,7 @@ GET_RUNTIME_FUNCTION(rt_list_zip)
 GET_RUNTIME_FUNCTION(rt_list_zipwith)
 
 GET_RUNTIME_FUNCTION(rt_set_new)
+GET_RUNTIME_FUNCTION(rt_set_from_predicate)
 GET_RUNTIME_FUNCTION(rt_set_of)
 GET_RUNTIME_FUNCTION(rt_set_from_list)
 GET_RUNTIME_FUNCTION(rt_set_from_array)

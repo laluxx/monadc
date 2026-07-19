@@ -149,6 +149,7 @@ typedef struct RuntimeSet {
     size_t         capacity;
     size_t         count;
     size_t         tombstones;
+    RuntimeValue  *membership_predicate;
 } RuntimeSet;
 
 
@@ -217,6 +218,7 @@ RuntimeSet   *rt_set_new(void);
 RuntimeSet   *rt_set_of(RuntimeValue **vals, size_t n);
 RuntimeSet   *rt_set_from_list(RuntimeList *list);
 RuntimeSet   *rt_set_from_array(RuntimeValue *array_rv);
+RuntimeSet   *rt_set_from_predicate(RuntimeValue *predicate);
 RuntimeSet   *rt_set_conj(RuntimeSet *s, RuntimeValue *val);
 RuntimeSet   *rt_set_disj(RuntimeSet *s, RuntimeValue *val);
 RuntimeSet   *rt_set_conj_mut(RuntimeSet *s, RuntimeValue *val);
@@ -422,6 +424,7 @@ LLVMValueRef get_rt_set_new(CodegenContext *ctx);
 LLVMValueRef get_rt_set_of(CodegenContext *ctx);
 LLVMValueRef get_rt_set_from_list(CodegenContext *ctx);
 LLVMValueRef get_rt_set_from_array(CodegenContext *ctx);
+LLVMValueRef get_rt_set_from_predicate(CodegenContext *ctx);
 LLVMValueRef get_rt_set_contains(CodegenContext *ctx);
 LLVMValueRef get_rt_set_conj(CodegenContext *ctx);
 LLVMValueRef get_rt_set_disj(CodegenContext *ctx);

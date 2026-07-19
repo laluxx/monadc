@@ -78,6 +78,8 @@ instance Eq Set
 tests
   assert-eq (member? 2 {1, 2, 3})                     True          "Data.Set membership is core-owned"
   assert-eq (member? 4 {1, 2, 3})                     False         "Data.Set membership rejects absent values"
+  assert-eq (member? 4 {x in Int | x > 0})            True          "Data.Set predicate set accepts a member"
+  assert-eq (member? -1 {x in Int | x > 0})           False         "Data.Set predicate set rejects a non-member"
   assert-eq (eq? {1 2} {2 1})                         True          "Data.Set Eq ignores insertion order"
   assert-eq (not-eq? {1 2} {1 3})                     True          "Data.Set Eq distinguishes members"
   assert-eq (singleton 1)                              {1}           "Data.Set singleton"

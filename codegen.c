@@ -16798,8 +16798,9 @@ if (ast->list.count >= 5) {
             }
         }
 
-        /* Anonymous refinement { x ∈ T | pred } used as a value —
-         * emit as a lambda: (lambda ([x :: T]) pred)              */
+        /* Anonymous set builder { x ∈ T | pred } used as a value.
+         * The predicate is the set's intensional representation: membership
+         * is executable without requiring enumeration or finite cardinality. */
         if (!rname) {
             ASTParam *params = malloc(sizeof(ASTParam));
             params[0].name      = strdup(var ? var : "x");
@@ -16816,7 +16817,13 @@ if (ast->list.count >= 5) {
             lam->column = ast->column;
             CodegenResult r = codegen_expr(ctx, lam);
             ast_free(lam);
-            return r;
+            LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+            LLVMValueRef raw_set = emit_call_1(ctx, get_rt_set_from_predicate(ctx),
+                                               ptr, r.value, "predicate_set");
+            result.value = emit_call_1(ctx, get_rt_value_set(ctx), ptr,
+                                       raw_set, "predicate_set_value");
+            result.type = type_set();
+            return result;
         }
 
         if (!isupper((unsigned char)rname[0])) {
