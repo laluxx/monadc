@@ -33,6 +33,17 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "the compiler must not turn the core finite-set declaration back into TYPE_BOOL",
         )
 
+    def test_registered_core_types_override_legacy_representation_fallbacks(self):
+        types_c = source("types.c")
+        registry_lookup = types_c.index("// Check alias registry")
+        builtin_fallback = types_c.index("// Built-in types first")
+
+        self.assertLess(
+            registry_lookup,
+            builtin_fallback,
+            "a core type registration must win over a compiler representation fallback",
+        )
+
     def test_numeric_typeclass_methods_have_no_concrete_module_copies(self):
         forbidden = ("inc", "dec", "double", "square", "cube", "abs", "signum")
         for module in ("core/prelude/Data/Int.mon", "core/prelude/Data/Float.mon"):

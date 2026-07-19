@@ -968,6 +968,21 @@ Type *type_from_name(const char *name) {
     const FiniteTypeSetEntry *finite = finite_type_set_lookup(name);
     if (finite) return type_finite_set(finite->name, finite->member_count);
 
+    // Check alias registry before legacy representation fallbacks.  Public
+    // core declarations must own their names; built-ins below are bootstrap
+    // representations used only when core has not registered an override.
+    for (TypeAlias *a = g_aliases; a; a = a->next) {
+        if (strcmp(a->alias_name, name) == 0) {
+            static int alias_resolution_depth = 0;
+            if (alias_resolution_depth >= 32) return NULL;
+            alias_resolution_depth++;
+            Type *t = type_from_name(a->target_name);
+            alias_resolution_depth--;
+            if (t) return t;
+            break;
+        }
+    }
+
     // Built-in types first
     if (strcmp(name, "Int")     == 0) return type_int();
     if (strcmp(name, "Float")   == 0) return type_float();
@@ -1008,23 +1023,6 @@ Type *type_from_name(const char *name) {
         int width = 0; bool is_signed = false;
         if (parse_int_type(name, 0, 0, &width, &is_signed))
             return type_int_arbitrary(width, is_signed);
-    }
-
-    // Check alias registry (supports chained aliases: Code -> List -> ...)
-    int depth = 0;
-    const char *current = name;
-    while (depth++ < 32) {  // prevent infinite loops
-        for (TypeAlias *a = g_aliases; a; a = a->next) {
-            if (strcmp(a->alias_name, current) == 0) {
-                // Try to resolve the target as a builtin first
-                Type *t = type_from_name(a->target_name);
-                if (t) return t;
-                current = a->target_name;
-                goto next_iteration;
-            }
-        }
-        break;  // not found in aliases
-        next_iteration:;
     }
 
     return NULL;  // unknown type
