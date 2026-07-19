@@ -9,7 +9,9 @@ generic optimization mechanism; the compiler must not contain a semantic
 rewrite specifically for =Bool.not?= or another core method.
 
 The executable regression in [[file:test_core_zero_cost.py]] verifies both
-observable behavior and generated LLVM IR.  Run it against the current build:
+observable behavior and generated LLVM IR.  =Ordering= is defined by core as
+the finite set ={LT, EQ, GT}= and therefore lowers to an =i2= tag rather than
+an allocated ADT pointer.  Run the contracts against the current build:
 
 #+begin_src sh
 MONAD_BINARY="$PWD/build/monad" python3 tests/test_core_zero_cost.py -v

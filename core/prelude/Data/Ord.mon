@@ -23,7 +23,7 @@ module Data.Ord
    comparing compareDown]
 
 
-data Ordering = LT | EQ | GT
+type Ordering {LT EQ GT}
 
 
 class Ord a where
