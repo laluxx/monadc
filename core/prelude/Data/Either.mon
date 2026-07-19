@@ -13,6 +13,7 @@
 ;;; Code:
 
 import Data.Bool
+import Data.Functor
 
 module Data.Either
   [Either Left Right
@@ -23,6 +24,12 @@ module Data.Either
 
 
 data Either e a = Left e | Right a
+
+
+instance Bifunctor Either
+  bimap f g value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right (g x)))
+  first-map f value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right x))
+  second-map g value -> (match value with | (Left e) -> (Left e) | (Right x) -> (Right (g x)))
 
 
 define either :: (e -> c) -> (a -> c) -> Either e a -> c
@@ -46,11 +53,11 @@ define fromRight :: a -> Either e a -> a
 
 
 define mapLeft :: (e -> f) -> Either e a -> Either f a
-  f value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right x))
+  f value -> first-map f value
 
 
 define mapRight :: (a -> b) -> Either e a -> Either e b
-  f value -> (match value with | (Left e) -> (Left e) | (Right x) -> (Right (f x)))
+  f value -> second-map f value
 
 
 define either-map :: (a -> b) -> Either e a -> Either e b
@@ -62,7 +69,7 @@ define either-bind :: Either e a -> (a -> Either e b) -> Either e b
 
 
 define either-bimap :: (e -> f) -> (a -> b) -> Either e a -> Either f b
-  f g value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right (g x)))
+  f g value -> bimap f g value
 
 
 define either-test-negate :: Int -> Int
