@@ -62,6 +62,11 @@ This file is the canonical work queue for humans and coding agents.
   - [X] Use source order for deterministic constructor tags and dependent
         exhaustiveness/redundancy checking over finite pattern products.
   - [X] Add parser, inference, diagnostics, core, runtime, and Windows coverage.
+  - [X] Allow overlapping singleton membership. A value such as =Red= may
+        inhabit multiple finite sets and is resolved from the expected type;
+        declaration order must not assign it one global nominal owner.
+  - [ ] Add explicit subset coercions between finite sets, including ordinal
+        remapping when the two source orders differ.
 
   - [X] {True, False} etc. desugars to an anonymous sum of singleton types.
         Bool becomes DEFINED as {True, False}, not a separate nominal type

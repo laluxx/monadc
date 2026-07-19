@@ -179,7 +179,10 @@ bool finite_type_set_register_ast(const char *name, struct AST **members,
                                   size_t member_count);
 const FiniteTypeSetEntry *finite_type_set_lookup(const char *name);
 const FiniteTypeSetEntry *finite_type_set_lookup_member(const char *member,
-                                                        size_t *ordinal);
+                                                         size_t *ordinal);
+size_t finite_type_set_member_type_count(const char *member);
+bool finite_type_set_contains_symbol(const char *name, const char *member,
+                                     size_t *ordinal);
 const FiniteTypeSetEntry *finite_type_set_lookup_literal(const struct AST *member,
                                                          size_t *ordinal);
 bool finite_type_set_contains_literal(const char *name, const struct AST *member,

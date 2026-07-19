@@ -322,11 +322,6 @@ static bool finite_type_set_register_members(const char *name,
                     return false;
             return true;
         }
-        for (size_t i = 0; i < existing->member_count; i++)
-            for (size_t j = 0; j < member_count; j++)
-                if (members[j].kind == FINITE_MEMBER_SYMBOL &&
-                    finite_members_equal(&existing->members[i], &members[j]))
-                    return false;
     }
 
     FiniteTypeSetEntry *e = calloc(1, sizeof(*e));
@@ -384,6 +379,33 @@ const FiniteTypeSetEntry *finite_type_set_lookup_member(const char *member,
                 return e;
             }
     return NULL;
+}
+
+size_t finite_type_set_member_type_count(const char *member) {
+    if (!member) return 0;
+    size_t count = 0;
+    for (FiniteTypeSetEntry *e = g_finite_type_sets; e; e = e->next)
+        for (size_t i = 0; i < e->member_count; i++)
+            if (e->members[i].kind == FINITE_MEMBER_SYMBOL &&
+                strcmp(e->members[i].spelling, member) == 0) {
+                count++;
+                break;
+            }
+    return count;
+}
+
+bool finite_type_set_contains_symbol(const char *name, const char *member,
+                                     size_t *ordinal) {
+    const FiniteTypeSetEntry *finite = finite_type_set_lookup(name);
+    if (!finite || !member) return false;
+    for (size_t i = 0; i < finite->member_count; i++) {
+        if (finite->members[i].kind == FINITE_MEMBER_SYMBOL &&
+            strcmp(finite->members[i].spelling, member) == 0) {
+            if (ordinal) *ordinal = i;
+            return true;
+        }
+    }
+    return false;
 }
 
 const FiniteTypeSetEntry *finite_type_set_lookup_literal(const AST *member,

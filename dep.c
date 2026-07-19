@@ -2807,6 +2807,27 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     check_default:
     // ── Default: infer and compare ────────────────────────────────
     default: {
+        bool source_is_symbol_member = t->source_ast &&
+            t->source_ast->type == AST_SYMBOL &&
+            finite_type_set_member_type_count(t->source_ast->symbol) > 0;
+        if (source_is_symbol_member && expected_type->kind == VAL_EMBED &&
+            expected_type->embed_type &&
+            expected_type->embed_type->kind == TYPE_FINITE_SET) {
+            if (finite_type_set_contains_symbol(
+                    expected_type->embed_type->finite_name,
+                    t->source_ast->symbol, NULL)) {
+                if (t->source_ast->inferred_type)
+                    type_free(t->source_ast->inferred_type);
+                t->source_ast->inferred_type =
+                    type_clone(expected_type->embed_type);
+                return true;
+            }
+            dep_error_set(ctx, t->line, t->col,
+                          ": singleton '%s' is not an inhabitant of finite type '%s'",
+                          t->source_ast->symbol,
+                          expected_type->embed_type->finite_name);
+            return false;
+        }
         bool source_is_literal = t->source_ast &&
             (t->source_ast->type == AST_NUMBER ||
              t->source_ast->type == AST_STRING ||

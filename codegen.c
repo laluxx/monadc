@@ -6076,8 +6076,16 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             return result;
         }
         size_t finite_ordinal = 0;
-        const FiniteTypeSetEntry *finite =
-            finite_type_set_lookup_member(ast->symbol, &finite_ordinal);
+        const FiniteTypeSetEntry *finite = NULL;
+        if (ast->inferred_type && ast->inferred_type->kind == TYPE_FINITE_SET) {
+            finite = finite_type_set_lookup(ast->inferred_type->finite_name);
+            if (!finite_type_set_contains_symbol(ast->inferred_type->finite_name,
+                                                 ast->symbol,
+                                                 &finite_ordinal))
+                finite = NULL;
+        }
+        if (!finite)
+            finite = finite_type_set_lookup_member(ast->symbol, &finite_ordinal);
         if (finite) {
             result.type = type_finite_set(finite->name, finite->member_count);
             LLVMTypeRef repr = type_to_llvm(ctx, result.type);

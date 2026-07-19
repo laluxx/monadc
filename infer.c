@@ -1329,6 +1329,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         break;
 
     case AST_SYMBOL: {
+        if (finite_type_set_member_type_count(ast->symbol) > 1) {
+            /* Overlapping singleton sets are resolved by the expected type
+             * at the call/check site, not by global declaration order. */
+            result = infer_fresh(ctx);
+            break;
+        }
         const FiniteTypeSetEntry *finite =
             finite_type_set_lookup_member(ast->symbol, NULL);
         if (finite) {
@@ -2722,6 +2728,20 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                                 READER_ERROR(arg->line, arg->column,
                                              "literal is not an inhabitant of finite type '%s'",
                                              param_t->finite_name);
+                            }
+                            arg->inferred_type = type_clone(param_t);
+                        }
+
+                        if (param_t->kind == TYPE_FINITE_SET &&
+                            arg->type == AST_SYMBOL &&
+                            finite_type_set_member_type_count(arg->symbol) > 0) {
+                            size_t ordinal = 0;
+                            if (!finite_type_set_contains_symbol(param_t->finite_name,
+                                                                 arg->symbol,
+                                                                 &ordinal)) {
+                                READER_ERROR(arg->line, arg->column,
+                                             "singleton '%s' is not an inhabitant of finite type '%s'",
+                                             arg->symbol, param_t->finite_name);
                             }
                             arg->inferred_type = type_clone(param_t);
                         }

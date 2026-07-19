@@ -1,0 +1,29 @@
+;; TEST-ID: tests.codegen.type.dep.finite-type-set.overlapping-members
+;; TEST-TIER: regression
+;; TEST-STATUS: active
+;; TEST-SECTION: codegen
+;; TEST-CATEGORY: dependent-types
+;; TEST-SUBSET: finite-type-sets
+;; TEST-QUALITY: language-contract-regression
+;; TEST-CONTEXT: TODO.org Set-literal types
+;; TEST-PURPOSE: A singleton can inhabit multiple finite set types and is resolved by expected type.
+;; TEST-EXPECT: compile, run
+;; TEST-STDOUT-FILE: finite-type-set-overlapping-members.stdout
+;; TEST-CODEGEN-PATH: types.dep.finite-type-set.overlapping-members
+;; TEST-MENU: types/dep/finite-type-set/atom.type.dep.finite-type-set.overlapping-members
+;; TEST-MENU-PATH: codegen/types/dep/finite-type-set/atom.type.dep.finite-type-set.overlapping-members
+;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.overlapping-members
+;; TEST-CLI-TARGET: codegen types dep finite-type-sets
+
+(module Main)
+(type Primary {Red Green})
+(type Traffic {Green Yellow Red})
+(define (primary-code [value : Primary] -> Int)
+  Red   -> 1
+  Green -> 2)
+(define (traffic-code [value : Traffic] -> Int)
+  Green  -> 3
+  Yellow -> 4
+  Red    -> 5)
+(show (primary-code Red))
+(show (traffic-code Red))
