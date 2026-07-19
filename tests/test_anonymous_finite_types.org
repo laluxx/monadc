@@ -1,0 +1,10 @@
+#+title: Anonymous Finite Types
+
+* Contract
+
+A finite set expression is valid anywhere a function signature accepts a type:
+=Bool -> {Yes No}= and ={Yes, No} -> {Yes No}= use the same structural type.
+Commas are optional layout punctuation. Symbolic finite members lower directly
+to the minimum-width ordinal tag; no runtime set allocation is involved.
+
+The executable and IR contract lives in [[file:test_anonymous_finite_types.py]].

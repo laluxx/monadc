@@ -2751,6 +2751,8 @@ static void type_buf_append(char *buf, size_t size, const char *frag) {
         memcpy(buf + cur_len, frag, frag_len + 1);
 }
 
+static char *parse_anonymous_finite_type(Parser *p);
+
 static ASTParam parse_one_param(Parser *p) {
     ASTParam param = {NULL, NULL, false};
 
@@ -2771,6 +2773,11 @@ static ASTParam parse_one_param(Parser *p) {
 
         if (is_colon || is_arrow) {
             p->current = lexer_next_token(p->lexer);
+
+            if (is_colon && p->current.type == TOK_LBRACE) {
+                param.type_name = parse_anonymous_finite_type(p);
+                return param;
+            }
 
             char type_buf[512] = {0};
 
@@ -2828,6 +2835,50 @@ static ASTParam parse_one_param(Parser *p) {
 
 static int g_anon_param_counter = 0;
 static int g_typevar_counter    = 0;
+
+static char *parse_anonymous_finite_type(Parser *p) {
+    const char **members = NULL;
+    size_t member_count = 0;
+    size_t member_cap = 0;
+    char type_buf[512] = "{";
+
+    p->current = lexer_next_token(p->lexer); /* skip '{' */
+    while (p->current.type != TOK_RBRACE && p->current.type != TOK_EOF) {
+        if (p->current.type == TOK_SYMBOL && p->current.value &&
+            strcmp(p->current.value, ",") != 0) {
+            if (member_count == member_cap) {
+                member_cap = member_cap ? member_cap * 2 : 4;
+                members = realloc(members, member_cap * sizeof(*members));
+            }
+            members[member_count++] = my_strdup(p->current.value);
+            if (member_count > 1)
+                strncat(type_buf, " ",
+                        sizeof(type_buf) - strlen(type_buf) - 1);
+            strncat(type_buf, p->current.value,
+                    sizeof(type_buf) - strlen(type_buf) - 1);
+        } else if (!(p->current.type == TOK_SYMBOL && p->current.value &&
+                     strcmp(p->current.value, ",") == 0)) {
+            READER_ERROR(p->current.line, p->current.column,
+                         "anonymous finite type members must be symbolic singletons");
+        }
+        p->current = lexer_next_token(p->lexer);
+    }
+
+    if (p->current.type != TOK_RBRACE || member_count == 0) {
+        READER_ERROR(p->current.line, p->current.column,
+                     "anonymous finite type must contain at least one member");
+    }
+    p->current = lexer_next_token(p->lexer); /* skip '}' */
+    strncat(type_buf, "}", sizeof(type_buf) - strlen(type_buf) - 1);
+
+    if (!finite_type_set_register(type_buf, members, member_count)) {
+        READER_ERROR(p->current.line, p->current.column,
+                     "anonymous finite type contains duplicate members");
+    }
+    for (size_t i = 0; i < member_count; i++) free((char *)members[i]);
+    free(members);
+    return my_strdup(type_buf);
+}
 
 static void parse_fn_signature(Parser *p, ASTParam **out_params,
                                int *out_count, char **out_return_type) {
@@ -3018,7 +3069,19 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             // Rest param must be last — skip to closing paren
             break;
         }
-        if (p->current.type == TOK_LBRACKET) {
+        if (p->current.type == TOK_LBRACE) {
+            if (count >= capacity) {
+                capacity = capacity == 0 ? 4 : capacity * 2;
+                params = realloc(params, sizeof(ASTParam) * capacity);
+            }
+            char gen_name[32];
+            snprintf(gen_name, sizeof(gen_name), "__p_%d", count);
+            params[count].name = my_strdup(gen_name);
+            params[count].type_name = parse_anonymous_finite_type(p);
+            params[count].is_rest = false;
+            params[count].is_anon = true;
+            count++;
+        } else if (p->current.type == TOK_LBRACKET) {
             /* Typed or annotated parameter: [name] or [name :: Type] */
             p->current = lexer_next_token(p->lexer);
             ASTParam param = parse_one_param(p);
@@ -3289,6 +3352,13 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     free(ret_type);
                     ret_type = my_strdup(type_buf);
                 }
+            } else if (p->current.type == TOK_LBRACE) {
+                /* Anonymous finite type in a signature: {Red, Amber, Green}.
+                 * Its canonical spelling is also its structural registry key,
+                 * so equal set expressions share one type without inventing a
+                 * nominal compiler-owned declaration. */
+                free(ret_type);
+                ret_type = parse_anonymous_finite_type(p);
             } else if (p->current.type == TOK_LBRACKET) {
                 /* Type is [a] or [Int] etc. — peek past the [...] to check
                  * if another '->' follows, determining param vs return type. */

@@ -166,6 +166,16 @@ add_test(
   NAME how_to_examples
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_how_to_examples.py
 )
+add_test(
+  NAME core_zero_cost_contract
+  COMMAND ${CMAKE_COMMAND} -E env MONAD_BINARY=$<TARGET_FILE:monad>
+    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_core_zero_cost.py
+)
+add_test(
+  NAME anonymous_finite_type_contract
+  COMMAND ${CMAKE_COMMAND} -E env MONAD_BINARY=$<TARGET_FILE:monad>
+    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_anonymous_finite_types.py
+)
 set(MONADC_CHECKOUT_LOCAL_TESTS
   test_relative_monad_binary_env_resolves_from_checkout_root
   test_windows_drive_monad_binary_env_is_already_absolute
@@ -176,6 +186,7 @@ set(MONADC_CHECKOUT_LOCAL_TESTS
   test_checkout_compiler_can_compile_program_without_install_env
   test_compiler_returns_failure_when_linker_fails
   test_package_build_finds_checkout_core_from_project_directory
+  test_compiler_bootstraps_a_crlf_core_checkout
 )
 
 foreach(checkout_local_test IN LISTS MONADC_CHECKOUT_LOCAL_TESTS)
