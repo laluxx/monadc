@@ -2817,8 +2817,9 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
                     expected_type->embed_type->finite_name,
                     t->source_ast->symbol, NULL)) {
                 Type *resolved = type_clone(expected_type->embed_type);
-                if (t->source_ast->inferred_type)
-                    type_free(t->source_ast->inferred_type);
+                /* Inferred types may be shared with HM substitutions and
+                 * environment schemes. The AST does not have unique ownership
+                 * here, so replacing the annotation must not free the old one. */
                 t->source_ast->inferred_type = resolved;
                 return true;
             }
