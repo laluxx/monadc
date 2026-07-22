@@ -1873,6 +1873,18 @@ static char *wisp_expand_expr_snippet(ArityTable *at, const char *src) {
     if (error_message)
         return error_message;
 
+    /* A quote owns the complete grouped datum following it.  Feeding this
+     * through the ordinary arity expander can classify the datum as a call
+     * and, in a value binding, erase it entirely (`define xs '(1 2 3)`).
+     * Preserve the reader-native representation; the reader is responsible
+     * for constructing the quote AST and suppressing evaluation semantics. */
+    const char *quote = src;
+    while (*quote == ' ' || *quote == '\t')
+        quote++;
+    if (quote[0] == '\'' &&
+        (quote[1] == '(' || quote[1] == '[' || quote[1] == '{'))
+        return strdup(quote);
+
     WTokenStream ts = build_token_stream(src, at);
     SB sb;
     sb_init(&sb);
@@ -4451,6 +4463,19 @@ static bool wisp_token_can_call_group(const char *text) {
     }
 
     return true;
+}
+
+static bool wisp_group_contains_quote_form(const char *text) {
+    if (!text)
+        return false;
+
+    for (const char *p = text; p[0] && p[1]; p++) {
+        if (p[0] == '\'' &&
+            (p[1] == '(' || p[1] == '[' || p[1] == '{') &&
+            p[2] != '\'')
+            return true;
+    }
+    return false;
 }
 
 static bool wisp_token_is_infix_name(const char *text) {
@@ -10634,7 +10659,8 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                 sb_puts(&prefix_sb, text);
             }
         } else {
-            if (is_grouped && text[0] == '(') {
+            if (is_grouped && text[0] == '(' &&
+                !wisp_group_contains_quote_form(text)) {
                 char *rewritten = wisp_rewrite_grouped_infix(t, text);
                 sb_puts(&prefix_sb, rewritten);
                 free(rewritten);

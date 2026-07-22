@@ -692,6 +692,13 @@
   =./monad test core/prelude/Data/String.mon= and
   =./monad test tests/wisp_data_string_import.mon=.
 
+[FIX id:fix.core-libs.string-method-ownership-2026-07-22 date:2026-07-22 by:codex]
+  Active String behavior is receiver-owned in =core/prelude/Data/String.mon=.
+  The public methods are =concat=, =startsWith?=, =endsWith?=, =includes?=,
+  =copy=, and =append=. The former =string-*= wrappers were removed; low-level
+  storage and intrinsics remain compiler machinery, while naming, argument
+  order, and composition policy live in the core.
+
 * Assert.mon — Assertion Stubs (MOVED TO old-core)
 :PROPERTIES:
 :ID: monadc.context.core-libs.assert

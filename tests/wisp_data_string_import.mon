@@ -3,4 +3,4 @@
 import Data.String
 
 tests
-  assert-eq (show (concat "ab" "cd")) "abcd" "Data.String import exposes concat"
+  assert-eq (show ("ab".concat "cd")) "abcd" "Data.String import exposes concat"

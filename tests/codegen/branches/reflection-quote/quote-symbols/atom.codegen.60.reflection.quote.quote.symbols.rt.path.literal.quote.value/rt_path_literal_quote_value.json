@@ -9,6 +9,11 @@
       {
         "type": "symbol",
         "name": "PathLiteralQuoteValue"
+      },
+      {
+        "type": "array",
+        "is_heap": false,
+        "elements": []
       }
     ]
   },

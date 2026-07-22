@@ -58,6 +58,18 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
                 self.assertRegex(text, rf"(?m)^method\s+{re.escape(name)}\s+::")
                 self.assertNotRegex(text, rf"(?m)^define\s+{re.escape(name)}\s+::")
 
+    def test_string_behavior_is_owned_by_core_methods(self):
+        string_core = source("core/prelude/Data/String.mon")
+        for name in ("concat", "startsWith?", "endsWith?", "includes?", "copy", "append"):
+            self.assertRegex(string_core, rf"(?m)^method\s+{re.escape(name)}\s+::")
+            self.assertNotRegex(string_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
+        for obsolete in (
+            "string-prefix?", "string-suffix?", "string-contains?",
+            "string-copy", "string-append",
+        ):
+            self.assertNotIn(obsolete, string_core)
+
     def test_registered_core_types_override_legacy_representation_fallbacks(self):
         types_c = source("types.c")
         registry_lookup = types_c.index("// Check alias registry")

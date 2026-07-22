@@ -62,7 +62,7 @@ method curry :: ((a, b) -> c) -> a -> b -> c
 
 method uncurry :: (a -> b -> c) -> (a, b) -> c
   :doc "Convert a curried function into a function on a pair."
-  f pair -> f (pair 0) (pair 1)
+  f pair -> (f (pair 0) (pair 1))
 
 
 method bimap :: (a -> c) -> (b -> d) -> (a, b) -> (c, d)

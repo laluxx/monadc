@@ -28,9 +28,9 @@ layout Color
       r g b -> (Color r g b)
 
     method eql? :: Self -> Color -> Bool
-      s o -> and s.r = o.r
-                 s.g = o.g
-                 s.b = o.b
+      s o -> (and (= s.r o.r)
+                  (and (= s.g o.g)
+                       (= s.b o.b)))
 
 define red   (Color 255 0 0)
 define black (Color 0   0 0)
