@@ -7,6 +7,8 @@
 ;;; Code:
 
 import Data.Bool
+import Data.Maybe
+import Sequence
 
 module Data.Map.Class
   [Lookup Key Value lookup member? keys values
@@ -21,7 +23,10 @@ class Lookup m where
   keys    :: m -> [Key m]
   values  :: m -> [Value m]
 
-  ;; Read-only map/dictionary pattern.
+  member? key table -> just? (lookup key table)
+
+  ;; minimal complete definition: lookup, keys, values
+  ;; law: member? key table = just? (lookup key table)
 
 
 class Lookup m => Associative m where
@@ -34,6 +39,25 @@ class Lookup m => Associative m where
   unionWith        :: (Value m -> Value m -> Value m) -> m -> m -> m
   intersectionWith :: (Value m -> Value m -> Value m) -> m -> m -> m
   difference       :: m -> m -> m
+
+  adjust f key table ->
+    maybe table
+          (lambda (value) (insert key (f value) table))
+          (lookup key table)
+
+  alter f key table ->
+    maybe (delete key table)
+          (lambda (value) (insert key value table))
+          (f (lookup key table))
+
+  difference left right ->
+    coll-foldl (lambda (table key) (delete key table)) left (keys right)
+
+  ;; minimal complete definition: insert and delete, plus unionWith and
+  ;; intersectionWith when an instance can combine values more efficiently.
+  ;; law: lookup key (insert key value table) = Just value
+  ;; law: lookup key (delete key table) = Nothing
+  ;; law: member? key (difference left right) is false when key is in right
 
 
 tests [2/2]

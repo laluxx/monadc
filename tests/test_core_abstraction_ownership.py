@@ -96,6 +96,30 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         ):
             self.assertNotIn(obsolete, list_core)
 
+        for name in ("caar", "cadr", "cdar", "cddr", "caddr", "cdddr"):
+            self.assertRegex(list_core, rf"(?m)^method\s+{name}\s+::")
+            self.assertNotRegex(list_core, rf"(?m)^define\s+{name}\s+::")
+
+    def test_char_methods_are_typed_by_the_char_module(self):
+        char_core = source("core/prelude/Data/Char.mon")
+        predicates = re.findall(
+            r"(?m)^method\s+([^\s]+\?)\s+::\s+([^\n]+)$",
+            char_core,
+        )
+
+        self.assertGreater(len(predicates), 25)
+        for name, signature in predicates:
+            self.assertEqual(signature, "Self -> Bool", name)
+
+        self.assertRegex(char_core, r"(?m)^method\s+ord\s+::\s+Self -> Int$")
+        self.assertRegex(char_core, r"(?m)^method\s+chr\s+::\s+Int -> Char$")
+        for name in ("upcase", "downcase", "toggle-case"):
+            self.assertRegex(char_core, rf"(?m)^method\s+{name}\s+::\s+Self -> Char$")
+        for name in ("digit->int", "hex-digit->int", "base36-digit->int"):
+            self.assertRegex(char_core, rf"(?m)^method\s+{name}\s+::\s+Self -> Int$")
+        for name in ("int->digit", "int->hex-digit", "int->base36-digit"):
+            self.assertRegex(char_core, rf"(?m)^method\s+{name}\s+::\s+Int -> Char$")
+
     def test_registered_core_types_override_legacy_representation_fallbacks(self):
         types_c = source("types.c")
         registry_lookup = types_c.index("// Check alias registry")
@@ -189,6 +213,20 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertRegex(data_set, r"(?m)^instance Membership Set$")
         self.assertIn("(member? x s) => __rt_contains? s x", data_set)
         self.assertNotIn('env_insert_builtin(ctx->env, "contains?"', codegen)
+
+    def test_map_class_owns_lawful_derived_operations(self):
+        map_class = source("core/prelude/Data/Map/Class.mon")
+
+        self.assertIn("import Data.Maybe", map_class)
+        self.assertIn("import Sequence", map_class)
+        for method in ("member?", "adjust", "alter", "difference"):
+            self.assertRegex(
+                map_class,
+                rf"(?m)^\s{{2}}{method}[^\n]* ->",
+                f"Data.Map.Class must provide the derived {method} method",
+            )
+        self.assertIn("minimal complete definition: lookup, keys, values", map_class)
+        self.assertIn("minimal complete definition: insert and delete", map_class)
 
     def test_string_queries_are_composed_from_core_abstractions(self):
         data_string = source("core/prelude/Data/String.mon")

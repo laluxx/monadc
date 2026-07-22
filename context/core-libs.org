@@ -1485,3 +1485,14 @@
   example to abort or reference a generated =__jret_0=. Multiple indented
   expressions are sequenced with =begin=. The README how-to compilation and
   requested-output link tests cover the regression on the CMake-built compiler.
+
+[FIX id:fix.core-libs.char-list-map-ownership-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Char.mon,core/prelude/Data/List.mon,core/prelude/Data/Map/Class.mon conf:high]
+  Core type modules no longer expose representation-shaped APIs where the
+  semantic type is known. Character predicates receive =Self=, character
+  transformations return =Char=, and numeric conversions state their actual
+  =Char=/=Int= boundary. Composite List accessors are methods owned by
+  =Data.List=. =Lookup= derives membership from =lookup=, while =Associative=
+  derives =adjust=, =alter=, and =difference= from its smaller lawful basis.
+  The Map classes now document minimal complete definitions and lookup/update
+  laws so user-defined map structures need not duplicate generic algorithms.
+  Ownership regressions enforce these signatures and defaults.

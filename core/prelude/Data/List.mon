@@ -11,31 +11,33 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.List
   [caar cadr cdar cddr caddr cdddr]
 
 
-define caar :: [[a]] -> a
+method caar :: [[a]] -> a
   xs -> head (head xs)
 
 
-define cadr :: [a] -> a
+method cadr :: [a] -> a
   xs -> head (tail xs)
 
 
-define cdar :: [[a]] -> [a]
+method cdar :: [[a]] -> [a]
   xs -> tail (head xs)
 
 
-define cddr :: [a] -> [a]
+method cddr :: [a] -> [a]
   xs -> tail (tail xs)
 
 
-define caddr :: [a] -> a
+method caddr :: [a] -> a
   xs -> head (tail (tail xs))
 
 
-define cdddr :: [a] -> [a]
+method cdddr :: [a] -> [a]
   xs -> tail (tail (tail xs))
 
 

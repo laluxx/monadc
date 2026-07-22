@@ -114,57 +114,57 @@ define [delta :: Int] 0x61 - 0x41
 ;; Distance between lowercase and uppercase ASCII letters.
 
 
-method ascii? :: Int -> Bool
+method ascii? :: Self -> Bool
   c | >= 0x00 and <= 0x7f -> True
     | otherwise           -> False
   :doc "Return True if C is in the ASCII range 0x00..0x7f."
 
 
-method non-ascii? :: Int -> Bool
+method non-ascii? :: Self -> Bool
   c | ascii?    -> False
     | otherwise -> True
   :doc "Return True if C is outside the ASCII range."
 
 
-method lower? :: Int -> Bool
+method lower? :: Self -> Bool
   c | >= 0x61 and <= 0x7a -> True
     | otherwise           -> False
   :doc "Return True if C is an ASCII lowercase letter."
 
 
-method upper? :: Int -> Bool
+method upper? :: Self -> Bool
   c | >= 0x41 and <= 0x5a -> True
     | otherwise         -> False
   :doc "Return True if C is an ASCII uppercase letter."
 
 
-method alpha? :: Int -> Bool
+method alpha? :: Self -> Bool
   c | lower?    -> True
     | upper?    -> True
     | otherwise -> False
   :doc "Return True if C is an ASCII letter."
 
 
-method digit? :: Int -> Bool
+method digit? :: Self -> Bool
   c | >= 0x30 and <= 0x39 -> True
     | otherwise         -> False
   :doc "Return True if C is an ASCII decimal digit."
 
 
-method decimal? :: Int -> Bool
+method decimal? :: Self -> Bool
   c | digit?    -> True
     | otherwise -> False
   :doc "Return True if C is an ASCII decimal digit."
 
 
-method alnum? :: Int -> Bool
+method alnum? :: Self -> Bool
   c | alpha?    -> True
     | digit?    -> True
     | otherwise -> False
   :doc "Return True if C is an ASCII letter or digit."
 
 
-method space? :: Int -> Bool
+method space? :: Self -> Bool
   c | = 0x20     -> True
     | = 0x09     -> True
     | = 0x0a     -> True
@@ -175,52 +175,52 @@ method space? :: Int -> Bool
   :doc "Return True if C is ASCII whitespace."
 
 
-method whitespace? :: Int -> Bool
+method whitespace? :: Self -> Bool
   c | space?    -> True
     | otherwise -> False
   :doc "Return True if C is ASCII whitespace."
 
 
-method blank? :: Int -> Bool
+method blank? :: Self -> Bool
   c | = 0x20      -> True
     | = 0x09     -> True
     | otherwise  -> False
   :doc "Return True if C is a horizontal ASCII blank: space or tab."
 
 
-method newline? :: Int -> Bool
+method newline? :: Self -> Bool
   c | = 0x0a     -> True
     | otherwise  -> False
   :doc "Return True if C is ASCII line feed."
 
 
-method linebreak? :: Int -> Bool
+method linebreak? :: Self -> Bool
   c | = 0x0a     -> True
     | = 0x0d     -> True
     | otherwise  -> False
   :doc "Return True if C is an ASCII line break character."
 
 
-method control? :: Int -> Bool
+method control? :: Self -> Bool
   c | < 0x20      -> True
     | = 0x7f   -> True
     | otherwise  -> False
   :doc "Return True if C is an ASCII control character."
 
 
-method printable? :: Int -> Bool
+method printable? :: Self -> Bool
   c | >= 0x20 and < 0x7f -> True
     | otherwise           -> False
   :doc "Return True if C is printable ASCII, including space."
 
 
-method graph? :: Int -> Bool
+method graph? :: Self -> Bool
   c | > 0x20 and < 0x7f -> True
     | otherwise          -> False
   :doc "Return True if C is printable ASCII excluding space."
 
 
-method punct? :: Int -> Bool
+method punct? :: Self -> Bool
   c | >= 0x21 and <= 0x2f -> True
     | >= 0x3a and <= 0x40 -> True
     | >= 0x5b and <= 0x60 -> True
@@ -229,7 +229,7 @@ method punct? :: Int -> Bool
   :doc "Return True if C is ASCII punctuation."
 
 
-method word? :: Int -> Bool
+method word? :: Self -> Bool
   c | alnum?    -> True
     | = 0x5f  -> True
     | otherwise -> False
@@ -237,7 +237,7 @@ method word? :: Int -> Bool
 
 
 :total True
-method hex? :: Int -> Bool
+method hex? :: Self -> Bool
   c | digit?            -> True
     | >= 0x61 and <= 0x66 -> True
     | >= 0x41 and <= 0x46 -> True
@@ -245,20 +245,20 @@ method hex? :: Int -> Bool
   :doc "Return True if C is an ASCII hexadecimal digit."
 
 
-method oct? :: Int -> Bool
+method oct? :: Self -> Bool
   c | >= 0x30 and <= 0x37 -> True
     | otherwise         -> False
   :doc "Return True if C is an ASCII octal digit."
 
 
-method binary? :: Int -> Bool
+method binary? :: Self -> Bool
   c | = 0x30      -> True
     | = 0x31      -> True
     | otherwise -> False
   :doc "Return True if C is an ASCII binary digit."
 
 
-method base36? :: Int -> Bool
+method base36? :: Self -> Bool
   c | digit?      -> True
     | lower?      -> True
     | upper?      -> True
@@ -266,86 +266,86 @@ method base36? :: Int -> Bool
   :doc "Return True if C is an ASCII base36 digit: 0-9, A-Z, or a-z."
 
 
-method quote? :: Int -> Bool
+method quote? :: Self -> Bool
   c | = 0x22     -> True
     | otherwise  -> False
   :doc "Return True if C is a double quote."
 
 
-method apostrophe? :: Int -> Bool
+method apostrophe? :: Self -> Bool
   c | = 0x27     -> True
     | otherwise  -> False
   :doc "Return True if C is a single quote."
 
 
-method backslash? :: Int -> Bool
+method backslash? :: Self -> Bool
   c | = 0x5c     -> True
     | otherwise  -> False
   :doc "Return True if C is a backslash."
 
 
-method underscore? :: Int -> Bool
+method underscore? :: Self -> Bool
   c | = 0x5f     -> True
     | otherwise  -> False
   :doc "Return True if C is an underscore."
 
 
-method dash? :: Int -> Bool
+method dash? :: Self -> Bool
   c | = 0x2d     -> True
     | otherwise  -> False
   :doc "Return True if C is an ASCII dash/minus character."
 
 
-method paren-open? :: Int -> Bool
+method paren-open? :: Self -> Bool
   c | = 0x28     -> True
     | otherwise  -> False
   :doc "Return True if C is an open parenthesis."
 
 
-method paren-close? :: Int -> Bool
+method paren-close? :: Self -> Bool
   c | = 0x29     -> True
     | otherwise  -> False
   :doc "Return True if C is a close parenthesis."
 
 
-method bracket-open? :: Int -> Bool
+method bracket-open? :: Self -> Bool
   c | = 0x5b     -> True
     | otherwise  -> False
   :doc "Return True if C is an open bracket."
 
 
-method bracket-close? :: Int -> Bool
+method bracket-close? :: Self -> Bool
   c | = 0x5d     -> True
     | otherwise  -> False
   :doc "Return True if C is a close bracket."
 
 
-method brace-open? :: Int -> Bool
+method brace-open? :: Self -> Bool
   c | = 0x7b     -> True
     | otherwise  -> False
   :doc "Return True if C is an open brace."
 
-method brace-close? :: Int -> Bool
+method brace-close? :: Self -> Bool
   c | = 0x7d     -> True
     | otherwise  -> False
   :doc "Return True if C is a close brace."
 
 
-method upcase :: Int -> Int
+method upcase :: Self -> Char
   c | c < 0x61  -> c
     | c > 0x7a  -> c
     | otherwise -> c - delta
   :doc "Convert C to uppercase if it is ASCII lowercase."
 
 
-method downcase :: Int -> Int
+method downcase :: Self -> Char
   c | c < 0x41  -> c
     | c > 0x5a  -> c
     | otherwise -> c + delta
   :doc "Convert C to lowercase if it is ASCII uppercase."
 
 
-method toggle-case :: Int -> Int
+method toggle-case :: Self -> Char
   c | c < 0x41  -> c
     | c <= 0x5a -> downcase c
     | c < 0x61  -> c
@@ -354,39 +354,39 @@ method toggle-case :: Int -> Int
   :doc "Toggle ASCII letter case; leave non-letters unchanged."
 
 
-method ord :: Int -> Int
+method ord :: Self -> Int
   c -> c
   :doc "Return the numeric byte value of C."
 
 
-method chr :: Int -> Int
+method chr :: Int -> Char
   b -> b
   :doc "Convert byte B to the corresponding character."
 
 
-method char->byte :: Int -> Int
+method char->byte :: Self -> Int
   c -> c
   :doc "Convert character C to its underlying byte value."
 
 
-method byte->char :: Int -> Int
+method byte->char :: Int -> Char
   b -> b
   :doc "Convert byte B to the corresponding character."
 
 
-method digit->int :: Int -> Int
+method digit->int :: Self -> Int
   c | digit?    -> c - 0x30
     | otherwise -> error "digit->int: not a decimal digit"
   :doc "Convert an ASCII decimal digit to Int."
 
 
-method int->digit :: Int -> Int
+method int->digit :: Int -> Char
   n | >= 0 and <= 9 -> 0x30 + n
     | otherwise     -> error "int->digit: outside 0..9"
   :doc "Convert an integer 0..9 to an ASCII decimal digit."
 
 
-method hex-digit->int :: Int -> Int
+method hex-digit->int :: Self -> Int
   c | >= 0x30 and <= 0x39 -> c - 0x30
     | >= 0x61 and <= 0x66 -> 10 + c - 0x61
     | >= 0x41 and <= 0x46 -> 10 + c - 0x41
@@ -394,14 +394,14 @@ method hex-digit->int :: Int -> Int
   :doc "Convert an ASCII hexadecimal digit to Int."
 
 
-method int->hex-digit :: Int -> Int
+method int->hex-digit :: Int -> Char
   n | >= 0  and <= 9  -> 0x30 + n
     | >= 10 and <= 15 -> 0x61 + (n - 10)
     | otherwise       -> error "int->hex-digit: outside 0..15"
   :doc "Convert an integer 0..15 to a lowercase ASCII hexadecimal digit."
 
 
-method base36-digit->int :: Int -> Int
+method base36-digit->int :: Self -> Int
   c | digit?    -> c - 0x30
     | lower?    -> 10 + c - 0x61
     | upper?    -> 10 + c - 0x41
@@ -409,39 +409,39 @@ method base36-digit->int :: Int -> Int
   :doc "Convert an ASCII base36 digit to Int."
 
 
-method int->base36-digit :: Int -> Int
+method int->base36-digit :: Int -> Char
   n | >= 0  and <= 9  -> 0x30 + n
     | >= 10 and <= 35 -> 0x61 + (n - 10)
     | otherwise       -> error "int->base36-digit: outside 0..35"
   :doc "Convert an integer 0..35 to a lowercase ASCII base36 digit."
 
 
-method lower-index :: Int -> Int
+method lower-index :: Self -> Int
   c | lower?    -> c - 0x61
     | otherwise -> error "lower-index: not an ASCII lowercase letter"
   :doc "Convert ASCII lowercase a-z to index 0..25."
 
 
-method upper-index :: Int -> Int
+method upper-index :: Self -> Int
   c | upper?    -> c - 0x41
     | otherwise -> error "upper-index: not an ASCII uppercase letter"
   :doc "Convert ASCII uppercase A-Z to index 0..25."
 
 
-method letter-index :: Int -> Int
+method letter-index :: Self -> Int
   c | lower?    -> lower-index c
     | upper?    -> upper-index c
     | otherwise -> error "letter-index: not an ASCII letter"
   :doc "Convert ASCII letter A-Z or a-z to index 0..25."
 
 
-method index->lower :: Int -> Int
+method index->lower :: Int -> Char
   n | >= 0 and <= 25 -> 0x61 + n
     | otherwise      -> error "index->lower: outside 0..25"
   :doc "Convert index 0..25 to ASCII lowercase a-z."
 
 
-method index->upper :: Int -> Int
+method index->upper :: Int -> Char
   n | >= 0 and <= 25 -> 0x41 + n
     | otherwise      -> error "index->upper: outside 0..25"
   :doc "Convert index 0..25 to ASCII uppercase A-Z."
