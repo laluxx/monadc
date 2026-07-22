@@ -70,6 +70,38 @@ class CoreRunnerDiscoveryTests(unittest.TestCase):
         self.assertIn('(assert-eq 1 1 "one")', materialized)
         self.assertIn('(assert-eq 2 2 "two")', materialized)
 
+    def test_materialized_tree_runs_only_the_selected_modules_tests(self):
+        runner_mod = load_core_runner()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            core = root / "core"
+            output = root / "materialized"
+            core.mkdir()
+            active = core / "Active.mon"
+            dependency = core / "Dependency.mon"
+            active.write_text(
+                "module Active\n\ntests\n  assert-eq 1 1 \"active\"\n",
+                encoding="utf-8",
+            )
+            dependency.write_text(
+                "module Dependency\n\ntests\n  assert-eq 2 2 \"dependency\"\n",
+                encoding="utf-8",
+            )
+
+            original_core_root = runner_mod.CORE_ROOT
+            runner_mod.CORE_ROOT = core
+            try:
+                runner_mod.materialize_core_tree(output, Path("Active.mon"))
+            finally:
+                runner_mod.CORE_ROOT = original_core_root
+
+            active_text = (output / "Active.mon").read_text(encoding="utf-8")
+            dependency_text = (output / "Dependency.mon").read_text(encoding="utf-8")
+
+        self.assertIn('assert-eq 1 1 "active"', active_text)
+        self.assertNotIn("tests", dependency_text)
+        self.assertNotIn("dependency", dependency_text)
+
     def test_update_test_cookies_rewrites_existing_heading_counts(self):
         runner_mod = load_core_runner()
         with tempfile.TemporaryDirectory() as td:

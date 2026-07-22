@@ -714,18 +714,28 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
 
         /* Register as ENV_FUNC so direct typed calls work */
         EnvEntry *existing = env_lookup(ctx->env, mname);
+        if (existing && tc_is_method(reg, mname)) {
+            /* Replace the generic inference placeholder (or a previous
+             * instance's dispatch trigger) with this implementation's real
+             * arity. Instance selection still occurs through the registry. */
+            env_remove(ctx->env, mname);
+            existing = NULL;
+        }
         if (!existing) {
-            /* 2-param closure ABI function */
-            EnvParam *params = malloc(sizeof(EnvParam) * 2);
-            params[0].name = strdup("__x");
-            params[0].type = type_unknown();
-            params[1].name = strdup("__y");
-            params[1].type = type_unknown();
-            env_insert_func(ctx->env, mname, params, 2,
-                            type_unknown(), inst->method_funcs[mi], NULL, NULL);
+            int param_count = (int)LLVMCountParams(inst->method_funcs[mi]);
+            EnvParam *params = malloc(sizeof(EnvParam) *
+                                      (param_count ? param_count : 1));
+            for (int pi = 0; pi < param_count; pi++) {
+                params[pi].name = strdup("__arg");
+                params[pi].type = type_unknown();
+            }
+            Type *return_type = tc_method_result_type(reg, c->name, mname);
+            if (!return_type) return_type = type_unknown();
+            env_insert_func(ctx->env, mname, params, param_count,
+                            return_type, inst->method_funcs[mi], NULL, NULL);
             EnvEntry *e = env_lookup(ctx->env, mname);
             if (e) {
-                e->is_closure_abi = true;
+                e->is_closure_abi = false;
                 e->lifted_count   = 0;
             }
         }

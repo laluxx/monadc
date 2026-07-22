@@ -1456,3 +1456,14 @@
   scalar results such as =length :: c a -> Int= from being compiled with pointer
   ABI. Runtime import regressions exercise =null?=, =drop=, =length=, =reverse=,
   =nth=, and inherited =Foldable.foldl= across the module boundary.
+
+[FIX id:fix.core-libs.isolated-core-tests-and-typeclass-arity-2026-07-22 date:2026-07-22 by:codex src:tests/run_core.py,typeclass.c,codegen.c conf:high]
+  Core test builds preserve the selected module's Wisp source and remove test
+  blocks from dependencies, so dependency initialization cannot execute hidden
+  suites or distort method syntax. =MONAD_CORE_TEST_FILTER= provides a focused
+  regression path and =MONAD_KEEP_CORE_TEST_HOME= preserves a failing materialized
+  tree for inspection. Typeclass environment entries now use each compiled
+  instance method's real arity instead of a two-argument approximation, and
+  partial-application trampolines box primitive results according to their LLVM
+  representation when generic semantic metadata is incomplete. The isolated
+  sweep passes all 33 core modules and 603 assertions.

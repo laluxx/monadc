@@ -28,13 +28,15 @@ class ModuleResult:
 
 
 def discover_modules() -> list[Path]:
-    return [
+    modules = [
         path
         for path in sorted(CORE_ROOT.rglob("*.mon"))
         if path.is_file()
         if not any(part.startswith(".") for part in path.relative_to(CORE_ROOT).parts)
         if has_active_tests_block(path)
     ]
+    selected = os.environ.get("MONAD_CORE_TEST_FILTER")
+    return [path for path in modules if selected in str(path)] if selected else modules
 
 
 def has_active_tests_block(path: Path) -> bool:
@@ -62,11 +64,17 @@ def run_module(path: Path) -> ModuleResult:
     before = artifact_snapshot(path)
     start = time.perf_counter_ns()
     env = os.environ.copy()
-    with tempfile.TemporaryDirectory(prefix="monadc-core-home-") as home:
+    keep_home = os.environ.get("MONAD_KEEP_CORE_TEST_HOME")
+    home_context = (
+        tempfile.TemporaryDirectory(prefix="monadc-core-home-")
+        if not keep_home else None
+    )
+    home = home_context.name if home_context else tempfile.mkdtemp(prefix="monadc-core-home-")
+    try:
         home_path = Path(home)
         temp_core = home_path / "core"
-        materialize_core_tree(temp_core)
         rel = path.relative_to(CORE_ROOT)
+        materialize_core_tree(temp_core, rel)
         test_file = temp_core / rel
         env["MONAD_CORE"] = str(temp_core)
         env["HOME"] = home
@@ -79,6 +87,11 @@ def run_module(path: Path) -> ModuleResult:
             stderr=subprocess.STDOUT,
             check=False,
         )
+    finally:
+        if home_context:
+            home_context.cleanup()
+        elif keep_home:
+            print(f"preserved core test home: {home}")
     elapsed_ns = time.perf_counter_ns() - start
     cleanup_artifacts(path, before)
     passed = result.returncode == 0
@@ -87,7 +100,7 @@ def run_module(path: Path) -> ModuleResult:
     return ModuleResult(path, passed, elapsed_ns, result.stdout, count_assertions(path))
 
 
-def materialize_core_tree(destination: Path) -> None:
+def materialize_core_tree(destination: Path, active_test: Path | None = None) -> None:
     for source in sorted(CORE_ROOT.rglob("*")):
         rel = source.relative_to(CORE_ROOT)
         if any(part.startswith(".") for part in rel.parts):
@@ -98,12 +111,15 @@ def materialize_core_tree(destination: Path) -> None:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         if source.suffix == ".mon":
-            target.write_text(materialize_test_source(source), encoding="utf-8")
+            include_tests = active_test is None or source.relative_to(CORE_ROOT) == active_test
+            text = (source.read_text(encoding="utf-8") if include_tests
+                    else materialize_test_source(source, False))
+            target.write_text(text, encoding="utf-8")
         else:
             shutil.copy2(source, target)
 
 
-def materialize_test_source(path: Path) -> str:
+def materialize_test_source(path: Path, include_tests: bool = True) -> str:
     lines = path.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
     assertions: list[str] = []
@@ -128,7 +144,8 @@ def materialize_test_source(path: Path) -> str:
                     raise ValueError(
                         f"{path}:{open_drawer_line}: unclosed test drawer :{open_drawer}:"
                     )
-                out.append(format_tests_block(assertions))
+                if include_tests:
+                    out.append(format_tests_block(assertions))
                 in_tests = False
             else:
                 drawer = parse_test_drawer(stripped)
@@ -153,7 +170,8 @@ def materialize_test_source(path: Path) -> str:
     if in_tests:
         if open_drawer is not None:
             raise ValueError(f"{path}:{open_drawer_line}: unclosed test drawer :{open_drawer}:")
-        out.append(format_tests_block(assertions))
+        if include_tests:
+            out.append(format_tests_block(assertions))
     return "\n".join(out) + "\n"
 
 

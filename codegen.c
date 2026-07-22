@@ -14464,6 +14464,21 @@ if (ast->list.count >= 5) {
 
                     // Box the result
                     LLVMValueRef boxed_ret = codegen_box(ctx, raw, entry->return_type);
+                    if (LLVMTypeOf(boxed_ret) != ptr_t) {
+                        LLVMTypeRef raw_type = LLVMTypeOf(raw);
+                        LLVMTypeKind raw_kind = LLVMGetTypeKind(raw_type);
+                        if (raw_kind == LLVMIntegerTypeKind) {
+                            unsigned width = LLVMGetIntTypeWidth(raw_type);
+                            Type *concrete = width == 1 ? type_bool() : type_int();
+                            boxed_ret = codegen_box(ctx, raw, concrete);
+                            type_free(concrete);
+                        } else if (raw_kind == LLVMDoubleTypeKind ||
+                                   raw_kind == LLVMFloatTypeKind) {
+                            Type *concrete = type_float();
+                            boxed_ret = codegen_box(ctx, raw, concrete);
+                            type_free(concrete);
+                        }
+                    }
                     LLVMBuildRet(ctx->builder, boxed_ret);
 
                     if (saved_block)
