@@ -884,6 +884,58 @@ static bool mon_file_stem(const char *filename, char *out, size_t out_size)
     return true;
 }
 
+typedef struct {
+    char **items;
+    size_t count;
+} CoreModuleList;
+
+static CoreModuleList core_primitive_module_stems(void)
+{
+    CoreModuleList modules = {0};
+    char *core_dir = monad_core_dir();
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/prelude/Data/Primitive.modules", core_dir);
+    free(core_dir);
+
+    FILE *manifest = fopen(path, "rb");
+    if (!manifest) {
+        fprintf(stderr, "core bootstrap error: cannot read %s\n", path);
+        return modules;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), manifest)) {
+        char *start = line;
+        while (*start == ' ' || *start == '\t') start++;
+        char *end = start + strlen(start);
+        while (end > start &&
+               (end[-1] == '\r' || end[-1] == '\n' ||
+                end[-1] == ' ' || end[-1] == '\t')) {
+            *--end = '\0';
+        }
+        if (!*start || *start == ';') continue;
+        if (!module_name_is_valid(start)) {
+            fprintf(stderr, "core bootstrap error: invalid module '%s' in %s\n",
+                    start, path);
+            continue;
+        }
+        modules.items = realloc(modules.items,
+                                sizeof(char *) * (modules.count + 1));
+        modules.items[modules.count++] = strdup(start);
+    }
+    fclose(manifest);
+    return modules;
+}
+
+static void core_module_list_free(CoreModuleList *modules)
+{
+    if (!modules) return;
+    for (size_t i = 0; i < modules->count; i++) free(modules->items[i]);
+    free(modules->items);
+    modules->items = NULL;
+    modules->count = 0;
+}
+
 static void compile_prelude_dir(const char *dir, const char *current_source,
                                 CompilerFlags *flags, const char *source)
 {
@@ -1154,13 +1206,7 @@ static CompiledModule *compile_one(const char *source_path,
      * of primitive type names — NOT by capitalization, because user modules
      * like Main.mon also start with uppercase and are not type method files. */
     {
-        static const char *k_primitive_type_stems[] = {
-            "Int", "I8", "I16", "I32", "I64", "I128",
-            "U8",  "U16", "U32", "U64", "U128",
-            "Float", "F32", "F80",
-            "Bool", "String", "Char",
-            NULL
-        };
+        CoreModuleList primitive_modules = core_primitive_module_stems();
 
         /* Derive the directory containing my_source_path */
         char src_dir[1024] = ".";
@@ -1189,8 +1235,8 @@ static CompiledModule *compile_one(const char *source_path,
         if (in_core_data_dir || source_is_prelude_file(my_source_path))
             goto skip_primitive_type_autoload;
 
-        for (int _ti = 0; k_primitive_type_stems[_ti]; _ti++) {
-            const char *stem = k_primitive_type_stems[_ti];
+        for (size_t _ti = 0; _ti < primitive_modules.count; _ti++) {
+            const char *stem = primitive_modules.items[_ti];
 
             char type_paths[1][1024];
             int type_path_count = 0;
@@ -1256,6 +1302,7 @@ static CompiledModule *compile_one(const char *source_path,
             }
         }
 skip_primitive_type_autoload:
+        core_module_list_free(&primitive_modules);
         ;
     }
 
@@ -1639,21 +1686,14 @@ skip_primitive_type_autoload:
     }
 
     /* Auto-declare primitive type method modules (Int, String, etc.).
-     * Same canonical list as the auto-compile pass above — no directory
-     * scan, no capitalization heuristic.  For each known primitive stem,
+     * The canonical list is owned by the core manifest. For each stem,
      * find its compiled module in the registry and call declare_externals
      * so that Int.double etc. are visible in the current module's env.  */
     {
-        static const char *k_primitive_type_stems2[] = {
-            "Int", "I8", "I16", "I32", "I64", "I128",
-            "U8",  "U16", "U32", "U64", "U128",
-            "Float", "F32", "F80",
-            "Bool", "String", "Char",
-            NULL
-        };
+        CoreModuleList primitive_modules = core_primitive_module_stems();
 
-        for (int _ti = 0; k_primitive_type_stems2[_ti]; _ti++) {
-            const char *stem2 = k_primitive_type_stems2[_ti];
+        for (size_t _ti = 0; _ti < primitive_modules.count; _ti++) {
+            const char *stem2 = primitive_modules.items[_ti];
 
             /* Find the compiled module for this primitive type */
             CompiledModule *type_mod = NULL;
@@ -1698,6 +1738,7 @@ skip_primitive_type_autoload:
 
             type_mod->module_name = old_mn;  /* restore */
         }
+        core_module_list_free(&primitive_modules);
     }
 
 

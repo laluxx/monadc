@@ -236,5 +236,5 @@ install(TARGETS monad monad_runtime
 )
 install(FILES runtime.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/monad)
 install(DIRECTORY core/ DESTINATION ${CMAKE_INSTALL_LIBDIR}/monad/core
-  FILES_MATCHING PATTERN "*.mon"
+  FILES_MATCHING PATTERN "*.mon" PATTERN "*.modules"
 )

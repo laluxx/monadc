@@ -11,6 +11,22 @@ def source(relative: str) -> str:
 
 
 class CoreAbstractionOwnershipTests(unittest.TestCase):
+    def test_core_declares_its_primitive_module_manifest(self):
+        main_c = source("main.c")
+        manifest = source("core/prelude/Data/Primitive.modules")
+        makefile = source("Makefile")
+        cmake = source("CMakeLists.txt")
+
+        self.assertNotIn("k_primitive_type_stems", main_c)
+        self.assertNotIn("k_primitive_type_stems2", main_c)
+        self.assertIn("core_primitive_module_stems", main_c)
+        self.assertEqual(
+            [line for line in manifest.splitlines() if line and not line.startswith(";")],
+            ["Int", "Float", "Bool", "String", "Char"],
+        )
+        self.assertIn('-o -name "*.modules"', makefile)
+        self.assertIn('PATTERN "*.modules"', cmake)
+
     def test_bool_is_a_core_owned_finite_type_set(self):
         bool_core = source("core/prelude/Data/Bool.mon")
         infer_c = source("infer.c")

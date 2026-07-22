@@ -1496,3 +1496,13 @@
   The Map classes now document minimal complete definitions and lookup/update
   laws so user-defined map structures need not duplicate generic algorithms.
   Ownership regressions enforce these signatures and defaults.
+
+[FIX id:fix.core-libs.primitive-bootstrap-manifest-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Primitive.modules,main.c conf:high]
+  The primitive module set and its dependency order are no longer duplicated
+  as C string arrays. =Data/Primitive.modules= visibly declares the core-owned
+  bootstrap surface; both compilation and external-method declaration read the
+  same manifest. Adding a primitive core type therefore changes core data, not
+  compiler policy. Make and CMake installation preserve the manifest, and the
+  ownership contract rejects reintroduced hardcoded lists. This manifest is a
+  bootstrap index only: all public operations and laws remain ordinary Monad
+  definitions in the referenced modules.

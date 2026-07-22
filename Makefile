@@ -80,7 +80,7 @@ install: $(RUNTIME_LIB) $(TARGET)
 	install -m 644 runtime.h $(INCDIR)/runtime.h
 # Install core modules
 	rm -rf $(COREDIR)
-	find core -name "*.mon" | while read f; do \
+	find core \( -name "*.mon" -o -name "*.modules" \) | while read f; do \
 		dir=$$(dirname "$$f"); \
 		install -d $(COREDIR)/$${dir#core/}; \
 		install -m 644 "$$f" $(COREDIR)/$${dir#core/}/; \

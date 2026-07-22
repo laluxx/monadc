@@ -1,0 +1,8 @@
+;;; Primitive core type modules, in bootstrap dependency order.
+;;; Public behavior lives in the corresponding .mon file. The compiler reads
+;;; only these module names so the core—not C source—owns the bootstrap set.
+Int
+Float
+Bool
+String
+Char
