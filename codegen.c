@@ -11741,9 +11741,11 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            if (strcmp(head->symbol, "contains?") == 0) {
+            /* Private representation intrinsics. Public query semantics live
+             * in Data.String and Data.Set. */
+            if (strcmp(head->symbol, "__rt_contains?") == 0) {
                 if (ast->list.count != 3) {
-                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'contains?' requires 2 arguments",
+                    CODEGEN_ERROR(ctx, "%s:%d:%d: error: '__rt_contains?' requires 2 arguments",
                                   parser_get_filename(), ast->line, ast->column);
                 }
                 LLVMTypeRef  ptr    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -11806,9 +11808,9 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            if (strcmp(head->symbol, "starts-with?") == 0 ||
-                strcmp(head->symbol, "ends-with?") == 0) {
-                bool is_ends = (strcmp(head->symbol, "ends-with?") == 0);
+            if (strcmp(head->symbol, "__rt_starts_with?") == 0 ||
+                strcmp(head->symbol, "__rt_ends_with?") == 0) {
+                bool is_ends = (strcmp(head->symbol, "__rt_ends_with?") == 0);
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: ‘%s’ requires 2 arguments",
                                   parser_get_filename(), ast->line, ast->column, head->symbol);
@@ -17290,9 +17292,6 @@ static void register_legacy_collection_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "disj",         2,  0, "Remove an element from a set", NULL);
     env_insert_builtin(ctx->env, "conj!",        2,  0, "Mutate a set by adding an element in place", NULL);
     env_insert_builtin(ctx->env, "disj!",        2,  0, "Mutate a set by removing an element in place", NULL);
-    env_insert_builtin(ctx->env, "contains?",    2,  0, "Test if a collection contains an element", NULL);
-    env_insert_builtin(ctx->env, "ends-with?",   2,  0, "Test if a collection ends with a suffix", NULL);
-    env_insert_builtin(ctx->env, "starts-with?", 2,  0, "Test if a collection starts with a prefix", NULL);
     env_insert_builtin(ctx->env, "substring",    3,  0, "Return a substring from start index to end index", NULL);
     env_insert_builtin(ctx->env, "count",        1,  0, "Get number of elements in a collection", NULL);
 

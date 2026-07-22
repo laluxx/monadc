@@ -19,7 +19,9 @@ class Membership s where
 
 
 instance Membership Set
-  (member? x s) => contains? s x
+  ;; The method and its laws are public core semantics.  This private intrinsic
+  ;; is only the constant-time runtime representation operation.
+  (member? x s) => __rt_contains? s x
 
 
 method singleton :: a -> Set

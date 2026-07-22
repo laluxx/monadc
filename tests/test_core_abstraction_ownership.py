@@ -179,6 +179,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
     def test_set_membership_does_not_require_enumeration(self):
         data_set = source("core/prelude/Data/Set.mon")
+        codegen = source("codegen.c")
         membership = data_set.split("class Membership s where", 1)[1].split(
             "\n\ninstance Membership", 1
         )[0]
@@ -186,6 +187,25 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertRegex(membership, r"(?m)^\s*member\?\s+::")
         self.assertNotRegex(membership, r"(?m)^\s*(?:count|foldl|foldr|elements)\s+::")
         self.assertRegex(data_set, r"(?m)^instance Membership Set$")
+        self.assertIn("(member? x s) => __rt_contains? s x", data_set)
+        self.assertNotIn('env_insert_builtin(ctx->env, "contains?"', codegen)
+
+    def test_string_queries_are_composed_from_core_abstractions(self):
+        data_string = source("core/prelude/Data/String.mon")
+        codegen = source("codegen.c")
+
+        self.assertNotRegex(
+            data_string,
+            r"\b(?:starts-with\?|ends-with\?|contains\?)\b",
+        )
+        for builtin in ("starts-with?", "ends-with?", "contains?"):
+            self.assertNotIn(f'env_insert_builtin(ctx->env, "{builtin}"', codegen)
+            self.assertNotIn(f'strcmp(head->symbol, "{builtin}")', codegen)
+
+        self.assertNotIn("import Data.Eq", data_string)
+        self.assertRegex(data_string, r"(?m)^method\s+startsWith\?\s+::")
+        self.assertRegex(data_string, r"(?m)^method\s+endsWith\?\s+::")
+        self.assertRegex(data_string, r"(?m)^method\s+includes\?\s+::")
 
 
 if __name__ == "__main__":

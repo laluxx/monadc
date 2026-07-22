@@ -1467,3 +1467,13 @@
   partial-application trampolines box primitive results according to their LLVM
   representation when generic semantic metadata is incomplete. The isolated
   sweep passes all 33 core modules and 603 assertions.
+
+[FIX id:fix.core-libs.string-query-semantics-core-owned-2026-07-22 date:2026-07-22 by:codex src:core/prelude/Data/String.mon,codegen.c conf:high]
+  =Data.String= now defines prefix, suffix, and substring semantics by composing
+  core-owned =Sequence= operations, equality, =Bool=, and recursion. The former public compiler
+  builtins =starts-with?=, =ends-with?=, and =contains?= are no longer registered
+  or recognized as source operations; retained optimized lowering hooks use
+  private =__rt_*= names only. Tests cover empty and oversized affixes, whole
+  strings, absent fragments, and recursive substring search. This establishes
+  the boundary rule: a runtime intrinsic may optimize representation, but the
+  exported method and its laws must be expressible and owned by core.

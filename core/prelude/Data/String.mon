@@ -40,15 +40,22 @@ class IsList l where
 
 
 method startsWith? :: String -> String -> Bool
-  s prefix -> starts-with? s prefix
+  s prefix -> (take s (length prefix)) = prefix
 
 
 method endsWith? :: String -> String -> Bool
-  s suffix -> ends-with? s suffix
+  s suffix -> (drop s (- (length s) (length suffix))) = suffix
+
+
+define string-includes? :: String -> String -> Bool
+  s fragment | fragment = ""                         -> True
+             | s = ""                                -> False
+             | (take s (length fragment)) = fragment -> True
+             | otherwise                             -> string-includes? (drop s 1) fragment
 
 
 method includes? :: String -> String -> Bool
-  s fragment -> contains? s fragment
+  s fragment -> string-includes? s fragment
 
 
 method copy :: String -> String
@@ -63,8 +70,15 @@ tests
 
   :queries:
   assert-eq ("hello".startsWith? "he") True "Data.String prefix"
+  assert-eq ("hello".startsWith? "")   True "Data.String empty prefix"
+  assert-eq ("hi".startsWith? "hello") False "Data.String long prefix"
   assert-eq ("hello".endsWith? "lo")   True "Data.String suffix"
+  assert-eq ("hello".endsWith? "")     True "Data.String empty suffix"
+  assert-eq ("hi".endsWith? "hello")   False "Data.String long suffix"
   assert-eq ("hello".includes? "ell")  True "Data.String contains"
+  assert-eq ("hello".includes? "hello") True "Data.String contains whole value"
+  assert-eq ("hello".includes? "")      True "Data.String contains empty value"
+  assert-eq ("hello".includes? "xyz")   False "Data.String rejects absent value"
   :queries:
 
   :construction:
