@@ -6,52 +6,13 @@
 
 ;;; Commentary:
 
-;; This module owns stable list helpers used by core modules that should not
-;; depend directly on collection builtins. Broad user-facing names should live
-;; here, while compiler primitives keep low-level names such as count and ++.
+;; Composite Lisp accessors retained for compatibility. General sequence
+;; structure belongs to Coll and is available through receiver methods.
 
 ;;; Code:
 
-import Data.Bool
-
 module Data.List
-  [list-null? list-length list-drop list-take list-append list-reverse
-   reverse at nth reduce
-   caar cadr cdar cddr caddr cdddr list-tail]
-
-import Data.Maybe
-
-
-define list-null? :: [a] -> Bool
-  []     -> True
-  [x|xs] -> False
-
-
-define list-length :: [a] -> Int
-  []     -> 0
-  [x|xs] -> 1 + (list-length xs)
-
-
-define reverse :: [a] -> [a]
-  xs -> list-reverse xs
-
-
-define at :: [a] -> Int -> Maybe a
-  _ n      | n < 0 -> Nothing
-  [] _             -> Nothing
-  [x|xs] 0         -> Just x
-  [x|xs] n         -> at xs (n - 1)
-
-
-define nth :: [a] -> Int -> a
-  [] _              -> error "Data.List.nth: index out of bounds"
-  [x|xs] n | n <= 0 -> x
-  [x|xs] n          -> nth xs (n - 1)
-
-
-define reduce :: (b -> a -> b) -> b -> [a] -> b
-  _ acc []     -> acc
-  f acc [x|xs] -> reduce f (f acc x) xs
+  [caar cadr cdar cddr caddr cdddr]
 
 
 define caar :: [[a]] -> a
@@ -78,84 +39,10 @@ define cdddr :: [a] -> [a]
   xs -> tail (tail (tail xs))
 
 
-define list-tail :: [a] -> Int -> [a]
-  xs k -> list-drop k xs
-
-
-define list-drop :: Int -> [a] -> [a]
-  n xs     | n <= 0 -> xs
-  n []              -> []
-  n [x|xs]          -> list-drop (n - 1) xs
-
-
-define list-take :: Int -> [a] -> [a]
-  n xs     | n <= 0 -> []
-  n []              -> []
-  n [x|xs]          -> (x ++ (list-take (n - 1) xs))
-
-
-define list-append :: [a] -> [a] -> [a]
-  [] ys     -> ys
-  [x|xs] ys -> (x ++ (list-append xs ys))
-
-
-define list-reverse :: [a] -> [a]
-  []     -> []
-  [x|xs] -> list-append (list-reverse xs) (list x)
-
-
 tests
-  :null:
-  assert-eq (list-null? []) True "Data.List list-null? empty"
-  assert-eq (list-null? (list 1)) False "Data.List list-null? nonempty"
-  :null:
-
-  :length:
-  assert-eq (list-length []) 0 "Data.List list-length empty"
-  assert-eq (list-length (list 1 2 3)) 3 "Data.List list-length values"
-  :length:
-
-  :drop:
-  assert-eq (show (list-drop 0 (list 1 2))) "(1 2)" "Data.List list-drop zero"
-  assert-eq (show (list-drop 2 (list 1 2 3 4))) "(3 4)" "Data.List list-drop middle"
-  assert-eq (show (list-drop 5 (list 1 2))) "()" "Data.List list-drop beyond"
-  :drop:
-
-  :take:
-  assert-eq (show (list-take 0 (list 1 2))) "()" "Data.List list-take zero"
-  assert-eq (show (list-take 2 (list 1 2 3))) "(1 2)" "Data.List list-take middle"
-  assert-eq (show (list-take 5 (list 1 2))) "(1 2)" "Data.List list-take beyond"
-  :take:
-
-  :append:
-  assert-eq (show (list-append (list 1 2) (list 3 4))) "(1 2 3 4)" "Data.List list-append"
-  assert-eq (show (list-append [] (list 3))) "(3)" "Data.List list-append empty left"
-  :append:
-
-  :reverse:
-  assert-eq (show (list-reverse [])) "()" "Data.List list-reverse empty"
-  assert-eq (show (list-reverse (list 1 2 3))) "(3 2 1)" "Data.List list-reverse values"
-  assert-eq (show (reverse (list 1 2 3))) "(3 2 1)" "Data.List reverse wrapper"
-  :reverse:
-
-  :nth:
-  assert-eq (show (at (list 5 6 7) 0)) "(Just 5)" "Data.List at first"
-  assert-eq (show (at (list 5 6 7) 9)) "Nothing" "Data.List at out of bounds"
-  assert-eq (show (at (list 5 6 7) -1)) "Nothing" "Data.List at negative"
-  assert-eq (nth (list 5 6 7) 0) 5 "Data.List nth first"
-  assert-eq (nth (list 5 6 7) 2) 7 "Data.List nth last"
-  :nth:
-
-  :reduce:
-  assert-eq (reduce (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)) 10 "Data.List reduce sum"
-  assert-eq (reduce (lambda (acc x) (* acc x)) 1 (list 2 3 4)) 24 "Data.List reduce product"
-  assert-eq (reduce (lambda ([acc : Float] [x : Float] -> Float) (+ acc x)) 0.0 (list 1.5 2.5)) 4.0 "Data.List reduce Float"
-  :reduce:
-
   :legacy-accessors:
   assert-eq (caar (list (list 7 8))) 7 "Data.List caar"
   assert-eq (cadr (list 1 2 3)) 2 "Data.List cadr"
   assert-eq (caddr (list 1 2 3 4)) 3 "Data.List caddr"
   assert-eq (show (cdddr (list 1 2 3 4 5))) "(4 5)" "Data.List cdddr"
-  assert-eq (show (list-tail (list 1 2 3 4) 2)) "(3 4)" "Data.List list-tail"
   :legacy-accessors:

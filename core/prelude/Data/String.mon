@@ -1,17 +1,28 @@
-;;; String.mon --- String conversion abstractions
+;;; String.mon --- Core-owned character sequences
 
 ;; Author: Laluxx
 ;; Version: 1.0.0
-;; Keywords: string list conversion typeclass
+;; Keywords: string sequence character refinement typeclass
+
+;;; Commentary:
+
+;; String is the set of all finite character sequences. The compiler retains
+;; its compact representation and primitive lowering, while Coll owns generic
+;; sequence behavior and this module owns String-specific conversions and
+;; queries.
 
 ;;; Code:
 
+import Coll
 import Data.Bool
 
 module Data.String
-  [IsString fromString
+  [String IsString fromString
    IsList Item fromList fromListN
-   concat startsWith? endsWith? includes? copy append]
+   startsWith? endsWith? includes? copy]
+
+
+(type String { chars ∈ [Char] | True })
 
 
 class IsString a where
@@ -28,10 +39,6 @@ class IsList l where
   ;; Conversion pattern for sequence literals and collection builders.
 
 
-method concat :: String -> String -> String
-  a b -> (++ a b)
-
-
 method startsWith? :: String -> String -> Bool
   s prefix -> starts-with? s prefix
 
@@ -45,11 +52,7 @@ method includes? :: String -> String -> Bool
 
 
 method copy :: String -> String
-  s -> ++ "" s
-
-
-method append :: String -> String -> String
-  a b -> ++ a b
+  s -> concat "" s
 
 
 tests
@@ -58,10 +61,6 @@ tests
   assert-eq 1 1 "String registers IsList"
   :registration:
 
-  :concat:
-  assert-eq (show ("ab".concat "cd")) "abcd" "Data.String concat"
-  :concat:
-
   :queries:
   assert-eq ("hello".startsWith? "he") True "Data.String prefix"
   assert-eq ("hello".endsWith? "lo")   True "Data.String suffix"
@@ -69,6 +68,6 @@ tests
   :queries:
 
   :construction:
-  assert-eq (show ("hello".append " world")) "hello world" "Data.String append"
+  assert-eq (show (concat "hello" " world")) "hello world" "String Sequence concat"
   assert-eq (show ("hello".copy))             "hello"       "Data.String copy"
   :construction:

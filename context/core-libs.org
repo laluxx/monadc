@@ -674,7 +674,7 @@
 :ID: monadc.context.core-libs.data-string
 :CUSTOM_ID: core-libs-data-string
 :CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: core/prelude/Data/String.mon — active string/list conversion classes and string helpers.
+:CONTEXT_DESCRIPTION: core/prelude/Data/String.mon — core-owned String set, conversions, and String-specific queries.
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-30
@@ -693,11 +693,18 @@
   =./monad test tests/wisp_data_string_import.mon=.
 
 [FIX id:fix.core-libs.string-method-ownership-2026-07-22 date:2026-07-22 by:codex]
-  Active String behavior is receiver-owned in =core/prelude/Data/String.mon=.
-  The public methods are =concat=, =startsWith?=, =endsWith?=, =includes?=,
-  =copy=, and =append=. The former =string-*= wrappers were removed; low-level
-  storage and intrinsics remain compiler machinery, while naming, argument
-  order, and composition policy live in the core.
+  String-specific queries are receiver-owned in =core/prelude/Data/String.mon=.
+  Generic concatenation is not duplicated there: it belongs to =Sequence=.
+  Low-level storage and intrinsics remain compiler machinery.
+
+[FIX id:fix.core-libs.string-sequence-set-2026-07-22 date:2026-07-22 by:codex src:core/prelude/Data/String.mon,core/prelude/Coll.mon,reader.c conf:high]
+  =String= is declared by core as the predicate set of finite character
+  sequences, ={ chars ∈ [Char] | True }=. Refinement set builders therefore
+  accept parameterized collection bases such as =[Char]=. =Sequence= owns the
+  associative =concat= contract, and its =Coll= instance works unchanged for
+  lists and strings through the existing =Coll Char= representation bridge.
+  The instance lowers to the optimized =++= primitive; public semantics and
+  laws remain in core.
 
 * Assert.mon — Assertion Stubs (MOVED TO old-core)
 :PROPERTIES:

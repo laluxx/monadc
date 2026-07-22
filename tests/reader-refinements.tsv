@@ -26,6 +26,7 @@ refine_string_between	monadc.context.language.refinement-types	String count lowe
 refine_string_exact	monadc.context.language.refinement-types	Exact string count refinement parses.	(type ThreeChars { s ∈ String | (= (count s) 3) })				regression	passing-baseline-2026-06-15
 refine_string_no_space_shape	monadc.context.language.refinement-types	String negated contains predicate parses.	(type NoSpaces { s ∈ String | (not (contains? s " ")) })				regression	passing-baseline-2026-06-15
 refine_string_identifier_shape	monadc.context.language.refinement-types	Identifier-shaped string predicate parses.	(type IdentifierText { s ∈ String | (and (> (count s) 0) (not (contains? s " "))) })				regression	passing-baseline-2026-06-15
+refine_collection_char_base	monadc.context.language.refinement-types	Parameterized collection bases work in set-builder types.	(type CharacterSequence { chars ∈ [Char] | True })				regression	passing-baseline-2026-07-22
 refine_list_nonempty	monadc.context.language.refinement-types	Nonempty list refinement parses.	(type NonEmptyList { xs ∈ List | (> (count xs) 0) })				regression	passing-baseline-2026-06-15
 refine_list_empty	monadc.context.language.refinement-types	Empty list refinement parses.	(type EmptyList { xs ∈ List | (= (count xs) 0) })				regression	passing-baseline-2026-06-15
 refine_list_small	monadc.context.language.refinement-types	Small list refinement parses.	(type SmallList { xs ∈ List | (< (count xs) 8) })				regression	passing-baseline-2026-06-15

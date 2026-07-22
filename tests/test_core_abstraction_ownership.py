@@ -60,15 +60,39 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
     def test_string_behavior_is_owned_by_core_methods(self):
         string_core = source("core/prelude/Data/String.mon")
-        for name in ("concat", "startsWith?", "endsWith?", "includes?", "copy", "append"):
+        self.assertRegex(
+            string_core,
+            r"(?m)^\(?type\s+String\s+\{\s*chars\s+∈\s+\[Char\]",
+        )
+        for name in ("startsWith?", "endsWith?", "includes?", "copy"):
             self.assertRegex(string_core, rf"(?m)^method\s+{re.escape(name)}\s+::")
             self.assertNotRegex(string_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
+        self.assertNotRegex(string_core, r"(?m)^method\s+(?:concat|append)\s+::")
 
         for obsolete in (
             "string-prefix?", "string-suffix?", "string-contains?",
             "string-copy", "string-append",
         ):
             self.assertNotIn(obsolete, string_core)
+
+    def test_sequence_structure_is_owned_by_coll_methods(self):
+        coll_core = source("core/prelude/Coll.mon")
+        self.assertRegex(coll_core, r"(?m)^\s+concat\s+::\s+c a\s+->\s+c a\s+->\s+c a")
+        for name in (
+            "null?", "length", "reverse", "append", "at", "nth",
+            "take", "drop", "takeWhile", "dropWhile",
+            "any?", "all?", "zip", "zipWith", "snoc",
+        ):
+            self.assertRegex(coll_core, rf"(?m)^method\s+{re.escape(name)}\s+::")
+            self.assertNotRegex(coll_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
+    def test_data_list_does_not_duplicate_sequence_structure(self):
+        list_core = source("core/prelude/Data/List.mon")
+        for obsolete in (
+            "list-drop", "list-take", "list-append", "list-reverse",
+        ):
+            self.assertNotIn(obsolete, list_core)
 
     def test_registered_core_types_override_legacy_representation_fallbacks(self):
         types_c = source("types.c")
@@ -146,7 +170,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         data_list = source("core/prelude/Data/List.mon")
 
         self.assertNotRegex(coll, r"(?m)^define\s+(?:append|both)\s+::")
-        self.assertRegex(coll, r"(?m)^define\s+snoc\s+::")
+        self.assertRegex(coll, r"(?m)^method\s+snoc\s+::")
         self.assertRegex(coll, r"(?m)^define\s+bothPredicates\s+::")
         self.assertNotRegex(function, r"(?m)^define\s+times\s+::")
         self.assertNotRegex(data_list, r"(?m)^define\s+length\s+::")

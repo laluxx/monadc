@@ -16,41 +16,84 @@
 import Data.Functor
 import Data.Foldable
 import Data.Bool
+import Data.Maybe
 
 module Coll
- [Sequence map filter foldl foldr coll-foldl
+ [Sequence map filter concat foldl foldr coll-foldl
+  null? length reverse append at nth
   take      drop
   takeWhile dropWhile
   any? all?
-  zip zipwith snoc bothPredicates]
+  zip zipWith snoc bothPredicates]
 
 
 class (Functor c, Foldable c) => Sequence c where
   filter :: (a -> Bool) -> c a -> c a
+  concat :: c a -> c a -> c a
+
+  ;; minimal complete definition: filter and concat
+  ;; law: concat (concat xs ys) zs = concat xs (concat ys zs)
 
 
-define take :: Int -> [a] -> [a]
-  _ []                         -> []
-  n [x|xs] | n > 0             -> (x ++ (take (n - 1) xs))
-  n [x|xs] | otherwise         -> []
+method null? :: [a] -> Bool
+  []     -> True
+  [x|xs] -> False
 
 
-define drop :: Int -> [a] -> [a]
-  _ []                         -> []
-  n [x|xs] | n > 0             -> (drop (n - 1) xs)
-  n [x|xs] | otherwise         -> (x ++ xs)
+method length :: [a] -> Int
+  []     -> 0
+  [x|xs] -> 1 + xs.length
 
 
-define takeWhile :: (a -> Bool) -> [a] -> [a]
-  _ []                         -> []
-  p [x|xs] | p x               -> (x ++ (takeWhile p xs))
-  p [x|xs] | otherwise         -> []
+define coll-reverse-into :: [a] -> [a] -> [a]
+  acc []     -> acc
+  acc [x|xs] -> coll-reverse-into (x ++ acc) xs
 
 
-define dropWhile :: (a -> Bool) -> [a] -> [a]
-  _ []                         -> []
-  p [x|xs] | p x               -> dropWhile p xs
-  p [x|xs] | otherwise         -> (x ++ xs)
+method reverse :: [a] -> [a]
+  xs -> coll-reverse-into [] xs
+
+
+method append :: [a] -> [a] -> [a]
+  [] ys     -> ys
+  [x|xs] ys -> (x ++ (xs.append ys))
+
+
+method at :: [a] -> Int -> Maybe a
+  _ n      | n < 0 -> Nothing
+  [] _             -> Nothing
+  [x|xs] 0         -> Just x
+  [x|xs] n         -> xs.at (n - 1)
+
+
+method nth :: [a] -> Int -> a
+  [] _              -> error "Coll.nth: index out of bounds"
+  [x|xs] n | n <= 0 -> x
+  [x|xs] n          -> xs.nth (n - 1)
+
+
+method take :: [a] -> Int -> [a]
+  [] _                         -> []
+  [x|xs] n | n > 0             -> (x ++ (xs.take (n - 1)))
+  [x|xs] n | otherwise         -> []
+
+
+method drop :: [a] -> Int -> [a]
+  [] _                         -> []
+  [x|xs] n | n > 0             -> xs.drop (n - 1)
+  [x|xs] n | otherwise         -> (x ++ xs)
+
+
+method takeWhile :: [a] -> (a -> Bool) -> [a]
+  [] _                         -> []
+  [x|xs] p | p x               -> (x ++ (xs.takeWhile p))
+  [x|xs] p | otherwise         -> []
+
+
+method dropWhile :: [a] -> (a -> Bool) -> [a]
+  [] _                         -> []
+  [x|xs] p | p x               -> xs.dropWhile p
+  [x|xs] p | otherwise         -> (x ++ xs)
 
 
 define coll-map :: (a -> b) -> [a] -> [b]
@@ -64,15 +107,15 @@ define coll-filter :: (a -> Bool) -> [a] -> [a]
   p [x|xs] | otherwise         -> coll-filter p xs
 
 
-define any? :: (a -> Bool) -> [a] -> Bool
-  _ []     -> False
-  p [x|xs] -> if p x then True else any? p xs
+method any? :: [a] -> (a -> Bool) -> Bool
+  [] _     -> False
+  [x|xs] p -> if p x then True else xs.any? p
 
 
-define all? :: (a -> Bool) -> [a] -> Bool
-  _ []                         -> True
-  p [x|xs] | p x               -> all? p xs
-  p [x|xs] | otherwise         -> False
+method all? :: [a] -> (a -> Bool) -> Bool
+  [] _                         -> True
+  [x|xs] p | p x               -> xs.all? p
+  [x|xs] p | otherwise         -> False
 
 
 define coll-foldl :: (b -> a -> b) -> b -> [a] -> b
@@ -96,23 +139,24 @@ instance Foldable Coll
 
 instance Sequence Coll
   filter p xs -> coll-filter p xs
+  concat xs ys -> ++ xs ys
 
 
-define zip :: [a] -> [b] -> [c]
+method zip :: [a] -> [b] -> [c]
   [] _          -> []
   _ []          -> []
-  [x|xs] [y|ys] -> ((list x y) ++ (zip xs ys))
+  [x|xs] [y|ys] -> ((list x y) ++ (xs.zip ys))
 
 
-define zipwith :: (a -> b -> c) -> [a] -> [b] -> [c]
+method zipWith :: [a] -> [b] -> (a -> b -> c) -> [c]
+  [] _ _          -> []
   _ [] _          -> []
-  _ _ []          -> []
-  f [x|xs] [y|ys] -> ((f x y) ++ (zipwith f xs ys))
+  [x|xs] [y|ys] f -> ((f x y) ++ (xs.zipWith ys f))
 
 
-define snoc :: [a] -> a -> [a]
+method snoc :: [a] -> a -> [a]
   [] val     -> (list val)
-  [x|xs] val -> (x ++ (snoc xs val))
+  [x|xs] val -> (x ++ (xs.snoc val))
 
 ;; TODO unit type () pointer *dereferencing and fix wisp
 ;; define append! :: [xs -> [a]] -> [val :: a] -> ()
@@ -125,20 +169,30 @@ define bothPredicates :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
 
 
 tests
-  :take:
-  assert-eq (show (take 2 (list 1 2 3))) "(1 2)" "take normal"
-  assert-eq (show (take 0 (list 1 2))) "()" "take zero"
-  assert-eq (show (take 5 (list 1 2))) "(1 2)" "take beyond length"
-  assert-eq (show (take 1 (list 42))) "(42)" "take singleton"
+  :structure:
+  assert-eq ([].null?)                            True        "null? empty"
+  assert-eq ((list 1).null?)                      False       "null? nonempty"
+  assert-eq ((list 1 2 3).length)                 3           "length"
+  assert-eq (show ((list 1 2 3).reverse))         "(3 2 1)"   "reverse"
+  assert-eq (show ((list 1 2).append (list 3 4))) "(1 2 3 4)" "append"
+  assert-eq (show ((list 5 6 7).at 1))            "(Just 6)"  "at"
+  assert-eq ((list 5 6 7).nth 2)                  7           "nth"
+  :structure:
 
   :take:
-  :drop:
-  assert-eq (show (drop 2 (list 1 2 3 4))) "(3 4)" "drop normal"
-  assert-eq (show (drop 0 (list 1 2))) "(1 2)" "drop zero"
-  assert-eq (show (drop 5 (list 1 2))) "()" "drop beyond length"
-  assert-eq (show (drop 1 (list 42))) "()" "drop singleton"
+  assert-eq (show ((list 1 2 3).take 2)) "(1 2)" "take normal"
+  assert-eq (show ((list 1 2).take 0))   "()"    "take zero"
+  assert-eq (show ((list 1 2).take 5))   "(1 2)" "take beyond length"
+  assert-eq (show ((list 42).take 1))    "(42)"  "take singleton"
+  :take:
 
   :drop:
+  assert-eq (show ((list 1 2 3 4).drop 2)) "(3 4)" "drop normal"
+  assert-eq (show ((list 1 2).drop 0))     "(1 2)" "drop zero"
+  assert-eq (show ((list 1 2).drop 5))     "()"    "drop beyond length"
+  assert-eq (show ((list 42).drop 1))      "()"    "drop singleton"
+  :drop:
+
   :higher-order-registrations:
   assert-eq 1 1 "takeWhile registers"
   assert-eq 1 1 "dropWhile registers"
@@ -146,62 +200,68 @@ tests
   assert-eq 1 1 "all? registers"
   assert-eq 1 1 "foldl registers"
   assert-eq 1 1 "foldr registers"
-
   :higher-order-registrations:
+
   :map-runtime:
   assert-eq (show (map (lambda (x) (+ x 1)) (list 1 2 3))) "(2 3 4)" "map increment"
   assert-eq (show (map (lambda (x) (* x 2)) (list 0 1 2))) "(0 2 4)" "map double"
   assert-eq (show (map (lambda (x) x) (list 1 2))) "(1 2)" "map identity"
   assert-eq (show (map (lambda (x) 0) (list 1 2 3))) "(0 0 0)" "map constant"
-
   :map-runtime:
-  :take-while:
-  assert-eq (show (takeWhile (lambda (x) (< x 3)) (list 1 2 3 4))) "(1 2)" "takeWhile less than 3"
-  assert-eq (show (takeWhile (lambda (x) (< x 0)) (list 1 2))) "()" "takeWhile none"
-  assert-eq (show (takeWhile (lambda (x) (< x 5)) (list 1 2))) "(1 2)" "takeWhile all"
 
   :take-while:
-  :drop-while:
-  assert-eq (show (dropWhile (lambda (x) (< x 3)) (list 1 2 3 4))) "(3 4)" "dropWhile less than 3"
-  assert-eq (show (dropWhile (lambda (x) (< x 0)) (list 1 2))) "(1 2)" "dropWhile none"
-  assert-eq (show (dropWhile (lambda (x) (< x 5)) (list 1 2))) "()" "dropWhile all"
+  assert-eq (show ((list 1 2 3 4).takeWhile (lambda (x) (< x 3)))) "(1 2)" "takeWhile less than 3"
+  assert-eq (show ((list 1 2).takeWhile (lambda (x) (< x 0))))     "()"    "takeWhile none"
+  assert-eq (show ((list 1 2).takeWhile (lambda (x) (< x 5))))     "(1 2)" "takeWhile all"
+  :take-while:
 
   :drop-while:
-  :any:
-  assert-eq (any? (lambda (x) (< 2 x)) (list 1 2 3 4)) True "any? finds element"
-  assert-eq (any? (lambda (x) (> x 9)) (list 1 2 3)) False "any? missing"
-  assert-eq (any? (lambda (x) False) (list)) False "any? empty list"
+  assert-eq (show ((list 1 2 3 4).dropWhile (lambda (x) (< x 3)))) "(3 4)" "dropWhile less than 3"
+  assert-eq (show ((list 1 2).dropWhile (lambda (x) (< x 0))))     "(1 2)" "dropWhile none"
+  assert-eq (show ((list 1 2).dropWhile (lambda (x) (< x 5))))     "()"    "dropWhile all"
+  :drop-while:
 
   :any:
-  :all:
-  assert-eq (all? (lambda (x) (< x 5)) (list 1 2 3)) True "all? all satisfy"
-  assert-eq (all? (lambda (x) (< x 3)) (list 1 2 3)) False "all? one fails"
-  assert-eq (all? (lambda (x) False) (list)) True "all? empty list"
+  assert-eq ((list 1 2 3 4).any? (lambda (x) (< 2 x))) True  "any? finds element"
+  assert-eq ((list 1 2 3).any? (lambda (x) (> x 9)))   False "any? missing"
+  assert-eq ((list).any? (lambda (x) False))           False "any? empty list"
+  :any:
 
   :all:
+  assert-eq ((list 1 2 3).all? (lambda (x) (< x 5))) True  "all? all satisfy"
+  assert-eq ((list 1 2 3).all? (lambda (x) (< x 3))) False "all? one fails"
+  assert-eq ((list).all? (lambda (x) False))         True  "all? empty list"
+  :all:
+
   :foldl:
   :foldl:
   :foldr:
   :foldr:
-  :zip:
-  assert-eq (show (zip (list 1 2) (list 3 4))) "((1 3) (2 4))" "zip pair"
-  assert-eq (show (zip (list 1) (list 2 3))) "((1 2))" "zip uneven"
 
   :zip:
-  :zipwith:
-  assert-eq (show (zipwith (lambda (x y) (+ x y)) (list 1 2) (list 3 4))) "(4 6)" "zipwith sum"
-  assert-eq (show (zipwith (lambda (x y) (* x y)) (list 2 3) (list 4))) "(8)" "zipwith uneven"
+  assert-eq (show ((list 1 2).zip (list 3 4))) "((1 3) (2 4))" "zip pair"
+  assert-eq (show ((list 1).zip (list 2 3)))   "((1 2))"       "zip uneven"
+  :zip:
 
-  :zipwith:
-  :snoc:
-  assert-eq (show (snoc (list 1 2) 3)) "(1 2 3)" "snoc nonempty"
-  assert-eq (show (snoc [] 3)) "(3)" "snoc empty"
+  :zipWith:
+  assert-eq (show ((list 1 2).zipWith (list 3 4) (lambda (x y) (+ x y)))) "(4 6)" "zipWith sum"
+  assert-eq (show ((list 2 3).zipWith (list 4) (lambda (x y) (* x y))))   "(8)"   "zipWith uneven"
+  :zipWith:
 
   :snoc:
+  assert-eq (show ((list 1 2).snoc 3)) "(1 2 3)" "snoc nonempty"
+  assert-eq (show ([].snoc 3))         "(3)"     "snoc empty"
+  :snoc:
+
   :filter:
   assert-eq (show (filter (lambda (x) (< x 3)) (list 1 2 3 4))) "(1 2)" "filter less"
   assert-eq (show (filter (lambda (x) (> x 5)) (list 1 2))) "()" "filter none"
   :filter:
+
+  :concat:
+  assert-eq (show (concat (list 1 2) (list 3 4))) "(1 2 3 4)" "Sequence concat lists"
+  assert-eq (show (concat "ab" "cd"))             "abcd"      "Sequence concat String"
+  :concat:
 
   :both-predicate:
   assert-eq ((bothPredicates (lambda (x) (< 0 x)) (lambda (x) (< x 4))) 3) True "bothPredicates true"

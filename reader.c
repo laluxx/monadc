@@ -8729,15 +8729,30 @@ static AST *parse_refinement_expr(Parser *p, int start_line, int start_col) {
                        "Expected '∈' after variable name");
     p->current = lexer_next_token(p->lexer); // consume ∈
 
-    if (!p->current.value || p->current.type != TOK_SYMBOL)
+    char *base = NULL;
+    if (p->current.type == TOK_SYMBOL && p->current.value) {
+        base = my_strdup(p->current.value);
+        p->current = lexer_next_token(p->lexer); // consume base type
+    } else if (p->current.type == TOK_LBRACKET) {
+        /* Collection bases are types too: { xs ∈ [Char] | p xs }.
+         * Preserve the type spelling for type_from_name rather than treating
+         * the brackets as a value-level collection literal. */
+        p->current = lexer_next_token(p->lexer); // consume '['
+        if (p->current.type != TOK_SYMBOL || !p->current.value)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected element type in refinement collection base");
+        size_t n = strlen(p->current.value);
+        base = malloc(n + 3);
+        snprintf(base, n + 3, "[%s]", p->current.value);
+        p->current = lexer_next_token(p->lexer); // consume element type
+        if (p->current.type != TOK_RBRACKET)
+            compiler_error(p->current.line, p->current.column,
+                           "Expected ']' after refinement collection base");
+        p->current = lexer_next_token(p->lexer); // consume ']'
+    } else {
         compiler_error(p->current.line, p->current.column,
                        "Expected base type after '∈'");
-
-    if (p->current.type != TOK_SYMBOL)
-        compiler_error(p->current.line, p->current.column,
-                       "Expected base type after '∈'");
-    char *base = my_strdup(p->current.value);
-    p->current = lexer_next_token(p->lexer); // consume base type
+    }
 
     if (!(p->current.type == TOK_SYMBOL &&
           p->current.value &&
