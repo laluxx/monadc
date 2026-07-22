@@ -921,25 +921,6 @@ static void compile_prelude_dir(const char *dir, const char *current_source,
     closedir(d);
 }
 
-static void compile_core_subr(const char *current_source,
-                              CompilerFlags *flags, const char *source,
-                              const char *core_dir)
-{
-    if (!core_dir || !*core_dir)
-        return;
-
-    char subr_path[1024];
-    snprintf(subr_path, sizeof(subr_path), "%s/Subr.mon", core_dir);
-    if (!file_exists(subr_path) ||
-        path_is_current_source(subr_path, current_source) ||
-        registry_find("Subr"))
-        return;
-
-    CompiledModule *subr = compile_one(subr_path, flags, false);
-    register_compiled_module_wisp_arities(subr);
-    parser_set_context(current_source, source);
-}
-
 static void compile_prelude_modules(const char *current_source,
                                     CompilerFlags *flags, const char *source)
 {
@@ -966,7 +947,6 @@ static void compile_prelude_modules(const char *current_source,
     }
 
     char path[1024];
-    compile_core_subr(current_source, flags, source, core_dir);
     snprintf(path, sizeof(path), "%s/prelude", core_dir);
     compile_prelude_dir(path, current_source, flags, source);
     free(core_dir);

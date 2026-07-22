@@ -16509,8 +16509,19 @@ if (ast->list.count >= 5) {
             if (strcmp(head->symbol, "dot") == 0 && ast->list.count == 3) {
                 if (ast->list.items[2]->type == AST_SYMBOL) {
                     const char *method_name = ast->list.items[2]->symbol;
-                    char *imported_method_name =
-                        codegen_imported_call_name(ctx, method_name);
+                    char resolved_method_name[512] = {0};
+                    const char *receiver_name =
+                        codegen_type_method_receiver_name_from_ast(
+                            ctx, ast->list.items[1]);
+                    EnvEntry *local_method = receiver_name
+                        ? codegen_lookup_type_method(
+                              ctx, receiver_name, method_name,
+                              resolved_method_name,
+                              sizeof(resolved_method_name))
+                        : NULL;
+                    char *imported_method_name = local_method
+                        ? strdup(resolved_method_name)
+                        : codegen_imported_call_name(ctx, method_name);
 
                     if (imported_method_name) {
                         AST *call_items[2];
@@ -16652,6 +16663,56 @@ if (ast->list.count >= 5) {
 
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: unknown function: %s",
                     parser_get_filename(), ast->line, ast->column, head->symbol);
+        }
+
+        /* Handle ((dot receiver method) args...) as an ordinary method call.
+         *
+         * Wisp keeps postfix calls on arbitrary expressions explicit instead of
+         * fusing them into a symbol (for example, `(Just 1).fromMaybe 0`).  Do
+         * not compile the inner dot first: that would call the method with only
+         * its receiver and then attempt to call the result as a closure. */
+        if (head->type == AST_LIST && head->list.count == 3 &&
+            head->list.items[0]->type == AST_SYMBOL &&
+            strcmp(head->list.items[0]->symbol, "dot") == 0 &&
+            head->list.items[2]->type == AST_SYMBOL) {
+            const char *method_name = head->list.items[2]->symbol;
+            const char *receiver_name =
+                codegen_type_method_receiver_name_from_ast(
+                    ctx, head->list.items[1]);
+            char resolved_method_name[512] = {0};
+            EnvEntry *local_method = receiver_name
+                ? codegen_lookup_type_method(
+                      ctx, receiver_name, method_name,
+                      resolved_method_name, sizeof(resolved_method_name))
+                : NULL;
+            char *call_name = local_method
+                ? strdup(resolved_method_name)
+                : codegen_imported_call_name(ctx, method_name);
+
+            if (call_name) {
+                size_t call_count = ast->list.count + 1;
+                AST **call_items = malloc(call_count * sizeof(*call_items));
+                AST call_ast;
+
+                call_items[0] = head->list.items[2];
+                call_items[1] = head->list.items[1];
+                for (size_t i = 1; i < ast->list.count; i++)
+                    call_items[i + 1] = ast->list.items[i];
+
+                memset(&call_ast, 0, sizeof(call_ast));
+                call_ast.type = AST_LIST;
+                call_ast.line = ast->line;
+                call_ast.column = ast->column;
+                call_ast.inferred_type = ast->inferred_type;
+                call_ast.list.count = call_count;
+                call_ast.list.items = call_items;
+
+                CodegenResult method_result =
+                    codegen_forward_declared_call(ctx, &call_ast, call_name);
+                free(call_items);
+                free(call_name);
+                return method_result;
+            }
         }
 
         // Handle ((expr) args...) — calling a non-symbol expression in head position

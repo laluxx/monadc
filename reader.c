@@ -7385,11 +7385,59 @@ static AST *parse_list(Parser *p) {
              */
             int sig_depth = 0;
             bool sig_last_was_arrow = false;
+            bool has_explicit_clause_boundary = false;
+            {
+                Lexer boundary_lex = *p->lexer;
+                Token boundary_tok = p->current;
+                if (boundary_tok.value)
+                    boundary_tok.value = my_strdup(boundary_tok.value);
+                int boundary_depth = 0;
+                while (boundary_tok.type != TOK_EOF) {
+                    if (boundary_tok.type == TOK_KEYWORD &&
+                        boundary_tok.value &&
+                        strcmp(boundary_tok.value, "clauses") == 0) {
+                        has_explicit_clause_boundary = true;
+                        free(boundary_tok.value);
+                        break;
+                    }
+                    if (boundary_tok.type == TOK_LPAREN ||
+                        boundary_tok.type == TOK_LBRACKET ||
+                        boundary_tok.type == TOK_LBRACE ||
+                        boundary_tok.type == TOK_HASH_LBRACE) {
+                        boundary_depth++;
+                    } else if (boundary_tok.type == TOK_RPAREN ||
+                               boundary_tok.type == TOK_RBRACKET ||
+                               boundary_tok.type == TOK_RBRACE) {
+                        if (boundary_depth == 0) {
+                            free(boundary_tok.value);
+                            break;
+                        }
+                        boundary_depth--;
+                    }
+                    free(boundary_tok.value);
+                    boundary_tok = lexer_next_token(&boundary_lex);
+                }
+                if (boundary_tok.type == TOK_EOF) {
+                    free(boundary_tok.value);
+                }
+            }
 
             while (p->current.type != TOK_EOF &&
                    !(sig_depth == 0 && p->current.type == TOK_RPAREN) &&
                    !(sig_depth == 0 && p->current.type == TOK_KEYWORD)) {
-                if (sig_depth == 0 &&
+                /* Wisp keeps the signature on the `method` line and starts
+                 * clauses on the following line.  This is the authoritative
+                 * boundary for polymorphic applications such as
+                 * `Either e a -> c` and pattern clauses beginning with `[]`.
+                 * The older token-shape heuristic remains below for compact
+                 * one-line Lisp forms. */
+                if (sig_depth == 0 && strstr(sig_buf, "->") &&
+                    p->current.line > meth_line) {
+                    break;
+                }
+
+                if (!has_explicit_clause_boundary &&
+                    sig_depth == 0 &&
                     !sig_last_was_arrow &&
                     p->current.type == TOK_SYMBOL &&
                     p->current.value &&
@@ -7581,6 +7629,14 @@ static AST *parse_list(Parser *p) {
             }
             free(ret_type2);
             ret_type2 = my_strdup(rt_buf2);
+        }
+
+        /* Wisp emits an explicit boundary between a method's type and its
+         * clauses.  Without it, `Either e a -> c` followed by `f g value ->`
+         * is grammatically ambiguous after layout has been removed. */
+        if (p->current.type == TOK_KEYWORD && p->current.value &&
+            strcmp(p->current.value, "clauses") == 0) {
+            p->current = lexer_next_token(p->lexer);
         }
 
         bool method_has_pmatch = false;

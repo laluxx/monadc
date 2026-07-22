@@ -19,10 +19,9 @@ module Data.Maybe
   [Maybe Nothing Just
    maybe fromMaybe fromJust
    just? nothing?
-   maybe-map maybe-bind maybe-join maybe-apply
-   maybe-replace maybe-lift2 maybe-lift3
-   maybeToList listToMaybe
-   orElse firstJust safe-head safe-tail]
+   transform flatMap flatten apply replace combine combineThree
+   toList listToMaybe
+   orElse firstJust safeHead safeTail]
 
 
 data Maybe a = Nothing | Just a
@@ -48,80 +47,80 @@ instance Monad Maybe
   fail message -> Nothing
 
 
-define maybe :: b -> (a -> b) -> Maybe a -> b
-  default f value -> (match value with | Nothing -> default | (Just x) -> (f x))
+method maybe :: Maybe a -> b -> (a -> b) -> b
+  value default f -> (match value with | Nothing -> default | (Just x) -> (f x))
 
 
-define fromMaybe :: a -> Maybe a -> a
-  default value -> (match value with | Nothing -> default | (Just x) -> x)
+method fromMaybe :: Maybe a -> a -> a
+  value default -> (match value with | Nothing -> default | (Just x) -> x)
 
 
-define fromJust :: Maybe a -> a
+method fromJust :: Maybe a -> a
   value -> (match value with | Nothing -> (error "fromJust: Nothing") | (Just x) -> x)
 
 
-define just? :: Maybe a -> Bool
+method just? :: Maybe a -> Bool
   value -> (match value with | Nothing -> False | (Just x) -> True)
 
 
-define nothing? :: Maybe a -> Bool
+method nothing? :: Maybe a -> Bool
   value -> (match value with | Nothing -> True | (Just x) -> False)
 
 
-define maybe-map :: (a -> b) -> Maybe a -> Maybe b
-  f value -> map f value
+method transform :: Maybe a -> (a -> b) -> Maybe b
+  value f -> map f value
 
 
-define maybe-bind :: Maybe a -> (a -> Maybe b) -> Maybe b
+method flatMap :: Maybe a -> (a -> Maybe b) -> Maybe b
   ;; Keep the compatibility wrapper direct until polymorphic typeclass calls
   ;; carrying closures share the ordinary closure ABI in both parser paths.
   value f -> (match value with | Nothing -> Nothing | (Just x) -> (f x))
 
 
-define maybe-join :: Maybe (Maybe a) -> Maybe a
+method flatten :: Maybe (Maybe a) -> Maybe a
   value -> join value
 
 
-define maybe-apply :: Maybe (a -> b) -> Maybe a -> Maybe b
-  fvalue x -> (match fvalue with | Nothing -> Nothing | (Just f) -> (maybe-map f x))
+method apply :: Maybe (a -> b) -> Maybe a -> Maybe b
+  fvalue x -> (match fvalue with | Nothing -> Nothing | (Just f) -> (transform x f))
 
 
-define maybe-replace :: a -> Maybe b -> Maybe a
-  x value -> (match value with | Nothing -> Nothing | (Just ignored) -> Just x)
+method replace :: Maybe b -> a -> Maybe a
+  value x -> (match value with | Nothing -> Nothing | (Just ignored) -> Just x)
 
 
-define maybe-lift2 :: (a -> b -> c) -> Maybe a -> Maybe b -> Maybe c
-  f x y -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> Just (f a b)))
+method combine :: Maybe a -> Maybe b -> (a -> b -> c) -> Maybe c
+  x y f -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> Just (f a b)))
 
 
-define maybe-lift3 :: (a -> b -> c -> d) -> Maybe a -> Maybe b -> Maybe c -> Maybe d
-  f x y z -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> (match z with | Nothing -> Nothing | (Just c) -> Just (f a b c))))
+method combineThree :: Maybe a -> Maybe b -> Maybe c -> (a -> b -> c -> d) -> Maybe d
+  x y z f -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> (match z with | Nothing -> Nothing | (Just c) -> Just (f a b c))))
 
 
-define maybeToList :: Maybe a -> [a]
+method toList :: Maybe a -> [a]
   value -> (match value with | Nothing -> [] | (Just x) -> (list x))
 
 
-define listToMaybe :: [a] -> Maybe a
+method listToMaybe :: [a] -> Maybe a
   []           -> Nothing
   [x|ignored] -> Just x
 
 
-define orElse :: Maybe a -> Maybe a -> Maybe a
-  value rhs -> (match value with | Nothing -> rhs | (Just x) -> (Just x))
+method orElse :: Maybe a -> Maybe a -> Maybe a
+  value rhs -> (match value with | Nothing -> rhs | (Just x) -> value)
 
 
-define firstJust :: [Maybe a] -> Maybe a
+method firstJust :: [Maybe a] -> Maybe a
   []       -> Nothing
-  [m|rest] -> (orElse m (firstJust rest))
+  [m|rest] -> m.orElse (firstJust rest)
 
 
-define safe-head :: [a] -> Maybe a
+method safeHead :: [a] -> Maybe a
   []           -> Nothing
   [x|ignored] -> Just x
 
 
-define safe-tail :: [a] -> Maybe [a]
+method safeTail :: [a] -> Maybe [a]
   [] -> Nothing
   [ignored|xs] -> Just xs
 
@@ -138,84 +137,35 @@ define maybe-test-add3 :: Int -> Int -> Int -> Int
   x y z -> x + y + z
 
 
-define maybe-test-eliminate-nothing :: _ -> Int
-  _ -> maybe 0 maybe-test-inc Nothing
-
-
-define maybe-test-eliminate-just :: _ -> Int
-  _ -> maybe 0 maybe-test-inc (Just 41)
-
-
-define maybe-test-map-just :: _ -> Maybe Int
-  _ -> maybe-map maybe-test-inc (Just 41)
-
-
-define maybe-test-map-nothing :: _ -> Maybe Int
-  _ -> maybe-map maybe-test-inc Nothing
-
-
-define maybe-test-bind-just :: _ -> Maybe Int
-  _ -> maybe-bind (Just 41) (lambda (x) (Just (maybe-test-inc x)))
-
-
-define maybe-test-bind-nothing :: _ -> Maybe Int
-  _ -> maybe-bind Nothing (lambda (x) (Just (maybe-test-inc x)))
-
-
-define maybe-test-lift2-just :: _ -> Maybe Int
-  _ -> maybe-lift2 maybe-test-add (Just 20) (Just 22)
-
-
-define maybe-test-lift2-nothing :: _ -> Maybe Int
-  _ -> maybe-lift2 maybe-test-add (Just 20) Nothing
-
-
-define maybe-test-lift3-just :: _ -> Maybe Int
-  _ -> maybe-lift3 maybe-test-add3 (Just 10) (Just 12) (Just 20)
-
-
-define maybe-test-lift3-nothing :: _ -> Maybe Int
-  _ -> maybe-lift3 maybe-test-add3 (Just 10) Nothing (Just 20)
-
-
 tests
   :eliminate:
-  assert-eq (maybe-test-eliminate-nothing 0) 0 "Maybe maybe Nothing"
-  assert-eq (maybe-test-eliminate-just 0) 42 "Maybe maybe Just"
-  assert-eq (fromMaybe 7 Nothing) 7 "Maybe fromMaybe Nothing"
-  assert-eq (fromMaybe 7 (Just 9)) 9 "Maybe fromMaybe Just"
+  assert-eq (Nothing.fromMaybe 7)      7 "Maybe fromMaybe Nothing"
+  assert-eq ((Just 9).fromMaybe 7) 9 "Maybe fromMaybe Just"
   :eliminate:
 
   :predicates:
-  assert-eq (just? (Just 1)) True "Maybe just? Just"
-  assert-eq (just? Nothing) False "Maybe just? Nothing"
-  assert-eq (nothing? Nothing) True "Maybe nothing? Nothing"
-  assert-eq (nothing? (Just 1)) False "Maybe nothing? Just"
+  assert-eq ((Just 1).just?)       True  "Maybe just? Just"
+  assert-eq ((Just 1).just?)       True  "Maybe just? method syntax"
+  assert-eq (Nothing.just?)        False "Maybe just? Nothing"
+  assert-eq (Nothing.nothing?)     True  "Maybe nothing? Nothing"
+  assert-eq ((Just 1).nothing?) False "Maybe nothing? Just"
   :predicates:
 
   :transform:
-  assert-eq (show (maybe-test-map-just 0)) "(Just 42)" "Maybe map Just"
-  assert-eq (show (maybe-test-map-nothing 0)) "Nothing" "Maybe map Nothing"
-  assert-eq (show (maybe-test-bind-just 0)) "(Just 42)" "Maybe bind Just"
-  assert-eq (show (maybe-test-bind-nothing 0)) "Nothing" "Maybe bind Nothing"
-  assert-eq (show (maybe-join (Just (Just 42)))) "(Just 42)" "Maybe join nested Just"
-  assert-eq (show (maybe-join (Just Nothing))) "Nothing" "Maybe join inner Nothing"
-  assert-eq (show (maybe-join Nothing)) "Nothing" "Maybe join outer Nothing"
-  assert-eq (show (maybe-replace 9 (Just 1))) "(Just 9)" "Maybe replace Just"
-  assert-eq (show (maybe-replace 9 Nothing)) "Nothing" "Maybe replace Nothing"
-  assert-eq (show (maybe-test-lift2-just 0)) "(Just 42)" "Maybe lift2 Just"
-  assert-eq (show (maybe-test-lift2-nothing 0)) "Nothing" "Maybe lift2 Nothing"
-  assert-eq (show (maybe-test-lift3-just 0)) "(Just 42)" "Maybe lift3 Just"
-  assert-eq (show (maybe-test-lift3-nothing 0)) "Nothing" "Maybe lift3 Nothing"
+  assert-eq (show ((Just (Just 42)).flatten)) "(Just 42)" "Maybe flatten nested Just"
+  assert-eq (show ((Just Nothing).flatten))   "Nothing"   "Maybe flatten inner Nothing"
+  assert-eq (show (Nothing.flatten))          "Nothing"   "Maybe flatten outer Nothing"
+  assert-eq (show ((Just 1).replace 9))        "(Just 9)"  "Maybe replace Just"
+  assert-eq (show (Nothing.replace 9))         "Nothing"   "Maybe replace Nothing"
   :transform:
 
   :list:
-  assert-eq (show (maybeToList (Just 5))) "(5)" "Maybe to list Just"
-  assert-eq (show (maybeToList Nothing)) "()" "Maybe to list Nothing"
+  assert-eq (show ((Just 5).toList))          "(5)"        "Maybe to list Just"
+  assert-eq (show (Nothing.toList))           "()"         "Maybe to list Nothing"
   assert-eq (show (listToMaybe (list 8 9))) "(Just 8)" "Maybe listToMaybe nonempty"
-  assert-eq (show (listToMaybe [])) "Nothing" "Maybe listToMaybe empty"
-  assert-eq (show (safe-head (list 3 4))) "(Just 3)" "Maybe safe-head nonempty"
-  assert-eq (show (safe-head [])) "Nothing" "Maybe safe-head empty"
-  assert-eq (show (safe-tail (list 3 4))) "(Just (4))" "Maybe safe-tail nonempty"
-  assert-eq (show (safe-tail [])) "Nothing" "Maybe safe-tail empty"
+  assert-eq (show (listToMaybe []))            "Nothing"   "Maybe listToMaybe empty"
+  assert-eq (show (safeHead (list 3 4)))       "(Just 3)"  "Maybe safeHead nonempty"
+  assert-eq (show (safeHead []))               "Nothing"   "Maybe safeHead empty"
+  assert-eq (show (safeTail (list 3 4)))       "(Just (4))" "Maybe safeTail nonempty"
+  assert-eq (show (safeTail []))               "Nothing"   "Maybe safeTail empty"
   :list:

@@ -6960,6 +6960,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
             bool is_method_block =
                 (strncmp(t, "method", 6) == 0 &&
                  (t[6] == ' ' || t[6] == '\t' || t[6] == '\0'));
+            bool method_clauses_started = false;
 
             size_t method_meta_cap = 128;
             size_t method_meta_len = 0;
@@ -7482,6 +7483,17 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     while (need >= acc_cap) { acc_cap *= 2; acc = realloc(acc, acc_cap); }
 
                     if (is_method_block) {
+                        if (!method_clauses_started) {
+                            const char *boundary = " :clauses ";
+                            size_t boundary_len = strlen(boundary);
+                            while (acc_len + boundary_len + 2 >= acc_cap) {
+                                acc_cap *= 2;
+                                acc = realloc(acc, acc_cap);
+                            }
+                            memcpy(acc + acc_len, boundary, boundary_len);
+                            acc_len += boundary_len;
+                            method_clauses_started = true;
+                        }
                         acc[acc_len++] = ' ';
                     } else {
                         memcpy(acc + acc_len, _ld2, _ld2len);

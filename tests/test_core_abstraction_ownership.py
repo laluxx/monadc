@@ -33,6 +33,31 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "the compiler must not turn the core finite-set declaration back into TYPE_BOOL",
         )
 
+    def test_bool_behavior_is_owned_by_core_methods(self):
+        bool_core = source("core/prelude/Data/Bool.mon")
+        for name in ("bool", "not?", "and?", "or?", "xor?", "implies?", "iff?"):
+            self.assertRegex(bool_core, rf"(?m)^method\s+{re.escape(name)}\s+::")
+            self.assertNotRegex(bool_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
+    def test_sum_type_behavior_is_owned_by_core_methods(self):
+        modules = {
+            "core/prelude/Data/Maybe.mon": (
+                "maybe", "fromMaybe", "fromJust", "just?", "nothing?",
+                "transform", "flatMap", "flatten", "apply", "replace",
+                "combine", "combineThree", "toList", "listToMaybe", "orElse",
+                "firstJust", "safeHead", "safeTail",
+            ),
+            "core/prelude/Data/Either.mon": (
+                "either", "left?", "right?", "fromLeft", "fromRight",
+                "mapLeft", "mapRight", "flatMap", "mapBoth",
+            ),
+        }
+        for module, names in modules.items():
+            text = source(module)
+            for name in names:
+                self.assertRegex(text, rf"(?m)^method\s+{re.escape(name)}\s+::")
+                self.assertNotRegex(text, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
     def test_registered_core_types_override_legacy_representation_fallbacks(self):
         types_c = source("types.c")
         registry_lookup = types_c.index("// Check alias registry")

@@ -6,8 +6,8 @@
 
 ;;; Commentary:
 
-;; Core boolean functions.  No dependencies on Maybe or ADTs — every function
-;; returns Bool or a polymorphic value, making these tests foundational.
+;; Bool is a finite core-owned set.  Its behavior is attached as methods; the
+;; compiler supplies representation and dispatch machinery, not boolean policy.
 
 ;;; Code:
 
@@ -18,43 +18,43 @@ module Data.Bool
 type Bool {True False}
 
 
-define bool :: a -> a -> Bool -> a
+method bool :: a -> a -> Bool -> a
   :doc "Choose the first value for False and the second for True."
-  false_val true_val c | c         -> true_val
-                       | otherwise -> false_val
+  false true c | c         -> true
+               | otherwise -> false
 
 
-define not? :: Bool -> Bool
+method not? :: Bool -> Bool
   :doc "Boolean negation."
   x | x       -> False
     | otherwise -> True
 
 
-define and? :: Bool -> Bool -> Bool
+method and? :: Bool -> Bool -> Bool
   :doc "Boolean conjunction."
   x y | x       -> y
       | otherwise -> False
 
 
-define or? :: Bool -> Bool -> Bool
+method or? :: Bool -> Bool -> Bool
   :doc "Boolean disjunction."
   x y | x       -> True
       | otherwise -> y
 
 
-define xor? :: Bool -> Bool -> Bool
+method xor? :: Bool -> Bool -> Bool
   :doc "Exclusive or."
   x y | x       -> not? y
       | otherwise -> y
 
 
-define implies? :: Bool -> Bool -> Bool
+method implies? :: Bool -> Bool -> Bool
   :doc "Logical implication."
   x y | x       -> y
       | otherwise -> True
 
 
-define iff? :: Bool -> Bool -> Bool
+method iff? :: Bool -> Bool -> Bool
   :doc "Logical equivalence."
   x y | x       -> y
       | otherwise -> not? y
@@ -69,6 +69,7 @@ tests
   :not?:
   assert-eq (not? True)  False "not? True"
   assert-eq (not? False) True  "not? False"
+  assert-eq (True.not?)  False "not? method syntax"
 
   :not?:
   :and?:

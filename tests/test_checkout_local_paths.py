@@ -88,16 +88,12 @@ class CheckoutLocalPathTests(unittest.TestCase):
         self.assertIn('"libmonad.a"', main_c)
         self.assertNotIn(" -o %s /usr/local/lib/libmonad.a", main_c)
 
-    def test_core_subr_manifest_precedes_prelude_discovery(self):
+    def test_prelude_is_the_single_core_semantic_root(self):
         main_c = read("main.c")
-        subr = read("core/Subr.mon")
 
-        self.assertIn("module Subr", subr)
-        self.assertIn("compile_core_subr", main_c)
-        self.assertLess(
-            main_c.index("compile_core_subr(current_source"),
-            main_c.index("compile_prelude_dir(path, current_source"),
-        )
+        self.assertFalse((ROOT / "core/Subr.mon").exists())
+        self.assertNotIn("compile_core_subr", main_c)
+        self.assertIn("compile_prelude_dir(path, current_source", main_c)
 
     def test_legacy_buildsystem_links_runtime_archive_not_object_file(self):
         buildsystem_c = read("buildsystem.c")
