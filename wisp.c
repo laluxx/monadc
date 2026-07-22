@@ -9905,8 +9905,58 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     p = clause_start_pos;
 
                     /* No indented parameter clause followed the return type:
-                     * keep this as a true nullary function. */
+                     * keep this as a true nullary function and consume its
+                     * indented expression body. */
                     arity_set(at, fname, 0);
+
+                    scan_pos = clause_start_pos;
+                    scan_lineno = lineno + 1;
+                    SB nullary_body;
+                    sb_init(&nullary_body);
+                    int nullary_count = 0;
+                    while (*scan_pos) {
+                        const char *ls = scan_pos;
+                        while (*scan_pos && *scan_pos != '\n') scan_pos++;
+                        const char *le = scan_pos;
+                        if (*scan_pos == '\n') scan_pos++;
+
+                        const char *lt = ls;
+                        while (lt < le && (*lt == ' ' || *lt == '\t')) lt++;
+                        if (lt >= le || *lt == ';') {
+                            scan_lineno++;
+                            continue;
+                        }
+                        if (measure_indent(ls) <= indent) {
+                            scan_pos = ls;
+                            break;
+                        }
+
+                        char *body_src = strndup(lt, (size_t)(le - lt));
+                        char *body_expr = wisp_expand_expr_snippet(at, body_src);
+                        free(body_src);
+                        if (nullary_count > 0) sb_putc(&nullary_body, ' ');
+                        sb_puts(&nullary_body, body_expr);
+                        free(body_expr);
+                        nullary_count++;
+                        scan_lineno++;
+                    }
+
+                    char *nullary_text;
+                    if (nullary_count == 0) {
+                        nullary_text = strdup("(undefined)");
+                        free(sb_take(&nullary_body));
+                    } else if (nullary_count == 1) {
+                        nullary_text = sb_take(&nullary_body);
+                    } else {
+                        char *items = sb_take(&nullary_body);
+                        SB sequence;
+                        sb_init(&sequence);
+                        sb_puts(&sequence, "(begin ");
+                        sb_puts(&sequence, items);
+                        sb_putc(&sequence, ')');
+                        free(items);
+                        nullary_text = sb_take(&sequence);
+                    }
 
                     SB full;
                     sb_init(&full);
@@ -9914,16 +9964,20 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     sb_puts(&full, fname);
                     sb_puts(&full, " -> ");
                     sb_puts(&full, ret_type);
-                    sb_puts(&full, ") (undefined))");
+                    sb_puts(&full, ") ");
+                    sb_puts(&full, nullary_text);
+                    sb_putc(&full, ')');
 
                     char *complete = sb_take(&full);
                     wts_push(&s, complete, indent, lineno);
 
                     free(complete);
+                    free(nullary_text);
                     free(fname);
                     free(ret_type);
                     free(raw);
-                    lineno++;
+                    p = scan_pos;
+                    lineno = scan_lineno;
                     continue;
                 }
 

@@ -1477,3 +1477,11 @@
   strings, absent fragments, and recursive substring search. This establishes
   the boundary rule: a runtime intrinsic may optimize representation, but the
   exported method and its laws must be expressible and owned by core.
+
+[FIX id:fix.wisp.typed-nullary-body-2026-07-22 date:2026-07-22 by:codex src:wisp.c,how_to/Syntax.mon conf:high]
+  A Wisp definition such as =define return-string -> String= now consumes its
+  indented expression body as a true nullary function. Previously the expander
+  emitted =(undefined)= and left the body at top level, which caused the Syntax
+  example to abort or reference a generated =__jret_0=. Multiple indented
+  expressions are sequenced with =begin=. The README how-to compilation and
+  requested-output link tests cover the regression on the CMake-built compiler.
