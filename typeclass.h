@@ -135,6 +135,10 @@ bool tc_is_method(TypeClassRegistry *reg, const char *method_name);
 // Returns the class name that owns method_name, NULL if not a method.
 const char *tc_method_class(TypeClassRegistry *reg, const char *method_name);
 
+// Parse and return the declared result type of a class method. Caller owns it.
+Type *tc_method_result_type(TypeClassRegistry *reg, const char *class_name,
+                            const char *method_name);
+
 /// Dictionary type generation
 //
 // Returns (or creates) the LLVM struct type for a class's dictionary.

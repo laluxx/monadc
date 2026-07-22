@@ -5673,6 +5673,31 @@ static char *codegen_type_method_call_name(CodegenContext *ctx,
 
 static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast, const char *name) {
     CodegenResult result = {NULL, NULL};
+    Type *method_result = NULL;
+
+    if (name && strncmp(name, "__impl_", 7) == 0) {
+        const char *class_start = name + 7;
+        const char *class_end = strchr(class_start, '_');
+        const char *type_end = class_end ? strchr(class_end + 1, '_') : NULL;
+        if (class_end && type_end && type_end[1]) {
+            size_t class_len = (size_t)(class_end - class_start);
+            char *class_name = malloc(class_len + 1);
+            memcpy(class_name, class_start, class_len);
+            class_name[class_len] = '\0';
+            const char *current_module =
+                (ctx->module_ctx && ctx->module_ctx->decl)
+                    ? ctx->module_ctx->decl->name : NULL;
+            if (current_module && strcmp(current_module, class_name) != 0)
+                method_result = tc_method_result_type(ctx->tc_registry, class_name,
+                                                      type_end + 1);
+            if (method_result && (method_result->kind == TYPE_UNKNOWN ||
+                                  method_result->kind == TYPE_VAR)) {
+                type_free(method_result);
+                method_result = NULL;
+            }
+            free(class_name);
+        }
+    }
 
     if (codegen_import_debug_enabled()) {
         fprintf(stderr,
@@ -5713,16 +5738,43 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
     }
 
     Type *ret_type = NULL;
-    if (ast->inferred_type && ast->inferred_type->kind != TYPE_UNKNOWN) {
+    if (method_result) {
+        ret_type = method_result;
+        method_result = NULL;
+    } else if (ast->inferred_type && ast->inferred_type->kind != TYPE_UNKNOWN) {
         ret_type = type_clone(ast->inferred_type);
     } else {
-        ret_type = type_unknown();
+        EnvEntry *known = env_lookup(ctx->env, name);
+        if (known && known->return_type &&
+            known->return_type->kind != TYPE_UNKNOWN)
+            ret_type = type_clone(known->return_type);
+        else
+            ret_type = type_unknown();
+    }
+
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, name);
+    if (fn && ret_type->kind == TYPE_UNKNOWN) {
+        /* Imported typeclass calls can reach codegen before HM has zonked the
+         * call node. The already imported implementation declaration carries
+         * the concrete ABI and is authoritative for primitive results. */
+        LLVMTypeRef actual_ret = LLVMGetReturnType(LLVMGlobalGetValueType(fn));
+        LLVMTypeKind ret_kind = LLVMGetTypeKind(actual_ret);
+        if (ret_kind == LLVMIntegerTypeKind) {
+            unsigned width = LLVMGetIntTypeWidth(actual_ret);
+            type_free(ret_type);
+            ret_type = width == 1 ? type_bool()
+                     : width == 8 ? type_char()
+                                  : type_int();
+        } else if (ret_kind == LLVMDoubleTypeKind ||
+                   ret_kind == LLVMFloatTypeKind) {
+            type_free(ret_type);
+            ret_type = type_float();
+        }
     }
 
     LLVMTypeRef ret_llvm = type_to_llvm(ctx, ret_type);
     LLVMTypeRef fn_type = LLVMFunctionType(ret_llvm, arg_types, argc, 0);
 
-    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, name);
     if (!fn) {
         fn = LLVMAddFunction(ctx->module, name, fn_type);
         LLVMSetLinkage(fn, LLVMExternalLinkage);
@@ -13099,7 +13151,7 @@ if (ast->list.count >= 5) {
                         (entry && entry->type) ? (int)entry->type->kind : -1);
             }
 
-            if (!entry && !tc_is_method(ctx->tc_registry, head->symbol)) {
+            if (!entry) {
                 char *type_method_call_name =
                     codegen_type_method_call_name(ctx, ast, head->symbol);
 
@@ -14076,7 +14128,7 @@ if (ast->list.count >= 5) {
                 }
             }
 
-            if (!entry) {
+            if (!entry && !tc_is_method(ctx->tc_registry, head->symbol)) {
                 char *imported_call_name =
                     codegen_imported_call_name(ctx, head->symbol);
 

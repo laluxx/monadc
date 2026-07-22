@@ -422,6 +422,28 @@ static Type *my_type_parse_fn_arrow(const char *sig) {
     return t;
 }
 
+Type *tc_method_result_type(TypeClassRegistry *reg, const char *class_name,
+                            const char *method_name) {
+    TCClass *class_decl = tc_find_class(reg, class_name);
+    if (!class_decl) return NULL;
+
+    for (int i = 0; i < class_decl->method_count; i++) {
+        TCMethod *method = &class_decl->methods[i];
+        if (!method->name || !method->type_str ||
+            strcmp(method->name, method_name) != 0)
+            continue;
+
+        Type *signature = my_type_parse_fn_arrow(method->type_str);
+        Type *result = signature;
+        while (result && result->kind == TYPE_ARROW)
+            result = result->arrow_ret;
+        Type *owned_result = result ? type_clone(result) : NULL;
+        type_free(signature);
+        return owned_result;
+    }
+    return NULL;
+}
+
 /// Instance registration
 //
 // For each method in the instance:

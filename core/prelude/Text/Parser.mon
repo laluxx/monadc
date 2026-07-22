@@ -12,7 +12,7 @@
 
 ;;; Code:
 
-import Coll
+import Sequence
 import Data.Bool
 
 module Text.Parser
@@ -67,11 +67,11 @@ define parse-error-code :: ParseResult -> Int
 
 
 define parser-empty? :: [Int] -> Bool
-  xs -> Coll.null? xs
+  xs -> null? xs
 
 
 define parser-drop :: Int -> [Int] -> [Int]
-  n xs -> Coll.drop xs n
+  n xs -> drop xs n
 
 
 define byte :: Int -> Int -> [Int] -> ParseResult

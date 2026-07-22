@@ -1402,8 +1402,8 @@
   keeps the method definition traceable to =core/prelude/Data/Int.mon= while
   preserving an optimized direct call.
 
-[FIX id:fix.core-libs.collection-class-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Coll.mon,infer.c conf:high]
-  =Collection c= is now declared by core with constructor-preserving =map= and
+[FIX id:fix.core-libs.collection-class-2026-07-16 date:2026-07-16 by:codex src:core/prelude/Sequence.mon,infer.c conf:high]
+  =Sequence c= is now declared by core with constructor-preserving =map= and
   =filter= plus =foldl/foldr=. The compiler no longer installs public HM schemes
   for those four operation names; the =Coll= instance owns their implementations.
   Concrete set algorithms temporarily use exported =coll-foldl= because imported
@@ -1417,7 +1417,7 @@
   The list primitive spectrum, mutable append, and collection workflow runtime
   regressions cover these representation boundaries.
 
-[FIX id:fix.core-libs.sequence-class-wisp-defaults-2026-07-17 date:2026-07-17 by:codex src:core/prelude/Coll.mon,core/prelude/Data/Enum.mon,wisp.c conf:high]
+[FIX id:fix.core-libs.sequence-class-wisp-defaults-2026-07-17 date:2026-07-17 by:codex src:core/prelude/Sequence.mon,core/prelude/Data/Enum.mon,wisp.c conf:high]
   The ordered, constructor-preserving abstraction for lists, arrays, and strings
   is named =Sequence= rather than =Collection=.  Its order-sensitive operations
   (=take=, =drop=, =zip=) make that contract narrower than the compiler/runtime
@@ -1446,3 +1446,13 @@
   interval predicates. Parallel copies were removed from =Math=, =Data.Int=,
   and =Data.Float=. The ownership regression scans these modules, while the
   full core suite executes all 33 active modules and 640 assertions.
+
+[FIX id:fix.core-libs.sequence-module-and-imported-abi-2026-07-22 date:2026-07-22 by:codex src:core/prelude/Sequence.mon,codegen.c,typeclass.c conf:high]
+  The public sequence abstraction now lives in =Sequence.mon= and is imported
+  as =Sequence=; =Coll= remains only the compiler's private representation name.
+  All ordered sequence operations are class methods implemented by the core's
+  =Sequence Coll= instance. Imported typeclass implementation calls recover
+  their result type from the class signature before LLVM declaration, preventing
+  scalar results such as =length :: c a -> Int= from being compiled with pointer
+  ABI. Runtime import regressions exercise =null?=, =drop=, =length=, =reverse=,
+  =nth=, and inherited =Foldable.foldl= across the module boundary.

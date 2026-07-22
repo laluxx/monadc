@@ -139,29 +139,29 @@ define maybe-test-add3 :: Int -> Int -> Int -> Int
 
 tests
   :eliminate:
-  assert-eq (Nothing.fromMaybe 7)      7 "Maybe fromMaybe Nothing"
+  assert-eq (fromMaybe Nothing 7)      7 "Maybe fromMaybe Nothing"
   assert-eq ((Just 9).fromMaybe 7) 9 "Maybe fromMaybe Just"
   :eliminate:
 
   :predicates:
   assert-eq ((Just 1).just?)       True  "Maybe just? Just"
   assert-eq ((Just 1).just?)       True  "Maybe just? method syntax"
-  assert-eq (Nothing.just?)        False "Maybe just? Nothing"
-  assert-eq (Nothing.nothing?)     True  "Maybe nothing? Nothing"
+  assert-eq (just? Nothing)        False "Maybe just? Nothing"
+  assert-eq (nothing? Nothing)     True  "Maybe nothing? Nothing"
   assert-eq ((Just 1).nothing?) False "Maybe nothing? Just"
   :predicates:
 
   :transform:
   assert-eq (show ((Just (Just 42)).flatten)) "(Just 42)" "Maybe flatten nested Just"
   assert-eq (show ((Just Nothing).flatten))   "Nothing"   "Maybe flatten inner Nothing"
-  assert-eq (show (Nothing.flatten))          "Nothing"   "Maybe flatten outer Nothing"
+  assert-eq (show (flatten Nothing))          "Nothing"   "Maybe flatten outer Nothing"
   assert-eq (show ((Just 1).replace 9))        "(Just 9)"  "Maybe replace Just"
-  assert-eq (show (Nothing.replace 9))         "Nothing"   "Maybe replace Nothing"
+  assert-eq (show (replace Nothing 9))         "Nothing"   "Maybe replace Nothing"
   :transform:
 
   :list:
   assert-eq (show ((Just 5).toList))          "(5)"        "Maybe to list Just"
-  assert-eq (show (Nothing.toList))           "()"         "Maybe to list Nothing"
+  assert-eq (show (toList Nothing))           "()"         "Maybe to list Nothing"
   assert-eq (show (listToMaybe (list 8 9))) "(Just 8)" "Maybe listToMaybe nonempty"
   assert-eq (show (listToMaybe []))            "Nothing"   "Maybe listToMaybe empty"
   assert-eq (show (safeHead (list 3 4)))       "(Just 3)"  "Maybe safeHead nonempty"

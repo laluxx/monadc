@@ -698,15 +698,14 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         }
         if (a->kind == TYPE_COLL && b->kind == TYPE_STRING) {
             Type *tc = type_char();
-            bool ok = infer_unify_one(ctx, a->element_type, tc, line, col);
-            type_free(tc);
-            return ok;
+            /* Substitutions retain concrete type pointers, so TC becomes
+             * owned by the inference context when an element variable binds
+             * to it. Freeing it here leaves the substitution dangling. */
+            return infer_unify_one(ctx, a->element_type, tc, line, col);
         }
         if (b->kind == TYPE_COLL && a->kind == TYPE_STRING) {
             Type *tc = type_char();
-            bool ok = infer_unify_one(ctx, b->element_type, tc, line, col);
-            type_free(tc);
-            return ok;
+            return infer_unify_one(ctx, b->element_type, tc, line, col);
         }
         if (a->kind == TYPE_COLL && b->kind == TYPE_SET   ) return true;
         if (b->kind == TYPE_COLL && a->kind == TYPE_SET   ) return true;

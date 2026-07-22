@@ -19,7 +19,7 @@
 ;; TEST-ATOM-LEAF: atom.codegen.typeclass.imported.collection.instances
 ;; TEST-CLI-TARGET: codegen branches typeclasses imports
 
-(import Coll)
+(import Sequence)
 (show (map (lambda (x) (+ x 1)) (list 1 2 3)))
 (show (foldl (lambda (acc x) (+ acc x)) 0 (list 1 2 3)))
 (show (filter (lambda (x) (< x 3)) (list 1 2 3)))

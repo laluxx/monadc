@@ -9515,7 +9515,10 @@ AST *parse_expr(Parser *p) {
 
         while (p->current.type == TOK_SYMBOL && p->current.value && p->current.column == end_col) {
             const char *sv = p->current.value;
-            unsigned char u0 = sv[0], u1 = sv[1], u2 = sv[2];
+            size_t sv_len = strlen(sv);
+            unsigned char u0 = sv_len > 0 ? (unsigned char)sv[0] : 0;
+            unsigned char u1 = sv_len > 1 ? (unsigned char)sv[1] : 0;
+            unsigned char u2 = sv_len > 2 ? (unsigned char)sv[2] : 0;
             int d = -1;
             /* Map UTF-8 superscript codepoints to their integer values */
             if (u0 == 0xC2 && u1 == 0xB9) d = 1;
@@ -9529,7 +9532,7 @@ AST *parse_expr(Parser *p) {
 
             power = power * 10 + d;
             is_super = true;
-            end_col += strlen(sv);
+            end_col += sv_len;
             p->current = lexer_next_token(p->lexer);
         }
 

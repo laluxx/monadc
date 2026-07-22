@@ -7,7 +7,7 @@
 ;;; Commentary:
 
 ;; Composite Lisp accessors retained for compatibility. General sequence
-;; structure belongs to Coll and is available through receiver methods.
+;; structure belongs to Sequence and is available through its typeclass.
 
 ;;; Code:
 

@@ -1,4 +1,4 @@
-;;; Coll.mon --- Core Sequence Utilities
+;;; Sequence.mon --- Core sequence abstraction and utilities
 
 ;; Author: Laluxx
 ;; Version: 0.1.0
@@ -18,9 +18,9 @@ import Data.Foldable
 import Data.Bool
 import Data.Maybe
 
-module Coll
+module Sequence
  [Sequence map filter concat foldl foldr coll-foldl
-  null? length reverse append at nth
+  null? length reverse at nth
   take      drop
   takeWhile dropWhile
   any? all?
@@ -28,21 +28,38 @@ module Coll
 
 
 class (Functor c, Foldable c) => Sequence c where
-  filter :: (a -> Bool) -> c a -> c a
-  concat :: c a -> c a -> c a
+  filter    :: (a -> Bool) -> c a -> c a
+  concat    :: c a -> c a -> c a
+  null?     :: c a -> Bool
+  length    :: c a -> Int
+  reverse   :: c a -> c a
+  at        :: c a -> Int -> Maybe a
+  nth       :: c a -> Int -> a
+  take      :: c a -> Int -> c a
+  drop      :: c a -> Int -> c a
+  takeWhile :: c a -> (a -> Bool) -> c a
+  dropWhile :: c a -> (a -> Bool) -> c a
+  any?      :: c a -> (a -> Bool) -> Bool
+  all?      :: c a -> (a -> Bool) -> Bool
+  zip       :: c a -> c b -> c (a, b)
+  zipWith   :: c a -> c b -> (a -> b -> d) -> c d
+  snoc      :: c a -> a -> c a
 
-  ;; minimal complete definition: filter and concat
+  ;; minimal complete definition: all methods above
   ;; law: concat (concat xs ys) zs = concat xs (concat ys zs)
+  ;; law: length (concat xs ys) = length xs + length ys
+  ;; law: reverse (reverse xs) = xs
+  ;; law: take xs n `concat` drop xs n = xs, for n >= 0
 
 
-method null? :: [a] -> Bool
+define coll-null? :: [a] -> Bool
   []     -> True
   [x|xs] -> False
 
 
-method length :: [a] -> Int
+define coll-length :: [a] -> Int
   []     -> 0
-  [x|xs] -> 1 + xs.length
+  [x|xs] -> 1 + (coll-length xs)
 
 
 define coll-reverse-into :: [a] -> [a] -> [a]
@@ -50,49 +67,44 @@ define coll-reverse-into :: [a] -> [a] -> [a]
   acc [x|xs] -> coll-reverse-into (x ++ acc) xs
 
 
-method reverse :: [a] -> [a]
+define coll-reverse :: [a] -> [a]
   xs -> coll-reverse-into [] xs
 
 
-method append :: [a] -> [a] -> [a]
-  [] ys     -> ys
-  [x|xs] ys -> (x ++ (xs.append ys))
-
-
-method at :: [a] -> Int -> Maybe a
+define coll-at :: [a] -> Int -> Maybe a
   _ n      | n < 0 -> Nothing
   [] _             -> Nothing
   [x|xs] 0         -> Just x
-  [x|xs] n         -> xs.at (n - 1)
+  [x|xs] n         -> coll-at xs (n - 1)
 
 
-method nth :: [a] -> Int -> a
+define coll-nth :: [a] -> Int -> a
   [] _              -> error "Coll.nth: index out of bounds"
   [x|xs] n | n <= 0 -> x
-  [x|xs] n          -> xs.nth (n - 1)
+  [x|xs] n          -> coll-nth xs (n - 1)
 
 
-method take :: [a] -> Int -> [a]
+define coll-take :: [a] -> Int -> [a]
   [] _                         -> []
-  [x|xs] n | n > 0             -> (x ++ (xs.take (n - 1)))
+  [x|xs] n | n > 0             -> (x ++ (coll-take xs (n - 1)))
   [x|xs] n | otherwise         -> []
 
 
-method drop :: [a] -> Int -> [a]
+define coll-drop :: [a] -> Int -> [a]
   [] _                         -> []
-  [x|xs] n | n > 0             -> xs.drop (n - 1)
+  [x|xs] n | n > 0             -> coll-drop xs (n - 1)
   [x|xs] n | otherwise         -> (x ++ xs)
 
 
-method takeWhile :: [a] -> (a -> Bool) -> [a]
+define coll-take-while :: [a] -> (a -> Bool) -> [a]
   [] _                         -> []
-  [x|xs] p | p x               -> (x ++ (xs.takeWhile p))
+  [x|xs] p | p x               -> (x ++ (coll-take-while xs p))
   [x|xs] p | otherwise         -> []
 
 
-method dropWhile :: [a] -> (a -> Bool) -> [a]
+define coll-drop-while :: [a] -> (a -> Bool) -> [a]
   [] _                         -> []
-  [x|xs] p | p x               -> xs.dropWhile p
+  [x|xs] p | p x               -> coll-drop-while xs p
   [x|xs] p | otherwise         -> (x ++ xs)
 
 
@@ -107,15 +119,32 @@ define coll-filter :: (a -> Bool) -> [a] -> [a]
   p [x|xs] | otherwise         -> coll-filter p xs
 
 
-method any? :: [a] -> (a -> Bool) -> Bool
+define coll-any? :: [a] -> (a -> Bool) -> Bool
   [] _     -> False
-  [x|xs] p -> if p x then True else xs.any? p
+  [x|xs] p -> if p x then True else coll-any? xs p
 
 
-method all? :: [a] -> (a -> Bool) -> Bool
+define coll-all? :: [a] -> (a -> Bool) -> Bool
   [] _                         -> True
-  [x|xs] p | p x               -> xs.all? p
+  [x|xs] p | p x               -> coll-all? xs p
   [x|xs] p | otherwise         -> False
+
+
+define coll-zip :: [a] -> [b] -> [(a, b)]
+  [] _          -> []
+  _ []          -> []
+  [x|xs] [y|ys] -> ((x, y) ++ (coll-zip xs ys))
+
+
+define coll-zip-with :: [a] -> [b] -> (a -> b -> d) -> [d]
+  [] _ _          -> []
+  _ [] _          -> []
+  [x|xs] [y|ys] f -> ((f x y) ++ (coll-zip-with xs ys f))
+
+
+define coll-snoc :: [a] -> a -> [a]
+  [] val     -> (list val)
+  [x|xs] val -> (x ++ (coll-snoc xs val))
 
 
 define coll-foldl :: (b -> a -> b) -> b -> [a] -> b
@@ -138,25 +167,22 @@ instance Foldable Coll
 
 
 instance Sequence Coll
-  filter p xs -> coll-filter p xs
-  concat xs ys -> ++ xs ys
-
-
-method zip :: [a] -> [b] -> [c]
-  [] _          -> []
-  _ []          -> []
-  [x|xs] [y|ys] -> ((list x y) ++ (xs.zip ys))
-
-
-method zipWith :: [a] -> [b] -> (a -> b -> c) -> [c]
-  [] _ _          -> []
-  _ [] _          -> []
-  [x|xs] [y|ys] f -> ((f x y) ++ (xs.zipWith ys f))
-
-
-method snoc :: [a] -> a -> [a]
-  [] val     -> (list val)
-  [x|xs] val -> (x ++ (xs.snoc val))
+  filter p xs       -> coll-filter p xs
+  concat xs ys      -> ++ xs ys
+  null? xs          -> coll-null? xs
+  length xs         -> coll-length xs
+  reverse xs        -> coll-reverse xs
+  at xs n           -> coll-at xs n
+  nth xs n          -> coll-nth xs n
+  take xs n         -> coll-take xs n
+  drop xs n         -> coll-drop xs n
+  takeWhile xs p    -> coll-take-while xs p
+  dropWhile xs p    -> coll-drop-while xs p
+  any? xs p         -> coll-any? xs p
+  all? xs p         -> coll-all? xs p
+  zip xs ys         -> coll-zip xs ys
+  zipWith xs ys f   -> coll-zip-with xs ys f
+  snoc xs val       -> coll-snoc xs val
 
 ;; TODO unit type () pointer *dereferencing and fix wisp
 ;; define append! :: [xs -> [a]] -> [val :: a] -> ()
@@ -174,7 +200,7 @@ tests
   assert-eq ((list 1).null?)                      False       "null? nonempty"
   assert-eq ((list 1 2 3).length)                 3           "length"
   assert-eq (show ((list 1 2 3).reverse))         "(3 2 1)"   "reverse"
-  assert-eq (show ((list 1 2).append (list 3 4))) "(1 2 3 4)" "append"
+  assert-eq (show (concat (list 1 2) (list 3 4))) "(1 2 3 4)" "concat"
   assert-eq (show ((list 5 6 7).at 1))            "(Just 6)"  "at"
   assert-eq ((list 5 6 7).nth 2)                  7           "nth"
   :structure:

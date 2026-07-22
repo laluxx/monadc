@@ -7,13 +7,13 @@
 ;;; Commentary:
 
 ;; String is the set of all finite character sequences. The compiler retains
-;; its compact representation and primitive lowering, while Coll owns generic
+;; its compact representation and primitive lowering, while Sequence owns generic
 ;; sequence behavior and this module owns String-specific conversions and
 ;; queries.
 
 ;;; Code:
 
-import Coll
+import Sequence
 import Data.Bool
 
 module Data.String
@@ -71,3 +71,12 @@ tests
   assert-eq (show (concat "hello" " world")) "hello world" "String Sequence concat"
   assert-eq (show ("hello".copy))             "hello"       "Data.String copy"
   :construction:
+
+  :sequence:
+  assert-eq (null? "")                                      True   "String Sequence null?"
+  assert-eq (length "hello")                                5      "String Sequence length"
+  assert-eq (show (reverse "abc"))                          "cba"  "String Sequence reverse"
+  assert-eq (show (take "abcd" 2))                          "ab"   "String Sequence take"
+  assert-eq (show (drop "abcd" 2))                          "cd"   "String Sequence drop"
+  assert-eq (show (filter (lambda (c) (!= c 'b')) "abc"))   "ac"   "String Sequence filter"
+  :sequence:

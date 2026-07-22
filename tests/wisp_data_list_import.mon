@@ -1,11 +1,14 @@
 ;; TEST-CONTEXT: monadc.context.core-libs.coll, monadc.context.module.path-resolution
 
-import Coll
+import Sequence
+
+module Main
 
 tests
-  assert-eq ([].null?)                               True      "Coll import exposes null?"
-  assert-eq (show ((list 1 2 3 4).drop 2))          "(3 4)"   "Coll import exposes drop"
-  assert-eq ((list 1 2 3 4 5).length)               5         "Coll import exposes length"
-  assert-eq (show ((list 1 2 3).reverse))           "(3 2 1)" "Coll import exposes reverse"
-  assert-eq ((list 5 6 7).nth 1)                    6         "Coll import exposes nth"
-  assert-eq (foldl (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)) 10 "Coll import exposes foldl"
+  assert-eq (null? [])                                      True      "Sequence import exposes null?"
+  assert-eq (show (drop (list 1 2 3 4) 2))                 "(3 4)"   "Sequence import exposes drop"
+  assert-eq (length (list 1 2 3 4 5))                      5         "Sequence import exposes length"
+  assert-eq (show (reverse (list 1 2 3)))                  "(3 2 1)" "Sequence import exposes reverse"
+  assert-eq (nth (list 5 6 7) 1)                           6         "Sequence import exposes nth"
+  assert-eq (foldl (lambda (acc x) (+ acc x))
+                   0 (list 1 2 3 4))                           10         "Sequence import exposes foldl"

@@ -7,7 +7,7 @@ module Data.Set
    singleton singleton? union intersection difference symmetric-difference
    subset? proper-subset? superset? proper-superset? disjoint?]
 
-import Coll
+import Sequence
 import Data.Eq
 
 

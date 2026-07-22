@@ -69,7 +69,7 @@ tests
   :not?:
   assert-eq (not? True)  False "not? True"
   assert-eq (not? False) True  "not? False"
-  assert-eq (True.not?)  False "not? method syntax"
+  assert-eq (not? True)  False "not? method dispatch"
 
   :not?:
   :and?:
