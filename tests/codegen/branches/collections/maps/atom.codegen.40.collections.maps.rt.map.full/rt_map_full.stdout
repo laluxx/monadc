@@ -1,7 +1,7 @@
 True
-::x
-::z
-::y
+True
+False
+20
 (::y ::x)
 (20 10)
 2

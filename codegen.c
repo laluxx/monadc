@@ -3891,8 +3891,12 @@ static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
 
     LLVMValueRef op_fn = fn_getter(ctx);
     if (expect_args == 1) {
-        result.value = emit_call_1(ctx, op_fn, ptr, raw_map, op_name);
-        result.type  = type_list(NULL, 0);
+        LLVMValueRef raw_list = emit_call_1(ctx, op_fn, ptr, raw_map, op_name);
+        result.value = emit_call_1(ctx, get_rt_value_list(ctx), ptr, raw_list,
+                                   "map_sequence");
+        result.type = ast->inferred_type
+            ? type_clone(ast->inferred_type)
+            : type_coll();
         return result;
     }
 
@@ -3901,7 +3905,9 @@ static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
     if (expect_args == 2) {
         LLVMValueRef new_map = emit_call_2(ctx, op_fn, ptr, raw_map, bkey, op_name);
         result.value = emit_call_1(ctx, get_rt_value_map(ctx), ptr, new_map, "mapval");
-        result.type  = type_map();
+        result.type = ast->inferred_type && ast->inferred_type->kind == TYPE_MAP
+            ? type_clone(ast->inferred_type)
+            : type_map();
         return result;
     }
 
@@ -3909,7 +3915,9 @@ static CodegenResult codegen_map_op(CodegenContext *ctx, AST *ast,
     LLVMValueRef bval = codegen_box(ctx, val_r.value, val_r.type);
     LLVMValueRef new_map = emit_call_3(ctx, op_fn, ptr, raw_map, bkey, bval, op_name);
     result.value = emit_call_1(ctx, get_rt_value_map(ctx), ptr, new_map, "mapval");
-    result.type  = type_map();
+    result.type = ast->inferred_type && ast->inferred_type->kind == TYPE_MAP
+        ? type_clone(ast->inferred_type)
+        : type_map();
     return result;
 }
 
@@ -4806,6 +4814,7 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
         case TYPE_BOOL:   type_name_str = "Bool";   break;
         case TYPE_STRING: type_name_str = "String"; break;
         case TYPE_CHAR:   type_name_str = "Char";   break;
+        case TYPE_MAP:    type_name_str = "Map";    break;
         case TYPE_APP:
             if (current_lay->app_constructor)
                 type_name_str = current_lay->app_constructor;
@@ -5273,7 +5282,8 @@ void codegen_predeclare_toplevel_functions(CodegenContext *ctx, AST **exprs,
                 ptype = type_unknown();
             }
 
-            if (codegen_param_type_needs_usage(ptype) && hm_scheme) {
+            if (ptype && ptype->kind != TYPE_VAR &&
+                codegen_param_type_needs_usage(ptype) && hm_scheme) {
                 Type *t = hm_scheme->type;
                 for (int j = 0; j < p && t && t->kind == TYPE_ARROW; j++)
                     t = t->arrow_ret;
@@ -6734,7 +6744,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
         LLVMTypeRef  wft     = LLVMFunctionType(ptr, &ptr, 1, 0);
         LLVMValueRef wa[]    = {map};
         result.value = LLVMBuildCall2(ctx->builder, wft, wrap_fn, wa, 1, "mapval");
-        result.type  = type_map();
+        result.type = ast->inferred_type && ast->inferred_type->kind == TYPE_MAP
+            ? type_clone(ast->inferred_type)
+            : type_map();
         return result;
     }
 
@@ -7355,7 +7367,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         env_params[i].name = strdup(param->name);
                         env_params[i].type = param_type;
 
-                        if (codegen_param_type_needs_usage(param_type) && hm_scheme) {
+                        /* An explicitly quantified parameter has the boxed
+                         * polymorphic ABI. Usage heuristics must never
+                         * specialize it (for example, a key used by member?
+                         * is not thereby a Bool). */
+                        if (param_type && param_type->kind != TYPE_VAR &&
+                            codegen_param_type_needs_usage(param_type) && hm_scheme) {
                             // Use HM-inferred concrete param type if available,
                             // but only for simple ground types (Int, Float, Bool, Char).
                             // For function/arrow types, always use ptr since they
@@ -11671,15 +11688,15 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            // Map
-            if (strcmp(head->symbol, "assoc")   == 0) return codegen_map_op(ctx, ast, get_rt_map_assoc,      "assoc",   3);
-            if (strcmp(head->symbol, "assoc!")  == 0) return codegen_map_op(ctx, ast, get_rt_map_assoc_mut,  "assoc!",  3);
-            if (strcmp(head->symbol, "dissoc")  == 0) return codegen_map_op(ctx, ast, get_rt_map_dissoc,     "dissoc",  2);
-            if (strcmp(head->symbol, "dissoc!") == 0) return codegen_map_op(ctx, ast, get_rt_map_dissoc_mut, "dissoc!", 2);
-            if (strcmp(head->symbol, "keys")    == 0) return codegen_map_op(ctx, ast, get_rt_map_keys,       "keys",    1);
-            if (strcmp(head->symbol, "vals")    == 0) return codegen_map_op(ctx, ast, get_rt_map_vals,       "vals",    1);
+            // Private Map representation intrinsics. Public methods live in Data.Map.
+            if (strcmp(head->symbol, "__rt_map_assoc")   == 0) return codegen_map_op(ctx, ast, get_rt_map_assoc,      "__rt_map_assoc",   3);
+            if (strcmp(head->symbol, "__rt_map_assoc!")  == 0) return codegen_map_op(ctx, ast, get_rt_map_assoc_mut,  "__rt_map_assoc!",  3);
+            if (strcmp(head->symbol, "__rt_map_dissoc")  == 0) return codegen_map_op(ctx, ast, get_rt_map_dissoc,     "__rt_map_dissoc",  2);
+            if (strcmp(head->symbol, "__rt_map_dissoc!") == 0) return codegen_map_op(ctx, ast, get_rt_map_dissoc_mut, "__rt_map_dissoc!", 2);
+            if (strcmp(head->symbol, "__rt_map_keys")    == 0) return codegen_map_op(ctx, ast, get_rt_map_keys,       "__rt_map_keys",    1);
+            if (strcmp(head->symbol, "__rt_map_values")  == 0) return codegen_map_op(ctx, ast, get_rt_map_vals,       "__rt_map_values",  1);
 
-            if (strcmp(head->symbol, "find") == 0) {
+            if (strcmp(head->symbol, "__rt_map_find") == 0) {
                 REQUIRE_ARGS(2);
                 LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
                 CodegenResult map_r = codegen_expr(ctx, ast->list.items[1]);
@@ -11687,12 +11704,22 @@ if (ast->list.count >= 5) {
                 LLVMValueRef raw_map = map_r.value;
                 if (map_r.type && map_r.type->kind == TYPE_MAP)
                     raw_map = emit_call_1(ctx, get_rt_unbox_map(ctx), ptr, raw_map, "rawmap");
-                result.value = emit_call_2(ctx, get_rt_map_find(ctx), ptr, raw_map, codegen_box(ctx, key_r.value, key_r.type), "find");
-                result.type  = type_unknown();
+                LLVMValueRef pair = emit_call_2(
+                    ctx, get_rt_map_find(ctx), ptr, raw_map,
+                    codegen_box(ctx, key_r.value, key_r.type), "entry");
+                LLVMValueRef raw_pair = emit_call_1(
+                    ctx, get_rt_unbox_list(ctx), ptr, pair, "raw_entry");
+                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                result.value = emit_call_2(
+                    ctx, get_rt_list_nth(ctx), ptr, raw_pair,
+                    LLVMConstInt(i64, 1, 0), "find");
+                result.type = ast->inferred_type
+                    ? type_clone(ast->inferred_type)
+                    : type_unknown();
                 return result;
             }
 
-            if (strcmp(head->symbol, "merge") == 0) {
+            if (strcmp(head->symbol, "__rt_map_merge") == 0) {
                 if (ast->list.count != 3) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'merge' requires 2 arguments (map map)",
                                   parser_get_filename(), ast->line, ast->column);
@@ -15501,7 +15528,9 @@ if (ast->list.count >= 5) {
                         } else {
                             converted_arg = codegen_box(ctx, arg_result.value, arg_result.type);
                         }
-                    } else if (expected_type && expected_type->kind == TYPE_UNKNOWN) {
+                    } else if (expected_type &&
+                               (expected_type->kind == TYPE_UNKNOWN ||
+                                expected_type->kind == TYPE_VAR)) {
 
                         if (actual_type->kind == TYPE_UNKNOWN) {
                             converted_arg = arg_result.value;
@@ -17275,15 +17304,15 @@ void codegen_declare_external_func(CodegenContext *ctx,
 static void register_legacy_collection_builtins(CodegenContext *ctx) {
     /* Transitional library surface: these names still lower through codegen
      * handlers, but their semantics should migrate into core modules. */
-    env_insert_builtin(ctx->env, "Map?",     1, 0, "Test if value is a map", NULL);
-    env_insert_builtin(ctx->env, "assoc",    3, 0, "Add or update a key-value pair in a map (immutable)", NULL);
-    env_insert_builtin(ctx->env, "assoc!",   3, 0, "Add or update a key-value pair in a map in place", NULL);
-    env_insert_builtin(ctx->env, "dissoc",   2, 0, "Remove a key from a map (immutable)", NULL);
-    env_insert_builtin(ctx->env, "dissoc!",  2, 0, "Remove a key from a map in place", NULL);
-    env_insert_builtin(ctx->env, "find",     2, 0, "Return (key val) pair for key in map, or nil", NULL);
-    env_insert_builtin(ctx->env, "keys",     1, 0, "Return a list of all keys in a map", NULL);
-    env_insert_builtin(ctx->env, "vals",     1, 0, "Return a list of all values in a map", NULL);
-    env_insert_builtin(ctx->env, "merge",    2, 0, "Merge two maps, rightmost wins on conflict", NULL);
+    env_insert_builtin(ctx->env, "Map?",              1, 0, "Test if value is a map", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_assoc",    3, 0, "Private immutable map insertion", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_assoc!",   3, 0, "Private mutable map insertion", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_dissoc",   2, 0, "Private immutable map deletion", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_dissoc!",  2, 0, "Private mutable map deletion", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_find",      2, 0, "Private map lookup", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_keys",      1, 0, "Private map key enumeration", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_values",    1, 0, "Private map value enumeration", NULL);
+    env_insert_builtin(ctx->env, "__rt_map_merge",     2, 0, "Private map merge", NULL);
 
     env_insert_builtin(ctx->env, "set",          0, -1, "Create a set from arguments or convert a collection", NULL);
     env_insert_builtin(ctx->env, "Set?",         1,  0, "Test if value is a set", NULL);

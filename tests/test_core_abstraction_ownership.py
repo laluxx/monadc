@@ -22,7 +22,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertIn("core_primitive_module_stems", main_c)
         self.assertEqual(
             [line for line in manifest.splitlines() if line and not line.startswith(";")],
-            ["Int", "Float", "Bool", "String", "Char"],
+            ["Int", "Float", "Bool", "String", "Map", "Char"],
         )
         self.assertIn('-o -name "*.modules"', makefile)
         self.assertIn('PATTERN "*.modules"', cmake)
@@ -243,6 +243,41 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             )
         self.assertIn("minimal complete definition: lookup, keys, values", map_class)
         self.assertIn("minimal complete definition: insert and delete", map_class)
+
+    def test_map_representation_preserves_core_key_and_value_types(self):
+        types_h = source("types.h")
+        types_c = source("types.c")
+        infer_c = source("infer.c")
+
+        self.assertIn("struct Type *map_key_type;", types_h)
+        self.assertIn("struct Type *map_value_type;", types_h)
+        self.assertIn("Type *type_map_of(Type *key_type, Type *value_type);", types_h)
+        self.assertIn("Type *type_map_of(Type *key_type, Type *value_type)", types_c)
+        self.assertIn("result = type_map_of(key_t, val_t);", infer_c)
+        self.assertNotIn("result = type_map();\n        break;\n    }\n\n    case AST_ARRAY", infer_c)
+        self.assertIn(
+            'infer_env_insert(ctx->env, "__rt_map_keys", infer_generalise(ctx,\n'
+            '        type_arrow(keys_map, keys_result), ctx->env));',
+            infer_c,
+        )
+        self.assertIn("keys_result->element_type = type_clone(keys_fresh);", infer_c)
+
+    def test_concrete_map_api_is_owned_by_core(self):
+        data_map = source("core/prelude/Data/Map.mon")
+        codegen = source("codegen.c")
+
+        for name in ("member?", "keys", "values", "insert", "delete"):
+            self.assertRegex(data_map, rf"(?m)^method\s+{re.escape(name)}\s+::")
+        self.assertIn("Map k v", data_map)
+        for public in ("assoc", "assoc!", "dissoc", "dissoc!", "find", "keys", "vals", "merge"):
+            self.assertNotIn(f'env_insert_builtin(ctx->env, "{public}"', codegen)
+            self.assertNotIn(f'strcmp(head->symbol, "{public}")', codegen)
+        for private in (
+            "__rt_map_assoc", "__rt_map_assoc!", "__rt_map_dissoc",
+            "__rt_map_dissoc!", "__rt_map_find", "__rt_map_keys",
+            "__rt_map_values", "__rt_map_merge",
+        ):
+            self.assertIn(private, codegen)
 
     def test_string_queries_are_composed_from_core_abstractions(self):
         data_string = source("core/prelude/Data/String.mon")

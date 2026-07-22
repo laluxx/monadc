@@ -88,6 +88,14 @@ Type *infer_freshen_annotation_vars(InferCtx *ctx, Type *t,
         ret->arr_is_heap = t->arr_is_heap;
         return ret;
     }
+    case TYPE_MAP:
+        return type_map_of(
+            t->map_key_type
+                ? infer_freshen_annotation_vars(ctx, t->map_key_type, from, to, count)
+                : NULL,
+            t->map_value_type
+                ? infer_freshen_annotation_vars(ctx, t->map_value_type, from, to, count)
+                : NULL);
     case TYPE_ARROW:
         return type_arrow(infer_freshen_annotation_vars(ctx, t->arrow_param,
                                                         from, to, count),
@@ -339,6 +347,15 @@ static Type *subst_apply_depth(Substitution *s, Type *t, int depth) {
         return ret;
     }
 
+    case TYPE_MAP: {
+        Type *key = t->map_key_type
+            ? subst_apply_depth(s, t->map_key_type, depth + 1) : NULL;
+        Type *value = t->map_value_type
+            ? subst_apply_depth(s, t->map_value_type, depth + 1) : NULL;
+        if (key == t->map_key_type && value == t->map_value_type) return t;
+        return type_map_of(key, value);
+    }
+
     case TYPE_ARROW: {
         Type *p = subst_apply_depth(s, t->arrow_param, depth + 1);
         Type *r = subst_apply_depth(s, t->arrow_ret,   depth + 1);
@@ -425,6 +442,9 @@ bool infer_occurs(Substitution *s, int var_id, Type *t) {
             || infer_occurs(s, var_id, t->arrow_ret);
     case TYPE_APP:
         return infer_occurs(s, var_id, t->app_arg);
+    case TYPE_MAP:
+        return infer_occurs(s, var_id, t->map_key_type) ||
+               infer_occurs(s, var_id, t->map_value_type);
     default:
         return false;
     }
@@ -842,6 +862,15 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             return infer_unify_one(ctx, a->app_arg, b->app_arg, line, col);
         return true;
 
+    case TYPE_MAP:
+        if (a->map_key_type && b->map_key_type &&
+            !infer_unify_one(ctx, a->map_key_type, b->map_key_type, line, col))
+            return false;
+        if (a->map_value_type && b->map_value_type)
+            return infer_unify_one(ctx, a->map_value_type, b->map_value_type,
+                                   line, col);
+        return true;
+
     case TYPE_COLL:
         return infer_unify_one(ctx, a->element_type, b->element_type, line, col);
 
@@ -907,6 +936,10 @@ void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int ca
         break;
     case TYPE_APP:
         infer_free_vars_type(s, t->app_arg, out, count, cap);
+        break;
+    case TYPE_MAP:
+        infer_free_vars_type(s, t->map_key_type, out, count, cap);
+        infer_free_vars_type(s, t->map_value_type, out, count, cap);
         break;
     case TYPE_ARROW:
         infer_free_vars_type(s, t->arrow_param, out, count, cap);
@@ -1047,6 +1080,13 @@ static Type *infer_substitute_vars(Type *t, int *from, Type **to, int count) {
                         t->app_arg
                             ? infer_substitute_vars(t->app_arg, from, to, count)
                             : type_unknown());
+
+    case TYPE_MAP:
+        return type_map_of(
+            t->map_key_type
+                ? infer_substitute_vars(t->map_key_type, from, to, count) : NULL,
+            t->map_value_type
+                ? infer_substitute_vars(t->map_value_type, from, to, count) : NULL);
 
     case TYPE_FN: {
         FnParam *params = NULL;
@@ -1267,7 +1307,8 @@ static bool infer_type_contains_unknown_or_var(Type *t) {
     case TYPE_SET:
         return infer_type_contains_unknown_or_var(t->element_type);
     case TYPE_MAP:
-        return false;
+        return infer_type_contains_unknown_or_var(t->map_key_type) ||
+               infer_type_contains_unknown_or_var(t->map_value_type);
     case TYPE_PTR:
     case TYPE_OPTIONAL:
         return infer_type_contains_unknown_or_var(t->element_type);
@@ -1415,7 +1456,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             infer_constrain(ctx, kt, key_t, ast->line, ast->column);
             infer_constrain(ctx, vt, val_t, ast->line, ast->column);
         }
-        result = type_map();
+        result = type_map_of(key_t, val_t);
         break;
     }
 
@@ -2647,28 +2688,52 @@ void infer_register_builtins(InferCtx *ctx) {
     /* Map builtins */
     Type *mk = infer_fresh(ctx);
     Type *mv = infer_fresh(ctx);
+    Type *map_kv = type_map_of(mk, mv);
     TypeScheme *assoc_sc = infer_generalise(ctx,
-        type_arrow(type_map(),
-            type_arrow(mk, type_arrow(mv, type_map()))),
+        type_arrow(type_clone(map_kv),
+            type_arrow(type_clone(mk),
+                type_arrow(type_clone(mv), type_clone(map_kv)))),
         ctx->env);
-    infer_env_insert(ctx->env, "assoc",  assoc_sc);
-    infer_env_insert(ctx->env, "assoc!", assoc_sc);
+    infer_env_insert(ctx->env, "__rt_map_assoc",  assoc_sc);
+    infer_env_insert(ctx->env, "__rt_map_assoc!", assoc_sc);
 
     Type *dk = infer_fresh(ctx);
+    Type *dv = infer_fresh(ctx);
+    Type *delete_map = type_map_of(dk, dv);
     TypeScheme *dissoc_sc = infer_generalise(ctx,
-        type_arrow(type_map(), type_arrow(dk, type_map())), ctx->env);
-    infer_env_insert(ctx->env, "dissoc",  dissoc_sc);
-    infer_env_insert(ctx->env, "dissoc!", dissoc_sc);
+        type_arrow(type_clone(delete_map),
+                   type_arrow(type_clone(dk), type_clone(delete_map))), ctx->env);
+    infer_env_insert(ctx->env, "__rt_map_dissoc",  dissoc_sc);
+    infer_env_insert(ctx->env, "__rt_map_dissoc!", dissoc_sc);
 
-    infer_env_insert(ctx->env, "merge",
-        scheme_mono(type_arrow(type_map(), type_arrow(type_map(), type_map()))));
+    Type *merge_k = infer_fresh(ctx);
+    Type *merge_v = infer_fresh(ctx);
+    Type *merge_map = type_map_of(merge_k, merge_v);
+    infer_env_insert(ctx->env, "__rt_map_merge", infer_generalise(ctx,
+        type_arrow(type_clone(merge_map),
+                   type_arrow(type_clone(merge_map), type_clone(merge_map))),
+        ctx->env));
 
     Type *keys_fresh = infer_fresh(ctx);
-    infer_env_insert(ctx->env, "keys",
-        scheme_mono(type_arrow(type_map(), type_list(&keys_fresh, 1))));
+    Type *keys_value = infer_fresh(ctx);
+    Type *keys_map = type_map_of(keys_fresh, keys_value);
+    Type *keys_result = type_coll();
+    keys_result->element_type = type_clone(keys_fresh);
+    infer_env_insert(ctx->env, "__rt_map_keys", infer_generalise(ctx,
+        type_arrow(keys_map, keys_result), ctx->env));
     Type *vals_fresh = infer_fresh(ctx);
-    infer_env_insert(ctx->env, "vals",
-        scheme_mono(type_arrow(type_map(), type_list(&vals_fresh, 1))));
+    Type *vals_key = infer_fresh(ctx);
+    Type *vals_map = type_map_of(vals_key, vals_fresh);
+    Type *vals_result = type_coll();
+    vals_result->element_type = type_clone(vals_fresh);
+    infer_env_insert(ctx->env, "__rt_map_values", infer_generalise(ctx,
+        type_arrow(vals_map, vals_result), ctx->env));
+
+    Type *find_key = infer_fresh(ctx);
+    Type *find_value = infer_fresh(ctx);
+    infer_env_insert(ctx->env, "__rt_map_find", infer_generalise(ctx,
+        type_arrow(type_map_of(find_key, find_value),
+                   type_arrow(find_key, find_value)), ctx->env));
 
     /* ADT internal primitives — typed by codegen_data at runtime,
      * registered here as opaque so HM doesn't reject them          */

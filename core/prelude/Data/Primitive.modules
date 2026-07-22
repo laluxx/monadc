@@ -5,4 +5,5 @@ Int
 Float
 Bool
 String
+Map
 Char

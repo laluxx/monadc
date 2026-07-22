@@ -1506,3 +1506,13 @@
   ownership contract rejects reintroduced hardcoded lists. This manifest is a
   bootstrap index only: all public operations and laws remain ordinary Monad
   definitions in the referenced modules.
+
+[FIX id:fix.core-libs.typed-map-ownership-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Map.mon,types.c,infer.c,codegen.c,tests/test_core_abstraction_ownership.py conf:high]
+  Map's public semantic surface is core-owned. The compiler retains only the
+  optimized representation intrinsics under =__rt_map_*= names and represents
+  the semantic constructor as =Map k v= throughout cloning, substitution,
+  unification, generalisation, diagnostics, and lowering. Polymorphic parameters
+  use the boxed ABI and must not be specialized by usage heuristics. Collection
+  results such as =keys :: Map k v -> [k]= use the abstract sequence type rather
+  than a tuple-shaped internal list. Verified by compiling and executing
+  =core/prelude/Data/Map.mon= and by =tests/test_core_abstraction_ownership.py=.

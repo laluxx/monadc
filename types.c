@@ -196,6 +196,16 @@ static Type *type_parse_type_application(const char *name) {
     }
 
     const char *constructor = parts[0];
+    if (strcmp(constructor, "Map") == 0 && count == 3) {
+        Type *key = type_from_name(parts[1]);
+        Type *value = type_from_name(parts[2]);
+        Type *map = type_map_of(key ? key : type_unknown(),
+                                value ? value : type_unknown());
+        type_free(key);
+        type_free(value);
+        type_free_split_parts(parts, count);
+        return map;
+    }
     if (!(constructor[0] >= 'A' && constructor[0] <= 'Z') ||
         type_name_is_builtin_constructor(constructor)) {
         type_free_split_parts(parts, count);
@@ -1070,7 +1080,13 @@ Type *type_oct    (void) { return make_type(TYPE_OCT);     }
 Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
 Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
 Type *type_set    (void) { return make_type(TYPE_SET);     }
-Type *type_map    (void) { return make_type(TYPE_MAP);     }
+Type *type_map_of(Type *key_type, Type *value_type) {
+    Type *t = make_type(TYPE_MAP);
+    t->map_key_type = key_type ? type_clone(key_type) : NULL;
+    t->map_value_type = value_type ? type_clone(value_type) : NULL;
+    return t;
+}
+Type *type_map    (void) { return type_map_of(NULL, NULL); }
 Type *type_coll   (void) { return make_type(TYPE_COLL);    }
 Type *type_f32    (void) { return make_type(TYPE_F32);     }
 Type *type_i8     (void) { return make_type(TYPE_I8);      }
@@ -1346,6 +1362,8 @@ Type *type_clone(Type *t) {
             c->element_type = type_clone(t->element_type);
             return c;
         }
+        case TYPE_MAP:
+            return type_map_of(t->map_key_type, t->map_value_type);
         case TYPE_F32:     return type_f32();
         case TYPE_I8:      return type_i8();
         case TYPE_U8:      return type_u8();
@@ -1416,6 +1434,10 @@ void type_free(Type *t) {
     if (t->kind == TYPE_ARR) {
         type_free(t->arr_element_type);
     }
+    if (t->kind == TYPE_MAP) {
+        type_free(t->map_key_type);
+        type_free(t->map_value_type);
+    }
     if (t->kind == TYPE_LAYOUT) {
         free(t->layout_name);
         // layout_fields is shared with the registry — do not free it
@@ -1456,7 +1478,14 @@ const char *type_to_string(Type *t) {
     case TYPE_KEYWORD: return "Keyword";
     case TYPE_RATIO:   return "Ratio";
     case TYPE_SET:     return "Set";
-    case TYPE_MAP:     return "Map";
+    case TYPE_MAP:
+        if (t->map_key_type && t->map_value_type) {
+            snprintf(buf, 512, "Map %s %s",
+                     type_to_string(t->map_key_type),
+                     type_to_string(t->map_value_type));
+            return buf;
+        }
+        return "Map";
     case TYPE_F32:     return "F32";
     case TYPE_I8:      return "I8";
     case TYPE_U8:      return "U8";

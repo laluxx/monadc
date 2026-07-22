@@ -636,6 +636,10 @@ static void normalize_vars(Type *t, int *map, int *next_id) {
     if (t->kind == TYPE_ARR) {
         normalize_vars(t->arr_element_type, map, next_id);
     }
+    if (t->kind == TYPE_MAP) {
+        normalize_vars(t->map_key_type, map, next_id);
+        normalize_vars(t->map_value_type, map, next_id);
+    }
 }
 
 struct TypeScheme *env_hm_infer_define(Env *env, const char *name,

@@ -47,7 +47,7 @@ method endsWith? :: String -> String -> Bool
   s suffix -> (drop s (- (length s) (length suffix))) = suffix
 
 
-define string-includes? :: String -> String -> Bool
+method string-includes? :: String -> String -> Bool
   s fragment | fragment = ""                         -> True
              | s = ""                                -> False
              | (take s (length fragment)) = fragment -> True

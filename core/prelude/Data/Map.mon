@@ -1,0 +1,81 @@
+;;; Map.mon --- Typed finite maps
+
+;;; Commentary:
+
+;; Map is the core-owned interface to the optimized runtime hash-map
+;; representation. The semantic type is Map k v: every key in one value has
+;; type k and every stored value has type v. The __rt_map_* names below are
+;; private representation intrinsics, never public language operations.
+
+;;; Code:
+
+import Data.Bool
+import Data.Maybe
+
+module Data.Map
+  [member? keys values insert delete merge
+   assoc assoc! dissoc dissoc! contains? find vals]
+
+
+method member? :: Map k v -> k -> Bool
+  table key -> __rt_contains? table key
+
+
+method keys :: Map k v -> [k]
+  table -> __rt_map_keys table
+
+
+method values :: Map k v -> [v]
+  table -> __rt_map_values table
+
+
+method insert :: Map k v -> k -> v -> Map k v
+  table key value -> __rt_map_assoc table key value
+
+
+method delete :: Map k v -> k -> Map k v
+  table key -> __rt_map_dissoc table key
+
+
+method merge :: Map k v -> Map k v -> Map k v
+  left right -> __rt_map_merge left right
+
+
+;; Compatibility vocabulary is implemented in core and delegates to the
+;; canonical methods. It has no privileged compiler meaning.
+method assoc :: Map k v -> k -> v -> Map k v
+  table key value -> insert table key value
+
+
+method assoc! :: Map k v -> k -> v -> Map k v
+  table key value -> __rt_map_assoc! table key value
+
+
+method dissoc :: Map k v -> k -> Map k v
+  table key -> delete table key
+
+
+method dissoc! :: Map k v -> k -> Map k v
+  table key -> __rt_map_dissoc! table key
+
+
+;; Compatibility vocabulary remains ordinary core methods. find is the
+;; deliberately partial lookup operation; total optional lookup belongs to
+;; the Lookup abstraction once polymorphic guard proof lowering is available.
+method contains? :: Map k v -> k -> Bool
+  table key -> member? table key
+
+
+method find :: Map k v -> k -> v
+  table key -> __rt_map_find table key
+
+
+method vals :: Map k v -> [v]
+  table -> values table
+
+
+tests
+  assert-eq (member? #{:answer 42} :answer) True "Data.Map membership"
+  assert-eq (member? #{:answer 42} :missing) False "Data.Map missing key"
+  assert-eq (member? (insert #{:answer 42} :extra 7) :extra) True "Data.Map insert"
+  assert-eq (member? (delete #{:answer 42 :extra 7} :extra) :extra) False "Data.Map delete"

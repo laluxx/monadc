@@ -100,6 +100,10 @@ typedef struct Type {
     bool         arr_is_fat;        // true = runtime fat pointer {data, size}
     bool         arr_is_heap;       // true = heap-growable    {data, size, cap}
 
+    // TYPE_MAP — runtime representation is erased, semantic type is Map k v
+    struct Type *map_key_type;
+    struct Type *map_value_type;
+
     // TYPE_LAYOUT
     char        *layout_name;
     LayoutField *layout_fields;
@@ -209,6 +213,7 @@ Type *type_keyword(void);
 Type *type_ratio(void);
 Type *type_set(void);
 Type *type_map(void);
+Type *type_map_of(Type *key_type, Type *value_type);
 Type *type_coll(void);
 Type *type_f32(void);
 Type *type_i8(void);
