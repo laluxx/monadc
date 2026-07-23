@@ -2470,6 +2470,8 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "rt_coll_is_empty", rt_is_empty_sc);
     infer_env_insert(ctx->env, "__rt_count",
                      scheme_mono(type_arrow(type_coll(), type_int())));
+    infer_env_insert(ctx->env, "__rt_set_singleton",
+                     scheme_mono(type_arrow(type_set(), type_bool())));
 
     /* ∀a. a → Bool */
     Type *a4 = infer_fresh(ctx);

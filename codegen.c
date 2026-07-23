@@ -17352,6 +17352,7 @@ static void register_legacy_collection_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "__rt_prepend", 2, 0, "Private typed Sequence prepend primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_concat",  2, 0, "Private typed Sequence concatenation primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_count",   1, 0, "Private collection cardinality primitive", NULL);
+    env_insert_builtin(ctx->env, "__rt_set_singleton", 1, 0, "Private Set singleton predicate", NULL);
     env_insert_builtin(ctx->env, "rt_coll_head", 1, 0, "Private collection pattern projection", NULL);
     env_insert_builtin(ctx->env, "pair?",   1,  0, "Test if a list is a dotted pair (tail is an atom)", NULL);
     env_insert_builtin(ctx->env, "append!", 2,  0, "Destructively append a value to a list in place: (append! xs val)", NULL);

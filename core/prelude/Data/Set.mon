@@ -33,7 +33,7 @@ method finite-cardinality :: Set -> Int
 
 
 method singleton? :: Set -> Bool
-  x -> and ((finite-cardinality x) > 0) ((finite-cardinality x) < 2)
+  x -> __rt_set_singleton x
 
 
 method union :: Set -> Set -> Set

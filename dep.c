@@ -4197,6 +4197,7 @@ void dep_register_builtins(DepCtx *ctx) {
     dep_env_declare(env, "rt_coll_empty", dep_eval(poly_identity, ee, NULL));
     dep_env_declare(env, "rt_coll_is_empty", dep_eval(poly_bool, ee, NULL));
     dep_env_declare(env, "__rt_count", dep_eval(poly_int, ee, NULL));
+    dep_env_declare(env, "__rt_set_singleton", dep_eval(poly_bool, ee, NULL));
     dep_env_declare(env, "and", dep_eval(bool_bool_bool, ee, NULL));
     dep_env_declare(env, "or",  dep_eval(bool_bool_bool, ee, NULL));
 

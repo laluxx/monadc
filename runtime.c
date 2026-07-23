@@ -868,6 +868,18 @@ int64_t rt_coll_count(RuntimeValue *coll) {
     return 0;
 }
 
+/* Linkable form of Sequence's private cardinality primitive. Codegen may
+ * specialize literal calls, while separately compiled core modules use this
+ * stable representation-level ABI. */
+int64_t __rt_count(RuntimeValue *coll) {
+    return rt_coll_count(coll);
+}
+
+bool __rt_set_singleton(RuntimeValue *set) {
+    return set && set->type == RT_SET &&
+           rt_set_count(set->data.set_val) == 1;
+}
+
 int rt_coll_contains(RuntimeValue *coll, RuntimeValue *value) {
     if (!coll) return 0;
     if (coll->type == RT_SET)
