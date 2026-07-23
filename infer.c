@@ -1779,7 +1779,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         /* ---- reader/runtime collection concat -------------------------- */
         if (head->type == AST_SYMBOL &&
-            strcmp(head->symbol, "rt_coll_concat") == 0 &&
+            (strcmp(head->symbol, "rt_coll_concat") == 0 ||
+             strcmp(head->symbol, "__rt_concat") == 0) &&
             ast->list.count == 3) {
             Type *left_t = infer_expr(ctx, ast->list.items[1]);
             Type *right_t = infer_expr(ctx, ast->list.items[2]);

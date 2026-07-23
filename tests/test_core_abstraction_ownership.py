@@ -109,8 +109,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         implementation = coll_core.split("\ntests\n", 1)[0]
         self.assertNotIn(" ++ ", implementation)
         self.assertIn("import Data.Semigroup", coll_core)
-        self.assertIn("concat xs ys      -> append xs ys", implementation)
-        self.assertNotIn("concat xs ys      -> __rt_concat xs ys", implementation)
+        self.assertIn("concat xs ys      -> rt_coll_concat xs ys", implementation)
         self.assertIn("prepend x xs      -> __rt_prepend x xs", implementation)
         self.assertRegex(coll_core, r"(?m)^method head :: \[a\] -> a$")
         self.assertRegex(coll_core, r"(?m)^\s+:alias hd$")
@@ -301,7 +300,8 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
         self.assertNotRegex(set_core, r"\b(?:head|empty\?|count)\b")
         self.assertIn("instance Eq Set", set_core)
-        self.assertIn("finite-cardinality x", set_core)
+        self.assertIn("x -> __rt_set_singleton x", set_core)
+        self.assertIn("bool __rt_set_singleton", source("runtime.c"))
         self.assertNotRegex(list_core, r"\b(?:head|tail)\b")
         self.assertNotIn("count text", readline_core)
         self.assertIn("length text", readline_core)

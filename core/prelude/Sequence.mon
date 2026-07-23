@@ -203,7 +203,7 @@ instance Foldable Coll
 instance Sequence Coll
   filter p xs       -> coll-filter p xs
   prepend x xs      -> __rt_prepend x xs
-  concat xs ys      -> append xs ys
+  concat xs ys      -> rt_coll_concat xs ys
   null? xs          -> coll-null? xs
   length xs         -> coll-length xs
   reverse xs        -> coll-reverse xs

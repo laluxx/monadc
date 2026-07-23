@@ -1530,10 +1530,13 @@
   Same-shaped append algebra is canonically owned by =Data.Semigroup=.
   =Semigroup Coll= implements associative append and non-empty concatenation,
   while =Monoid Coll= adds the empty identity and total =mconcat=. =Sequence=
-  delegates =concat= to that instance and retains =prepend= as the distinct
-  element-construction operation. Enum and Readline now compose these typed
-  methods instead of the compiler-overloaded =++=, and Readline no longer owns
-  a duplicate list append. The dependent checker gives the private
+  exposes the same law through its concrete Coll instance and retains
+  =prepend= as the distinct element-construction operation. Both instances
+  terminate at the shared runtime concat representation primitive; keeping the
+  Sequence dictionary entry concrete also avoids unresolved polymorphic weak
+  symbols on COFF. Enum and Readline now compose these typed methods instead
+  of the compiler-overloaded =++=, and Readline no longer owns a duplicate
+  list append. The dependent checker gives the private
   =__rt_concat= representation boundary the exact same-type polymorphic shape;
   public meaning, laws, and dispatch remain in core.
 
