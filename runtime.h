@@ -362,6 +362,9 @@ RuntimeValue *rt_coll_concat(RuntimeValue *a, RuntimeValue *b);
 RuntimeValue *rt_coll_lazy_cons(RuntimeValue *head, RuntimeThunk *tail_thunk);
 RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n);
 int64_t       rt_coll_count(RuntimeValue *coll);
+int           rt_coll_contains(RuntimeValue *coll, RuntimeValue *value);
+int           rt_coll_starts_with(RuntimeValue *coll, RuntimeValue *prefix);
+int           rt_coll_ends_with(RuntimeValue *coll, RuntimeValue *suffix);
 int           rt_coll_is_empty(RuntimeValue *coll);
 
 /// LLVM
@@ -518,6 +521,9 @@ LLVMValueRef get_rt_coll_concat(CodegenContext *ctx);
 LLVMValueRef get_rt_coll_lazy_cons(CodegenContext *ctx);
 LLVMValueRef get_rt_coll_drop(CodegenContext *ctx);
 LLVMValueRef get_rt_coll_count(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_contains(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_starts_with(CodegenContext *ctx);
+LLVMValueRef get_rt_coll_ends_with(CodegenContext *ctx);
 LLVMValueRef get_rt_coll_is_empty(CodegenContext *ctx);
 
 LLVMValueRef get_rt_ast_to_runtime_value(CodegenContext *ctx);

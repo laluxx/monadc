@@ -714,10 +714,15 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
 
         /* Register as ENV_FUNC so direct typed calls work */
         EnvEntry *existing = env_lookup(ctx->env, mname);
-        if (existing && tc_is_method(reg, mname)) {
+        bool is_local_definition = existing && existing->source_ast &&
+                                   !existing->module_name;
+        bool replace_dispatch_entry = existing && tc_is_method(reg, mname) &&
+                                      !is_local_definition;
+        if (replace_dispatch_entry) {
             /* Replace the generic inference placeholder (or a previous
              * instance's dispatch trigger) with this implementation's real
-             * arity. Instance selection still occurs through the registry. */
+             * arity. A user/core definition already occupying the plain name
+             * remains lexically authoritative. */
             env_remove(ctx->env, mname);
             existing = NULL;
         }

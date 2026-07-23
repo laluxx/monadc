@@ -593,7 +593,11 @@ AST *ast_new_number(double value, const char *literal) {
 AST *ast_new_symbol(const char *name) {
     AST *a = calloc(1, sizeof(AST));
     a->type   = AST_SYMBOL;
-    a->symbol = my_strdup(name);
+    /* ++ is surface syntax for the core-owned Semigroup.append method.
+     * Canonicalize before inference/codegen so the compiler does not acquire
+     * a second, untyped definition of append semantics. */
+    const char *canonical = strcmp(name, "++") == 0 ? "append" : name;
+    a->symbol = my_strdup(canonical);
     return a;
 }
 
@@ -9549,7 +9553,8 @@ AST *parse_expr(Parser *p) {
         }
     }
 
-/* Postfix index: expr[x] -> (index expr x), expr[1 2 3] -> (index expr 1 2 3) */
+/* Postfix index lowers to the collection-as-call AST shape. Source positions
+ * retain the proof that this was indexing rather than an ordinary call. */
     /* Only when adjacent (no space): arr[0] yes, arr [0] no            */
     while (p->current.type == TOK_LBRACKET &&
            p->current.column == expr_result->end_column &&
@@ -9559,7 +9564,6 @@ AST *parse_expr(Parser *p) {
         p->current = lexer_next_token(p->lexer); /* consume '[' */
 
         AST *index_call = ast_new_list();
-        ast_list_append(index_call, ast_new_symbol("index"));
         ast_list_append(index_call, expr_result);
 
         while (p->current.type != TOK_RBRACKET && p->current.type != TOK_EOF)

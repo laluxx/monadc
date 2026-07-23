@@ -1849,10 +1849,9 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         if (head->type == AST_SYMBOL &&
-            strcmp(head->symbol, "count") == 0 &&
+            strcmp(head->symbol, "__rt_count") == 0 &&
             ast->list.count == 2) {
-            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
-            infer_constrain(ctx, arg_t, type_coll(), ast->line, ast->column);
+            (void)infer_expr(ctx, ast->list.items[1]);
             result = type_int();
             break;
         }
@@ -1884,6 +1883,43 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "rt_coll_head") == 0 &&
+            ast->list.count == 2) {
+            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
+            Type *arg_applied = subst_apply(ctx->subst, arg_t);
+            Type *elem_t = NULL;
+
+            if (arg_applied) {
+                if (arg_applied->kind == TYPE_COLL)
+                    elem_t = arg_applied->element_type;
+                else if (arg_applied->kind == TYPE_ARR)
+                    elem_t = arg_applied->arr_element_type;
+                else if (arg_applied->kind == TYPE_LIST) {
+                    if (arg_applied->list_elem)
+                        elem_t = arg_applied->list_elem;
+                    else if (arg_applied->list_count == 1 &&
+                             arg_applied->list_types)
+                        elem_t = arg_applied->list_types[0];
+                } else if (arg_applied->kind == TYPE_STRING) {
+                    elem_t = type_char();
+                }
+            }
+
+            if (!elem_t) elem_t = infer_fresh(ctx);
+            if (!arg_applied || (arg_applied->kind != TYPE_STRING &&
+                                 arg_applied->kind != TYPE_LIST &&
+                                 arg_applied->kind != TYPE_COLL &&
+                                 arg_applied->kind != TYPE_ARR)) {
+                Type *expected_coll = type_coll();
+                expected_coll->element_type = type_clone(elem_t);
+                infer_constrain(ctx, arg_t, expected_coll,
+                                ast->line, ast->column);
+            }
+            result = elem_t;
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
             strcmp(head->symbol, "rt_coll_empty") == 0 &&
             ast->list.count == 2) {
             Type *arg_t = infer_expr(ctx, ast->list.items[1]);
@@ -1891,78 +1927,6 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
             result = type_coll();
             result->element_type = infer_fresh(ctx);
-            break;
-        }
-
-        if (head->type == AST_SYMBOL &&
-            strcmp(head->symbol, "head") == 0 &&
-            ast->list.count == 2) {
-            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
-            Type *arg_applied = subst_apply(ctx->subst, arg_t);
-            Type *elem_t = NULL;
-
-            if (arg_applied) {
-                if (arg_applied->kind == TYPE_COLL)
-                    elem_t = arg_applied->element_type;
-                else if (arg_applied->kind == TYPE_ARR)
-                    elem_t = arg_applied->arr_element_type;
-                else if (arg_applied->kind == TYPE_LIST) {
-                    if (arg_applied->list_elem)
-                        elem_t = arg_applied->list_elem;
-                    else if (arg_applied->list_count == 1 && arg_applied->list_types)
-                        elem_t = arg_applied->list_types[0];
-                } else if (arg_applied->kind == TYPE_STRING) {
-                    elem_t = type_char();
-                }
-            }
-
-            if (!elem_t) elem_t = infer_fresh(ctx);
-            if (!arg_applied || (arg_applied->kind != TYPE_STRING &&
-                                 arg_applied->kind != TYPE_LIST &&
-                                 arg_applied->kind != TYPE_COLL &&
-                                 arg_applied->kind != TYPE_ARR)) {
-                Type *expected_coll = type_coll();
-                expected_coll->element_type = type_clone(elem_t);
-                infer_constrain(ctx, arg_t, expected_coll, ast->line, ast->column);
-            }
-            result = elem_t;
-            break;
-        }
-
-        if (head->type == AST_SYMBOL &&
-            strcmp(head->symbol, "tail") == 0 &&
-            ast->list.count == 2) {
-            Type *arg_t = infer_expr(ctx, ast->list.items[1]);
-            Type *arg_applied = subst_apply(ctx->subst, arg_t);
-            Type *elem_t = NULL;
-
-            if (arg_applied) {
-                if (arg_applied->kind == TYPE_COLL)
-                    elem_t = arg_applied->element_type;
-                else if (arg_applied->kind == TYPE_ARR)
-                    elem_t = arg_applied->arr_element_type;
-                else if (arg_applied->kind == TYPE_LIST) {
-                    if (arg_applied->list_elem)
-                        elem_t = arg_applied->list_elem;
-                    else if (arg_applied->list_count == 1 && arg_applied->list_types)
-                        elem_t = arg_applied->list_types[0];
-                } else if (arg_applied->kind == TYPE_STRING) {
-                    elem_t = type_char();
-                }
-            }
-
-            if (!elem_t) elem_t = infer_fresh(ctx);
-            Type *out_t = type_coll();
-            out_t->element_type = type_clone(elem_t);
-            if (!arg_applied || (arg_applied->kind != TYPE_STRING &&
-                                 arg_applied->kind != TYPE_LIST &&
-                                 arg_applied->kind != TYPE_COLL &&
-                                 arg_applied->kind != TYPE_ARR)) {
-                Type *expected_coll = type_coll();
-                expected_coll->element_type = type_clone(elem_t);
-                infer_constrain(ctx, arg_t, expected_coll, ast->line, ast->column);
-            }
-            result = out_t;
             break;
         }
 
@@ -2007,86 +1971,6 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                                 ast->list.items[i]->column);
             }
             result = num_t;
-            break;
-        }
-
-        /* ---- collection append/prepend: (++ lhs rhs) ---------------- */
-        if (head->type == AST_SYMBOL &&
-            strcmp(head->symbol, "++") == 0 &&
-            ast->list.count == 3) {
-            Type *lhs_t = subst_apply(ctx->subst,
-                                       infer_expr(ctx, ast->list.items[1]));
-            Type *rhs_t = subst_apply(ctx->subst,
-                                       infer_expr(ctx, ast->list.items[2]));
-
-            bool lhs_is_collection =
-                lhs_t &&
-                (lhs_t->kind == TYPE_COLL ||
-                 lhs_t->kind == TYPE_ARR ||
-                 lhs_t->kind == TYPE_LIST ||
-                 lhs_t->kind == TYPE_STRING);
-
-            bool rhs_is_collection =
-                rhs_t &&
-                (rhs_t->kind == TYPE_COLL ||
-                 rhs_t->kind == TYPE_ARR ||
-                 rhs_t->kind == TYPE_LIST ||
-                 rhs_t->kind == TYPE_STRING);
-
-            if (lhs_is_collection && rhs_is_collection) {
-                infer_constrain(ctx, lhs_t, rhs_t,
-                                ast->line, ast->column);
-                result = rhs_t;
-                break;
-            }
-
-            if (rhs_t && rhs_t->kind == TYPE_STRING) {
-                infer_constrain(ctx, lhs_t, type_char(),
-                                ast->list.items[1]->line,
-                                ast->list.items[1]->column);
-                result = rhs_t;
-                break;
-            }
-
-            if (rhs_t && rhs_t->kind == TYPE_COLL) {
-                if (!rhs_t->element_type)
-                    rhs_t->element_type = infer_fresh(ctx);
-
-                infer_constrain(ctx, lhs_t, rhs_t->element_type,
-                                ast->list.items[1]->line,
-                                ast->list.items[1]->column);
-                result = rhs_t;
-                break;
-            }
-
-            if (rhs_t && rhs_t->kind == TYPE_ARR) {
-                if (!rhs_t->arr_element_type)
-                    rhs_t->arr_element_type = infer_fresh(ctx);
-
-                infer_constrain(ctx, lhs_t, rhs_t->arr_element_type,
-                                ast->list.items[1]->line,
-                                ast->list.items[1]->column);
-                result = rhs_t;
-                break;
-            }
-
-            if (rhs_t && rhs_t->kind == TYPE_LIST &&
-                rhs_t->list_count == 1 &&
-                rhs_t->list_types &&
-                rhs_t->list_types[0]) {
-                infer_constrain(ctx, lhs_t, rhs_t->list_types[0],
-                                ast->list.items[1]->line,
-                                ast->list.items[1]->column);
-                result = rhs_t;
-                break;
-            }
-
-            Type *coll_t = type_coll();
-            coll_t->element_type = type_clone(lhs_t);
-            infer_constrain(ctx, rhs_t, coll_t,
-                            ast->list.items[2]->line,
-                            ast->list.items[2]->column);
-            result = coll_t;
             break;
         }
 
@@ -2558,10 +2442,6 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
         type_arrow(a3_col, type_arrow(a3_key, type_bool())), ctx->env);
     infer_env_insert(ctx->env, "contains?", contains_sc);
 
-    /* ∀a. Coll → Int  (count works on sets, maps, lists, arrays, strings) */
-    TypeScheme *count_sc = scheme_mono(type_arrow(type_coll(), type_int()));
-    infer_env_insert(ctx->env, "count", count_sc);
-
     Type *rt_drop_a = infer_fresh(ctx);
     Type *rt_drop_in = type_coll();
     Type *rt_drop_out = type_coll();
@@ -2570,6 +2450,13 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     TypeScheme *rt_drop_sc = infer_generalise(ctx,
         type_arrow(rt_drop_in, type_arrow(type_int(), rt_drop_out)), ctx->env);
     infer_env_insert(ctx->env, "rt_coll_drop", rt_drop_sc);
+
+    Type *rt_head_a = infer_fresh(ctx);
+    Type *rt_head_in = type_coll();
+    rt_head_in->element_type = type_clone(rt_head_a);
+    TypeScheme *rt_head_sc = infer_generalise(
+        ctx, type_arrow(rt_head_in, rt_head_a), ctx->env);
+    infer_env_insert(ctx->env, "rt_coll_head", rt_head_sc);
 
     Type *rt_empty_ref = infer_fresh(ctx);
     Type *rt_empty_a = infer_fresh(ctx);
@@ -2581,6 +2468,8 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
 
     TypeScheme *rt_is_empty_sc = scheme_mono(type_arrow(type_coll(), type_bool()));
     infer_env_insert(ctx->env, "rt_coll_is_empty", rt_is_empty_sc);
+    infer_env_insert(ctx->env, "__rt_count",
+                     scheme_mono(type_arrow(type_coll(), type_int())));
 
     /* ∀a. a → Bool */
     Type *a4 = infer_fresh(ctx);
@@ -2590,11 +2479,6 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "map?",        set_pred_sc);
     infer_env_insert(ctx->env, "collection?", set_pred_sc);
 
-    /* Keep bootstrap variable IDs stable while public collection operations
-     * are supplied by core class declarations. */
-    for (int i = 0; i < 5; i++)
-        (void)infer_fresh(ctx);
-
     /* ∀a. a -> [a] -> [a]   (cons / .) */
     Type *cons_a = infer_fresh(ctx);
     Type *cons_list_in  = type_list(&cons_a, 1);
@@ -2603,39 +2487,6 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
         type_arrow(cons_a, type_arrow(cons_list_in, cons_list_out)), ctx->env);
     infer_env_insert(ctx->env, ".", cons_sc);
 
-    /* ++ is overloaded at the HM expression level.
-     *
-     * It supports both:
-     *   a      -> Coll a -> Coll a
-     *   Coll a -> Coll a -> Coll a
-     *
-     * A single Hindley-Milner scheme cannot express that ad-hoc overload, so
-     * infer_expr handles binary ++ before generic function application.
-     * Keep this fallback intentionally loose for unusual arities/debug paths. */
-    Type *app_lhs = infer_fresh(ctx);
-    Type *app_rhs = infer_fresh(ctx);
-    Type *app_ret = infer_fresh(ctx);
-    TypeScheme *app_sc = infer_generalise(ctx,
-        type_arrow(app_lhs, type_arrow(app_rhs, app_ret)), ctx->env);
-    infer_env_insert(ctx->env, "++", app_sc);
-
-    /* ∀a. Coll a → a   (head) */
-    Type *head_a = infer_fresh(ctx);
-    Type *head_coll = type_coll();
-    head_coll->element_type = head_a;
-    TypeScheme *head_sc = infer_generalise(ctx,
-        type_arrow(head_coll, head_a), ctx->env);
-    infer_env_insert(ctx->env, "head", head_sc);
-
-    /* ∀a. Coll a → Coll a   (tail) */
-    Type *tail_a = infer_fresh(ctx);
-    Type *tail_in = type_coll();
-    tail_in->element_type = tail_a;
-    Type *tail_out = type_coll();
-    tail_out->element_type = tail_a;
-    TypeScheme *tail_sc = infer_generalise(ctx,
-        type_arrow(tail_in, tail_out), ctx->env);
-    infer_env_insert(ctx->env, "tail", tail_sc);
 }
 
 void infer_register_builtins(InferCtx *ctx) {

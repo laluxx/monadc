@@ -705,6 +705,11 @@ RuntimeValue *rt_coll_empty(RuntimeValue *coll) {
 
 int rt_coll_is_empty(RuntimeValue *coll) {
     if (!coll) return 1;
+    if ((uintptr_t)coll >= 0x10000) {
+        int tag = (int)coll->type;
+        if (tag < 0 || tag > RT_CLOSURE)
+            return rt_list_is_empty_list((RuntimeList *)coll);
+    }
     if (coll->type == RT_STRING) return coll->data.string_val[0] == '\0';
     if (coll->type == RT_ARRAY)  return coll->data.array_val.length == 0;
     if (coll->type == RT_LIST)   return rt_list_is_empty_list(coll->data.list_val);
@@ -850,12 +855,83 @@ RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n) {
 
 int64_t rt_coll_count(RuntimeValue *coll) {
     if (!coll) return 0;
+    if ((uintptr_t)coll >= 0x10000) {
+        int tag = (int)coll->type;
+        if (tag < 0 || tag > RT_CLOSURE)
+            return rt_list_length((RuntimeList *)coll);
+    }
     if (coll->type == RT_STRING) return strlen(coll->data.string_val);
     if (coll->type == RT_ARRAY)  return coll->data.array_val.length;
     if (coll->type == RT_MAP)    return rt_map_count(coll->data.map_val);
     if (coll->type == RT_SET)    return rt_set_count(coll->data.set_val);
     if (coll->type == RT_LIST)   return rt_list_length(coll->data.list_val);
     return 0;
+}
+
+int rt_coll_contains(RuntimeValue *coll, RuntimeValue *value) {
+    if (!coll) return 0;
+    if (coll->type == RT_SET)
+        return rt_set_contains(coll->data.set_val, value);
+    if (coll->type == RT_MAP)
+        return rt_map_contains(coll->data.map_val, value);
+    if (coll->type == RT_ARRAY) {
+        for (size_t i = 0; i < coll->data.array_val.length; i++)
+            if (rt_equal_p(coll->data.array_val.elements[i], value)) return 1;
+        return 0;
+    }
+    if (coll->type == RT_LIST) {
+        RuntimeList *xs = coll->data.list_val;
+        while (!rt_list_is_empty_list(xs)) {
+            if (rt_equal_p(rt_list_car(xs), value)) return 1;
+            xs = rt_list_cdr(xs);
+        }
+        return 0;
+    }
+    if (coll->type == RT_STRING && value && value->type == RT_STRING)
+        return strstr(coll->data.string_val, value->data.string_val) != NULL;
+    if (coll->type == RT_STRING && value && value->type == RT_CHAR)
+        return strchr(coll->data.string_val, value->data.char_val) != NULL;
+    return 0;
+}
+
+static RuntimeValue *rt_coll_nth_value(RuntimeValue *coll, size_t index) {
+    if (!coll) return NULL;
+    if (coll->type == RT_ARRAY)
+        return index < coll->data.array_val.length
+            ? coll->data.array_val.elements[index] : NULL;
+    if (coll->type == RT_LIST)
+        return rt_list_nth(coll->data.list_val, (int64_t)index);
+    if (coll->type == RT_STRING) {
+        size_t length = strlen(coll->data.string_val);
+        return index < length ? rt_value_char(coll->data.string_val[index]) : NULL;
+    }
+    if (index == 0) return coll;
+    return NULL;
+}
+
+static int rt_coll_affix(RuntimeValue *coll, RuntimeValue *affix, int at_end) {
+    int64_t coll_count = rt_coll_count(coll);
+    int64_t affix_count = rt_coll_count(affix);
+    if (affix && affix_count == 0 &&
+        affix->type != RT_LIST && affix->type != RT_ARRAY &&
+        affix->type != RT_STRING)
+        affix_count = 1;
+    if (coll_count < affix_count) return 0;
+    size_t offset = at_end ? (size_t)(coll_count - affix_count) : 0;
+    for (size_t i = 0; i < (size_t)affix_count; i++) {
+        RuntimeValue *left = rt_coll_nth_value(coll, offset + i);
+        RuntimeValue *right = rt_coll_nth_value(affix, i);
+        if (!left || !right || !rt_equal_p(left, right)) return 0;
+    }
+    return 1;
+}
+
+int rt_coll_starts_with(RuntimeValue *coll, RuntimeValue *prefix) {
+    return rt_coll_affix(coll, prefix, 0);
+}
+
+int rt_coll_ends_with(RuntimeValue *coll, RuntimeValue *suffix) {
+    return rt_coll_affix(coll, suffix, 1);
 }
 
 RuntimeList *rt_list_drop(RuntimeList *list, int64_t n) {
@@ -2668,6 +2744,9 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_coll_lazy_cons", ptr, ptr, ptr);
     DECL("rt_coll_drop",      ptr, ptr, i64);
     DECL("rt_coll_count",     i64, ptr);
+    DECL("rt_coll_contains",  i32, ptr, ptr);
+    DECL("rt_coll_starts_with", i32, ptr, ptr);
+    DECL("rt_coll_ends_with",   i32, ptr, ptr);
     DECL("rt_coll_is_empty",  i32, ptr);
 
     // --- Assert ---
@@ -2827,6 +2906,9 @@ GET_RUNTIME_FUNCTION(rt_coll_concat)
 GET_RUNTIME_FUNCTION(rt_coll_lazy_cons)
 GET_RUNTIME_FUNCTION(rt_coll_drop)
 GET_RUNTIME_FUNCTION(rt_coll_count)
+GET_RUNTIME_FUNCTION(rt_coll_contains)
+GET_RUNTIME_FUNCTION(rt_coll_starts_with)
+GET_RUNTIME_FUNCTION(rt_coll_ends_with)
 GET_RUNTIME_FUNCTION(rt_coll_is_empty)
 
 LLVMValueRef get___monad_runtime_error(CodegenContext *ctx) {

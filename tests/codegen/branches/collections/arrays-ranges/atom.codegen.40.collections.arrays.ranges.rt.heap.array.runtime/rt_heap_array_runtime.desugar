@@ -1,4 +1,4 @@
-(module Main)
+(module Main [])
 (define heap [1 2 3])
 (show heap)
 (show (count heap))

@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+import Data.Bool
+
 module Data.Semigroup
   [Semigroup append sconcat
    Monoid mempty mappend mconcat]
@@ -27,9 +29,66 @@ class Semigroup a => Monoid a where
   ;; law: mappend x mempty = x
 
 
+define sum-ints :: [Int] -> Int
+  []     -> error "Semigroup.sconcat: empty sequence"
+  [x|xs] -> sum-ints-from x xs
+
+
+define sum-ints-from :: Int -> [Int] -> Int
+  acc []     -> acc
+  acc [x|xs] -> sum-ints-from (acc + x) xs
+
+
+define concat-colls :: [[a]] -> [a]
+  []       -> error "Semigroup.sconcat: empty sequence"
+  [xs|xss] -> concat-colls-from xs xss
+
+
+define concat-colls-from :: [a] -> [[a]] -> [a]
+  acc []       -> acc
+  acc [xs|xss] -> concat-colls-from (__rt_concat acc xs) xss
+
+
+define mconcat-colls :: [[a]] -> [a]
+  []       -> list
+  [xs|xss] -> __rt_concat xs (mconcat-colls xss)
+
+
 instance Semigroup Int
-  (append x y) => x + y
-  (sconcat xs) => head xs
+  append x y -> x + y
+  sconcat xs -> sum-ints xs
+
+
+instance Semigroup Bool
+  append x y -> x and y
+  sconcat xs -> conjoin-bools? xs
+
+
+instance Monoid Bool
+  mempty        -> True
+  mappend x y   -> x and y
+  mconcat xs    -> conjoin-bools-from? True xs
+
+
+instance Semigroup Coll
+  append xs ys -> __rt_concat xs ys
+  sconcat xss  -> concat-colls xss
+
+
+instance Monoid Coll
+  mempty        -> list
+  mappend xs ys -> __rt_concat xs ys
+  mconcat xss   -> mconcat-colls xss
+
+
+define conjoin-bools? :: [Bool] -> Bool
+  []     -> error "Semigroup.sconcat: empty sequence"
+  [x|xs] -> conjoin-bools-from? x xs
+
+
+define conjoin-bools-from? :: Bool -> [Bool] -> Bool
+  acc []     -> acc
+  acc [x|xs] -> conjoin-bools-from? (acc and x) xs
 
 
 tests
@@ -40,5 +99,18 @@ tests
 
   :int-semigroup:
   assert-eq (append 2 3) 5 "Semigroup Int append"
+  assert-eq (sconcat (list 2 3 4)) 9 "Semigroup Int sconcat folds every member"
   assert-eq (append (append 1 2) 3) (append 1 (append 2 3)) "Semigroup Int append associative"
   :int-semigroup:
+
+  :collection-monoid:
+  assert-eq (show (append (list 1 2) (list 3 4))) "(1 2 3 4)" "Semigroup Coll append"
+  assert-eq (show (sconcat (list (list 1) (list 2 3)))) "(1 2 3)" "Semigroup Coll sconcat"
+  assert-eq (show (mconcat (list (list 1) (list 2 3)))) "(1 2 3)" "Monoid Coll mconcat"
+  assert-eq (show mempty) "()" "Monoid Coll identity"
+  :collection-monoid:
+
+  :surface-operator-dispatch:
+  assert-eq (True ++ False) False "++ resolves the core Semigroup Bool instance"
+  assert-eq (True ++ True)  True  "++ is not compiler-specialized to collections"
+  :surface-operator-dispatch:

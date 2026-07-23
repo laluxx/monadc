@@ -106,13 +106,17 @@ method listToMaybe :: [a] -> Maybe a
   [x|ignored] -> Just x
 
 
-method orElse :: Maybe a -> Maybe a -> Maybe a
+define maybe-or-else :: Maybe a -> Maybe a -> Maybe a
   value rhs -> (match value with | Nothing -> rhs | (Just x) -> value)
+
+
+method orElse :: Maybe a -> Maybe a -> Maybe a
+  value rhs -> maybe-or-else value rhs
 
 
 method firstJust :: [Maybe a] -> Maybe a
   []       -> Nothing
-  [m|rest] -> m.orElse (firstJust rest)
+  [m|rest] -> maybe-or-else m (firstJust rest)
 
 
 method safeHead :: [a] -> Maybe a

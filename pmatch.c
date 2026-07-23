@@ -763,7 +763,7 @@ static AST *make_index_access(const char *param_name, int idx) {
         coll = make_list(drop_items, 3);
     }
 
-    AST *items[] = {sym("head"), coll};
+    AST *items[] = {sym("rt_coll_head"), coll};
     return make_list(items, 2);
 }
 

@@ -7,3 +7,5 @@ Bool
 String
 Map
 Char
+Semigroup
+Sequence

@@ -15,6 +15,7 @@
 
 import System.Posix.Term
 import Data.Bool
+import Sequence
 
 module Text.Readline
   [key-ctrl-a key-ctrl-b key-ctrl-d key-ctrl-e key-ctrl-f
@@ -46,11 +47,6 @@ define key-home 1003
 define key-end 1004
 
 
-define append-list :: [Int] -> [Int] -> [Int]
-  [] ys     -> ys
-  [x|xs] ys -> (x ++ (append-list xs ys))
-
-
 define length-list :: [Int] -> Int
   []     -> 0
   [x|xs] -> (+ 1 (length-list xs))
@@ -59,7 +55,7 @@ define length-list :: [Int] -> Int
 define take-list :: Int -> [Int] -> [Int]
   n _      | (<= n 0) -> []
   n []                -> []
-  n [x|xs]            -> (x ++ (take-list (- n 1) xs))
+  n [x|xs]            -> prepend x (take-list (- n 1) xs)
 
 
 define drop-list :: Int -> [Int] -> [Int]
@@ -69,15 +65,15 @@ define drop-list :: Int -> [Int] -> [Int]
 
 
 define insert-at :: Int -> Int -> [Int] -> [Int]
-  index c xs     | (<= index 0) -> (c ++ xs)
-  index c []                    -> (c ++ [])
-  index c [x|xs]                -> (x ++ (insert-at (- index 1) c xs))
+  index c xs     | (<= index 0) -> prepend c xs
+  index c []                    -> prepend c []
+  index c [x|xs]                -> prepend x (insert-at (- index 1) c xs)
 
 
 define delete-at :: Int -> [Int] -> [Int]
   index xs     | (<= index 0) -> delete-head xs
   index []                    -> []
-  index [x|xs]                -> (x ++ (delete-at (- index 1) xs))
+  index [x|xs]                -> prepend x (delete-at (- index 1) xs)
 
 
 define delete-head :: [Int] -> [Int]
@@ -96,7 +92,7 @@ define word-char? :: Int -> Bool
 define drop-forward-word :: [Int] -> [Int]
   []                     -> []
   [x|xs] | word-char? x  -> drop-forward-word xs
-  [x|xs]                 -> (x ++ xs)
+  [x|xs]                 -> prepend x xs
 
 
 define word-start-loop :: Int -> Int -> Int -> [Int] -> Int
@@ -119,7 +115,7 @@ define move-end :: Int -> [Int] -> Int
 
 
 define move-forward :: Int -> [Int] -> Int
-  cursor text | (< cursor (count text)) -> (+ cursor 1)
+  cursor text | (< cursor (length text)) -> (+ cursor 1)
   cursor text                           -> cursor
 
 
@@ -142,11 +138,11 @@ define delete-backward :: Int -> [Int] -> [Int]
 
 
 define kill-word-forward :: Int -> [Int] -> [Int]
-  cursor text -> append-list (take-list cursor text) (drop-forward-word (drop-list cursor text))
+  cursor text -> concat (take-list cursor text) (drop-forward-word (drop-list cursor text))
 
 
 define kill-word-backward :: Int -> [Int] -> [Int]
-  cursor text -> append-list (take-list (word-start cursor text) text) (drop-list cursor text)
+  cursor text -> concat (take-list (word-start cursor text) text) (drop-list cursor text)
 
 
 define kill-line-backward :: Int -> [Int] -> [Int]

@@ -13,6 +13,8 @@
 
 ;;; Code:
 
+import Sequence
+
 module Data.Enum
   [Enum succ pred toEnum fromEnum enumFromTo enumFromThenTo
    Bounded minBound maxBound
@@ -35,27 +37,27 @@ class Enum a where
 
   enumFromTo start end ->
     if (fromEnum start) > (fromEnum end)
-      list
+      (list)
     else
       if (fromEnum start) = (fromEnum end)
-        start ++ list
+        prepend start (list)
       else
-        start ++ enumFromTo (succ start) end
+        prepend start (enumFromTo (succ start) end)
 
   enumFromThenTo start next end ->
     if (fromEnum start) = (fromEnum next)
       error "enumFromThenTo: zero step"
     else
       if ((fromEnum next) > (fromEnum start) and (fromEnum start) > (fromEnum end)) or ((fromEnum next) < (fromEnum start) and (fromEnum start) < (fromEnum end))
-        list
+        (list)
       else
         if ((fromEnum next) > (fromEnum start) and (fromEnum next) > (fromEnum end)) or ((fromEnum next) < (fromEnum start) and (fromEnum next) < (fromEnum end))
-          start ++ list
+          prepend start (list)
         else
           if (fromEnum next) = (fromEnum end)
-            start ++ next ++ list
+            prepend start (prepend next (list))
           else
-            start ++ enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end
+            prepend start (enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end)
 
   ;; law: succ x = toEnum (fromEnum x + 1)
   ;; law: pred x = toEnum (fromEnum x - 1)

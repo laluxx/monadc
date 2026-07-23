@@ -17,18 +17,21 @@ import Data.Functor
 import Data.Foldable
 import Data.Bool
 import Data.Maybe
+import Data.Semigroup
 
 module Sequence
- [Sequence map filter concat foldl foldr coll-foldl
-  null? length reverse at nth
+ [Sequence map filter prepend concat foldl foldr coll-foldl
+  null? length reverse at nth head hd tail tl
+  count empty? is-empty?
   take      drop
   takeWhile dropWhile
-  any? all?
+  any? all? starts-with? ends-with?
   zip zipWith snoc bothPredicates]
 
 
 class (Functor c, Foldable c) => Sequence c where
   filter    :: (a -> Bool) -> c a -> c a
+  prepend   :: a -> c a -> c a
   concat    :: c a -> c a -> c a
   null?     :: c a -> Bool
   length    :: c a -> Int
@@ -52,6 +55,37 @@ class (Functor c, Foldable c) => Sequence c where
   ;; law: take xs n `concat` drop xs n = xs, for n >= 0
 
 
+method starts-with? :: [a] -> [a] -> Bool
+  values prefix -> __rt_starts_with? values prefix
+
+
+method ends-with? :: [a] -> [a] -> Bool
+  values suffix -> __rt_ends_with? values suffix
+
+
+method head :: [a] -> a
+  :alias hd
+  xs -> coll-nth xs 0
+
+
+method tail :: [a] -> [a]
+  :alias tl
+  xs -> coll-drop xs 1
+
+
+method count :: [a] -> Int
+  xs -> __rt_count xs
+
+
+method empty? :: [a] -> Bool
+  :alias is-empty?
+  xs -> rt_coll_is_empty xs
+
+
+define coll-prepend :: a -> [a] -> [a]
+  x xs -> __rt_prepend x xs
+
+
 define coll-null? :: [a] -> Bool
   []     -> True
   [x|xs] -> False
@@ -64,7 +98,7 @@ define coll-length :: [a] -> Int
 
 define coll-reverse-into :: [a] -> [a] -> [a]
   acc []     -> acc
-  acc [x|xs] -> coll-reverse-into (x ++ acc) xs
+  acc [x|xs] -> coll-reverse-into (coll-prepend x acc) xs
 
 
 define coll-reverse :: [a] -> [a]
@@ -86,36 +120,36 @@ define coll-nth :: [a] -> Int -> a
 
 define coll-take :: [a] -> Int -> [a]
   [] _                         -> []
-  [x|xs] n | n > 0             -> (x ++ (coll-take xs (n - 1)))
+  [x|xs] n | n > 0             -> coll-prepend x (coll-take xs (n - 1))
   [x|xs] n | otherwise         -> []
 
 
 define coll-drop :: [a] -> Int -> [a]
   [] _                         -> []
   [x|xs] n | n > 0             -> coll-drop xs (n - 1)
-  [x|xs] n | otherwise         -> (x ++ xs)
+  [x|xs] n | otherwise         -> coll-prepend x xs
 
 
 define coll-take-while :: [a] -> (a -> Bool) -> [a]
   [] _                         -> []
-  [x|xs] p | p x               -> (x ++ (coll-take-while xs p))
+  [x|xs] p | p x               -> coll-prepend x (coll-take-while xs p)
   [x|xs] p | otherwise         -> []
 
 
 define coll-drop-while :: [a] -> (a -> Bool) -> [a]
   [] _                         -> []
   [x|xs] p | p x               -> coll-drop-while xs p
-  [x|xs] p | otherwise         -> (x ++ xs)
+  [x|xs] p | otherwise         -> coll-prepend x xs
 
 
 define coll-map :: (a -> b) -> [a] -> [b]
   _ []     -> []
-  f [x|xs] -> ((f x) ++ (coll-map f xs))
+  f [x|xs] -> coll-prepend (f x) (coll-map f xs)
 
 
 define coll-filter :: (a -> Bool) -> [a] -> [a]
   _ []                         -> []
-  p [x|xs] | p x               -> (x ++ (coll-filter p xs))
+  p [x|xs] | p x               -> coll-prepend x (coll-filter p xs)
   p [x|xs] | otherwise         -> coll-filter p xs
 
 
@@ -133,18 +167,18 @@ define coll-all? :: [a] -> (a -> Bool) -> Bool
 define coll-zip :: [a] -> [b] -> [(a, b)]
   [] _          -> []
   _ []          -> []
-  [x|xs] [y|ys] -> ((x, y) ++ (coll-zip xs ys))
+  [x|xs] [y|ys] -> coll-prepend (x, y) (coll-zip xs ys)
 
 
 define coll-zip-with :: [a] -> [b] -> (a -> b -> d) -> [d]
   [] _ _          -> []
   _ [] _          -> []
-  [x|xs] [y|ys] f -> ((f x y) ++ (coll-zip-with xs ys f))
+  [x|xs] [y|ys] f -> coll-prepend (f x y) (coll-zip-with xs ys f)
 
 
 define coll-snoc :: [a] -> a -> [a]
   [] val     -> (list val)
-  [x|xs] val -> (x ++ (coll-snoc xs val))
+  [x|xs] val -> coll-prepend x (coll-snoc xs val)
 
 
 define coll-foldl :: (b -> a -> b) -> b -> [a] -> b
@@ -168,7 +202,8 @@ instance Foldable Coll
 
 instance Sequence Coll
   filter p xs       -> coll-filter p xs
-  concat xs ys      -> ++ xs ys
+  prepend x xs      -> __rt_prepend x xs
+  concat xs ys      -> append xs ys
   null? xs          -> coll-null? xs
   length xs         -> coll-length xs
   reverse xs        -> coll-reverse xs
@@ -203,6 +238,13 @@ tests
   assert-eq (show (concat (list 1 2) (list 3 4))) "(1 2 3 4)" "concat"
   assert-eq (show ((list 5 6 7).at 1))            "(Just 6)"  "at"
   assert-eq ((list 5 6 7).nth 2)                  7           "nth"
+  assert-eq (head (list 5 6 7))                   5           "head"
+  assert-eq (hd (list 5 6 7))                     5           "head alias"
+  assert-eq (show (tail (list 5 6 7)))            "(6 7)"     "tail"
+  assert-eq (show (tl (list 5 6 7)))              "(6 7)"     "tail alias"
+  assert-eq (count (list 5 6 7))                  3           "count"
+  assert-eq (empty? [])                            True        "empty?"
+  assert-eq (is-empty? (list 5))                  False       "empty? alias"
   :structure:
 
   :take:

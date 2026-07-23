@@ -2429,6 +2429,19 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
         return val_universe_n(level);
     }
 
+    // ── Pair synthesis ────────────────────────────────────────────
+    case TERM_PAIR: {
+        Value *fst_ty = dep_infer(ctx, t->pair_fst);
+        if (!fst_ty) return NULL;
+        Value *snd_ty = dep_infer(ctx, t->pair_snd);
+        if (!snd_ty) return NULL;
+        Term *sigma_term = term_sigma(
+            "_", dep_quote(fst_ty, ctx->depth, ctx->mctx),
+            dep_quote(snd_ty, ctx->depth, ctx->mctx));
+        /* The resulting value closes over sigma_term's codomain. */
+        return dep_eval(sigma_term, ctx->env, ctx->mctx);
+    }
+
     // ── Σ-type formation ───────────────────────────────────────────
     case TERM_SIGMA: {
         int u = dep_infer_level(ctx, t->binder_dom);
@@ -2708,6 +2721,20 @@ bool dep_check(DepCtx *ctx, Term *t, Value *expected_type) {
 static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     expected_type = dep_force(expected_type, ctx->mctx);
 
+    /* An unresolved expected type is an inference hole, not a concrete set
+     * that can reject an inhabitant. HM/core inference will supply the ground
+     * type later; accepting the term here preserves bidirectional checking for
+     * aliases and refinement-bound definitions. */
+    if (expected_type->kind == VAL_META) {
+        MetaEntry *meta = meta_lookup(ctx->mctx, expected_type->meta_id);
+        if (expected_type->meta_id == -1 || !meta || meta->state == META_UNSOLVED)
+            return true;
+    }
+    if (expected_type->kind == VAL_EMBED && expected_type->embed_type &&
+        (expected_type->embed_type->kind == TYPE_UNKNOWN ||
+         expected_type->embed_type->kind == TYPE_VAR))
+        return true;
+
     switch (t->kind) {
 
     // ── Lambda — check against Π ──────────────────────────────────
@@ -2740,6 +2767,8 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     // ── Pair — check against Σ ────────────────────────────────────
     case TERM_PAIR: {
         if (expected_type->kind != VAL_SIGMA) {
+            if (expected_type->kind == VAL_META)
+                goto check_default;
             dep_error_set(ctx, t->line, t->col,
                           "pair in non-Σ position: expected %s",
                           term_to_string(dep_quote(expected_type, ctx->depth, ctx->mctx)));
@@ -3209,7 +3238,12 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
              * end_column. Use that to avoid changing normal calls like
              * (f 0).
              */
-            if (ast->list.count == 2 &&
+            bool receiver_is_product =
+                head->inferred_type &&
+                head->inferred_type->kind == TYPE_LIST &&
+                head->inferred_type->list_count > 1;
+            if (receiver_is_product &&
+                ast->list.count == 2 &&
                 dep_ast_was_postfix_index(ast, head)) {
                 int index_value = -1;
                 if (dep_ast_numeric_index(ast->list.items[1], &index_value)) {
@@ -4092,6 +4126,7 @@ void dep_register_builtins(DepCtx *ctx) {
     // ── Standard Library Bootstrapping ─────────────────────────────
     Term *t_bool = term_embed(type_bool());
     Term *t_str  = term_embed(type_string());
+    Term *t_int  = term_embed(type_int());
 
     // Helper to generate A -> B
     #define ARROW(a, b) term_pi("_", (a), (b), IMPLICIT_EXPLICIT)
@@ -4116,6 +4151,36 @@ void dep_register_builtins(DepCtx *ctx) {
                 IMPLICIT_EXPLICIT),
             IMPLICIT_IMPLICIT);
 
+    /* Π{A : Type}. A -> A */
+    Term *poly_identity =
+        term_pi("A", term_type_n(0),
+            term_pi("_", term_bvar(0), term_bvar(1),
+                    IMPLICIT_EXPLICIT),
+            IMPLICIT_IMPLICIT);
+
+    /* Π{A : Type}. A -> Bool */
+    Term *poly_bool =
+        term_pi("A", term_type_n(0),
+            term_pi("_", term_bvar(0), term_clone(t_bool),
+                    IMPLICIT_EXPLICIT),
+            IMPLICIT_IMPLICIT);
+
+    /* Π{A : Type}. A -> Int */
+    Term *poly_int =
+        term_pi("A", term_type_n(0),
+            term_pi("_", term_bvar(0), term_clone(t_int),
+                    IMPLICIT_EXPLICIT),
+            IMPLICIT_IMPLICIT);
+
+    /* Π{A : Type}. A -> Int -> A */
+    Term *poly_drop =
+        term_pi("A", term_type_n(0),
+            term_pi("_", term_bvar(0),
+                term_pi("_", term_clone(t_int), term_bvar(2),
+                        IMPLICIT_EXPLICIT),
+                IMPLICIT_EXPLICIT),
+            IMPLICIT_IMPLICIT);
+
     EvalEnv *ee = eval_env_empty();
 
     // Math & Logic
@@ -4123,6 +4188,15 @@ void dep_register_builtins(DepCtx *ctx) {
     dep_env_declare(env, "-",   dep_eval(poly_poly_poly, ee, NULL));
     dep_env_declare(env, "*",   dep_eval(poly_poly_poly, ee, NULL));
     dep_env_declare(env, "/",   dep_eval(poly_poly_poly, ee, NULL));
+    /* Private representation primitive used by the core Semigroup Coll
+     * instance.  Its public meaning and laws live in Data.Semigroup; the
+     * dependent checker only needs the exact same-shaped append boundary. */
+    dep_env_declare(env, "__rt_concat", dep_eval(poly_poly_poly, ee, NULL));
+    dep_env_declare(env, "rt_coll_drop", dep_eval(poly_drop, ee, NULL));
+    dep_env_declare(env, "rt_coll_head", dep_eval(poly_identity, ee, NULL));
+    dep_env_declare(env, "rt_coll_empty", dep_eval(poly_identity, ee, NULL));
+    dep_env_declare(env, "rt_coll_is_empty", dep_eval(poly_bool, ee, NULL));
+    dep_env_declare(env, "__rt_count", dep_eval(poly_int, ee, NULL));
     dep_env_declare(env, "and", dep_eval(bool_bool_bool, ee, NULL));
     dep_env_declare(env, "or",  dep_eval(bool_bool_bool, ee, NULL));
 

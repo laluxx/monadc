@@ -28,9 +28,12 @@ method singleton :: a -> Set
   x -> set x
 
 
+method finite-cardinality :: Set -> Int
+  x -> coll-foldl (lambda (size _) (size + 1)) 0 x
+
+
 method singleton? :: Set -> Bool
-  x | empty? x -> False
-  x -> empty? (disj x (head x))
+  x -> and ((finite-cardinality x) > 0) ((finite-cardinality x) < 2)
 
 
 method union :: Set -> Set -> Set
@@ -50,12 +53,12 @@ method symmetric-difference :: Set -> Set -> Set
 
 
 method subset? :: Set -> Set -> Bool
-  a b -> empty? (difference a b)
+  a b -> (finite-cardinality (difference a b)) < 1
 
 
 method proper-subset? :: Set -> Set -> Bool
-  a b -> and (empty? (difference a b))
-             (not (empty? (difference b a)))
+  a b -> and ((finite-cardinality (difference a b)) < 1)
+             ((finite-cardinality (difference b a)) > 0)
 
 
 method superset? :: Set -> Set -> Bool
@@ -67,14 +70,14 @@ method proper-superset? :: Set -> Set -> Bool
 
 
 method disjoint? :: Set -> Set -> Bool
-  a b -> empty? (intersection a b)
+  a b -> (finite-cardinality (intersection a b)) < 1
 
 
 instance Eq Set
-  (eq? x y) => and (empty? (difference x y))
-                   (empty? (difference y x))
-  (not-eq? x y) => not (and (empty? (difference x y))
-                            (empty? (difference y x)))
+  (eq? x y) => and ((finite-cardinality (difference x y)) < 1)
+                   ((finite-cardinality (difference y x)) < 1)
+  (not-eq? x y) => or ((finite-cardinality (difference x y)) > 0)
+                      ((finite-cardinality (difference y x)) > 0)
 
 
 tests

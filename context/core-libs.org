@@ -1478,6 +1478,15 @@
   the boundary rule: a runtime intrinsic may optimize representation, but the
   exported method and its laws must be expressible and owned by core.
 
+[FIX id:fix.core-libs.typed-sequence-construction-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Sequence.mon,codegen.c,tests/test_core_abstraction_ownership.py conf:high]
+  Sequence construction is split into typed core operations: =prepend :: a ->
+  c a -> c a= and =concat :: c a -> c a -> c a=. Core algorithms use the
+  typed =coll-prepend= implementation rather than the representation-overloaded
+  =++= spelling, preventing element insertion from becoming an ITT inference
+  hole. The =Sequence Coll= instance alone crosses into private
+  =__rt_prepend=/=__rt_concat= primitives. Public laws and types remain in core;
+  codegen owns only the optimized representation operation.
+
 [FIX id:fix.wisp.typed-nullary-body-2026-07-22 date:2026-07-22 by:codex src:wisp.c,how_to/Syntax.mon conf:high]
   A Wisp definition such as =define return-string -> String= now consumes its
   indented expression body as a true nullary function. Previously the expander
@@ -1516,3 +1525,56 @@
   results such as =keys :: Map k v -> [k]= use the abstract sequence type rather
   than a tuple-shaped internal list. Verified by compiling and executing
   =core/prelude/Data/Map.mon= and by =tests/test_core_abstraction_ownership.py=.
+
+[FIX id:fix.core-libs.semigroup-sequence-boundary-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Semigroup.mon,core/prelude/Sequence.mon,core/prelude/Data/Enum.mon,core/prelude/Text/Readline.mon,dep.c,tests/test_core_abstraction_ownership.py conf:high]
+  Same-shaped append algebra is canonically owned by =Data.Semigroup=.
+  =Semigroup Coll= implements associative append and non-empty concatenation,
+  while =Monoid Coll= adds the empty identity and total =mconcat=. =Sequence=
+  delegates =concat= to that instance and retains =prepend= as the distinct
+  element-construction operation. Enum and Readline now compose these typed
+  methods instead of the compiler-overloaded =++=, and Readline no longer owns
+  a duplicate list append. The dependent checker gives the private
+  =__rt_concat= representation boundary the exact same-type polymorphic shape;
+  public meaning, laws, and dispatch remain in core.
+
+[FIX id:fix.core-libs.public-append-core-dispatch-2026-07-23 date:2026-07-23 by:codex src:reader.c,infer.c,codegen.c,core/prelude/Data/Primitive.modules,core/prelude/Data/Semigroup.mon,tests/test_core_abstraction_ownership.py conf:high]
+  The =++= token is now surface syntax canonicalized by the reader to the
+  core-owned =Semigroup.append= method. HM inference and LLVM code generation
+  no longer register or special-case a public =++= builtin. =Semigroup= is in
+  the core bootstrap manifest so ordinary programs receive its class and
+  instances without compiler policy. Only =__rt_concat= and =__rt_prepend=
+  remain private optimized representation boundaries. A lawful Boolean
+  conjunction Semigroup/Monoid instance is exercised through =++= to prove
+  dispatch is extensible and is not secretly collection-specific compiler
+  behavior; existing list and String operator programs continue to pass.
+
+[FIX id:fix.core-libs.no-sequence-shortcuts-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Set.mon,core/prelude/Data/List.mon,core/prelude/Text/Readline.mon,tests/test_core_abstraction_ownership.py conf:high]
+  Core modules no longer bypass their abstractions through the historical
+  public =head=/=tail=/=count=/=empty?= compiler helpers. Set singleton and
+  extensional relations use a visibly finite fold-based cardinality method;
+  they never impose sequence order on a Set by selecting and deleting its
+  head. Composite List accessors are derived from =Sequence.nth=/=drop=, and
+  Readline movement uses =Sequence.length=. This also makes the finite-only
+  nature of enumerating Set operations explicit while predicate-set membership
+  remains independent and may represent infinite sets.
+
+[FIX id:fix.core-libs.head-tail-alias-ownership-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Sequence.mon,core/prelude/Data/Primitive.modules,main.c,infer.c,codegen.c,tests/test_core_abstraction_ownership.py conf:high]
+  =Sequence= owns the typed partial =head :: [a] -> a= and structural =tail ::
+  [a] -> [a]= methods. Their short spellings are metadata aliases (=hd= and
+  =tl=), not duplicate functions. The core bootstrap manifest can now expose
+  root prelude modules as well as =Data/*= modules, so ordinary programs see
+  these definitions without implicit C registrations. Public =head=/=tail=
+  inference and codegen branches, builtin registrations, and unused bootstrap
+  schemes were deleted. A standalone legacy program and the aliases execute
+  through the core implementation.
+
+[FIX id:fix.core-libs.count-empty-core-ownership-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Sequence.mon,infer.c,codegen.c,dep.c,tests/test_core_abstraction_ownership.py conf:high]
+  =Sequence= now owns typed =count :: [a] -> Int= and =empty? :: [a] ->
+  Bool= compatibility methods, with =is-empty?= provided through =:alias=
+  metadata rather than a duplicate function. Public HM special cases,
+  LLVM lowering branches, and builtin registrations for =count=/=empty?= were
+  deleted. Existing list, array, String, Set, and mixed-representation programs
+  execute through the core implementation. Generated private collection
+  operations used by pattern matching now have explicit ITT types:
+  =rt_coll_drop : Π A. A -> Int -> A=, =rt_coll_empty : Π A. A -> A=, and
+  =rt_coll_is_empty : Π A. A -> Bool=, replacing unbound-global shadow holes.

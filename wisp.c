@@ -990,7 +990,7 @@ static char *wisp_rewrite_postfix_index_token(const char *text) {
                     char *index = strndup(idx_start,
                                           (size_t)(idx - idx_start));
 
-                    sb_puts(&out, "(index ");
+                    sb_putc(&out, '(');
                     sb_puts(&out, name);
                     sb_putc(&out, ' ');
                     sb_puts(&out, index);
@@ -4021,9 +4021,11 @@ static char *wisp_expand_statement_range(ArityTable *at,
 
         SB out;
         sb_init(&out);
+        sb_puts(&out, "(set! ");
         sb_puts(&out, lhs);
-        sb_puts(&out, " <- ");
+        sb_putc(&out, ' ');
         sb_puts(&out, rhs);
+        sb_putc(&out, ')');
 
         free(lhs);
         free(rhs);
@@ -5558,7 +5560,12 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         /* Preserve the raw line (with original indentation stripped to
                          * relative indent) so nested for sugar sees correct structure. */
                         const char *blt_end = get_logical_line_end(blt);
-                        size_t blt_len = blt_end - blt;
+                        const char *body_assign =
+                            wisp_find_top_level_left_arrow_before(blt, blt_end);
+                        char *statement = body_assign
+                            ? wisp_expand_statement_range(at, blt, blt_end)
+                            : strndup(blt, (size_t)(blt_end - blt));
+                        size_t blt_len = strlen(statement);
                         /* Indent body lines by (bl_ind - indent - 1) spaces so that
                          * the recursive build_token_stream sees correct relative depth. */
                         int rel_indent = bl_ind - indent;
@@ -5567,9 +5574,10 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                         while (need >= body_src_cap) { body_src_cap *= 2; body_src = realloc(body_src, body_src_cap); }
                         if (body_src_len > 0) body_src[body_src_len++] = '\n';
                         for (int _si = 0; _si < rel_indent; _si++) body_src[body_src_len++] = ' ';
-                        memcpy(body_src + body_src_len, blt, blt_len);
+                        memcpy(body_src + body_src_len, statement, blt_len);
                         body_src_len += blt_len;
                         body_src[body_src_len] = '\0';
+                        free(statement);
                         free(blraw);
                         lineno++;
                     }

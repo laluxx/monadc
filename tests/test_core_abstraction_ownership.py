@@ -20,9 +20,10 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertNotIn("k_primitive_type_stems", main_c)
         self.assertNotIn("k_primitive_type_stems2", main_c)
         self.assertIn("core_primitive_module_stems", main_c)
+        self.assertIn('"%s/prelude/%s.mon", core_dir, stem', main_c)
         self.assertEqual(
             [line for line in manifest.splitlines() if line and not line.startswith(";")],
-            ["Int", "Float", "Bool", "String", "Map", "Char"],
+            ["Int", "Float", "Bool", "String", "Map", "Char", "Semigroup", "Sequence"],
         )
         self.assertIn('-o -name "*.modules"', makefile)
         self.assertIn('PATTERN "*.modules"', cmake)
@@ -95,7 +96,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
     def test_sequence_structure_is_owned_by_sequence_class(self):
         coll_core = source("core/prelude/Sequence.mon")
         for name in (
-            "filter", "concat", "null?", "length", "reverse", "at", "nth",
+            "filter", "prepend", "concat", "null?", "length", "reverse", "at", "nth",
             "take", "drop", "takeWhile", "dropWhile",
             "any?", "all?", "zip", "zipWith", "snoc",
         ):
@@ -104,6 +105,28 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             self.assertNotRegex(coll_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
 
         self.assertNotRegex(coll_core, r"(?m)^(?:method|define)\s+append\s+::")
+
+        implementation = coll_core.split("\ntests\n", 1)[0]
+        self.assertNotIn(" ++ ", implementation)
+        self.assertIn("import Data.Semigroup", coll_core)
+        self.assertIn("concat xs ys      -> append xs ys", implementation)
+        self.assertNotIn("concat xs ys      -> __rt_concat xs ys", implementation)
+        self.assertIn("prepend x xs      -> __rt_prepend x xs", implementation)
+        self.assertRegex(coll_core, r"(?m)^method head :: \[a\] -> a$")
+        self.assertRegex(coll_core, r"(?m)^\s+:alias hd$")
+        self.assertRegex(coll_core, r"(?m)^method tail :: \[a\] -> \[a\]$")
+        self.assertRegex(coll_core, r"(?m)^\s+:alias tl$")
+        self.assertRegex(coll_core, r"(?m)^method count :: \[a\] -> Int$")
+        self.assertRegex(coll_core, r"(?m)^method empty\? :: \[a\] -> Bool$")
+        self.assertRegex(coll_core, r"(?m)^\s+:alias is-empty\?$")
+        self.assertNotRegex(coll_core, r"(?m)^method hd ::")
+        self.assertNotRegex(coll_core, r"(?m)^method tl ::")
+        infer = source("infer.c")
+        codegen = source("codegen.c")
+        for name in ("head", "tail", "count", "empty?"):
+            self.assertNotIn(f'infer_env_insert(ctx->env, "{name}"', infer)
+            self.assertNotIn(f'env_insert_builtin(ctx->env, "{name}"', codegen)
+            self.assertNotIn(f'strcmp(head->symbol, "{name}") == 0', codegen)
 
     def test_data_list_does_not_duplicate_sequence_structure(self):
         list_core = source("core/prelude/Data/List.mon")
@@ -115,6 +138,47 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         for name in ("caar", "cadr", "cdar", "cddr", "caddr", "cdddr"):
             self.assertRegex(list_core, rf"(?m)^method\s+{name}\s+::")
             self.assertNotRegex(list_core, rf"(?m)^define\s+{name}\s+::")
+
+    def test_core_clients_use_sequence_construction_methods(self):
+        enum_core = source("core/prelude/Data/Enum.mon")
+        readline_core = source("core/prelude/Text/Readline.mon")
+
+        self.assertIn("import Sequence", enum_core)
+        self.assertNotIn(" ++ ", enum_core.split("\ntests\n", 1)[0])
+        self.assertIn("prepend start", enum_core)
+
+        self.assertIn("import Sequence", readline_core)
+        self.assertNotRegex(readline_core, r"(?m)^define\s+append-list\s+::")
+        self.assertNotIn(" ++ ", readline_core)
+        self.assertIn("-> concat (take-list", readline_core)
+
+    def test_semigroup_owns_same_shaped_collection_append(self):
+        semigroup_core = source("core/prelude/Data/Semigroup.mon")
+        reader = source("reader.c")
+        infer = source("infer.c")
+        codegen = source("codegen.c")
+
+        self.assertIn("instance Semigroup Coll", semigroup_core)
+        self.assertIn("append xs ys -> __rt_concat xs ys", semigroup_core)
+        self.assertIn("instance Monoid Coll", semigroup_core)
+        self.assertRegex(semigroup_core, r"(?m)^\s+mempty\s+-> list$")
+        self.assertNotIn("sconcat xs) => head xs", semigroup_core)
+        self.assertIn('strcmp(name, "++") == 0 ? "append" : name', reader)
+        self.assertNotIn('infer_env_insert(ctx->env, "++"', infer)
+        self.assertNotIn('strcmp(head->symbol, "++") == 0', infer)
+        self.assertNotIn('env_insert_builtin(ctx->env, "++"', codegen)
+        self.assertNotIn('strcmp(head->symbol, "++") == 0', codegen)
+
+        dependent_checker = source("dep.c")
+        self.assertIn(
+            'dep_env_declare(env, "__rt_concat", dep_eval(poly_poly_poly, ee, NULL));',
+            dependent_checker,
+        )
+        for primitive in ("rt_coll_drop", "rt_coll_empty", "rt_coll_is_empty"):
+            self.assertIn(
+                f'dep_env_declare(env, "{primitive}"',
+                dependent_checker,
+            )
 
     def test_char_methods_are_typed_by_the_char_module(self):
         char_core = source("core/prelude/Data/Char.mon")
@@ -230,19 +294,32 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertIn("(member? x s) => __rt_contains? s x", data_set)
         self.assertNotIn('env_insert_builtin(ctx->env, "contains?"', codegen)
 
-    def test_map_class_owns_lawful_derived_operations(self):
-        map_class = source("core/prelude/Data/Map/Class.mon")
+    def test_core_does_not_bypass_sequence_and_set_abstractions(self):
+        set_core = source("core/prelude/Data/Set.mon")
+        list_core = source("core/prelude/Data/List.mon")
+        readline_core = source("core/prelude/Text/Readline.mon")
 
-        self.assertIn("import Data.Maybe", map_class)
-        self.assertIn("import Sequence", map_class)
-        for method in ("member?", "adjust", "alter", "difference"):
-            self.assertRegex(
-                map_class,
-                rf"(?m)^\s{{2}}{method}[^\n]* ->",
-                f"Data.Map.Class must provide the derived {method} method",
-            )
-        self.assertIn("minimal complete definition: lookup, keys, values", map_class)
-        self.assertIn("minimal complete definition: insert and delete", map_class)
+        self.assertNotRegex(set_core, r"\b(?:head|empty\?|count)\b")
+        self.assertIn("instance Eq Set", set_core)
+        self.assertIn("finite-cardinality x", set_core)
+        self.assertNotRegex(list_core, r"\b(?:head|tail)\b")
+        self.assertNotIn("count text", readline_core)
+        self.assertIn("length text", readline_core)
+
+    def test_map_module_owns_typed_map_operations(self):
+        map_core = source("core/prelude/Data/Map.mon")
+
+        for signature in (
+            "member? :: Map k v -> k -> Bool",
+            "keys :: Map k v -> [k]",
+            "values :: Map k v -> [v]",
+            "insert :: Map k v -> k -> v -> Map k v",
+            "delete :: Map k v -> k -> Map k v",
+            "merge :: Map k v -> Map k v -> Map k v",
+        ):
+            self.assertIn(signature, map_core)
+        self.assertNotRegex(map_core, r"(?m)^define\s+(?:member\?|keys|values|insert|delete|merge)\s+::")
+        self.assertIn("__rt_map_", map_core)
 
     def test_map_representation_preserves_core_key_and_value_types(self):
         types_h = source("types.h")

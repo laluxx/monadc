@@ -11,34 +11,34 @@
 
 ;;; Code:
 
-import Data.Bool
+import Sequence
 
 module Data.List
   [caar cadr cdar cddr caddr cdddr]
 
 
 method caar :: [[a]] -> a
-  xs -> head (head xs)
+  xs -> nth (nth xs 0) 0
 
 
 method cadr :: [a] -> a
-  xs -> head (tail xs)
+  xs -> nth xs 1
 
 
 method cdar :: [[a]] -> [a]
-  xs -> tail (head xs)
+  xs -> drop (nth xs 0) 1
 
 
 method cddr :: [a] -> [a]
-  xs -> tail (tail xs)
+  xs -> drop xs 2
 
 
 method caddr :: [a] -> a
-  xs -> head (tail (tail xs))
+  xs -> nth xs 2
 
 
 method cdddr :: [a] -> [a]
-  xs -> tail (tail (tail xs))
+  xs -> drop xs 3
 
 
 tests

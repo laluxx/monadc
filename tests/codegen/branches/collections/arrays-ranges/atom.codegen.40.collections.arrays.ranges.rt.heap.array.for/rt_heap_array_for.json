@@ -9,6 +9,11 @@
       {
         "type": "symbol",
         "name": "Main"
+      },
+      {
+        "type": "array",
+        "is_heap": false,
+        "elements": []
       }
     ]
   },

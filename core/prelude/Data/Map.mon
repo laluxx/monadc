@@ -59,13 +59,15 @@ method dissoc! :: Map k v -> k -> Map k v
   table key -> __rt_map_dissoc! table key
 
 
-;; Compatibility vocabulary remains ordinary core methods. find is the
-;; deliberately partial lookup operation; total optional lookup belongs to
-;; the Lookup abstraction once polymorphic guard proof lowering is available.
-method contains? :: Map k v -> k -> Bool
-  table key -> member? table key
+;; Compatibility vocabulary remains ordinary core methods. contains? uses the
+;; language's collection abstraction rather than specializing the global name
+;; to Map: Sets, Strings, Sequences, and Maps all share this operation.
+method contains? :: [a] -> a -> Bool
+  values value -> __rt_contains? values value
 
 
+;; find is the deliberately partial lookup operation; total optional lookup
+;; belongs to Lookup once polymorphic guard proof lowering is available.
 method find :: Map k v -> k -> v
   table key -> __rt_map_find table key
 
