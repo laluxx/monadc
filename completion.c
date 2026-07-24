@@ -99,7 +99,7 @@ static const Entry ENTRIES[] = {
      "Remove build artifacts", "Deletes build/ and generated object/IR/assembly files."},
     {ENTRY_COMMAND, "commands", 'c', "i", "install", "", "monad install",
      "Install into ~/.local/bin", "Builds if needed, then installs the executable."},
-    {ENTRY_COMMAND, "commands", 'c', "t", "test", "[suite|file.mon]", "monad test [list|runner|windows|how-to|file.mon]",
+    {ENTRY_COMMAND, "commands", 'c', "t", "test", "[suite|file.mon]", "monad test [list|runner|core|laws|windows|how-to|file.mon]",
      "Run tests", "Without a file or with list, prints the self-documenting test suite menu. With a suite, runs it. With a file, builds and runs that test binary."},
     {ENTRY_COMMAND, "commands", 'c', "k", "check", "[file.mon]", "monad check file.mon",
      "Type-check only", "Useful for editors because the exit status is the diagnostic result."},
@@ -204,7 +204,7 @@ static const Entry ENTRIES[] = {
     {ENTRY_FLAG, "project", 'p', "T", "--test", "<file>", "monad --test file.mon",
      "Embed tests", "Compiles tests into the binary and keeps the binary."},
     {ENTRY_FLAG, "project", 'p', "t", "test", "[suite|file]", "monad test runner",
-     "Run tests", "Suites: list, runner, windows, how-to, cmake, readme, bytecode, core, all. File paths keep the compile-and-run behavior."},
+     "Run tests", "Suites: list, runner, core, laws, windows, how-to, cmake, readme, bytecode, all. File paths keep the compile-and-run behavior."},
     {ENTRY_FLAG, "project", 'p', "c", "check", "[file]", "monad check file.mon",
      "Editor check mode", "Type-checks without keeping a final binary."},
 };

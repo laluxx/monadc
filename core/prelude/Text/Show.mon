@@ -1,16 +1,23 @@
 ;;; Show.mon --- Text rendering typeclass
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: show render string typeclass
+:author "Laluxx"
+:version "1.2.0"
+:keywords "show render string typeclass executable law"
 
 ;;; Commentary:
 
 ;; Show is a text/rendering abstraction, not a generic prelude bucket entry.
 ;; The builtin `show` remains available for concrete values; this module names
-;; the class contract that instances should satisfy.
+;; the class contract that instances should satisfy. The executable law makes
+;; `showsPrec` the compositional basis and requires the convenient `show`
+;; operation to agree with precedence zero and an empty suffix.
+;; Implementations only need to define `show` for precedence-insensitive
+;; values: the class supplies the canonical difference-list-style
+;; `showsPrec` composition automatically.
 
 ;;; Code:
+
+import Data.Bool
 
 module Text.Show
   [Show show showsPrec showList]
@@ -21,9 +28,16 @@ class Show a where
   showsPrec :: Int -> a -> String -> String
   showList  :: [a] -> String
 
-  ;; law: show x = showsPrec 0 x ""
+  showsPrec precedence x suffix -> __rt_concat (show x) suffix
 
-data ShowSample ShowRed | ShowGreen deriving [Show]
+  law show-via-showsPrec :: a -> Bool
+    x -> (show x) = (showsPrec 0 x "")
+
+type ShowSample {ShowRed ShowGreen}
+
+instance Show ShowSample
+  show x -> if x = ShowRed then "ShowRed" else "ShowGreen"
+  showList xs -> "<ShowSample list>"
 
 
 tests
@@ -33,4 +47,5 @@ tests
 
   :deriving:
   assert-eq (show ShowRed) "ShowRed" "Show derives nullary constructor name"
+  assert-eq (showsPrec 0 ShowRed "") "ShowRed" "Show composes through showsPrec"
   :deriving:

@@ -43,6 +43,34 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         self.assertIn("Available test suites:", result.stdout)
         self.assertIn("runner", result.stdout)
         self.assertIn("windows", result.stdout)
+        self.assertIn("laws", result.stdout)
+
+    def test_compiler_laws_suite_executes_every_core_law_family(self):
+        result = subprocess.run(
+            [str(MONAD), "test", "laws"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=180,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        for family in (
+            "Eq Bool",
+            "Semigroup Bool",
+            "Monoid Bool",
+            "Enum Int",
+            "Ord Int",
+            "Ring Int",
+            "Show ShowSample",
+            "Sequence Coll",
+        ):
+            self.assertIn(family, result.stdout)
+        self.assertIn("Arbitrary1 Coll", result.stdout)
+        self.assertIn("All core laws passed: 8 families", result.stdout)
+        self.assertIn("Suite passed: laws", result.stdout)
 
     def test_compiler_test_help_is_the_discoverable_front_door(self):
         result = subprocess.run(
@@ -55,7 +83,7 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("Usage: monad test [list|runner|windows|how-to|file.mon]", result.stdout)
+        self.assertIn("Usage: monad test [list|runner|core|laws|windows|how-to|file.mon]", result.stdout)
         self.assertIn("Available test suites:", result.stdout)
         self.assertIn("runner", result.stdout)
         self.assertIn("windows", result.stdout)

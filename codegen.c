@@ -6271,6 +6271,7 @@ static AST *quickcheck_i64_literal(long long value) {
 static LLVMValueRef codegen_looped_law_condition(CodegenContext *ctx,
                                                  AST *law_lambda,
                                                  const char *type_name,
+                                                 const char *generator_name,
                                                  const char *case_name,
                                                  long long base_seed,
                                                  char (*arg_names)[96],
@@ -6307,16 +6308,30 @@ static LLVMValueRef codegen_looped_law_condition(CodegenContext *ctx,
                 "%", size_case, ast_new_number(100.0, "100"));
 
             AST *generate = ast_new_list();
-            ast_list_append(generate, ast_new_symbol("arbitrary"));
+            ast_list_append(generate, ast_new_symbol(generator_name));
             ast_list_append(generate, seed_expr);
             ast_list_append(generate, size_expr);
-            generate->inferred_type = type_from_name(type_name);
+            Type *generated_type = type_from_name(type_name);
+            if (!generated_type) {
+                Type *layout = env_lookup_layout(ctx->env, type_name);
+                generated_type = layout
+                    ? type_clone(layout)
+                    : type_layout_ref(type_name);
+            }
+            generate->inferred_type = generated_type;
             CodegenResult generated = codegen_expr(ctx, generate);
             LLVMBuildStore(ctx->builder, generated.value, arg_slots[i]);
         }
 
         AST *argument = ast_new_symbol(arg_names[i]);
-        argument->inferred_type = type_from_name(type_name);
+        Type *argument_type = type_from_name(type_name);
+        if (!argument_type) {
+            Type *layout = env_lookup_layout(ctx->env, type_name);
+            argument_type = layout
+                ? type_clone(layout)
+                : type_layout_ref(type_name);
+        }
+        argument->inferred_type = argument_type;
         ast_list_append(call, argument);
     }
 
@@ -6377,10 +6392,16 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
     const FiniteTypeSetEntry *finite = finite_type_set_lookup(type_name);
     TCInstance *arbitrary_instance =
         tc_find_instance(ctx->tc_registry, "Arbitrary", type_name);
-    if (!finite && !arbitrary_instance)
+    TCInstance *arbitrary1_instance =
+        tc_find_instance(ctx->tc_registry, "Arbitrary1", type_name);
+    if (!finite && !arbitrary_instance && !arbitrary1_instance)
         CODEGEN_ERROR(ctx,
-            "%s:%d:%d: error: cannot check laws for infinite or opaque type '%s' without Arbitrary evidence",
+            "%s:%d:%d: error: cannot check laws for infinite or opaque type '%s' without Arbitrary evidence (or Arbitrary1 evidence for type constructors)",
             parser_get_filename(), ast->line, ast->column, type_name);
+    const char *generator_name =
+        arbitrary_instance ? "arbitrary" : "arbitrary1";
+    const char *shrinker_name =
+        arbitrary_instance ? "shrink" : "shrink1";
 
     const size_t max_exhaustive_cases = 65536;
     long long parsed_case_count = 100;
@@ -6452,10 +6473,12 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
                  "\n"
                  "  \x1b[36;1mQuickCheck\x1b[0m  %s %s\n"
                  "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                 "  randomized  •  Arbitrary %s  •  %d %s/property  •  sizes 0…99\n"
+                 "  randomized  •  %s %s  •  %d %s/property  •  sizes 0…99\n"
                  "  seed %lld  •  deterministic replay  •  greedy shrinking\n"
                  "\n",
-                 class_name, type_name, type_name, generated_case_count,
+                 class_name, type_name,
+                 arbitrary_instance ? "Arbitrary" : "Arbitrary1", type_name,
+                 generated_case_count,
                  generated_case_count == 1 ? "case" : "cases",
                  generated_seed);
     LLVMValueRef header_text =
@@ -6486,6 +6509,12 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
             LLVMValueRef *arg_slots =
                 arity > 0 ? calloc((size_t)arity, sizeof(*arg_slots)) : NULL;
             Type *argument_type = type_from_name(type_name);
+            if (!argument_type) {
+                Type *layout = env_lookup_layout(ctx->env, type_name);
+                argument_type = layout
+                    ? type_clone(layout)
+                    : type_layout_ref(type_name);
+            }
             LLVMTypeRef argument_llvm = type_to_llvm(ctx, argument_type);
             for (int i = 0; i < arity; i++) {
                 snprintf(arg_names[i], sizeof(arg_names[i]),
@@ -6524,7 +6553,7 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
 
             LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
             LLVMValueRef condition = codegen_looped_law_condition(
-                ctx, law, type_name, case_name, generated_seed,
+                ctx, law, type_name, generator_name, case_name, generated_seed,
                 arg_names, arg_slots, true);
             LLVMBuildCondBr(ctx->builder, condition, next_bb, fail_bb);
 
@@ -6583,11 +6612,11 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
 
                 LLVMPositionBuilderAtEnd(ctx->builder, restart_bb);
                 AST *shrink_call = ast_new_list();
-                ast_list_append(shrink_call, ast_new_symbol("shrink"));
+                ast_list_append(shrink_call, ast_new_symbol(shrinker_name));
                 AST *current_arg = ast_new_symbol(arg_names[shrink_arg]);
-                current_arg->inferred_type = type_from_name(type_name);
+                current_arg->inferred_type = type_clone(argument_type);
                 ast_list_append(shrink_call, current_arg);
-                Type *list_element = type_from_name(type_name);
+                Type *list_element = type_clone(argument_type);
                 Type *list_type = type_list(&list_element, 1);
                 shrink_call->inferred_type = list_type;
                 CodegenResult candidates = codegen_expr(ctx, shrink_call);
@@ -6661,7 +6690,8 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
                                shrink_count_slot);
                 LLVMValueRef candidate_passes =
                     codegen_looped_law_condition(
-                        ctx, law, type_name, case_name, generated_seed,
+                        ctx, law, type_name, generator_name,
+                        case_name, generated_seed,
                         arg_names, arg_slots, false);
                 LLVMBuildCondBr(ctx->builder, candidate_passes,
                                 reject_bb, accept_bb);
@@ -9836,7 +9866,8 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            if (strcmp(head->symbol, "show") == 0) {
+            if (strcmp(head->symbol, "show") == 0 &&
+                !tc_is_method(ctx->tc_registry, "show")) {
                 REQUIRE_MIN_ARGS(1);
                 LLVMValueRef printf_fn = get_or_declare_printf(ctx);
                 AST *arg = ast->list.items[1];

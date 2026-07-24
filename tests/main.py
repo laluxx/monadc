@@ -47,6 +47,11 @@ SUITES: dict[str, Suite] = {
         "Core and prelude module tests discovered from active tests blocks.",
         (py("tests/run_core.py"),),
     ),
+    "laws": Suite(
+        "laws",
+        "Execute every structured law family declared by the core.",
+        (py("tests/run_laws.py"),),
+    ),
     "how-to": Suite(
         "how-to",
         "Compile every README-listed how_to example with checkout-local core/runtime paths.",

@@ -1,7 +1,7 @@
 ;;; Sequence.mon --- Core sequence abstraction and utilities
 
 :author "Laluxx"
-:version "1.0.0"
+:version "1.1.0"
 :keywords "sequence collection functor foldable methods typeclass"
 
 ;;; Commentary:
@@ -57,7 +57,7 @@ class (Functor c, Foldable c) => Sequence c where
       (length (concat xs ys)) = ((length xs) + (length ys))
 
   law reverse-involution :: c a -> Bool
-    xs -> (reverse (reverse xs)) = xs
+    xs -> (Sequence.reverse (Sequence.reverse xs)) = xs
 
   ;; minimal complete definition: all methods above
   ;; law: take xs n `concat` drop xs n = xs, for n >= 0

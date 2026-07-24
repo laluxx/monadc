@@ -590,6 +590,7 @@ static bool is_test_suite_word(const char *arg)
            (strcmp(arg, "list") == 0 ||
             strcmp(arg, "runner") == 0 ||
             strcmp(arg, "core") == 0 ||
+            strcmp(arg, "laws") == 0 ||
             strcmp(arg, "how-to") == 0 ||
             strcmp(arg, "windows") == 0 ||
             strcmp(arg, "cmake") == 0 ||
@@ -608,12 +609,13 @@ static bool is_help_word(const char *arg)
 
 static void print_test_help(void)
 {
-    printf("Usage: monad test [list|runner|windows|how-to|file.mon] [options]\n\n");
+    printf("Usage: monad test [list|runner|core|laws|windows|how-to|file.mon] [options]\n\n");
     printf("Run repository test suites or compile and run tests in one .mon file.\n\n");
     printf("Available test suites:\n");
     printf("  list      Show this suite menu\n");
     printf("  runner    Python harness contracts, portability checks, examples, and bytecode tests\n");
     printf("  core      Core and prelude module tests\n");
+    printf("  laws      Execute every structured core law family\n");
     printf("  how-to    README-listed how_to example smokes\n");
     printf("  windows   MSYS2/Windows portability contracts\n");
     printf("  cmake     CMake and CI contract tests\n");
@@ -623,6 +625,7 @@ static void print_test_help(void)
     printf("Examples:\n");
     printf("  monad test list\n");
     printf("  monad test runner\n");
+    printf("  monad test laws\n");
     printf("  monad test core/prelude/Data/Enum.mon\n");
 }
 

@@ -1880,3 +1880,22 @@
   positions, =seeded= remains available as an ordinary user identifier. This is
   the first recorded instance of contextual sub-keywords intended to remain
   extensible when parser facilities are exposed to language users.
+
+[FIX id:fix.core-libs.unified-complete-law-suite-2026-07-24 date:2026-07-24 by:codex src:cli.c,codegen.c,core/prelude/Test/QuickCheck.mon,core/prelude/Text/Show.mon,core/prelude/Sequence.mon,tests/run_laws.py,tests/test_unified_test_entrypoint.py conf:high]
+  =monad test laws= is the public whole-core law command. It discovers every
+  class that currently owns structured =law= clauses and rejects inventory
+  drift when a class is not represented by an executable family. Each family
+  runs in an isolated compiler process so imported instance registries cannot
+  contaminate one another; failures do not prevent later families from running,
+  and the suite returns nonzero after reporting the complete failure set.
+
+  Finite sets are traversed exhaustively. Infinite first-order domains use
+  =Arbitrary=, while constructor-polymorphic laws use =Arbitrary1= evidence;
+  =Arbitrary1 Coll= generates monomorphic, replayable collection shapes and
+  supplies ordered shrinking candidates. Core =Show= now owns its compositional
+  =showsPrec= default, and compiler builtin names yield to registered core
+  methods. The Sequence involution law qualifies =Sequence.reverse= so the law
+  invokes the abstraction method rather than materializing the same-named
+  function as a closure. Regression coverage executes the exact public command
+  and requires Eq, Semigroup, Monoid, Enum, Ord, Ring, Show, and Sequence to
+  pass.

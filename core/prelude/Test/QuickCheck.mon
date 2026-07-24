@@ -39,6 +39,7 @@ import Numeric
 
 module Test.QuickCheck
   [Arbitrary arbitrary shrink
+   Arbitrary1 arbitrary1 shrink1
    quickcheck-default-tests quickcheck-default-seed quickcheck-size
    quickcheck-next-seed quickcheck-mix64-step1 quickcheck-mix64-step2
    quickcheck-mix64-final quickcheck-mix64
@@ -119,6 +120,29 @@ instance Arbitrary Int
 
   shrink x ->
     quickcheck-shrink-integral x x
+
+
+class Arbitrary1 c where
+  arbitrary1 :: Int -> Int -> c Int
+  shrink1    :: c Int -> c (c Int)
+
+  shrink1 xs ->
+    list
+
+  ;; Higher-kinded generation evidence for laws over c a. The concrete Int
+  ;; element domain keeps a constructor law monomorphic and reproducible while
+  ;; exercising its shape independently of element generation.
+
+
+instance Arbitrary1 Coll
+  arbitrary1 seed size ->
+    if size <= 0
+      []
+    else
+      (list seed size)
+
+  shrink1 xs ->
+    if rt_coll_is_empty xs then [] else (list [])
 
 
 tests
