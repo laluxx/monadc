@@ -270,6 +270,8 @@ class ReplTests(unittest.TestCase):
             r"^module[ \t]+([A-Za-z_][A-Za-z0-9_.]*)", re.MULTILINE
         )
         for path in sorted((ROOT / "core").rglob("*.mon")):
+            if any(part.startswith(".") for part in path.relative_to(ROOT / "core").parts):
+                continue
             match = module_pattern.search(path.read_text(encoding="utf-8"))
             if match:
                 module_names.append(match.group(1))

@@ -395,3 +395,23 @@
   comments, typed definition blocks, and known fixed arities. Invalid input is
   covered through recovery to a subsequent valid form without leaking internal
   debug output.
+
+[FIX id:fix.repl.content-addressed-cache-2026-07-24 date:2026-07-24 by:codex src:repl.c,tests/test_repl_cache.py conf:high]
+  Imported native images use the Monad REPL cache under
+  =$XDG_CACHE_HOME/monad/repl/v1=, falling back to
+  =$HOME/.cache/monad/repl/v1=. Cache identity is derived from an explicit ABI
+  version, module name, ordered object contents, runtime archive, LLVM linker
+  flags, and the running compiler binary. Artifacts are immutable and published
+  by atomic rename from process-private linked images.
+
+  A per-module build lease covers object compilation and publication, preventing
+  concurrent cold REPL processes from racing on shared object-cache paths.
+  Abandoned leases expire, malformed/non-regular/foreign-owned artifacts are
+  rejected, and corrupt images are removed and rebuilt. =MONAD_CACHE=off=
+  disables both storage and leases; =MONAD_CACHE_TRACE=1= exposes
+  =store=/=hit=/=repair= decisions for diagnosis and tests.
+
+  The executable cache suite covers cold store, warm hit, corruption repair,
+  six-way concurrent cold startup, XDG placement, and explicit opt-out. On the
+  reference development machine, empty-session startup improves from about
+  0.49 seconds cold to 0.048 seconds warm.

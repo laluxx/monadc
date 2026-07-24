@@ -31,7 +31,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <errno.h>
 #include <setjmp.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #if !defined(_WIN32)
@@ -1803,6 +1805,181 @@ static void recover_module(REPLContext *ctx) {
 // then use nm to discover exported symbols and inject them into the env.
 
 static bool file_exists_r(const char *p) { return access(p, F_OK) == 0; }
+
+#define MONAD_REPL_CACHE_ABI "monad-repl-image-v1"
+
+static uint64_t repl_cache_hash_bytes(uint64_t hash,
+                                      const void *data, size_t size) {
+    const unsigned char *bytes = data;
+    for (size_t i = 0; i < size; i++) {
+        hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t repl_cache_hash_string(uint64_t hash, const char *value) {
+    return repl_cache_hash_bytes(hash, value, strlen(value) + 1);
+}
+
+static bool repl_cache_hash_file(uint64_t *hash, const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return false;
+    unsigned char buffer[64 * 1024];
+    size_t count;
+    while ((count = fread(buffer, 1, sizeof(buffer), file)) > 0)
+        *hash = repl_cache_hash_bytes(*hash, buffer, count);
+    bool ok = !ferror(file);
+    fclose(file);
+    return ok;
+}
+
+static void repl_cache_compiler_path(char *path, size_t capacity) {
+#if defined(_WIN32)
+    DWORD count = GetModuleFileNameA(NULL, path, (DWORD)capacity);
+    if (count == 0 || count >= capacity) path[0] = '\0';
+#elif defined(__linux__)
+    ssize_t count = readlink("/proc/self/exe", path, capacity - 1);
+    if (count < 0) path[0] = '\0';
+    else path[count] = '\0';
+#else
+    path[0] = '\0';
+#endif
+}
+
+static bool repl_cache_artifact_sane(const char *path) {
+    struct stat info;
+#if !defined(_WIN32)
+    if (lstat(path, &info) != 0 || !S_ISREG(info.st_mode) ||
+        info.st_uid != geteuid() || info.st_size < 4096)
+        return false;
+#else
+    if (stat(path, &info) != 0 || !S_ISREG(info.st_mode) ||
+        info.st_size < 4096)
+        return false;
+#endif
+#if !defined(_WIN32)
+    unsigned char magic[4] = {0};
+    FILE *file = fopen(path, "rb");
+    if (!file) return false;
+    size_t count = fread(magic, 1, sizeof(magic), file);
+    fclose(file);
+    return count == sizeof(magic) &&
+           magic[0] == 0x7f && magic[1] == 'E' &&
+           magic[2] == 'L' && magic[3] == 'F';
+#else
+    return true;
+#endif
+}
+
+static bool repl_cache_trace_enabled(void) {
+    const char *value = getenv("MONAD_CACHE_TRACE");
+    return value && value[0] && strcmp(value, "0") != 0;
+}
+
+static bool repl_cache_prepare_dir(char *dir, size_t capacity) {
+    const char *enabled = getenv("MONAD_CACHE");
+    if (enabled &&
+        (strcmp(enabled, "0") == 0 ||
+         strcmp(enabled, "off") == 0 ||
+         strcmp(enabled, "false") == 0))
+        return false;
+
+    const char *xdg_cache = getenv("XDG_CACHE_HOME");
+    const char *home = getenv("HOME");
+    if ((!xdg_cache || !xdg_cache[0]) && (!home || !home[0])) return false;
+
+    char path[1024];
+    if (xdg_cache && xdg_cache[0]) {
+        snprintf(path, sizeof(path), "%s", xdg_cache);
+        monad_mkdir(path);
+    } else {
+        snprintf(path, sizeof(path), "%s/.cache", home);
+        monad_mkdir(path);
+    }
+    char cache_root[1024];
+    snprintf(cache_root, sizeof(cache_root), "%s", path);
+    snprintf(path, sizeof(path), "%s/monad", cache_root);
+    monad_mkdir(path);
+    snprintf(path, sizeof(path), "%s/monad/repl", cache_root);
+    monad_mkdir(path);
+    snprintf(dir, capacity, "%s/monad/repl/v1", cache_root);
+    monad_mkdir(dir);
+    return access(dir, W_OK) == 0;
+}
+
+static void repl_cache_module_stem(const char *module_name,
+                                   char *stem, size_t capacity) {
+    size_t used = 0;
+    for (const char *p = module_name; *p && used + 1 < capacity; p++) {
+        unsigned char ch = (unsigned char)*p;
+        stem[used++] = (isalnum(ch) || ch == '_' || ch == '-')
+                     ? (char)ch : '_';
+    }
+    stem[used] = '\0';
+}
+
+typedef struct {
+    char path[1400];
+    bool held;
+} ReplCacheLease;
+
+static void repl_cache_pause(void) {
+#if defined(_WIN32)
+    Sleep(10);
+#else
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
+    nanosleep(&delay, NULL);
+#endif
+}
+
+static bool repl_cache_lease_acquire(const char *module_name,
+                                     ReplCacheLease *lease) {
+    memset(lease, 0, sizeof(*lease));
+    char cache_dir[1024];
+    if (!repl_cache_prepare_dir(cache_dir, sizeof(cache_dir)))
+        return true; /* A read-only/no-HOME environment simply runs uncached. */
+
+    char lock_dir[1200];
+    snprintf(lock_dir, sizeof(lock_dir), "%s/locks", cache_dir);
+    monad_mkdir(lock_dir);
+
+    char stem[256];
+    repl_cache_module_stem(module_name, stem, sizeof(stem));
+    snprintf(lease->path, sizeof(lease->path), "%s/%s.lock", lock_dir, stem);
+
+    for (int attempt = 0; attempt < 3000; attempt++) {
+        if (monad_mkdir(lease->path) == 0) {
+            lease->held = true;
+            return true;
+        }
+        if (errno != EEXIST) return false;
+
+        struct stat info;
+        if (stat(lease->path, &info) == 0 &&
+            time(NULL) - info.st_mtime > 120) {
+#if defined(_WIN32)
+            _rmdir(lease->path);
+#else
+            rmdir(lease->path);
+#endif
+            continue;
+        }
+        repl_cache_pause();
+    }
+    return false;
+}
+
+static void repl_cache_lease_release(ReplCacheLease *lease) {
+    if (!lease->held) return;
+#if defined(_WIN32)
+    _rmdir(lease->path);
+#else
+    rmdir(lease->path);
+#endif
+    lease->held = false;
+}
+
 static time_t file_mtime_r(const char *p) {
     struct stat st; return stat(p, &st) == 0 ? st.st_mtime : 0;
 }
@@ -2026,10 +2203,18 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
         return true;
     }
 
+    ReplCacheLease cache_lease;
+    if (!repl_cache_lease_acquire(mod_name, &cache_lease)) {
+        fprintf(stderr, "Error: timed out acquiring cache lease for '%s'\n",
+                mod_name);
+        return false;
+    }
+
     /* ------------------------------------------------------------------ */
     /* Step 1: Compile the module (populates env with typed exports)       */
     /* ------------------------------------------------------------------ */
     if (!repl_compile_module(&ctx->cg, imp)) {
+        repl_cache_lease_release(&cache_lease);
         fprintf(stderr, "Error: failed to compile module '%s'\n", mod_name);
         return false;
     }
@@ -2041,7 +2226,7 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
     /* produced, in order, with deduplication already handled by the       */
     /* registry.  No find glob, no path exclusions, no duplicates.         */
     /* ------------------------------------------------------------------ */
-    char so_path[512];
+    char so_path[1400];
 #if defined(_WIN32)
     char temp_dir[384];
     DWORD temp_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
@@ -2073,21 +2258,94 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
                     llvm_flags[i] = ' ';
         }
 
+        uint64_t cache_hash = UINT64_C(1469598103934665603);
+        cache_hash = repl_cache_hash_string(cache_hash, MONAD_REPL_CACHE_ABI);
+        cache_hash = repl_cache_hash_string(cache_hash, mod_name);
+        cache_hash = repl_cache_hash_string(cache_hash, llvm_flags);
+
+        bool hash_ok = true;
+        for (int i = 0; all_objs[i]; i++) {
+            cache_hash = repl_cache_hash_string(cache_hash, all_objs[i]);
+            if (!repl_cache_hash_file(&cache_hash, all_objs[i]))
+                hash_ok = false;
+        }
+        if (!repl_cache_hash_file(&cache_hash, runtime_archive))
+            hash_ok = false;
+
+        char compiler_path[1024];
+        repl_cache_compiler_path(compiler_path, sizeof(compiler_path));
+        if (!compiler_path[0] ||
+            !repl_cache_hash_file(&cache_hash, compiler_path))
+            hash_ok = false;
+
+        char cache_dir[1024];
+        char cache_path[1400] = "";
+        char module_stem[256];
+        repl_cache_module_stem(mod_name, module_stem, sizeof(module_stem));
+        bool cache_available =
+            hash_ok && repl_cache_prepare_dir(cache_dir, sizeof(cache_dir));
+        if (cache_available) {
+#if defined(_WIN32)
+            snprintf(cache_path, sizeof(cache_path), "%s/%s-%016llx.dll",
+#else
+            snprintf(cache_path, sizeof(cache_path), "%s/%s-%016llx.so",
+#endif
+                     cache_dir, module_stem,
+                     (unsigned long long)cache_hash);
+        }
+
+        bool cache_hit = cache_available && file_exists_r(cache_path);
+        if (cache_hit && !repl_cache_artifact_sane(cache_path)) {
+            if (repl_cache_trace_enabled())
+                fprintf(stderr, "[monad-cache] repair %s\n", mod_name);
+            remove(cache_path);
+            cache_hit = false;
+        }
+
+        if (cache_hit) {
+            if (repl_cache_trace_enabled())
+                fprintf(stderr, "[monad-cache] hit %s %016llx\n", mod_name,
+                        (unsigned long long)cache_hash);
+            snprintf(so_path, sizeof(so_path), "%s", cache_path);
+        }
+
         char cmd[16384];
-        int w = snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -o \"%s\"", so_path);
-        for (int i = 0; all_objs[i]; i++)
-            w += snprintf(cmd + w, sizeof(cmd) - w, " \"%s\"", all_objs[i]);
-        w += snprintf(cmd + w, sizeof(cmd) - w,
-                      " -Wl,--unresolved-symbols=ignore-all"
-                      " \"%s\" %s -lm -lgmp 2>&1", runtime_archive, llvm_flags);
+        int w = 0;
+        if (!cache_hit) {
+            w = snprintf(cmd, sizeof(cmd),
+                         "gcc -shared -fPIC -o \"%s\"", so_path);
+            for (int i = 0; all_objs[i]; i++)
+                w += snprintf(cmd + w, sizeof(cmd) - w,
+                              " \"%s\"", all_objs[i]);
+            w += snprintf(cmd + w, sizeof(cmd) - w,
+                          " -Wl,--unresolved-symbols=ignore-all"
+                          " \"%s\" %s -lm -lgmp 2>&1",
+                          runtime_archive, llvm_flags);
+        }
         free(runtime_archive);
         free(all_objs);
 
-        if (system(cmd) != 0) {
+        if (!cache_hit && system(cmd) != 0) {
+            repl_cache_lease_release(&cache_lease);
             fprintf(stderr, "Error: failed to link .so for '%s'\n", mod_name);
             return false;
         }
+
+        if (!cache_hit && cache_available) {
+            if (rename(so_path, cache_path) != 0) {
+                if (repl_cache_artifact_sane(cache_path)) {
+                    remove(so_path);
+                    snprintf(so_path, sizeof(so_path), "%s", cache_path);
+                }
+            } else {
+                snprintf(so_path, sizeof(so_path), "%s", cache_path);
+            }
+            if (repl_cache_trace_enabled())
+                fprintf(stderr, "[monad-cache] store %s %016llx\n", mod_name,
+                        (unsigned long long)cache_hash);
+        }
     }
+    repl_cache_lease_release(&cache_lease);
 
     /* ------------------------------------------------------------------ */
     /* Step 3: dlopen — make symbols live in the host process              */
@@ -2148,7 +2406,7 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
     prefix[ml+2] = '\0';
     size_t prefix_len = ml + 2;
 
-    char nm_cmd[512];
+    char nm_cmd[1600];
     snprintf(nm_cmd, sizeof(nm_cmd),
              "nm -D --defined-only \"%s\" 2>/dev/null", so_path);
     FILE *nm = popen(nm_cmd, "r");
