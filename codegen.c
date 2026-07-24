@@ -8901,12 +8901,6 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (lambda->lambda.body->type == AST_ASM) {
                             RegisterAllocator reg_alloc;
                             reg_alloc_init(&reg_alloc);
-                            fprintf(stderr, "DEBUG asm env_params:\n");
-                            for (int i = 0; i < total_params; i++)
-                                fprintf(stderr, "  env_params[%d].name = '%s'\n", i, env_params[i].name ? env_params[i].name : "(null)");
-                            fprintf(stderr, "DEBUG lambda params:\n");
-                            for (int i = 0; i < lambda->lambda.param_count; i++)
-                                fprintf(stderr, "  lambda->lambda.params[%d].name = '%s'\n", i, lambda->lambda.params[i].name ? lambda->lambda.params[i].name : "(null)");
                             AsmContext asm_ctx = {
                                 .params      = env_params,
                                 .param_count = total_params,
@@ -18109,6 +18103,7 @@ static void register_legacy_collection_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "__rt_concat",  2, 0, "Private typed Sequence concatenation primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_count",   1, 0, "Private collection cardinality primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_set_singleton", 1, 0, "Private Set singleton predicate", NULL);
+    env_insert_builtin(ctx->env, "__rt_set_intersection", 2, 0, "Private Set intersection primitive", NULL);
     env_insert_builtin(ctx->env, "rt_coll_head", 1, 0, "Private collection pattern projection", NULL);
     env_insert_builtin(ctx->env, "pair?",   1,  0, "Test if a list is a dotted pair (tail is an atom)", NULL);
     env_insert_builtin(ctx->env, "append!", 2,  0, "Destructively append a value to a list in place: (append! xs val)", NULL);

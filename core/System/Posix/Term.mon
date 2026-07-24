@@ -410,11 +410,13 @@ tests
   assert-eq STDOUT     1      "Term STDOUT"
   assert-eq STDERR     2      "Term STDERR"
   :constants:
+
   :masks:
   assert-eq raw-iflag-mask    (term-or5 BRKINT ICRNL INPCK ISTRIP IXON) "Term raw iflag mask"
   assert-eq raw-lflag-mask    (term-or4 ECHO ICANON IEXTEN ISIG)        "Term raw lflag mask"
   assert-eq cbreak-lflag-mask (bit-or ECHO ICANON)                      "Term cbreak lflag mask"
   :masks:
+
   :layouts:
   assert-eq (term-test-raw-iflag 0)    0 "Term raw clears input flags"
   assert-eq (term-test-cbreak-lflag 0) 0 "Term cbreak clears local flags"

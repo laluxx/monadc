@@ -359,3 +359,39 @@
   =show *features*= regression, repeated JIT modules, heap and scalar state,
   multiline input, recovery, commands, imports, parallel import isolation, and
   a 150-expression session.
+
+[FIX id:fix.repl.core-prelude-and-multiline-wisp-2026-07-24 date:2026-07-24 by:codex src:repl.c,tests/test_repl.py conf:high]
+  The REPL silently imports the core-owned =Function= module once during
+  initialization. Core functions such as =id= therefore contribute their real
+  exported symbols and arities; the compiler does not hardcode their semantics.
+  =id 3= is a single Wisp application and evaluates to =3=.
+
+  The input accumulator recognizes a known function applied to fewer operands
+  than its arity as the beginning of an indentation-delimited Wisp form.
+  General multiline calls now wait for their blank-line terminator in the same
+  way as typed definition blocks. Parenthesized multiline forms remain
+  delimiter-driven and may finish at EOF.
+
+  The REPL integration suite discovers every =module= declaration under
+  =core/=, imports all of them through one live subprocess session, rejects
+  compiler/runtime diagnostics, and evaluates a final sentinel. This contract
+  caught broken terminal inline assembly, stale Set folding code, debug output,
+  and a source-harvesting scanner that treated parentheses inside quoted strings
+  as forms. The focused suite now contains 19 subprocess tests.
+
+[FIX id:fix.repl.terminal-protocol-and-parser-completeness-2026-07-24 date:2026-07-24 by:codex src:repl.c,wisp.c,wisp.h,reader.c,tests/test_repl.py,tests/test_repl_pty.py conf:high]
+  Interactive behavior is a public protocol, not an implementation detail.
+  The regression suite therefore drives the shipped binary through a real
+  pseudo-terminal as well as pipes. It verifies the colored readline prompt,
+  core-prelude evaluation, blank-line-terminated indented Wisp, cancellation of
+  an unfinished form with Ctrl-C, recovery on the next expression, and clean
+  Ctrl-D exit.
+
+  Complete/incomplete/invalid input classification belongs to =wisp= rather
+  than to a second delimiter and arity parser in =repl.c=. The REPL waits only
+  on =WISP_INPUT_INCOMPLETE=; complete and invalid forms go through the normal
+  parser so diagnostics retain canonical source locations. The classifier
+  understands nested heterogeneous delimiters, strings, character literals,
+  comments, typed definition blocks, and known fixed arities. Invalid input is
+  covered through recovery to a subsequent valid form without leaking internal
+  debug output.

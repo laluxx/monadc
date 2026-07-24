@@ -2,7 +2,6 @@
 #define WISP_H
 
 #include <stdbool.h>
-#include "reader.h"
 /*
  * wisp — arity and type driven syntax expansion
  *
@@ -41,6 +40,13 @@ void    wisp_clear_arities(void);
 void    wisp_set_trace(bool enabled);
 int     wisp_get_arity(const char *name);
 
-ASTList wisp_parse_all(const char *source, const char *filename);
+typedef enum {
+    WISP_INPUT_COMPLETE,
+    WISP_INPUT_INCOMPLETE,
+    WISP_INPUT_INVALID
+} WispInputStatus;
+
+WispInputStatus wisp_classify_input(const char *source,
+                                    bool terminated_by_blank_line);
 
 #endif

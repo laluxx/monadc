@@ -9,6 +9,7 @@ module Data.Set
 
 import Sequence
 import Data.Eq
+import Data.Foldable
 
 
 class Membership s where
@@ -29,7 +30,7 @@ method singleton :: a -> Set
 
 
 method finite-cardinality :: Set -> Int
-  x -> coll-foldl (lambda (size _) (size + 1)) 0 x
+  x -> __rt_count x
 
 
 method singleton? :: Set -> Bool
@@ -37,15 +38,15 @@ method singleton? :: Set -> Bool
 
 
 method union :: Set -> Set -> Set
-  a b -> coll-foldl (lambda (acc x) (conj acc x)) a b
+  a b -> fold-list-left (lambda (acc x) (conj acc x)) a b
 
 
 method difference :: Set -> Set -> Set
-  a b -> coll-foldl (lambda (acc x) (disj acc x)) a b
+  a b -> fold-list-left (lambda (acc x) (disj acc x)) a b
 
 
 method intersection :: Set -> Set -> Set
-  a b -> difference a (difference a b)
+  a b -> __rt_set_intersection a b
 
 
 method symmetric-difference :: Set -> Set -> Set

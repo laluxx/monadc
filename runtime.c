@@ -1508,6 +1508,25 @@ RuntimeList *rt_set_seq(RuntimeSet *s) {
     return out;
 }
 
+RuntimeValue *__rt_set_intersection(RuntimeValue *left, RuntimeValue *right) {
+    if (!left || !right || left->type != RT_SET || right->type != RT_SET)
+        return rt_value_set(rt_set_new());
+
+    RuntimeSet *result = rt_set_new();
+    RuntimeSet *source = left->data.set_val;
+    RuntimeSet *membership = right->data.set_val;
+    if (!source || !membership)
+        return rt_value_set(result);
+
+    for (size_t i = 0; i < source->capacity; i++) {
+        RuntimeValue *value = source->buckets[i];
+        if (value && value != TOMBSTONE &&
+            rt_set_contains(membership, value))
+            rt_set_conj_mut(result, value);
+    }
+    return rt_value_set(result);
+}
+
 int rt_set_equal(RuntimeSet *a, RuntimeSet *b) {
     if (!a && !b) return 1;
     if (!a || !b) return 0;

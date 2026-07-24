@@ -1570,8 +1570,19 @@ skip_primitive_type_autoload:
     PHASE_END("wisp+parse");
 
     if (exprs.count == 0) {
-        fprintf(stderr, "%s: error: no expressions found\n", my_source_path);
-        exit(1);
+        /* Empty and comment-only files are valid no-op compilation units.
+         * Editors routinely invoke the compiler while a buffer is empty;
+         * success here is part of the syntax-checker protocol.  Returning
+         * NULL tells compile() there is intentionally nothing to link, just
+         * like the existing emit-only success paths. */
+        free(exprs.exprs);
+        free(source);
+        free(obj_path);
+        free(base);
+        free(my_source_path);
+        wisp_clear_arities();
+        type_alias_free_all();
+        return NULL;
     }
 
 /// Phase 1: Module + import declarations

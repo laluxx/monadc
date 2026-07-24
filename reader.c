@@ -9686,8 +9686,6 @@ static AST *parse_expr_base(Parser *p) {
     }
 
     default:
-        fprintf(stderr, "DEBUG parse_expr_base: unexpected token type=%d value='%s' line=%d col=%d\n",
-                tok.type, tok.value ? tok.value : "NULL", tok.line, tok.column);
         compiler_error(tok.line, tok.column, "unexpected token type: %d", tok.type);
     }
 }

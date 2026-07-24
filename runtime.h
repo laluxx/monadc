@@ -364,6 +364,7 @@ RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n);
 int64_t       rt_coll_count(RuntimeValue *coll);
 int64_t       __rt_count(RuntimeValue *coll);
 bool          __rt_set_singleton(RuntimeValue *set);
+RuntimeValue *__rt_set_intersection(RuntimeValue *left, RuntimeValue *right);
 int           rt_coll_contains(RuntimeValue *coll, RuntimeValue *value);
 int           rt_coll_starts_with(RuntimeValue *coll, RuntimeValue *prefix);
 int           rt_coll_ends_with(RuntimeValue *coll, RuntimeValue *suffix);

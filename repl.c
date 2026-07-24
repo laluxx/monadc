@@ -24,6 +24,7 @@
 #include "typeclass.h"
 #include "ffi.h"
 #include "features.h"
+#include "wisp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,9 +77,6 @@ static const char *dlerror(void) {
 #include <llvm-c/Transforms/PassBuilder.h>
 #include <llvm/Config/llvm-config.h>
 
-ASTList wisp_parse_all(const char *source, const char *filename);
-void wisp_register_arity(const char *name, int arity);
-
 /* Arm the reader escape point. Usage:
  *   REPL_PARSE(var, source)  — sets var to the parsed AST or NULL on error */
 #define REPL_PARSE(out, src) \
@@ -108,7 +106,9 @@ typedef sigjmp_buf repl_jmp_buf;
 #endif
 
 static repl_jmp_buf g_repl_escape;
+static repl_jmp_buf g_repl_input_escape;
 static bool    g_in_eval = false;
+static volatile sig_atomic_t g_input_escape_armed = 0;
 static volatile sig_atomic_t g_interrupted = 0;
 
 static void repl_sigint_handler(int sig) {
@@ -117,6 +117,8 @@ static void repl_sigint_handler(int sig) {
     rt_interrupted = 1;
     // NO arena_reset here — the arena is still live on the call stack
     write(STDERR_FILENO, "\n", 1);
+    if (!g_in_eval && g_input_escape_armed)
+        repl_longjmp(g_repl_input_escape, 1);
 }
 
 /* Catch SIGSEGV/SIGBUS from JIT-compiled code and longjmp back to the
@@ -751,6 +753,7 @@ static void redeclare_env_symbols(REPLContext *ctx) {
             }
         }
     }
+
 }
 
 /// Module lifecycle
@@ -1875,7 +1878,19 @@ static const char *advance_form(const char **pp, size_t *len)
 
     const char *start = p;
 
-    if (*p == '(') {
+    if (*p == '"') {
+        p++;
+        while (*p) {
+            if (*p == '\\' && p[1]) {
+                p += 2;
+            } else if (*p == '"') {
+                p++;
+                break;
+            } else {
+                p++;
+            }
+        }
+    } else if (*p == '(') {
         int depth = 0;
         bool in_str = false;
         while (*p) {
@@ -1995,7 +2010,7 @@ static void harvest_source_for_module(Env *env, const char *mod_name,
     }
 }
 
-static bool handle_import(REPLContext *ctx, AST *ast) {
+static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
     if (ast->list.count < 2 || ast->list.items[1]->type != AST_SYMBOL) {
         fprintf(stderr, "Error: import requires a module name symbol\n");
         return false;
@@ -2006,7 +2021,8 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
     const char *mod_name = imp->module_name;
 
     if (module_already_loaded(ctx, mod_name)) {
-        printf("Module '%s' already loaded.\n", mod_name);
+        if (announce)
+            printf("Module '%s' already loaded.\n", mod_name);
         return true;
     }
 
@@ -2195,7 +2211,8 @@ static bool handle_import(REPLContext *ctx, AST *ast) {
         free(src_path);
     }
 
-    printf("Imported %d symbol(s) from '%s'.\n", count, mod_name);
+    if (announce)
+        printf("Imported %d symbol(s) from '%s'.\n", count, mod_name);
     return true;
 }
 
@@ -2337,6 +2354,19 @@ void repl_init(REPLContext *ctx) {
     fresh_module(ctx, "__repl_1");
     ctx->expr_count = 1;
 
+    /* The REPL has the same implicit functional prelude as compiled source.
+     * Import the core-owned definitions once, without user-facing import
+     * chatter.  Their exported environment entries provide Wisp arities, so
+     * applications such as `id 3` parse as one form without compiler-owned
+     * knowledge of individual core functions. */
+    {
+        AST *imp = ast_new_list();
+        ast_list_append(imp, ast_new_symbol("import"));
+        ast_list_append(imp, ast_new_symbol("Function"));
+        if (!handle_import(ctx, imp, false))
+            fprintf(stderr, "REPL: failed to load the core Function prelude\n");
+        ast_free(imp);
+    }
 
     printf("\n");
 }
@@ -2467,6 +2497,12 @@ static void repl_seed_wisp_arities(REPLContext *ctx) {
             }
         }
     }
+
+    /* Canonical syntax arities win over broad builtin metadata (for example,
+     * show is represented as variadic internally but needs one leading Wisp
+     * operand before optional formatting arguments). */
+    wisp_register_arity("define", -1);
+    wisp_register_arity("show", 1);
 }
 
 static bool repl_infer(REPLContext *ctx, AST *ast) {
@@ -2564,7 +2600,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     fprintf(stderr, "Error: failed to build import for module\n");
                     return false;
                 }
-                bool ok = handle_import(ctx, imp_ast);
+                bool ok = handle_import(ctx, imp_ast, true);
                 ast_free(imp_ast);
                 return ok;
             }
@@ -2638,7 +2674,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
                     ast_free(form); skipped++; continue;
                 }
                 if (strcmp(head, "import") == 0) {
-                    handle_import(ctx, form);
+                    handle_import(ctx, form, true);
                     ast_free(form); skipped++; continue;
                 }
 
@@ -2943,7 +2979,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (ast->type == AST_LIST && ast->list.count >= 1 &&
         ast->list.items[0]->type == AST_SYMBOL &&
         strcmp(ast->list.items[0]->symbol, "import") == 0) {
-        bool ok = handle_import(ctx, ast);
+        bool ok = handle_import(ctx, ast, true);
         ast_free(ast);
         return ok;
     }
@@ -3349,63 +3385,17 @@ static void setup_electric_pairs(void) {
 #define PROMPT_ERROR_PLAIN "\033[34mMonad\033[0m \033[31m\xce\xbb\033[0m "
 
 
-/* Count paren depth of a string, ignoring chars inside strings/comments */
-static int paren_depth(const char *s) {
-    int depth = 0;
-    bool in_str = false;
-    for (; *s; s++) {
-        if (in_str) {
-            if (*s == '\\') { s++; continue; }
-            if (*s == '"')  in_str = false;
-        } else {
-            if (*s == '"')        in_str = true;
-            else if (*s == ';')   break;
-            else if (*s == '(')   depth++;
-            else if (*s == ')')   depth--;
-        }
-    }
-    /* If we ended inside a string, the string is unclosed —
-     * signal that we need more input by returning a positive depth. */
-    if (in_str) return depth + 1;
-    return depth;
-}
-
 static bool repl_line_is_blank_or_comment(const char *line) {
     const char *p = line;
     while (*p == ' ' || *p == '\t') p++;
     return *p == '\0' || *p == ';';
 }
 
-static bool repl_starts_word(const char *line, const char *word) {
-    const char *p = line;
-    while (*p == ' ' || *p == '\t') p++;
-
-    size_t n = strlen(word);
-    if (strncmp(p, word, n) != 0) return false;
-
-    return p[n] == '\0' ||
-           p[n] == ' '  ||
-           p[n] == '\t' ||
-           p[n] == ';';
-}
-
-static bool repl_line_starts_wisp_block(const char *line) {
-    const char *p = line;
-    while (*p == ' ' || *p == '\t') p++;
-
-    if (repl_starts_word(p, "define") &&
-        strstr(p, "::") &&
-        strstr(p, "->")) {
-        return true;
-    }
-
-    return false;
-}
-
 void repl_run(void) {
     REPLContext ctx;
     repl_init(&ctx);
     g_repl_ctx = &ctx;
+    repl_seed_wisp_arities(&ctx);
 
     /* Emacs runs the process with INSIDE_EMACS set, or with TERM=dumb.
      * In both cases readline is useless (no terminal, no electric pairs)
@@ -3435,15 +3425,26 @@ void repl_run(void) {
 
     char  accum[65536];
     int   accum_len = 0;
-    int   depth     = 0;
     bool  multiline = false;
-    bool  wisp_multiline = false;
-    bool  in_string = false;
 
     char *line;
     while (1) {
         if (use_readline) {
+            if (repl_setjmp(g_repl_input_escape) != 0) {
+                g_input_escape_armed = 0;
+                g_interrupted = 0;
+                rt_interrupted = 0;
+                accum_len = 0;
+                accum[0] = '\0';
+                multiline = false;
+                prompt = prompt_error;
+                rl_free_line_state();
+                rl_cleanup_after_signal();
+                continue;
+            }
+            g_input_escape_armed = 1;
             line = readline(multiline ? "" : prompt);
+            g_input_escape_armed = 0;
             if (!line) break;
         } else {
             /* Print prompt only at the start of a new expression */
@@ -3459,10 +3460,27 @@ void repl_run(void) {
             line = strdup(buf);
         }
 
+        /* SIGINT while readline is collecting a continuation cancels the
+         * entire pending form immediately.  Do not let the empty line that
+         * readline returns inherit multiline state or contaminate the next
+         * expression. */
+        if (g_interrupted) {
+            g_interrupted = 0;
+            rt_interrupted = 0;
+            free(line);
+            accum_len = 0;
+            accum[0] = '\0';
+            multiline = false;
+            prompt = prompt_error;
+            if (use_readline) {
+                rl_free_line_state();
+                rl_cleanup_after_signal();
+            }
+            continue;
+        }
+
         bool line_blank = repl_line_is_blank_or_comment(line);
-        bool starts_wisp_block = (!multiline &&
-                                  !line_blank &&
-                                  repl_line_starts_wisp_block(line));
+        bool blank_terminator = multiline && line_blank;
 
         /* Skip blank lines when not mid-expression */
         if (!multiline && line_blank) {
@@ -3478,47 +3496,19 @@ void repl_run(void) {
             accum[accum_len] = '\0';
         }
 
-        /* Scan the line updating both depth and in_string state */
-        {
-            const char *s = line;
-            while (*s) {
-                if (in_string) {
-                    if (*s == '\\') { s++; if (*s) s++; continue; }
-                    if (*s == '"')  in_string = false;
-                } else {
-                    if (*s == '"')      in_string = true;
-                    else if (*s == ';') break;
-                    else if (*s == '(' || *s == '[' || *s == '{') depth++;
-                    else if (*s == ')' || *s == ']' || *s == '}') depth--;
-                }
-                s++;
-            }
-        }
         free(line);
 
-        if (depth > 0 || in_string) {
+        WispInputStatus input_status =
+            wisp_classify_input(accum, blank_terminator);
+        if (input_status == WISP_INPUT_INCOMPLETE) {
             multiline = true;
             continue;
         }
 
-        if (starts_wisp_block) {
-            multiline = true;
-            wisp_multiline = true;
-            continue;
-        }
-
-        if (wisp_multiline && !line_blank) {
-            multiline = true;
-            continue;
-        }
-
-        if (wisp_multiline && line_blank) {
-            wisp_multiline = false;
-        }
-
+        /* Invalid input is deliberately sent through the real parser below:
+         * classification decides only whether to wait, while the parser owns
+         * the canonical source-located diagnostic. */
         multiline = false;
-        depth     = 0;
-        in_string = false;
 
         if (*accum) {
             if (use_readline) add_history(accum);

@@ -2,6 +2,7 @@
 #include "compat.h"
 #include "reader.h"
 #include "macro.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -114,6 +115,133 @@ void wisp_register_arity(const char *name, int arity) {
 int wisp_get_arity(const char *name) {
     if (!g_ffi_arities_init) return -99;
     return arity_get(&g_ffi_arities, name);
+}
+
+static int wisp_count_line_operands(const char *p) {
+    int operands = 0;
+    while (*p && *p != '\n') {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p || *p == '\n' || *p == ';') break;
+        operands++;
+
+        if (*p == '"') {
+            p++;
+            while (*p && *p != '\n' && *p != '"') {
+                if (*p == '\\' && p[1]) p += 2;
+                else p++;
+            }
+            if (*p == '"') p++;
+            continue;
+        }
+
+        if (*p == '(' || *p == '[' || *p == '{') {
+            char stack[256];
+            int depth = 0;
+            stack[depth++] = *p++;
+            bool in_string = false;
+            while (*p && depth > 0) {
+                if (in_string) {
+                    if (*p == '\\' && p[1]) p += 2;
+                    else if (*p++ == '"') in_string = false;
+                    continue;
+                }
+                if (*p == '"') {
+                    in_string = true;
+                    p++;
+                    continue;
+                }
+                if (*p == '(' || *p == '[' || *p == '{') {
+                    if (depth < (int)(sizeof(stack) / sizeof(stack[0])))
+                        stack[depth++] = *p;
+                    p++;
+                    continue;
+                }
+                if (*p == ')' || *p == ']' || *p == '}') {
+                    depth--;
+                    p++;
+                    continue;
+                }
+                p++;
+            }
+            continue;
+        }
+
+        while (*p && *p != '\n' &&
+               !isspace((unsigned char)*p) && *p != ';')
+            p++;
+    }
+    return operands;
+}
+
+WispInputStatus wisp_classify_input(const char *source,
+                                    bool terminated_by_blank_line) {
+    if (!source) return WISP_INPUT_COMPLETE;
+
+    char stack[1024];
+    int depth = 0;
+    bool in_string = false;
+    bool in_char = false;
+    bool in_comment = false;
+    for (const char *p = source; *p; p++) {
+        if (in_comment) {
+            if (*p == '\n') in_comment = false;
+            continue;
+        }
+        if (in_string) {
+            if (*p == '\\' && p[1]) p++;
+            else if (*p == '"') in_string = false;
+            continue;
+        }
+        if (in_char) {
+            if (*p == '\\' && p[1]) p++;
+            else if (*p == '\'') in_char = false;
+            continue;
+        }
+        if (*p == ';') {
+            in_comment = true;
+        } else if (*p == '"') {
+            in_string = true;
+        } else if (*p == '\'') {
+            in_char = true;
+        } else if (*p == '(' || *p == '[' || *p == '{') {
+            if (depth >= (int)(sizeof(stack) / sizeof(stack[0])))
+                return WISP_INPUT_INVALID;
+            stack[depth++] = *p;
+        } else if (*p == ')' || *p == ']' || *p == '}') {
+            if (depth == 0) return WISP_INPUT_INVALID;
+            char open = stack[--depth];
+            if ((open == '(' && *p != ')') ||
+                (open == '[' && *p != ']') ||
+                (open == '{' && *p != '}'))
+                return WISP_INPUT_INVALID;
+        }
+    }
+    if (in_string || in_char || depth > 0)
+        return WISP_INPUT_INCOMPLETE;
+
+    const char *p = source;
+    while (*p == ' ' || *p == '\t') p++;
+    const char *head = p;
+    while (*p && *p != '\n' && !isspace((unsigned char)*p)) p++;
+    size_t head_len = (size_t)(p - head);
+
+    bool typed_define =
+        head_len == 6 && strncmp(head, "define", 6) == 0 &&
+        strstr(source, "::") && strstr(source, "->");
+
+    bool incomplete_call = false;
+    if (head_len > 0 && head_len < 256 && !strchr("([{", *head)) {
+        char name[256];
+        memcpy(name, head, head_len);
+        name[head_len] = '\0';
+        int arity = wisp_get_arity(name);
+        if (arity > 0)
+            incomplete_call = wisp_count_line_operands(p) < arity;
+    }
+
+    if ((typed_define || incomplete_call) && !terminated_by_blank_line)
+        return WISP_INPUT_INCOMPLETE;
+    return WISP_INPUT_COMPLETE;
 }
 
 static int wisp_lookup_arity(ArityTable *t, const char *name) {

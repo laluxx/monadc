@@ -3,11 +3,13 @@ import re
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 from monad_binary import resolve_monad_binary
 
 
 MONAD = resolve_monad_binary()
+ROOT = Path(__file__).resolve().parents[1]
 
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -18,19 +20,23 @@ def clean_output(value: str) -> str:
 
 
 class ReplTests(unittest.TestCase):
-    def run_repl(self, source: str) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        env["MONAD_NO_PROMPT"] = "1"
-        return subprocess.run(
-            [str(MONAD), "repl"],
-            input=source,
-            env=env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-            timeout=15,
-        )
+    def run_repl(
+        self, source: str, timeout: int = 15
+    ) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory(prefix="monadc-repl-") as td:
+            env = os.environ.copy()
+            env["HOME"] = td
+            env["MONAD_NO_PROMPT"] = "1"
+            return subprocess.run(
+                [str(MONAD), "repl"],
+                input=source,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=timeout,
+            )
 
     def test_repl_evaluates_piped_one_line_wisp(self):
         result = self.run_repl("show 42\n")
@@ -43,6 +49,12 @@ class ReplTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(clean_output(result.stdout), "6")
+
+    def test_repl_applies_core_identity_function_in_wisp_syntax(self):
+        result = self.run_repl("id 3\n")
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(clean_output(result.stdout), "3")
 
     def test_repl_prints_builtin_features_without_crashing(self):
         result = self.run_repl("show *features*\n")
@@ -130,6 +142,25 @@ class ReplTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("42", clean_output(result.stdout).splitlines())
 
+    def test_repl_evaluates_general_indented_wisp_application(self):
+        result = self.run_repl(
+            "show\n"
+            "  id 42\n"
+            "\n"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(clean_output(result.stdout), "42")
+
+    def test_repl_evaluates_multiline_parenthesized_expression_at_eof(self):
+        result = self.run_repl(
+            "show (\n"
+            "  id 42)\n"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(clean_output(result.stdout), "42")
+
     def test_repl_evaluates_multiline_wisp_pattern_clauses(self):
         result = self.run_repl(
             "define choose :: Int -> Int\n"
@@ -142,6 +173,15 @@ class ReplTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(clean_output(result.stdout).splitlines(), ["10", "5"])
+
+    def test_repl_reports_invalid_input_then_recovers_for_the_next_form(self):
+        result = self.run_repl("]\nid 9\n")
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        output = clean_output(result.stdout)
+        self.assertIn("error:", output.lower())
+        self.assertNotIn("DEBUG", output)
+        self.assertEqual(output.splitlines()[-1], "9")
 
     def test_repl_imported_core_method_runs_without_debug_noise(self):
         with tempfile.TemporaryDirectory(prefix="monadc-repl-import-") as td:
@@ -223,6 +263,29 @@ class ReplTests(unittest.TestCase):
         self.assertNotIn("Constructor:", result.stdout)
         self.assertNotIn("Data type:", result.stdout)
         self.assertTrue(clean_output(result.stdout).endswith("1"), result.stdout)
+
+    def test_repl_imports_every_core_module_in_one_live_session(self):
+        module_names = []
+        module_pattern = re.compile(
+            r"^module[ \t]+([A-Za-z_][A-Za-z0-9_.]*)", re.MULTILINE
+        )
+        for path in sorted((ROOT / "core").rglob("*.mon")):
+            match = module_pattern.search(path.read_text(encoding="utf-8"))
+            if match:
+                module_names.append(match.group(1))
+
+        self.assertGreater(len(module_names), 20)
+        source = "".join(f"import {name}\n" for name in module_names)
+        source += "show 4242\n"
+        result = self.run_repl(source, timeout=180)
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        output = clean_output(result.stdout)
+        self.assertNotIn("runtime crash", output)
+        self.assertNotIn("failed to compile module", output)
+        self.assertNotIn("IR verification failed", output)
+        self.assertNotIn("error:", output.lower())
+        self.assertEqual(output.splitlines()[-1], "4242")
 
 
 if __name__ == "__main__":

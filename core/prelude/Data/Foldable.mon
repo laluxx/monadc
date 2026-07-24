@@ -1,35 +1,55 @@
 ;;; Foldable.mon --- Folding abstractions
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: foldable fold traverse typeclass
+:author "Laluxx"
+:version "1.1.0"
+:keywords "foldable fold keyed fold generic aggregation"
+
+;;; Commentary:
+
+;; Foldable owns structure-independent reduction. Consumers express their
+;; identity and combining operation once; concrete containers supply only
+;; foldl/foldr. Numeric aggregation therefore works for every Foldable instance
+;; instead of maintaining list-specific recursion beside the abstraction.
 
 ;;; Code:
 
 import Data.Bool
 
 module Data.Foldable
-  [Foldable foldr foldl
+  [Foldable foldr foldl fold-list-left
    FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey
    sumWith productWith]
 
 
-define sumWith :: a -> (a -> a -> a) -> [a] -> a
-  identity _ []       -> identity
-  identity add [x|xs] -> sumWith (add identity x) add xs
-
-
-define productWith :: a -> (a -> a -> a) -> [a] -> a
-  identity _ []       -> identity
-  identity mul [x|xs] -> productWith (mul identity x) mul xs
-
-
 class Foldable t where
-  foldr :: (a -> b -> b) -> b -> t a -> b
-  foldl :: (b -> a -> b) -> b -> t a -> b
+  foldr       :: (a -> b -> b) -> b -> t a -> b
+  foldl       :: (b -> a -> b) -> b -> t a -> b
+  sumWith     :: a -> (a -> a -> a) -> t a -> a
+  productWith :: a -> (a -> a -> a) -> t a -> a
+
+  sumWith identity add values ->
+    foldl add identity values
+
+  productWith identity mul values ->
+    foldl mul identity values
 
   ;; higher-kinded: t :: Type -> Type
   ;; minimal complete definition: foldr and foldl
+
+
+method fold-list-left :: (b -> a -> b) -> b -> [a] -> b
+  _ acc []     -> acc
+  f acc [x|xs] -> fold-list-left f (f acc x) xs
+
+
+method fold-list-right :: (a -> b -> b) -> b -> [a] -> b
+  _ acc []     -> acc
+  f acc [x|xs] -> (f x (fold-list-right f acc xs))
+
+
+instance Foldable Coll
+  foldl f acc xs -> fold-list-left f acc xs
+  foldr f acc xs -> fold-list-right f acc xs
 
 
 class Foldable t => FoldableWithKey t where

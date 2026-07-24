@@ -569,8 +569,9 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         }
 
         if (!body_lam) {
-            fprintf(stderr, "instance %s %s: no implementation for method '%s' "
-                    "and no default\n", class_name, type_name, mname);
+            if (getenv("MONAD_DEBUG_TYPECLASS"))
+                fprintf(stderr, "instance %s %s: no implementation for method '%s' "
+                        "and no default\n", class_name, type_name, mname);
             continue;
         }
 
@@ -716,9 +717,10 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
     LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context);
     for (int mi = 0; mi < c->method_count; mi++) {
         if (!inst->method_funcs[mi]) {
-            fprintf(stderr, "instance %s %s: method '%s' has no LLVM function, skipping dict slot\n",
-                    class_name, type_name,
-                    inst->method_names[mi] ? inst->method_names[mi] : "?");
+            if (getenv("MONAD_DEBUG_TYPECLASS"))
+                fprintf(stderr, "instance %s %s: method '%s' has no LLVM function, skipping dict slot\n",
+                        class_name, type_name,
+                        inst->method_names[mi] ? inst->method_names[mi] : "?");
             continue;
         }
 

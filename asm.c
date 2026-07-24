@@ -495,10 +495,6 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
     char *asm_str = build_asm_string(instructions, instruction_count, return_type,
                                      params, param_count, naked);
 
-    fprintf(stderr, "=== INLINE ASM ===\n");
-    fprintf(stderr, "Assembly: %s\n", asm_str);
-    fprintf(stderr, "Naked: %s\n", naked ? "yes" : "no");
-
     LLVMTypeRef llvm_ret_type;
     if (return_type->kind == TYPE_FLOAT)     llvm_ret_type = LLVMDoubleTypeInContext(context);
     else if (return_type->kind == TYPE_CHAR) llvm_ret_type = LLVMInt8TypeInContext(context);
@@ -539,9 +535,6 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
         else
             strcat(constraints, ",r");
     }
-
-    fprintf(stderr, "Constraints: %s\n", constraints);
-    fprintf(stderr, "==================\n");
 
     LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * param_count);
     for (int i = 0; i < param_count; i++)
