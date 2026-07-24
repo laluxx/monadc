@@ -1,8 +1,8 @@
 ;;; Numeric.mon --- Numeric typeclasses
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: numeric typeclass num integral fractional floating real power refinement
+:author "Laluxx"
+:version "1.2.0"
+:keywords "numeric typeclass ring integral fractional floating power refinement algebra laws"
 
 ;;; Commentary:
 
@@ -16,6 +16,19 @@
 ;; positive exponent. Keep the algebra in Num/Integral/Fractional and use
 ;; refinement types for domain restrictions when the type checker can enforce
 ;; them.
+;;
+;; Instances state their primitive arithmetic only. Convenience operations and
+;; algorithms are defaults expressed through the preceding abstractions, so a
+;; new numeric type receives the shared behavior without copying implementation
+;; code. Specialization may erase the dictionary boundary, but must not move
+;; these public definitions back into compiler policy.
+;;
+;; Num deliberately promises operations, not exact algebraic laws: IEEE
+;; floating-point addition and multiplication are not associative. Ring is the
+;; stronger, law-bearing abstraction for exact additive commutative groups and
+;; multiplicative monoids with distributivity. Keeping this distinction in the
+;; typeclass graph prevents generic algorithms from silently assuming invalid
+;; Float equations.
 
 ;;; Code:
 
@@ -23,15 +36,15 @@ import Data.Tuple
 import Data.Bool
 
 module Numeric
-  [Num Integral Fractional Floating Real RealFrac
+  [Num Ring Integral Fractional Floating Real RealFrac
    Pow Result]
 
 
 class Num a where
   add     :: a -> a -> a
-  sub     :: a -> a -> a
   mul     :: a -> a -> a
   negate  :: a -> a
+  sub     :: a -> a -> a
   abs     :: a -> a
   signum  :: a -> a
   fromInt :: Int -> a
@@ -41,9 +54,65 @@ class Num a where
   square  :: a -> a
   cube    :: a -> a
 
-  ;; law: add is associative and commutative for ordinary numeric instances.
-  ;; law: sub x y = add x (negate y)
-  ;; law: mul distributes over add.
+  inc x ->
+    add x (fromInt 1)
+
+  sub x y ->
+    add x (negate y)
+
+  dec x ->
+    sub x (fromInt 1)
+
+  double x ->
+    add x x
+
+  square x ->
+    mul x x
+
+  cube x ->
+    mul x (mul x x)
+
+  ;; minimal complete definition: add, mul, negate, abs, signum, fromInt
+
+
+class Num a => Ring a where
+  law add-associativity :: Eq a => a -> a -> a -> Bool
+    x y z -> (add (add x y) z) = (add x (add y z))
+
+  law add-commutativity :: Eq a => a -> a -> Bool
+    x y -> (add x y) = (add y x)
+
+  law additive-identity :: Eq a => a -> Bool
+    x ->
+      and?
+        ((add (fromInt 0) x) = x)
+        ((add x (fromInt 0)) = x)
+
+  law additive-inverse :: Eq a => a -> Bool
+    x ->
+      and?
+        ((add x (negate x)) = (fromInt 0))
+        ((add (negate x) x) = (fromInt 0))
+
+  law mul-associativity :: Eq a => a -> a -> a -> Bool
+    x y z -> (mul (mul x y) z) = (mul x (mul y z))
+
+  law multiplicative-identity :: Eq a => a -> Bool
+    x ->
+      and?
+        ((mul (fromInt 1) x) = x)
+        ((mul x (fromInt 1)) = x)
+
+  law left-distributivity :: Eq a => a -> a -> a -> Bool
+    x y z ->
+      (mul x (add y z)) = (add (mul x y) (mul x z))
+
+  law right-distributivity :: Eq a => a -> a -> a -> Bool
+    x y z ->
+      (mul (add x y) z) = (add (mul x z) (mul y z))
+
+  ;; A Ring instance supplies no operations beyond Num. It certifies that the
+  ;; inherited operations satisfy these executable exact-algebra obligations.
 
 
 class Num a => Integral a where
@@ -58,6 +127,31 @@ class Num a => Integral a where
   gcd     :: a -> a -> a
   lcm     :: a -> a -> a
 
+  quotRem x y ->
+    pair (quot x y) (rem x y)
+
+  divMod x y ->
+    pair (div x y) (mod x y)
+
+  even? x ->
+    (rem x (fromInt 2)) = (fromInt 0)
+
+  odd? x ->
+    (rem x (fromInt 2)) != (fromInt 0)
+
+  gcd x y ->
+    if y = (fromInt 0)
+      abs x
+    else
+      gcd y (rem x y)
+
+  lcm x y ->
+    if (or (= x (fromInt 0)) (= y (fromInt 0)))
+      fromInt 0
+    else
+      abs (mul (quot x (gcd x y)) y)
+
+  ;; minimal complete definition: quot, rem, div, mod
   ;; law: quotRem x y = (quot x y, rem x y)
   ;; law: divMod x y = (div x y, mod x y)
 
@@ -115,32 +209,23 @@ define [numeric-test-neg1 :: Int] 0 - 1
 
 instance Num Int
   (add x y)     => x + y
-  (sub x y)     => x - y
   (mul x y)     => x * y
   (negate x)    => 0 - x
   (abs x)       => if x < 0 then 0 - x else x
   (signum x)    => if x < 0 then 0 - 1 else if x > 0 then 1 else 0
   (fromInt x)   => x
-  (inc x)       => x + 1
-  (dec x)       => x - 1
-  (double x)    => x * 2
-  (square x)    => x * x
-  (cube x)      => x * x * x
+
+
+instance Ring Int
 
 
 instance Num Float
   (add x y)     => x + y
-  (sub x y)     => x - y
   (mul x y)     => x * y
   (negate x)    => 0.0 - x
   (abs x)       => if x < 0.0 then 0.0 - x else x
   (signum x)    => if x < 0.0 then 0.0 - 1.0 else if x > 0.0 then 1.0 else 0.0
   (fromInt x)   => Float x
-  (inc x)       => x + 1.0
-  (dec x)       => x - 1.0
-  (double x)    => x * 2.0
-  (square x)    => x * x
-  (cube x)      => x * x * x
 
 
 instance Integral Int
@@ -148,17 +233,12 @@ instance Integral Int
   (rem x y)     => x % y
   (div x y)     => x / y
   (mod x y)     => x % y
-  (quotRem x y) => pair (x / y) (x % y)
-  (divMod x y)  => pair (x / y) (x % y)
-  (even? x)     => (x % 2) = 0
-  (odd? x)      => (x % 2) != 0
-  (gcd x y)     => if y = 0 then abs x else gcd y (x % y)
-  (lcm x y)     => if (or (= x 0) (= y 0)) then 0 else abs ((x / (gcd x y)) * y)
 
 
 tests
   :registration:
   assert-eq 1 1 "Numeric registers Num"
+  assert-eq 1 1 "Numeric registers Ring"
   assert-eq 1 1 "Numeric registers Integral"
   assert-eq 1 1 "Numeric registers Fractional"
   assert-eq 1 1 "Numeric registers Floating"
@@ -195,8 +275,13 @@ tests
   :int-integral:
   assert-eq (quot 7 3) 2 "Numeric Integral Int quot"
   assert-eq (rem 7 3) 1 "Numeric Integral Int rem"
+  assert-eq (fst (quotRem 7 3)) 2 "Numeric Integral derives quotRem quotient"
+  assert-eq (snd (quotRem 7 3)) 1 "Numeric Integral derives quotRem remainder"
+  assert-eq (fst (divMod 7 3)) 2 "Numeric Integral derives divMod quotient"
+  assert-eq (snd (divMod 7 3)) 1 "Numeric Integral derives divMod remainder"
   assert-eq (even? 8) True "Numeric Integral Int even?"
   assert-eq (odd? 9) True "Numeric Integral Int odd?"
   assert-eq (gcd 54 24) 6 "Numeric Integral Int gcd"
   assert-eq (lcm 6 8) 24 "Numeric Integral Int lcm"
+  assert-eq (lcm 0 8) 0 "Numeric Integral derived lcm preserves zero"
   :int-integral:

@@ -1,14 +1,22 @@
 ;;; Ord.mon --- Ordering helpers
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: ord ordering comparison clamp min max
+:author "Laluxx"
+:version "1.2.0"
+:keywords "ord ordering comparison clamp interval relation"
 
 ;;; Commentary:
 
-;; Ord methods are the canonical ordering vocabulary. Primitive and user-defined
-;; instances inherit lawful defaults for comparison, extrema, clamping, and
-;; interval predicates instead of maintaining type-specific copies.
+;; Ord owns the canonical ordering vocabulary. An instance supplies strict and
+;; non-strict ascending relations; descending relations are obtained by
+;; reversing their arguments. Comparison, extrema, clamping, and interval
+;; predicates are then derived from that common basis.
+;;
+;; Primitive and user-defined instances therefore describe only their actual
+;; order, while all higher ordering algorithms share one implementation.
+;; Executable coherence laws pin the observable relationship between compare
+;; and the two primitive ascending relations. Extrema coherence remains stated
+;; below until specialized default methods preserve their concrete return ABI
+;; when nested inside a law.
 
 ;;; Code:
 
@@ -40,6 +48,12 @@ class Ord a where
   strict-between? :: a -> a -> a -> Bool
   outside?        :: a -> a -> a -> Bool
 
+  gt? x y ->
+    lt? y x
+
+  gte? x y ->
+    lte? y x
+
   compare x y ->
     if lt? x y
       LT
@@ -70,83 +84,93 @@ class Ord a where
   outside? lo hi x ->
     (or (lt? x lo) (gt? x hi))
 
-  ;; law: compare x y = LT when lt? x y, EQ when x and y are equal, GT otherwise
-  ;; law: min and max agree with lte?/gte?
+  law compare-consistency :: a -> a -> Bool
+    x y ->
+      and?
+        (implies? (lt? x y) ((compare x y) = LT))
+        (and?
+          (implies? (gt? x y) ((compare x y) = GT))
+          (implies? (and? (not? (lt? x y)) (not? (gt? x y))) ((compare x y) = EQ)))
+
+  law minimum-consistency :: a -> a -> Bool
+    x y ->
+      and?
+        (implies? (lte? x y) (and? (lte? (min x y) x) (lte? x (min x y))))
+        (implies? (not? (lte? x y)) (and? (lte? (min x y) y) (lte? y (min x y))))
+
+  law maximum-consistency :: a -> a -> Bool
+    x y ->
+      and?
+        (implies? (gte? x y) (and? (gte? (max x y) x) (gte? x (max x y))))
+        (implies? (not? (gte? x y)) (and? (gte? (max x y) y) (gte? y (max x y))))
+
+  ;; minimal complete definition: lt? and lte?
 
 
-define ord-bool-rank :: Bool -> Int
-  x | x         -> 1
-    | otherwise -> 0
+method ord-bool-rank :: Bool -> Int
+  x -> if x then 1 else 0
 
 
-define ord-char-rank :: Char -> Int
+method ord-char-rank :: Char -> Int
   x -> (Int x)
 
 
 instance Ord Int
   (lt?  x y) => (<  x y)
   (lte? x y) => (<= x y)
-  (gt?  x y) => (>  x y)
-  (gte? x y) => (>= x y)
 
 
 instance Ord Bool
   (lt? x y)       => (<  (ord-bool-rank x) (ord-bool-rank y))
   (lte? x y)      => (<= (ord-bool-rank x) (ord-bool-rank y))
-  (gt? x y)       => (>  (ord-bool-rank x) (ord-bool-rank y))
-  (gte? x y)      => (>= (ord-bool-rank x) (ord-bool-rank y))
 
 
 instance Ord Char
   (lt? x y)       => (<  (ord-char-rank x) (ord-char-rank y))
   (lte? x y)      => (<= (ord-char-rank x) (ord-char-rank y))
-  (gt? x y)       => (>  (ord-char-rank x) (ord-char-rank y))
-  (gte? x y)      => (>= (ord-char-rank x) (ord-char-rank y))
 
 
 instance Ord Float
   lt? x y  -> x < y
   lte? x y -> x <= y
-  gt? x y  -> x > y
-  gte? x y -> x >= y
 
 
-define ord-test-negate :: Int -> Int
+method ord-test-negate :: Int -> Int
   x -> 0 - x
 
 
-define min3 :: Int -> Int -> Int -> Int
+method min3 :: Int -> Int -> Int -> Int
   :doc "Return the smallest of three integers."
   x y z -> (min (min x y) z)
 
 
-define max3 :: Int -> Int -> Int -> Int
+method max3 :: Int -> Int -> Int -> Int
   :doc "Return the largest of three integers."
   x y z -> (max (max x y) z)
 
 
-define median3 :: Int -> Int -> Int -> Int
+method median3 :: Int -> Int -> Int -> Int
   :doc "Return the middle value of three integers."
   x y z -> (((x + y) + z) - (min3 x y z)) - (max3 x y z)
 
 
-define less? :: Int -> Int -> Bool
+method less? :: Int -> Int -> Bool
   x y -> x < y
 
 
-define less-or-equal? :: Int -> Int -> Bool
+method less-or-equal? :: Int -> Int -> Bool
   x y -> x <= y
 
 
-define greater? :: Int -> Int -> Bool
+method greater? :: Int -> Int -> Bool
   x y -> x > y
 
 
-define greater-or-equal? :: Int -> Int -> Bool
+method greater-or-equal? :: Int -> Int -> Bool
   x y -> x >= y
 
 
-define compareDown :: Int -> Int -> Ordering
+method compareDown :: Int -> Int -> Ordering
   :doc "Compare in descending order."
   x y -> (compare y x)
 

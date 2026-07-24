@@ -56,6 +56,14 @@
   Exercises codegen paths: lambda, define, if/cond/match, set!, for loops,
   asm blocks, type casting, struct field access, FFI calls, show.
 
+[FIX id:fix.how-to.quickcheck-example-2026-07-24 date:2026-07-24 by:codex src:how_to/QuickCheck.mon,tests/test_how_to_examples.py conf:high]
+  =how_to/QuickCheck.mon= is the compiling public example for executable
+  typeclass laws. It demonstrates exhaustive finite-set checking, deterministic
+  generated checking for =Int=, constrained law signatures, explicit case
+  counts and seeds, and explains minimized counterexamples and replay. The
+  ordinary how-to compilation regression includes it, and the example is also
+  executed with =monad test= during focused verification.
+
 * AlgebraicDataTypes.mon — ADT Examples
 :PROPERTIES:
 :ID: monadc.context.how-to.adt
@@ -644,6 +652,21 @@
   current compiler owns; more ambitious sketches stay commented until they have
   green fixture coverage.
 
+[FIX id:fix.how-to.quickcheck-installed-execution-2026-07-24 date:2026-07-24 by:codex src:how_to/QuickCheck.mon,tests/test_how_to_examples.py conf:high]
+  The QuickCheck tutorial is validated in an installed compiler topology, not
+  only with checkout-local environment overrides. The regression places the
+  compiler under =prefix/bin=, the core under a read-only
+  =prefix/lib/monad/core=, clears =MONAD_CORE=/=MONAD_RUNTIME_LIB=, compiles the
+  public example, executes its artifact, then runs =monad test QuickCheck.mon=
+  and requires both the exhaustive Eq Bool and generated Additive Int suite
+  summaries.
+
+  Law directives must be direct children of =tests=. Section labels previously
+  hid them from execution, and an accidental =check-laws2= spelling compiled
+  without checking anything. The example's operation is named =combine= rather
+  than colliding with Numeric's independent =add= method until method
+  qualification/ambiguity diagnostics are strengthened.
+
 * Connections
 :PROPERTIES:
 :ID: monadc.context.how-to.connections
@@ -679,3 +702,11 @@
   RefinementType.mon exercises refinement types) ·
   `monadc.context.cli` (examples compiled via CMD_COMPILE) ·
   `monadc.context.tests-arch` (how_to/ programs serve as integration tests)
+
+[FIX id:fix.how-to.contextual-seeded-laws-2026-07-24 date:2026-07-24 by:codex src:how_to/QuickCheck.mon,tests/test_how_to_examples.py conf:high]
+  The QuickCheck example documents and executes both contextual law forms. Its
+  =laws Eq Bool= parent demonstrates exhaustive finite checking; distinct
+  indented seeded children demonstrate explicit CI/replay configurations; and
+  =seeded law Additive Int= demonstrates deterministic defaults without a
+  duplicate check. Installed-topology compilation and execution remain part of
+  the how-to regression contract.

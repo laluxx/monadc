@@ -300,6 +300,12 @@ typedef struct AST {
             char **default_names;  // ["!="]
             AST  **default_bodies; // [lambda AST for default impl]
             int    default_count;
+            // Laws are executable property predicates attached to the class.
+            // They are metadata, not dictionary methods.
+            char **law_names;
+            char **law_types;
+            AST  **law_bodies;     // lambda ASTs
+            int    law_count;
         } class_decl;
 
         // AST_INSTANCE
@@ -372,7 +378,9 @@ AST *ast_new_class(const char *name, const char *type_var,
                    int superclass_count,
                    char **assoc_types, int assoc_count,
                    char **method_names, char **method_types, int method_count,
-                   char **default_names, AST **default_bodies, int default_count);
+                   char **default_names, AST **default_bodies, int default_count,
+                   char **law_names, char **law_types, AST **law_bodies,
+                   int law_count);
 AST *ast_new_instance(const char *class_name, const char *type_name,
                       char **assoc_names, char **assoc_values, int assoc_count,
                       char **method_names, AST **method_bodies, int method_count);

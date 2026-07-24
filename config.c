@@ -238,6 +238,7 @@ void config_apply_default_flags(CompilerFlags *flags)
     char *flags_path = config_join_path(monad_dir ? monad_dir : home, "flags");
     if (!config_dir || !monad_dir || !flags_path) goto done;
 
+    config_make_dir(home);
     config_make_dir(config_dir);
     config_make_dir(monad_dir);
 

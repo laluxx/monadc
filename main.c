@@ -448,6 +448,7 @@ static void ensure_cache_dir(const char *home)
         return;
 
     char dir[1024];
+    monad_mkdir(home);
     snprintf(dir, sizeof(dir), "%s/.cache", home);
     monad_mkdir(dir);
     snprintf(dir, sizeof(dir), "%s/.cache/monad", home);

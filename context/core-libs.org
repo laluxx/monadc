@@ -1581,3 +1581,287 @@
   operations used by pattern matching now have explicit ITT types:
   =rt_coll_drop : Π A. A -> Int -> A=, =rt_coll_empty : Π A. A -> A=, and
   =rt_coll_is_empty : Π A. A -> Bool=, replacing unbound-global shadow holes.
+
+[DEC id:dec.core-libs.dry-minimal-class-basis-2026-07-23 date:2026-07-23 by:human src:user-request conf:high]
+  A core abstraction owns its lawful derived operations exactly once. Instances
+  provide only the documented minimal complete definition and inherit the rest
+  through class defaults. Public compiler magic and parallel concrete-module
+  implementations are not acceptable substitutes. Every touched core module
+  must have real top-level author/version/keywords metadata, substantive
+  commentary, aligned executable tests, and a direct standalone-compilation
+  regression in addition to the isolated module-test harness.
+
+[FIX id:fix.core-libs.semigroup-minimal-defaults-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Semigroup.mon,tests/test_core_abstraction_ownership.py,tests/test_core_standalone_compile.py conf:high]
+  =Semigroup= now requires only associative =append= and derives non-empty
+  =sconcat=. =Monoid= adds only =mempty= and derives =mappend=/=mconcat=.
+  Int, Bool, and Coll instances no longer duplicate generic list recursion.
+  Direct compilation from a nonexistent compiler home also works because cache
+  and configuration initialization create the declared home before children.
+
+[FIX id:fix.core-libs.bifunctor-minimal-defaults-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Functor.mon,core/prelude/Data/Either.mon,tests/test_core_abstraction_ownership.py conf:high]
+  =Bifunctor= requires only =bimap=. The one-sided =first-map= and =second-map=
+  operations are lawful class defaults, so =Either= no longer repeats their
+  pattern matching. Executable Either tests call both inherited defaults on
+  both constructors, while standalone compilation covers the defining and
+  consuming modules.
+
+[FIX id:fix.core-libs.numeric-minimal-defaults-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Numeric.mon,tests/test_core_abstraction_ownership.py conf:high]
+  =Num= instances now provide primitive arithmetic and conversion only;
+  =inc=/=dec=/=double=/=square=/=cube= are shared defaults. =Integral=
+  instances provide division and remainder primitives, while tuple division,
+  parity, GCD, and LCM are derived through =Num=/=Integral=. Executable Int and
+  Float coverage proves inherited specialization, including zero-valued LCM.
+
+[FIX id:fix.core-libs.applicative-monad-minimal-defaults-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Control/Applicative.mon,core/prelude/Control/Monad.mon,core/prelude/Data/Maybe.mon conf:high]
+  =Applicative= derives =liftA=/=liftA2=/=liftA3= from =pure=/=applyA=.
+  =Monad= derives =return= from =pure= and =join=/=then= from =bind=.
+  =Maybe= supplies only primitive structure and failure behavior; executable
+  tests cover all inherited defaults for present and absent values.
+
+[FIX id:fix.core-libs.eq-ord-minimal-defaults-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Eq.mon,core/prelude/Data/Ord.mon conf:high]
+  =Eq= instances supply only =eq?= and inherit Boolean negation as =not-eq?=.
+  =Ord= instances supply ascending strict/non-strict relations and inherit
+  descending relations by argument reversal. Comparison, extrema, clamping, and
+  interval operations continue to derive from this smaller common basis.
+
+[FIX id:fix.core-libs.readline-sequence-consumer-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Text/Readline.mon,tests/test_core_abstraction_ownership.py conf:high]
+  Readline no longer owns monomorphic =length-list=/=take-list=/=drop-list=
+  recursion. Cursor movement and line/word deletion consume =Sequence.length=,
+  =take=, =drop=, =prepend=, and =concat= directly. The module retains only
+  editing policy and its byte-oriented terminal boundary.
+
+[FIX id:fix.core-libs.category-profunctor-defaults-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Control/Category.mon,core/prelude/Data/Profunctor.mon conf:high]
+  =Category.pipeCategory= is derived by reversing =composeCategory= arguments.
+  =Profunctor.lmap=/=rmap= are derived from =dimap= plus identity. Future
+  instances therefore implement only the actual categorical/profunctor basis;
+  concrete function instances remain a separate executable-coverage milestone.
+
+[DEC id:dec.core-libs.law-checking-boundary-2026-07-23 date:2026-07-23 by:codex src:user-request,reader.h,typeclass.h conf:high]
+  Executable laws are core-owned typed predicates attached to class
+  declarations, while the compiler owns law reflection, type-directed
+  generation, finite-set exhaustiveness, and optimized specialization. The
+  test runner owns deterministic seeds, replay, shrinking search, and reports.
+  A type being a set does not alone make it generatable: finite enumerable sets
+  can be checked exhaustively, while infinite, refinement, opaque, and function
+  sets require explicit generation evidence. Reports must distinguish tested,
+  exhaustive, and proved obligations.
+
+[FIX id:fix.core-libs.first-executable-class-laws-2026-07-23 date:2026-07-23 by:codex src:reader.c,reader.h,wisp.c,typeclass.c,typeclass.h,core/prelude/Data/Semigroup.mon,tests/test_class_laws.py conf:high]
+  Class declarations accept named =law= predicates in both Lisp and Wisp
+  syntax. Their constrained signatures, parameters, and executable AST bodies
+  survive cloning, JSON reflection, and typeclass-registry merging, but remain
+  separate from method arrays so they add no instance obligation or runtime
+  dictionary field. Wisp rejects a law signature without its property clause.
+  =Semigroup.associativity= and both =Monoid= identity laws are now structured
+  declarations rather than comments; the module compiles and its existing
+  concrete tests still pass. Property generation, shrinking, and the
+  =check-laws= driver remain the next vertical slice.
+
+[FIX id:fix.core-libs.checked-law-contracts-2026-07-23 date:2026-07-23 by:codex src:reader.c,core/prelude/Data/Eq.mon,core/prelude/Data/Semigroup.mon,tests/test_class_laws.py conf:high]
+  Class-law declarations are rejected when names repeat within a class, when
+  their signature does not return =Bool=, or when signature arity disagrees
+  with the executable property clause. This prevents malformed properties from
+  entering reflection metadata and later being counted as checked. =Eq= now
+  states the equivalence-relation laws (reflexivity, symmetry, transitivity)
+  and the inherited inequality-complement law as executable predicates.
+  Semigroup associativity and Monoid identities remain structured laws. A
+  regression reads the real core modules through JSON reflection and pins the
+  complete law inventory; concrete Eq tests mirror each new obligation until
+  the automatic exhaustive/property runner lands.
+
+[FIX id:fix.core-libs.finite-exhaustive-check-laws-2026-07-23 date:2026-07-23 by:codex src:infer.c,codegen.c,wisp.c,tests/test_check_laws.py conf:high]
+  =check-laws Class Type= is an executable language test directive. For a
+  core-defined finite type set, the compiler specializes each class-law lambda
+  to the selected instance and enumerates the full Cartesian product in
+  declaration/source order. This path uses no random generator and allocates no
+  runtime collection: generated LLVM branches fail fast on the first falsifying
+  tuple and report its concrete inhabitants; successful reports are explicitly
+  labelled =EXHAUSTIVE= with the exact case count. Expansion is capped at 65536
+  cases to prevent accidental compile-time/code-size explosions. Infinite and
+  opaque types are rejected with an explicit request for =Arbitrary= evidence;
+  they are never silently sampled or mislabeled exhaustive. Random generation,
+  replay seeds, and shrinking remain required before that evidence path is
+  enabled.
+
+[FIX id:fix.core-libs.arbitrary-tested-law-path-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Test/QuickCheck.mon,infer.c,codegen.c,wisp.c,tests/test_check_laws.py,tests/test_core_standalone_compile.py conf:high]
+  =Test.QuickCheck= owns the =Arbitrary= vocabulary: =arbitrary= is an explicit
+  deterministic function of seed and size, while =shrink= has an empty default
+  and may be refined by instances. The Int instance provides stable bounded
+  Park-Miller generation and a zero shrink candidate. =check-laws= now consumes
+  imported =Arbitrary Type= evidence for non-finite domains, schedules 100
+  size-graded cases by default, and labels results =TESTED= rather than
+  =EXHAUSTIVE=. =check-laws-seeded Class Type Count Seed= is the replay and CI
+  control surface; it accepts one to one million cases. Each law parameter gets
+  an independent adjacent seed, and failure output pins the case seed and size.
+  Finite types continue to take the exhaustive zero-generator path even when
+  Arbitrary evidence exists. Automated shrink search and concrete rendering of
+  generated counterexamples remain the next execution milestone.
+
+[FIX id:fix.core-libs.splitmix-looped-property-engine-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Test/QuickCheck.mon,codegen.c,tests/test_check_laws.py conf:high]
+  Sampled property testing no longer uses the provisional Park-Miller stream.
+  Core implements SplitMix64's 64-bit Weyl increment and Stafford variant-13
+  output mixer using exact hexadecimal bit patterns, wrapping Int arithmetic,
+  XOR, and logical shifts. Golden vectors pin seeds 0, 1, and 42 across native
+  targets. Size-bounded Int generation consumes the non-negative 63-bit output
+  through rejection sampling, eliminating modulo bias rather than accepting
+  the usual =random % bound= shortcut.
+
+  Sample counts are now runtime loop bounds. Each law/generator combination is
+  specialized once; increasing a run from 10 to 100 cases changes constants,
+  not the number of generated law bodies or LLVM branches. An IR-size
+  regression caps that growth at 20 percent. Finite-set checking intentionally
+  remains compile-time unrolled because its small complete domain benefits
+  from direct constant specialization and concrete counterexamples.
+
+[FIX id:fix.core-libs.minimal-counterexample-shrinking-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Test/QuickCheck.mon,codegen.c,tests/test_check_laws.py conf:high]
+  Sampled law failures retain their generated arguments in native LLVM slots
+  and run the selected =Arbitrary.shrink= implementation without rebuilding or
+  re-specializing the property per sample. Candidates are tried in declared
+  order; the first candidate that still falsifies the law becomes the new
+  current value and restarts that argument's shrink search. Arguments are
+  minimized left-to-right, producing a deterministic local minimum and an
+  exact shrink-evaluation count. Equal/non-progressing candidates are skipped
+  without evaluating the property, and a 10000-evaluation global budget makes
+  cyclic or otherwise unlawful shrinkers terminate.
+
+  Failure diagnostics print the minimized concrete tuple, original case index,
+  size, full-width seed, shrink count, and a one-case replay command. Seed
+  parsing consumes the AST's exact integer payload rather than its rounded
+  floating representation, so all 64 seed bits survive hexadecimal literals.
+  The core =Int= shrinker treats zero as minimal and emits the classic
+  logarithmic sequence toward zero (for example =10 -> [0,5,8,9]=) instead of
+  the former one-element approximation. Regressions cover local minimization,
+  non-progressing candidates, exact 64-bit replay, and constant sampled IR
+  growth.
+
+[FIX id:fix.core-libs.method-owned-sequence-foldable-functor-2026-07-24 date:2026-07-24 by:codex src:core/prelude/Sequence.mon,core/prelude/Data/Functor.mon,core/prelude/Data/Foldable.mon,core/prelude/Data/Set.mon,tests/test_core_abstraction_ownership.py conf:high]
+  Core collection behavior no longer depends on a parallel =coll-*= function
+  namespace. Concrete recursive implementations are methods, =Functor Coll=
+  is owned by =Data.Functor=, and =Foldable Coll= is owned by =Data.Foldable=.
+  =Sequence= consumes those superclass instances rather than redeclaring them,
+  and =Set= consumes the generic =foldl= method. =sumWith=/=productWith= are
+  Foldable defaults, so every new Foldable instance inherits aggregation.
+
+  An ownership regression rejects =coll-*= symbols and function =define=
+  declarations in =Sequence.mon=, and rejects typed function =define=
+  declarations throughout =core/prelude/Data/*.mon=. Value constants remain
+  ordinary definitions.
+
+[FIX id:fix.core-libs.second-executable-law-wave-2026-07-24 date:2026-07-24 by:codex src:core/prelude/Data/Enum.mon,core/prelude/Data/Ord.mon,core/prelude/Text/Show.mon,core/prelude/Sequence.mon,tests/test_class_laws.py,tests/test_check_laws.py conf:high]
+  Enum representation coherence, Ord comparison coherence, Show/showsPrec
+  coherence, Sequence concatenation associativity and length, and reverse
+  involution are structured executable laws rather than prose comments.
+  Seeded integration coverage actually executes the Enum Int and Ord Int laws;
+  metadata coverage pins the full declared inventory.
+
+  Laws requiring generated higher-kinded functions, heterogeneous law
+  arguments, or nested specialized default methods remain explicit prose
+  obligations until the checker can generate those domains and preserve the
+  concrete return ABI. They are not mislabeled as tested. This currently
+  includes Functor/Contravariant/Bifunctor/Profunctor/Representable laws,
+  Sequence take/drop reconstruction, Ord extrema coherence, and guarded
+  partial/approximate numeric laws.
+
+[FIX id:fix.core-libs.exact-ring-and-specialized-default-abi-2026-07-24 date:2026-07-24 by:codex src:core/prelude/Numeric.mon,codegen.c,tests/test_check_laws.py,tests/test_class_laws.py conf:high]
+  Numeric now distinguishes operational =Num= from exact =Ring=. This is a
+  semantic boundary, not naming decoration: IEEE Float remains a Num because
+  it supplies arithmetic, but is intentionally not a Ring because rounding
+  invalidates associativity and distributivity. =Ring Int= certifies eight
+  executable obligations for the additive commutative group, multiplicative
+  monoid, and both distributive directions. The seeded integration suite
+  executes every obligation for 1000 generated tuples.
+
+  Subtraction is derived once in Num as =add x (negate y)=; Int and Float no
+  longer duplicate it in their instances. The Num method order keeps the
+  dependency basis (=add= and =negate=) available before inherited defaults are
+  specialized, avoiding a forward-reference hole in instance code generation.
+
+  Forward-declared concrete class-default calls now recover a concrete logical
+  result when the generic method declaration returns a type variable, and cast
+  the emitted LLVM value to that specialized representation. This unblocks
+  nested Ord defaults, so minimum and maximum coherence are executable and
+  tested rather than remaining prose obligations. Heterogeneous and
+  higher-kinded law generation remain separate future work.
+
+[FIX id:fix.core-libs.fast-verbose-law-suites-2026-07-24 date:2026-07-24 by:codex src:core/prelude/Test/QuickCheck.mon,codegen.c,tests/test_check_laws.py conf:high]
+  Law checks report their execution contract before running and an aggregate
+  result afterward. Randomized headers state class, instance, law count,
+  cases per law, and the exact replay seed; exhaustive headers state the exact
+  total Cartesian case count. Individual law results remain visible between
+  those boundaries. Output occurs only at suite/law boundaries, never in the
+  sampled hot loop, so verbosity does not impose per-case I/O.
+
+  The compiler computes each law's case cardinality once and reuses it for
+  validation, execution, and reporting. The core SplitMix64 pipeline now names
+  its final xor-shift and feeds it the Stafford intermediate once; the previous
+  source duplicated both mixer stages to express the final xor and therefore
+  performed almost twice the intended arithmetic per generated value.
+  Golden-vector coverage pins the factored pipeline, while IR-size coverage
+  continues to require sampled case counts to remain runtime loop bounds.
+
+[FIX id:fix.core-libs.modern-law-cli-2026-07-24 date:2026-07-24 by:codex src:codegen.c,tests/test_check_laws.py,tests/test_how_to_examples.py conf:high]
+  Integrated law output is a structured, log-stable CLI surface. Each suite is
+  framed with Unicode box-drawing markers: =╭─= identifies the class/instance
+  target, =│= explains the execution contract, =├─ ✓= reports each law, and
+  =╰─ ✓= summarizes total verified work. Exhaustive suites name finite-set
+  source-order Cartesian traversal; sampled suites name Arbitrary evidence,
+  the 0…99 size schedule, deterministic replay, seed, and greedy shrinking.
+  Per-law rows include the declared constrained property signature, arity, and
+  exact case count.
+
+  Failures use the same hierarchy with =├─ ✗=, a minimized counterexample,
+  shrink-evaluation count, case/seed/size coordinates, and a copyable replay
+  command. The presentation uses ordinary newline-delimited output without
+  cursor control, spinners, terminal-width queries, or per-case printing, so it
+  remains readable in Emacs compilation buffers and CI logs and adds no I/O to
+  the property loop. Tests pin both success strategies and both generated and
+  finite failure shapes.
+
+[FIX id:fix.core-libs.aligned-colored-law-cli-2026-07-24 date:2026-07-24 by:codex src:codegen.c,tests/test_check_laws.py,tests/test_how_to_examples.py conf:high]
+  Supersedes the first box-drawing presentation above. Suite identity appears
+  once; strategy, coverage, domain/generator, replay, and shrinking are a
+  fixed-label metadata table. Law rows no longer repeat the class, instance,
+  strategy marker, and seed. Instead, the compiler computes the maximum law
+  name width and case-count width for the suite and emits aligned name, cases,
+  and arity columns. Signatures are subordinate rows under a stable
+  =signature= label. Case/cases grammar is cardinality-aware.
+
+  Success glyphs are ANSI green and failure glyphs ANSI red. Escape sequences
+  wrap only the one-column glyph, so invisible style bytes cannot affect table
+  padding. Failure regressions also pin the variadic =snprintf= argument count:
+  both the human-readable coordinate rows and legacy machine/tooling error
+  line receive case, size, and replay-seed arguments, preventing undefined
+  values in diagnostics.
+
+[FIX id:fix.core-libs.final-quickcheck-report-design-2026-07-24 date:2026-07-24 by:codex src:codegen.c,tests/test_check_laws.py,tests/test_how_to_examples.py conf:high]
+  Supersedes both box-oriented formats. The final report follows a restrained
+  test-runner layout: cyan bold =QuickCheck= plus the class/instance target, one
+  heavy rule, one or two compact execution-context lines, a blank-separated
+  property table, and a bold green PASS footer. The property table is truly
+  single-row: green status glyph, suite-aligned law name, suite-aligned full
+  constrained signature, and right-aligned case count. Arity is omitted because
+  it duplicates information visible in the signature.
+
+  Randomized context retains generator, cases per property, size schedule,
+  seed, replay determinism, and shrinking policy without presenting them as a
+  form. Exhaustive context retains finite-domain and source-order traversal
+  guarantees. Failures mirror the table with a red glyph and bold FAILED state,
+  followed by indented counterexample, shrink count, coordinates, and replay.
+  ANSI styling wraps semantic tokens only; computed visible-column padding is
+  unaffected. Cardinality-aware grammar covers both suite and per-property
+  counts.
+
+[DEC id:dec.core-libs.seeded-contextual-law-subkeyword-2026-07-24 date:2026-07-24 by:codex src:wisp.c,tests/test_check_laws.py,how_to/QuickCheck.mon conf:high]
+  =seeded= is a contextual sub-keyword of executable law syntax, not a globally
+  reserved identifier. A =laws Class Type= form runs its own law check and may
+  contain indented =seeded Class Type Count Seed= children. The prefix spelling
+  =seeded law Class Type= selects deterministic defaults: 100 generated cases
+  per property and seed zero.
+
+  Wisp lowers these surface forms to the canonical compiler directives
+  =check-laws= and =check-laws-seeded= before ordinary token parsing. Nested
+  seeded children are dedented into sibling test directives, so the syntax is
+  composition rather than an ad hoc variadic AST. Outside those two grammatical
+  positions, =seeded= remains available as an ordinary user identifier. This is
+  the first recorded instance of contextual sub-keywords intended to remain
+  extensible when parser facilities are exposed to language users.

@@ -1,0 +1,160 @@
+;;; QuickCheck.mon --- Property generation and shrinking evidence
+
+:author "Laluxx"
+:version "0.4.0"
+:keywords "testing property quickcheck arbitrary shrink deterministic replay"
+
+;;; Commentary:
+
+;; Property predicates belong to their classes; this module supplies evidence
+;; for types whose inhabitants cannot be enumerated exhaustively. Arbitrary
+;; receives an explicit deterministic seed and a non-negative size. Keeping
+;; both inputs visible makes every generated case replayable and lets recursive
+;; instances bound their output structurally.
+;;
+;; Finite type sets do not need Arbitrary instances: check-laws enumerates them
+;; completely in source order and reports EXHAUSTIVE. Infinite and opaque types
+;; opt into sampled checking by implementing arbitrary. Shrinking has a lawful,
+;; allocation-free empty default, so the minimal definition is arbitrary;
+;; useful instances should override shrink with strictly simpler candidates.
+;;
+;; Seed splitting and output mixing use SplitMix64's Weyl increment and
+;; Stafford variant-13 finalizer with deliberate two's-complement wrapping.
+;; Logical right shifts make the bit-level specification independent of signed
+;; comparison. Bounded generation uses rejection sampling rather than `%`
+;; alone, avoiding modulo bias.
+;;
+;; The compiler owns seed scheduling, exact 64-bit replay coordinates, and the
+;; bounded greedy traversal of shrink candidates. It specializes the property
+;; once, keeps generated arguments in native slots, ignores candidates equal
+;; to the current value, and stops after a defensive global budget if an
+;; instance supplies a cycle. This module owns candidate order: Int proposes
+;; zero first and then approaches the original in logarithmically many steps.
+;; A shrink list is therefore an ordered search strategy, not an unordered bag.
+
+;;; Code:
+
+import Data.Bool
+import Numeric
+
+module Test.QuickCheck
+  [Arbitrary arbitrary shrink
+   quickcheck-default-tests quickcheck-default-seed quickcheck-size
+   quickcheck-next-seed quickcheck-mix64-step1 quickcheck-mix64-step2
+   quickcheck-mix64-final quickcheck-mix64
+   quickcheck-bounded-from quickcheck-bounded]
+
+
+define [quickcheck-default-tests :: Int] 100
+define [quickcheck-default-seed  :: Int]   0
+
+
+method quickcheck-size :: Int -> Int
+  test-index ->
+    test-index % 100
+
+
+method quickcheck-next-seed :: Int -> Int
+  seed ->
+    seed + 0x9e3779b97f4a7c15
+
+
+method quickcheck-mix64-step1 :: Int -> Int
+  z ->
+    (bit-xor z (>>> z 30)) * 0xbf58476d1ce4e5b9
+
+
+method quickcheck-mix64-step2 :: Int -> Int
+  z ->
+    (bit-xor z (>>> z 27)) * 0x94d049bb133111eb
+
+
+method quickcheck-mix64-final :: Int -> Int
+  z ->
+    (bit-xor z (>>> z 31))
+
+
+method quickcheck-mix64 :: Int -> Int
+  z ->
+    quickcheck-mix64-final
+      (quickcheck-mix64-step2 (quickcheck-mix64-step1 z))
+
+
+method quickcheck-bounded-from :: Int -> Int -> Int -> Int
+  seed bound random ->
+    if (random < (0x7fffffffffffffff - (0x7fffffffffffffff % bound))) then (random % bound) else (quickcheck-bounded (quickcheck-next-seed seed) bound)
+
+
+method quickcheck-bounded :: Int -> Int -> Int
+  seed bound ->
+    (quickcheck-bounded-from
+      seed
+      bound
+      (>>> (quickcheck-mix64 (quickcheck-next-seed seed)) 1))
+
+
+define quickcheck-shrink-integral :: Int -> Int -> [Int]
+  original 0     -> []
+  original delta ->
+    __rt_prepend
+      (original - delta)
+      (quickcheck-shrink-integral original (div delta 2))
+
+
+class Arbitrary a where
+  arbitrary :: Int -> Int -> a
+  shrink    :: a -> [a]
+
+  shrink x ->
+    list
+
+  ;; minimal complete definition: arbitrary
+  ;; Generator determinism: equal seed and size inputs produce equal values.
+  ;; Shrink progress: candidates should be structurally simpler than the input.
+
+
+instance Arbitrary Int
+  arbitrary seed size ->
+    (quickcheck-bounded seed ((size * 2) + 1)) - size
+
+  shrink x ->
+    quickcheck-shrink-integral x x
+
+
+tests
+  :splitmix64-golden-vectors:
+  assert-eq
+    (quickcheck-mix64-final
+      (quickcheck-mix64-step2 (quickcheck-mix64-step1 (quickcheck-next-seed 0))))
+    0xe220a8397b1dcdaf
+    "SplitMix64 finalizer consumes the mixed intermediate once"
+  assert-eq
+    (quickcheck-mix64 (quickcheck-next-seed 0))
+    0xe220a8397b1dcdaf
+    "SplitMix64 seed 0 golden vector"
+  assert-eq
+    (quickcheck-mix64 (quickcheck-next-seed 1))
+    0x910a2dec89025cc1
+    "SplitMix64 seed 1 golden vector"
+  assert-eq
+    (quickcheck-mix64 (quickcheck-next-seed 42))
+    0xbdd732262feb6e95
+    "SplitMix64 seed 42 golden vector"
+  :splitmix64-golden-vectors:
+
+  :determinism:
+  assert-eq (arbitrary 0 10) (arbitrary 0 10) "Arbitrary Int replays a seed"
+  assert-eq (arbitrary 17 0) 0 "Arbitrary Int respects size zero"
+  :determinism:
+
+  :shrinking:
+  assert-eq (show (shrink 0)) "()" "zero is already minimal"
+  assert-eq
+    (show (shrink 10))
+    "(0 5 8 9)"
+    "positive Int shrinking is logarithmic"
+  assert-eq
+    (show (shrink -10))
+    "(0 -5 -8 -9)"
+    "negative Int shrinking is logarithmic"
+  :shrinking:

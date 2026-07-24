@@ -1,8 +1,8 @@
 ;;; Enum.mon --- Extensible enumeration typeclasses and helpers
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: enum range succ pred list
+:author "Laluxx"
+:version "1.1.0"
+:keywords "enum range successor predecessor bounded executable laws"
 
 ;;; Commentary:
 
@@ -10,6 +10,11 @@
 ;; owned by the Enum typeclass: user-defined instances receive lawful defaults
 ;; for stepping and finite ranges from their integer representation.  Int is a
 ;; regular instance, not a set of functions shadowing the class methods.
+;;
+;; The representation equations are executable obligations. They compare the
+;; integer observations rather than requiring a separate Eq superclass: an
+;; Enum instance is coherent precisely when stepping agrees with its declared
+;; toEnum/fromEnum representation.
 
 ;;; Code:
 
@@ -59,8 +64,12 @@ class Enum a where
           else
             prepend start (enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end)
 
-  ;; law: succ x = toEnum (fromEnum x + 1)
-  ;; law: pred x = toEnum (fromEnum x - 1)
+  law successor-representation :: a -> Bool
+    x -> (fromEnum (succ x)) = ((fromEnum x) + 1)
+
+  law predecessor-representation :: a -> Bool
+    x -> (fromEnum (pred x)) = ((fromEnum x) - 1)
+
   ;; minimal complete definition: toEnum and fromEnum
 
 
@@ -74,11 +83,11 @@ instance Enum Int
   fromEnum x -> x
 
 
-define range :: Int -> Int -> [Int]
+method range :: Int -> Int -> [Int]
   start end -> enumFromTo start end
 
 
-define rangeBy :: Int -> Int -> Int -> [Int]
+method rangeBy :: Int -> Int -> Int -> [Int]
   start step end | step > 0   -> enumFromThenTo start (start + step) end
   start step end | step < 0   -> enumFromThenTo start (start + step) end
   start _ _                   -> error "rangeBy: zero step"

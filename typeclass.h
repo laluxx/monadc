@@ -37,6 +37,10 @@ typedef struct TCClass {
     char     **default_names;    // methods with default impls
     AST      **default_bodies;   // lambda ASTs for defaults
     int        default_count;
+    char     **law_names;        // executable property names
+    char     **law_types;        // constrained predicate signatures
+    AST      **law_bodies;       // lambda ASTs; never dictionary fields
+    int        law_count;
 } TCClass;
 
 /// Type Class Instance

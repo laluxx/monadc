@@ -826,7 +826,9 @@ AST *ast_new_class(const char *name, const char *type_var,
                    int superclass_count,
                    char **assoc_types, int assoc_count,
                    char **method_names, char **method_types, int method_count,
-                   char **default_names, AST **default_bodies, int default_count) {
+                   char **default_names, AST **default_bodies, int default_count,
+                   char **law_names, char **law_types, AST **law_bodies,
+                   int law_count) {
     AST *a = calloc(1, sizeof(AST));
     a->type                          = AST_CLASS;
     a->class_decl.name               = my_strdup(name);
@@ -842,6 +844,10 @@ AST *ast_new_class(const char *name, const char *type_var,
     a->class_decl.default_names      = default_names;
     a->class_decl.default_bodies     = default_bodies;
     a->class_decl.default_count      = default_count;
+    a->class_decl.law_names          = law_names;
+    a->class_decl.law_types          = law_types;
+    a->class_decl.law_bodies         = law_bodies;
+    a->class_decl.law_count          = law_count;
     return a;
 }
 
@@ -1091,6 +1097,14 @@ AST *ast_clone(AST *ast) {
             c->class_decl.default_names[i] = ast->class_decl.default_names[i] ? strdup(ast->class_decl.default_names[i]) : NULL;
             c->class_decl.default_bodies[i] = ast_clone(ast->class_decl.default_bodies[i]);
         }
+        c->class_decl.law_names = malloc(sizeof(char*) * (ast->class_decl.law_count ? ast->class_decl.law_count : 1));
+        c->class_decl.law_types = malloc(sizeof(char*) * (ast->class_decl.law_count ? ast->class_decl.law_count : 1));
+        c->class_decl.law_bodies = malloc(sizeof(AST*) * (ast->class_decl.law_count ? ast->class_decl.law_count : 1));
+        for (int i = 0; i < ast->class_decl.law_count; i++) {
+            c->class_decl.law_names[i] = ast->class_decl.law_names[i] ? strdup(ast->class_decl.law_names[i]) : NULL;
+            c->class_decl.law_types[i] = ast->class_decl.law_types[i] ? strdup(ast->class_decl.law_types[i]) : NULL;
+            c->class_decl.law_bodies[i] = ast_clone(ast->class_decl.law_bodies[i]);
+        }
         break;
 
     case AST_INSTANCE:
@@ -1265,6 +1279,14 @@ void ast_free(AST *ast) {
         }
         free(ast->class_decl.default_names);
         free(ast->class_decl.default_bodies);
+        for (int i = 0; i < ast->class_decl.law_count; i++) {
+            free(ast->class_decl.law_names[i]);
+            free(ast->class_decl.law_types[i]);
+            ast_free(ast->class_decl.law_bodies[i]);
+        }
+        free(ast->class_decl.law_names);
+        free(ast->class_decl.law_types);
+        free(ast->class_decl.law_bodies);
         break;
 
     case AST_INSTANCE:
@@ -2753,6 +2775,37 @@ static void type_buf_append(char *buf, size_t size, const char *frag) {
     }
     if (cur_len + frag_len < size)
         memcpy(buf + cur_len, frag, frag_len + 1);
+}
+
+static const char *law_unconstrained_type(const char *type_str) {
+    const char *constraint = strstr(type_str, "=>");
+    return constraint ? constraint + 2 : type_str;
+}
+
+static int law_signature_arity(const char *type_str) {
+    const char *p = law_unconstrained_type(type_str);
+    int arity = 0;
+    while ((p = strstr(p, "->")) != NULL) {
+        arity++;
+        p += 2;
+    }
+    return arity;
+}
+
+static bool law_signature_returns_bool(const char *type_str) {
+    const char *p = law_unconstrained_type(type_str);
+    const char *last_arrow = NULL;
+    const char *scan = p;
+    while ((scan = strstr(scan, "->")) != NULL) {
+        last_arrow = scan;
+        scan += 2;
+    }
+    const char *result = last_arrow ? last_arrow + 2 : p;
+    while (*result == ' ' || *result == '\t') result++;
+    const char *end = result + strlen(result);
+    while (end > result && (end[-1] == ' ' || end[-1] == '\t')) end--;
+    return (size_t)(end - result) == 4 &&
+           strncmp(result, "Bool", 4) == 0;
 }
 
 static char *parse_anonymous_finite_type(Parser *p);
@@ -5803,9 +5856,117 @@ static AST *parse_list(Parser *p) {
         char **default_names  = NULL;
         AST  **default_bodies = NULL;
         int    default_count  = 0;
+        char **law_names      = NULL;
+        char **law_types      = NULL;
+        AST  **law_bodies     = NULL;
+        int    law_count      = 0;
 
         while (p->current.type != TOK_RPAREN &&
                p->current.type != TOK_EOF) {
+
+            /* Executable class law metadata:
+             *   (law associativity :: Eq a => a -> a -> a -> Bool
+             *     (x y z) => body)
+             *
+             * Laws are stored separately from methods so they never enlarge
+             * instance dictionaries or become implementation obligations. */
+            if (p->current.type == TOK_LPAREN) {
+                Lexer law_peek_lex = *p->lexer;
+                Token law_peek = lexer_next_token(&law_peek_lex);
+                bool is_law = law_peek.type == TOK_SYMBOL && law_peek.value &&
+                              strcmp(law_peek.value, "law") == 0;
+                free(law_peek.value);
+
+                if (is_law) {
+                    p->current = lexer_next_token(p->lexer); /* consume '(' */
+                    p->current = lexer_next_token(p->lexer); /* consume law */
+                    if (p->current.type != TOK_SYMBOL)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected law name after 'law'");
+                    char *law_name = my_strdup(p->current.value);
+                    p->current = lexer_next_token(p->lexer);
+                    if (!(p->current.type == TOK_SYMBOL && p->current.value &&
+                          strcmp(p->current.value, "::") == 0))
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected '::' after law name");
+                    p->current = lexer_next_token(p->lexer);
+
+                    char type_buf[512] = {0};
+                    while (p->current.type != TOK_LPAREN &&
+                           p->current.type != TOK_EOF) {
+                        Token cur = p->current;
+                        p->current = lexer_next_token(p->lexer);
+                        type_buf_append(type_buf, sizeof(type_buf),
+                                        type_token_fragment(&cur));
+                        free(cur.value);
+                    }
+                    if (p->current.type != TOK_LPAREN)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected law parameter list");
+                    p->current = lexer_next_token(p->lexer);
+
+                    ASTParam *params = NULL;
+                    int param_count = 0;
+                    while (p->current.type != TOK_RPAREN &&
+                           p->current.type != TOK_EOF) {
+                        if (p->current.type != TOK_SYMBOL)
+                            compiler_error(p->current.line, p->current.column,
+                                           "Expected law parameter name");
+                        params = realloc(params, sizeof(ASTParam) * (param_count + 1));
+                        params[param_count].name = my_strdup(p->current.value);
+                        params[param_count].type_name = NULL;
+                        params[param_count].is_rest = false;
+                        params[param_count].is_anon = false;
+                        param_count++;
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                    if (p->current.type != TOK_RPAREN)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected ')' after law parameters");
+
+                    for (int i = 0; i < law_count; i++) {
+                        if (strcmp(law_names[i], law_name) == 0)
+                            compiler_error(p->current.line, p->current.column,
+                                           "duplicate law '%s' in class '%s'",
+                                           law_name, cls_name);
+                    }
+                    if (!law_signature_returns_bool(type_buf))
+                        compiler_error(p->current.line, p->current.column,
+                                       "law '%s' must return Bool, but its signature is '%s'",
+                                       law_name, type_buf);
+                    int declared_arity = law_signature_arity(type_buf);
+                    if (declared_arity != param_count)
+                        compiler_error(p->current.line, p->current.column,
+                                       "law '%s' declares %d arguments but its property clause binds %d",
+                                       law_name, declared_arity, param_count);
+
+                    p->current = lexer_next_token(p->lexer);
+                    if (!(p->current.type == TOK_SYMBOL && p->current.value &&
+                          strcmp(p->current.value, "=>") == 0))
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected '=>' before law body");
+                    p->current = lexer_next_token(p->lexer);
+                    AST *body = parse_expr(p);
+                    if (p->current.type != TOK_RPAREN)
+                        compiler_error(p->current.line, p->current.column,
+                                       "Expected ')' to close law declaration");
+                    p->current = lexer_next_token(p->lexer);
+
+                    AST **body_exprs = malloc(sizeof(AST*));
+                    body_exprs[0] = body;
+                    AST *law_lambda = ast_new_lambda(params, param_count, NULL,
+                                                     NULL, NULL, false, body,
+                                                     body_exprs, 1);
+                    law_names = realloc(law_names, sizeof(char*) * (law_count + 1));
+                    law_types = realloc(law_types, sizeof(char*) * (law_count + 1));
+                    law_bodies = realloc(law_bodies, sizeof(AST*) * (law_count + 1));
+                    law_names[law_count] = law_name;
+                    law_types[law_count] = my_strdup(type_buf);
+                    law_bodies[law_count] = law_lambda;
+                    law_count++;
+                    continue;
+                }
+            }
 
             /* Wisp method signature: [(<) : a] a -> a -> Bool
              * This is the layout-preserving form produced from:
@@ -5858,6 +6019,14 @@ static AST *parse_list(Parser *p) {
                         }
 
                         if (depth == 0 && p->current.type == TOK_LPAREN) {
+                            Lexer law_lex = *p->lexer;
+                            Token law_tok = lexer_next_token(&law_lex);
+                            bool next_is_law = law_tok.type == TOK_SYMBOL &&
+                                               law_tok.value &&
+                                               strcmp(law_tok.value, "law") == 0;
+                            free(law_tok.value);
+                            if (next_is_law) break;
+
                             Lexer peek_lex = *p->lexer;
                             Token peek_tok = lexer_next_token(&peek_lex);
                             int peek_depth = 1;
@@ -5967,6 +6136,14 @@ static AST *parse_list(Parser *p) {
 
                         /* If it's a left paren at depth 0, peek ahead to see if it's the start of the next declaration */
                         if (depth == 0 && p->current.type == TOK_LPAREN) {
+                            Lexer law_lex = *p->lexer;
+                            Token law_tok = lexer_next_token(&law_lex);
+                            bool next_is_law = law_tok.type == TOK_SYMBOL &&
+                                               law_tok.value &&
+                                               strcmp(law_tok.value, "law") == 0;
+                            free(law_tok.value);
+                            if (next_is_law) break;
+
                             Lexer peek_lex = *p->lexer;
                             Token peek_tok = lexer_next_token(&peek_lex);
                             int peek_depth = 1;
@@ -6151,6 +6328,14 @@ static AST *parse_list(Parser *p) {
 
                         /* If it's a left paren at depth 0, peek ahead to see if it's the start of the next declaration */
                         if (depth == 0 && p->current.type == TOK_LPAREN) {
+                            Lexer law_lex = *p->lexer;
+                            Token law_tok = lexer_next_token(&law_lex);
+                            bool next_is_law = law_tok.type == TOK_SYMBOL &&
+                                               law_tok.value &&
+                                               strcmp(law_tok.value, "law") == 0;
+                            free(law_tok.value);
+                            if (next_is_law) break;
+
                             Lexer peek_lex = *p->lexer;
                             Token peek_tok = lexer_next_token(&peek_lex);
                             int peek_depth = 1;
@@ -6222,7 +6407,8 @@ static AST *parse_list(Parser *p) {
                                    superclass_count,
                                    assoc_types, assoc_count,
                                    method_names, method_types, method_count,
-                                   default_names, default_bodies, default_count);
+                                   default_names, default_bodies, default_count,
+                                   law_names, law_types, law_bodies, law_count);
         free(cls_name); free(type_var);
         node->line = cls_line; node->column = cls_col;
         return node;
@@ -10248,6 +10434,32 @@ static void ast_to_json_sb(SB *b, AST *ast) {
                 json_escape(b, ast->class_decl.default_names[i] ? ast->class_decl.default_names[i] : "");
                 sb_puts(b, ",\"body\":");
                 ast_to_json_sb(b, ast->class_decl.default_bodies[i]);
+                sb_putc(b, '}');
+            }
+            sb_puts(b, "]");
+        }
+        if (ast->class_decl.law_count > 0) {
+            sb_puts(b, ",\"laws\":[");
+            for (int i = 0; i < ast->class_decl.law_count; i++) {
+                if (i) sb_putc(b, ',');
+                AST *law = ast->class_decl.law_bodies[i];
+                sb_puts(b, "{\"name\":");
+                json_escape(b, ast->class_decl.law_names[i] ? ast->class_decl.law_names[i] : "");
+                sb_puts(b, ",\"type\":");
+                json_escape(b, ast->class_decl.law_types[i] ? ast->class_decl.law_types[i] : "");
+                sb_puts(b, ",\"parameters\":[");
+                if (law && law->type == AST_LAMBDA) {
+                    for (int j = 0; j < law->lambda.param_count; j++) {
+                        if (j) sb_putc(b, ',');
+                        json_escape(b, law->lambda.params[j].name
+                                       ? law->lambda.params[j].name : "");
+                    }
+                }
+                sb_puts(b, "],\"body\":");
+                if (law && law->type == AST_LAMBDA)
+                    ast_to_json_sb(b, law->lambda.body);
+                else
+                    sb_puts(b, "null");
                 sb_putc(b, '}');
             }
             sb_puts(b, "]");

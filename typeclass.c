@@ -58,6 +58,14 @@ void tc_registry_free(TypeClassRegistry *reg) {
         }
         free(c->default_names);
         free(c->default_bodies);
+        for (int j = 0; j < c->law_count; j++) {
+            free(c->law_names[j]);
+            free(c->law_types[j]);
+            ast_free(c->law_bodies[j]);
+        }
+        free(c->law_names);
+        free(c->law_types);
+        free(c->law_bodies);
     }
     free(reg->classes);
 
@@ -133,6 +141,16 @@ static void tc_copy_class_into(TypeClassRegistry *dst, const TCClass *src) {
     for (int i = 0; i < src->default_count; i++) {
         c->default_names[i] = src->default_names[i] ? strdup(src->default_names[i]) : NULL;
         c->default_bodies[i] = ast_clone(src->default_bodies[i]);
+    }
+
+    c->law_count = src->law_count;
+    c->law_names = malloc(sizeof(char*) * (src->law_count ? src->law_count : 1));
+    c->law_types = malloc(sizeof(char*) * (src->law_count ? src->law_count : 1));
+    c->law_bodies = malloc(sizeof(AST*) * (src->law_count ? src->law_count : 1));
+    for (int i = 0; i < src->law_count; i++) {
+        c->law_names[i] = src->law_names[i] ? strdup(src->law_names[i]) : NULL;
+        c->law_types[i] = src->law_types[i] ? strdup(src->law_types[i]) : NULL;
+        c->law_bodies[i] = ast_clone(src->law_bodies[i]);
     }
 }
 
@@ -346,9 +364,22 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
         c->default_bodies[i] = ast_clone(ast->class_decl.default_bodies[i]);
     }
 
+    /* Laws are copied into reflection/checking metadata.  They deliberately
+     * remain outside methods so an instance dictionary has zero law cost. */
+    c->law_count = ast->class_decl.law_count;
+    c->law_names = malloc(sizeof(char*) * (c->law_count ? c->law_count : 1));
+    c->law_types = malloc(sizeof(char*) * (c->law_count ? c->law_count : 1));
+    c->law_bodies = malloc(sizeof(AST*) * (c->law_count ? c->law_count : 1));
+    for (int i = 0; i < c->law_count; i++) {
+        c->law_names[i] = strdup(ast->class_decl.law_names[i]);
+        c->law_types[i] = strdup(ast->class_decl.law_types[i]);
+        c->law_bodies[i] = ast_clone(ast->class_decl.law_bodies[i]);
+    }
+
     if (getenv("MONAD_TYPECLASS_DEBUG")) {
-        printf("Class: %s %s (%d methods, %d defaults)\n",
-               c->name, c->type_var, c->method_count, c->default_count);
+        printf("Class: %s %s (%d methods, %d defaults, %d laws)\n",
+               c->name, c->type_var, c->method_count, c->default_count,
+               c->law_count);
         for (int i = 0; i < c->superclass_count; i++)
             printf("  superclass: %s %s\n",
                    c->superclass_names[i], c->superclass_type_vars[i]);
@@ -356,6 +387,8 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
             printf("  method: %s :: %s\n", c->methods[i].name, c->methods[i].type_str);
         for (int i = 0; i < c->default_count; i++)
             printf("  default: %s\n", c->default_names[i]);
+        for (int i = 0; i < c->law_count; i++)
+            printf("  law: %s :: %s\n", c->law_names[i], c->law_types[i]);
     }
 }
 

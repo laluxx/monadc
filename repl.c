@@ -620,8 +620,7 @@ static void redeclare_env_symbols(REPLContext *ctx) {
     Env *env = ctx->cg.env;
     for (size_t bi = 0; bi < env->size; bi++) {
         for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
-            if (e->kind == ENV_VAR &&
-                (!e->value || LLVMIsAGlobalVariable(e->value))) {
+            if (e->kind == ENV_VAR) {
 
                 const char *name = (e->llvm_name && e->llvm_name[0])
                                    ? e->llvm_name : e->name;
@@ -761,7 +760,13 @@ static void fresh_module(REPLContext *ctx, const char *mod_name) {
         LLVMDisposeBuilder(ctx->cg.builder);
         ctx->cg.builder = NULL;
     }
-    /* Previous module was handed to ORC — do NOT dispose it. */
+    /* close_and_run clears module after transferring ownership to ORC.
+     * A non-NULL module here is an unused pre-created or recovered module,
+     * so retaining it would leak an LLVM module on every REPL expression. */
+    if (ctx->cg.module) {
+        LLVMDisposeModule(ctx->cg.module);
+        ctx->cg.module = NULL;
+    }
 
     ctx->cg.module  = LLVMModuleCreateWithNameInContext(mod_name,
                                                         ctx->cg.context);
@@ -2313,13 +2318,18 @@ void repl_init(REPLContext *ctx) {
         Type *ft = type_list(&kw_t, 1);
         LLVMTypeRef flt = type_to_llvm(&ctx->cg, ft);
         LLVMValueRef fgv = LLVMAddGlobal(ctx->cg.module, flt, "__features__");
-        LLVMSetInitializer(fgv, LLVMConstNull(flt));
         LLVMSetLinkage(fgv, LLVMExternalLinkage);
         LLVMBuildStore(ctx->cg.builder, feat_list, fgv);
         EnvEntry *feat_entry = NULL;
         env_insert(ctx->cg.env, "*features*", ft, fgv);
         feat_entry = env_lookup(ctx->cg.env, "*features*");
-        if (feat_entry) feat_entry->llvm_name = strdup("__features__");
+        if (feat_entry) {
+            feat_entry->llvm_name = strdup("__features__");
+            if (!repl_ensure_host_global(ctx, feat_entry)) {
+                _Exit(1);
+            }
+            repl_define_value_getter(ctx, feat_entry);
+        }
         close_and_run(ctx);
     }
 

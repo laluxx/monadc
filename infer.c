@@ -1594,6 +1594,28 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
         AST *head = ast->list.items[0];
 
+        /* check-laws is a compile-time test directive.  Its class and type
+         * operands are names, not runtime values, and the code generator
+         * expands it into exhaustive or generated property evaluations. */
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "check-laws") == 0 ||
+             strcmp(head->symbol, "check-laws-seeded") == 0)) {
+            bool seeded = strcmp(head->symbol, "check-laws-seeded") == 0;
+            if (ast->list.count != (seeded ? 5u : 3u) ||
+                ast->list.items[1]->type != AST_SYMBOL ||
+                ast->list.items[2]->type != AST_SYMBOL ||
+                (seeded && (ast->list.items[3]->type != AST_NUMBER ||
+                            ast->list.items[4]->type != AST_NUMBER))) {
+                READER_ERROR(ast->line, ast->column,
+                             "%s expects a class name, a type name%s",
+                             head->symbol,
+                             seeded ? ", a positive case count, and a seed"
+                                    : "");
+            }
+            result = type_int();
+            break;
+        }
+
         bool is_tuple_expr = false;
         for (size_t i = 0; i < ast->list.count; i++) {
             AST *item = ast->list.items[i];
@@ -2685,6 +2707,12 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
     /* Recurse into all children */
     switch (ast->type) {
     case AST_LIST:
+        if (ast->list.count > 0 &&
+            ast->list.items[0] &&
+            ast->list.items[0]->type == AST_SYMBOL &&
+            (strcmp(ast->list.items[0]->symbol, "check-laws") == 0 ||
+             strcmp(ast->list.items[0]->symbol, "check-laws-seeded") == 0))
+            break;
         for (size_t i = 0; i < ast->list.count; i++)
             infer_validate_calls(ctx, ast->list.items[i]);
         break;

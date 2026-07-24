@@ -344,3 +344,18 @@
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+[FIX id:fix.repl.orc-persistent-value-lifetime-2026-07-24 date:2026-07-24 by:codex src:repl.c,codegen.c,tests/test_repl.py conf:high]
+  REPL environment entries must never inspect an =LLVMValueRef= after its
+  module has been transferred to ORC. Persistent variables are re-declared from
+  language-level environment metadata and read through exported getters backed
+  by stable host storage. The built-in =*features*= binding follows that same
+  path instead of creating a special cross-module data dependency.
+
+  =fresh_module= disposes an existing non-transferred module before replacing
+  it; =close_and_run= clears the module pointer when ORC takes ownership. This
+  removes one abandoned LLVM module per expression. The subprocess suite runs
+  the public REPL binary through pipes and EOF, covering the exact
+  =show *features*= regression, repeated JIT modules, heap and scalar state,
+  multiline input, recovery, commands, imports, parallel import isolation, and
+  a 150-expression session.

@@ -5733,8 +5733,18 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
             if (current_module && strcmp(current_module, class_name) != 0)
                 method_result = tc_method_result_type(ctx->tc_registry, class_name,
                                                       type_end + 1);
-            if (method_result && (method_result->kind == TYPE_UNKNOWN ||
-                                  method_result->kind == TYPE_VAR)) {
+            if (method_result && method_result->kind == TYPE_VAR) {
+                size_t instance_len =
+                    (size_t)(type_end - (class_end + 1));
+                char *instance_name = strndup(class_end + 1, instance_len);
+                type_free(method_result);
+                method_result = type_from_name(instance_name);
+                if (!method_result && instance_name[0] &&
+                    isupper((unsigned char)instance_name[0]))
+                    method_result = type_layout_ref(instance_name);
+                free(instance_name);
+            } else if (method_result &&
+                       method_result->kind == TYPE_UNKNOWN) {
                 type_free(method_result);
                 method_result = NULL;
             }
@@ -5859,6 +5869,11 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
                                   args,
                                   argc,
                                   name);
+    LLVMTypeRef expected_result_llvm = type_to_llvm(ctx, ret_type);
+    if (LLVMGetTypeKind(expected_result_llvm) != LLVMVoidTypeKind &&
+        LLVMTypeOf(result.value) != expected_result_llvm)
+        result.value = emit_type_cast(ctx, result.value,
+                                      expected_result_llvm);
     result.type = ret_type;
 
     for (int i = 0; i < argc; i++) {
@@ -6156,6 +6171,740 @@ static bool codegen_inline_imported(CodegenContext *ctx, AST *call,
     ctx->env = saved_env;
     *out = body;
     return body.value != NULL;
+}
+
+static AST *finite_member_to_ast(const FiniteTypeMember *member,
+                                 const char *type_name,
+                                 size_t cardinality) {
+    AST *value = NULL;
+    switch (member->kind) {
+    case FINITE_MEMBER_SYMBOL:
+        value = ast_new_symbol(member->spelling);
+        break;
+    case FINITE_MEMBER_NUMBER:
+        value = ast_new_number(member->number, member->spelling);
+        break;
+    case FINITE_MEMBER_STRING:
+        value = ast_new_string(member->spelling);
+        break;
+    case FINITE_MEMBER_CHAR:
+        value = ast_new_char((char)member->character);
+        break;
+    case FINITE_MEMBER_KEYWORD:
+        value = ast_new_keyword(member->spelling);
+        break;
+    }
+    if (value)
+        value->inferred_type = type_finite_set(type_name, cardinality);
+    return value;
+}
+
+static LLVMValueRef codegen_law_condition(CodegenContext *ctx,
+                                          AST *law_lambda,
+                                          const FiniteTypeSetEntry *finite,
+                                          size_t case_index) {
+    AST *specialized = ast_clone(law_lambda);
+    if (!specialized || specialized->type != AST_LAMBDA)
+        CODEGEN_ERROR(ctx, "internal error: class law body is not a property lambda");
+
+    specialized->lambda.return_type = strdup("Bool");
+    AST *call = ast_new_list();
+    ast_list_append(call, specialized);
+
+    size_t ordinal_product = case_index;
+    for (int i = 0; i < specialized->lambda.param_count; i++) {
+        free(specialized->lambda.params[i].type_name);
+        specialized->lambda.params[i].type_name = strdup(finite->name);
+        size_t ordinal = ordinal_product % finite->member_count;
+        ordinal_product /= finite->member_count;
+        ast_list_append(call,
+            finite_member_to_ast(&finite->members[ordinal], finite->name,
+                                 finite->member_count));
+    }
+
+    CodegenResult property = codegen_expr(ctx, call);
+    LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
+    LLVMValueRef condition = property.value;
+    if (LLVMTypeOf(condition) == LLVMPointerTypeInContext(ctx->context, 0)) {
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        condition = emit_call_1(ctx, get_rt_unbox_int(ctx), i64,
+                                condition, "law_unbox");
+    }
+    if (LLVMTypeOf(condition) != i1)
+        condition = LLVMBuildICmp(
+            ctx->builder, LLVMIntNE, condition,
+            LLVMConstNull(LLVMTypeOf(condition)), "law_bool");
+    return condition;
+}
+
+static AST *quickcheck_binary_expr(const char *op, AST *left, AST *right) {
+    AST *expr = ast_new_list();
+    ast_list_append(expr, ast_new_symbol(op));
+    ast_list_append(expr, left);
+    ast_list_append(expr, right);
+    expr->inferred_type = type_int();
+    return expr;
+}
+
+static AST *quickcheck_i64_literal(long long value) {
+    char spelling[32];
+    snprintf(spelling, sizeof(spelling), "0x%016llx",
+             (unsigned long long)value);
+    AST *literal = ast_new_number((double)value, spelling);
+    literal->has_raw_int = true;
+    literal->raw_int = (uint64_t)value;
+    literal->inferred_type = type_int();
+    return literal;
+}
+
+static LLVMValueRef codegen_looped_law_condition(CodegenContext *ctx,
+                                                 AST *law_lambda,
+                                                 const char *type_name,
+                                                 const char *case_name,
+                                                 long long base_seed,
+                                                 char (*arg_names)[96],
+                                                 LLVMValueRef *arg_slots,
+                                                 bool generate_arguments) {
+    AST *specialized = ast_clone(law_lambda);
+    if (!specialized || specialized->type != AST_LAMBDA)
+        CODEGEN_ERROR(ctx, "internal error: class law body is not a property lambda");
+
+    specialized->lambda.return_type = strdup("Bool");
+    AST *call = ast_new_list();
+    ast_list_append(call, specialized);
+    int arity = specialized->lambda.param_count;
+
+    for (int i = 0; i < arity; i++) {
+        free(specialized->lambda.params[i].type_name);
+        specialized->lambda.params[i].type_name = strdup(type_name);
+
+        if (generate_arguments) {
+            AST *case_term = ast_new_symbol(case_name);
+            case_term->inferred_type = type_int();
+            AST *offset = quickcheck_binary_expr(
+                "*", case_term,
+                ast_new_number((double)(arity ? arity : 1), NULL));
+            if (i)
+                offset = quickcheck_binary_expr(
+                    "+", offset, ast_new_number((double)i, NULL));
+            AST *seed_expr = quickcheck_binary_expr(
+                "+", quickcheck_i64_literal(base_seed), offset);
+
+            AST *size_case = ast_new_symbol(case_name);
+            size_case->inferred_type = type_int();
+            AST *size_expr = quickcheck_binary_expr(
+                "%", size_case, ast_new_number(100.0, "100"));
+
+            AST *generate = ast_new_list();
+            ast_list_append(generate, ast_new_symbol("arbitrary"));
+            ast_list_append(generate, seed_expr);
+            ast_list_append(generate, size_expr);
+            generate->inferred_type = type_from_name(type_name);
+            CodegenResult generated = codegen_expr(ctx, generate);
+            LLVMBuildStore(ctx->builder, generated.value, arg_slots[i]);
+        }
+
+        AST *argument = ast_new_symbol(arg_names[i]);
+        argument->inferred_type = type_from_name(type_name);
+        ast_list_append(call, argument);
+    }
+
+    CodegenResult property = codegen_expr(ctx, call);
+    LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx->context);
+    LLVMValueRef condition = property.value;
+    if (LLVMGetTypeKind(LLVMTypeOf(condition)) == LLVMPointerTypeKind) {
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        condition = emit_call_1(ctx, get_rt_unbox_int(ctx), i64,
+                                condition, "law_unbox");
+    }
+    if (LLVMTypeOf(condition) != i1)
+        condition = LLVMBuildICmp(
+            ctx->builder, LLVMIntNE, condition,
+            LLVMConstNull(LLVMTypeOf(condition)), "law_bool");
+    return condition;
+}
+
+static const char *check_laws_name(AST *operand) {
+    if (!operand) return NULL;
+    if (operand->type == AST_SYMBOL)
+        return operand->symbol;
+    if (operand->type == AST_LIST &&
+        operand->list.count == 1 &&
+        operand->list.items[0]->type == AST_SYMBOL)
+        return operand->list.items[0]->symbol;
+    return NULL;
+}
+
+static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
+    bool seeded_form =
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "check-laws-seeded") == 0;
+    const char *class_name = ast->list.count > 1
+        ? check_laws_name(ast->list.items[1]) : NULL;
+    const char *type_name = ast->list.count > 2
+        ? check_laws_name(ast->list.items[2]) : NULL;
+    size_t expected_items = seeded_form ? 5 : 3;
+    if (ast->list.count != expected_items || !class_name || !type_name ||
+        (seeded_form &&
+         (ast->list.items[3]->type != AST_NUMBER ||
+          ast->list.items[4]->type != AST_NUMBER)))
+        CODEGEN_ERROR(ctx,
+                      "%s:%d:%d: error: %s expects a class name, a type name%s",
+                      parser_get_filename(), ast->line, ast->column,
+                      seeded_form ? "check-laws-seeded" : "check-laws",
+                      seeded_form ? ", a positive case count, and a seed" : "");
+
+    TCClass *class_decl = tc_find_class(ctx->tc_registry, class_name);
+    if (!class_decl)
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: check-laws references unknown class '%s'",
+                      parser_get_filename(), ast->line, ast->column, class_name);
+    if (!tc_find_instance(ctx->tc_registry, class_name, type_name))
+        CODEGEN_ERROR(ctx, "%s:%d:%d: error: check-laws requires instance '%s %s'",
+                      parser_get_filename(), ast->line, ast->column,
+                      class_name, type_name);
+
+    const FiniteTypeSetEntry *finite = finite_type_set_lookup(type_name);
+    TCInstance *arbitrary_instance =
+        tc_find_instance(ctx->tc_registry, "Arbitrary", type_name);
+    if (!finite && !arbitrary_instance)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: cannot check laws for infinite or opaque type '%s' without Arbitrary evidence",
+            parser_get_filename(), ast->line, ast->column, type_name);
+
+    const size_t max_exhaustive_cases = 65536;
+    long long parsed_case_count = 100;
+    long long generated_seed = 0;
+    if (seeded_form &&
+        (!ast_number_to_i64(ast->list.items[3], &parsed_case_count) ||
+         !ast_number_to_i64(ast->list.items[4], &generated_seed)))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: check-laws-seeded count and seed must be exact Int literals",
+            parser_get_filename(), ast->line, ast->column);
+    int generated_case_count = (int)parsed_case_count;
+    if (generated_case_count <= 0 || generated_case_count > 1000000)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: check-laws-seeded case count must be between 1 and 1000000",
+            parser_get_filename(), ast->line, ast->column);
+    LLVMValueRef printf_fn = get_or_declare_printf(ctx);
+    size_t total_case_count = 0;
+    int law_name_width = 3;
+    int law_type_width = 4;
+    int case_count_width = 1;
+    size_t *law_case_counts =
+        class_decl->law_count > 0
+            ? calloc((size_t)class_decl->law_count, sizeof(*law_case_counts))
+            : NULL;
+    for (int law_index = 0; law_index < class_decl->law_count; law_index++) {
+        AST *law = class_decl->law_bodies[law_index];
+        int arity = law && law->type == AST_LAMBDA
+            ? law->lambda.param_count : 0;
+        size_t law_case_count = finite ? 1 : (size_t)generated_case_count;
+        if (finite) {
+            for (int i = 0; i < arity; i++) {
+                if (law_case_count > max_exhaustive_cases / finite->member_count)
+                    CODEGEN_ERROR(ctx,
+                        "%s:%d:%d: error: exhaustive law domain for '%s %s.%s' exceeds %zu cases",
+                        parser_get_filename(), ast->line, ast->column,
+                        class_name, type_name, class_decl->law_names[law_index],
+                        max_exhaustive_cases);
+                law_case_count *= finite->member_count;
+            }
+        }
+        law_case_counts[law_index] = law_case_count;
+        total_case_count += law_case_count;
+        int name_width = (int)strlen(class_decl->law_names[law_index]);
+        if (name_width > law_name_width)
+            law_name_width = name_width;
+        int type_width = (int)strlen(class_decl->law_types[law_index]);
+        if (type_width > law_type_width)
+            law_type_width = type_width;
+        char case_spelling[32];
+        int digits = snprintf(case_spelling, sizeof(case_spelling), "%zu",
+                              law_case_count);
+        if (digits > case_count_width)
+            case_count_width = digits;
+    }
+
+    char header_message[1024];
+    if (finite)
+        snprintf(header_message, sizeof(header_message),
+                 "\n"
+                 "  \x1b[36;1mQuickCheck\x1b[0m  %s %s\n"
+                 "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                 "  exhaustive  •  finite set  •  source-order traversal\n"
+                 "  %d properties  •  %zu %s\n"
+                 "\n",
+                 class_name, type_name, class_decl->law_count, total_case_count,
+                 total_case_count == 1 ? "case" : "cases");
+    else
+        snprintf(header_message, sizeof(header_message),
+                 "\n"
+                 "  \x1b[36;1mQuickCheck\x1b[0m  %s %s\n"
+                 "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                 "  randomized  •  Arbitrary %s  •  %d %s/property  •  sizes 0…99\n"
+                 "  seed %lld  •  deterministic replay  •  greedy shrinking\n"
+                 "\n",
+                 class_name, type_name, type_name, generated_case_count,
+                 generated_case_count == 1 ? "case" : "cases",
+                 generated_seed);
+    LLVMValueRef header_text =
+        LLVMBuildGlobalStringPtr(ctx->builder, header_message,
+                                 "law_suite_header");
+    LLVMValueRef header_args[] = {header_text};
+    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                   printf_fn, header_args, 1, "");
+
+    for (int law_index = 0; law_index < class_decl->law_count; law_index++) {
+        AST *law = class_decl->law_bodies[law_index];
+        int arity = law && law->type == AST_LAMBDA
+            ? law->lambda.param_count : 0;
+        size_t case_count = law_case_counts[law_index];
+
+        if (!finite) {
+            LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+            LLVMValueRef function =
+                LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+            char case_name[96];
+            snprintf(case_name, sizeof(case_name), "__qc_case_%d", law_index);
+            LLVMValueRef case_slot =
+                LLVMBuildAlloca(ctx->builder, i64, case_name);
+            LLVMBuildStore(ctx->builder, LLVMConstInt(i64, 0, 0), case_slot);
+            env_insert(ctx->env, case_name, type_int(), case_slot);
+            char (*arg_names)[96] =
+                arity > 0 ? calloc((size_t)arity, sizeof(*arg_names)) : NULL;
+            LLVMValueRef *arg_slots =
+                arity > 0 ? calloc((size_t)arity, sizeof(*arg_slots)) : NULL;
+            Type *argument_type = type_from_name(type_name);
+            LLVMTypeRef argument_llvm = type_to_llvm(ctx, argument_type);
+            for (int i = 0; i < arity; i++) {
+                snprintf(arg_names[i], sizeof(arg_names[i]),
+                         "__qc_arg_%d_%d", law_index, i);
+                arg_slots[i] = LLVMBuildAlloca(
+                    ctx->builder, argument_llvm, arg_names[i]);
+                env_insert(ctx->env, arg_names[i],
+                           type_clone(argument_type), arg_slots[i]);
+            }
+
+            LLVMBasicBlockRef cond_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_sample_cond");
+            LLVMBasicBlockRef body_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_sample_body");
+            LLVMBasicBlockRef next_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_sample_next");
+            LLVMBasicBlockRef fail_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_sample_fail");
+            LLVMBasicBlockRef pass_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_sample_pass");
+            LLVMBuildBr(ctx->builder, cond_bb);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, cond_bb);
+            LLVMValueRef case_value =
+                LLVMBuildLoad2(ctx->builder, i64, case_slot, "law_case");
+            LLVMValueRef in_range = LLVMBuildICmp(
+                ctx->builder, LLVMIntULT, case_value,
+                LLVMConstInt(i64, (unsigned long long)generated_case_count, 0),
+                "law_more_cases");
+            LLVMBuildCondBr(ctx->builder, in_range, body_bb, pass_bb);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
+            LLVMValueRef condition = codegen_looped_law_condition(
+                ctx, law, type_name, case_name, generated_seed,
+                arg_names, arg_slots, true);
+            LLVMBuildCondBr(ctx->builder, condition, next_bb, fail_bb);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, next_bb);
+            LLVMValueRef current =
+                LLVMBuildLoad2(ctx->builder, i64, case_slot, "law_case_current");
+            LLVMValueRef incremented = LLVMBuildAdd(
+                ctx->builder, current, LLVMConstInt(i64, 1, 0),
+                "law_case_incremented");
+            LLVMBuildStore(ctx->builder, incremented, case_slot);
+            LLVMBuildBr(ctx->builder, cond_bb);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, fail_bb);
+            /*
+             * Deterministic greedy shrinking.  Each argument is minimized in
+             * declaration order.  A failing candidate replaces the current
+             * value and restarts from its shrink list; a passing candidate is
+             * discarded.  The global budget protects the runner from an
+             * unlawful instance that returns cycles or the input itself.
+             */
+            LLVMValueRef shrink_count_slot = LLVMBuildAlloca(
+                ctx->builder, i64, "law_shrink_count");
+            LLVMBuildStore(ctx->builder, LLVMConstInt(i64, 0, 0),
+                           shrink_count_slot);
+            LLVMTypeRef ptr = LLVMPointerType(
+                LLVMInt8TypeInContext(ctx->context), 0);
+            const uint64_t max_shrinks = 10000;
+
+            for (int shrink_arg = 0; shrink_arg < arity; shrink_arg++) {
+                LLVMValueRef candidates_slot = LLVMBuildAlloca(
+                    ctx->builder, ptr, "law_shrink_candidates");
+                LLVMValueRef previous_slot = LLVMBuildAlloca(
+                    ctx->builder, argument_llvm, "law_shrink_previous");
+                LLVMBasicBlockRef restart_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_restart");
+                LLVMBasicBlockRef candidate_cond_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_candidate_cond");
+                LLVMBasicBlockRef candidate_body_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_candidate_body");
+                LLVMBasicBlockRef evaluate_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_evaluate");
+                LLVMBasicBlockRef accept_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_accept");
+                LLVMBasicBlockRef reject_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_reject");
+                LLVMBasicBlockRef done_bb =
+                    LLVMAppendBasicBlockInContext(ctx->context, function,
+                                                  "law_shrink_done");
+                LLVMBuildBr(ctx->builder, restart_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, restart_bb);
+                AST *shrink_call = ast_new_list();
+                ast_list_append(shrink_call, ast_new_symbol("shrink"));
+                AST *current_arg = ast_new_symbol(arg_names[shrink_arg]);
+                current_arg->inferred_type = type_from_name(type_name);
+                ast_list_append(shrink_call, current_arg);
+                Type *list_element = type_from_name(type_name);
+                Type *list_type = type_list(&list_element, 1);
+                shrink_call->inferred_type = list_type;
+                CodegenResult candidates = codegen_expr(ctx, shrink_call);
+                LLVMValueRef boxed_candidates =
+                    codegen_box(ctx, candidates.value, candidates.type);
+                LLVMValueRef raw_candidates = emit_call_1(
+                    ctx, get_rt_unbox_list(ctx), ptr, boxed_candidates,
+                    "law_shrink_list");
+                LLVMBuildStore(ctx->builder, raw_candidates, candidates_slot);
+                LLVMBuildBr(ctx->builder, candidate_cond_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, candidate_cond_bb);
+                LLVMValueRef candidate_list = LLVMBuildLoad2(
+                    ctx->builder, ptr, candidates_slot,
+                    "law_shrink_candidates_current");
+                LLVMValueRef empty_i32 = emit_call_1(
+                    ctx, get_rt_list_is_empty_list(ctx),
+                    LLVMInt32TypeInContext(ctx->context), candidate_list,
+                    "law_shrink_empty");
+                LLVMValueRef has_candidate = LLVMBuildICmp(
+                    ctx->builder, LLVMIntEQ, empty_i32,
+                    LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0),
+                    "law_shrink_has_candidate");
+                LLVMValueRef shrink_count = LLVMBuildLoad2(
+                    ctx->builder, i64, shrink_count_slot,
+                    "law_shrink_count_current");
+                LLVMValueRef within_budget = LLVMBuildICmp(
+                    ctx->builder, LLVMIntULT, shrink_count,
+                    LLVMConstInt(i64, max_shrinks, 0),
+                    "law_shrink_within_budget");
+                LLVMValueRef may_try = LLVMBuildAnd(
+                    ctx->builder, has_candidate, within_budget,
+                    "law_shrink_may_try");
+                LLVMBuildCondBr(ctx->builder, may_try,
+                                candidate_body_bb, done_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, candidate_body_bb);
+                LLVMValueRef previous = LLVMBuildLoad2(
+                    ctx->builder, argument_llvm, arg_slots[shrink_arg],
+                    "law_shrink_previous_value");
+                LLVMBuildStore(ctx->builder, previous, previous_slot);
+                LLVMValueRef boxed_candidate = emit_call_1(
+                    ctx, get_rt_list_car(ctx), ptr, candidate_list,
+                    "law_shrink_candidate");
+                LLVMValueRef native_candidate = emit_type_cast(
+                    ctx, boxed_candidate, argument_llvm);
+                LLVMValueRef boxed_previous =
+                    codegen_box(ctx, previous, argument_type);
+                LLVMValueRef equality_args[] = {
+                    boxed_previous, boxed_candidate
+                };
+                LLVMValueRef same_i32 = LLVMBuildCall2(
+                    ctx->builder,
+                    LLVMGlobalGetValueType(get_rt_equal_p(ctx)),
+                    get_rt_equal_p(ctx), equality_args, 2,
+                    "law_shrink_same_candidate");
+                LLVMValueRef same_candidate = LLVMBuildICmp(
+                    ctx->builder, LLVMIntNE, same_i32,
+                    LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0),
+                    "law_shrink_no_progress");
+                LLVMBuildCondBr(ctx->builder, same_candidate,
+                                reject_bb, evaluate_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, evaluate_bb);
+                LLVMBuildStore(ctx->builder, native_candidate,
+                               arg_slots[shrink_arg]);
+                LLVMValueRef next_shrink_count = LLVMBuildAdd(
+                    ctx->builder, shrink_count, LLVMConstInt(i64, 1, 0),
+                    "law_shrink_count_next");
+                LLVMBuildStore(ctx->builder, next_shrink_count,
+                               shrink_count_slot);
+                LLVMValueRef candidate_passes =
+                    codegen_looped_law_condition(
+                        ctx, law, type_name, case_name, generated_seed,
+                        arg_names, arg_slots, false);
+                LLVMBuildCondBr(ctx->builder, candidate_passes,
+                                reject_bb, accept_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, accept_bb);
+                LLVMBuildBr(ctx->builder, restart_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, reject_bb);
+                LLVMValueRef restore = LLVMBuildLoad2(
+                    ctx->builder, argument_llvm, previous_slot,
+                    "law_shrink_restore");
+                LLVMBuildStore(ctx->builder, restore, arg_slots[shrink_arg]);
+                LLVMValueRef remaining = emit_call_1(
+                    ctx, get_rt_list_cdr(ctx), ptr, candidate_list,
+                    "law_shrink_remaining");
+                LLVMBuildStore(ctx->builder, remaining, candidates_slot);
+                LLVMBuildBr(ctx->builder, candidate_cond_bb);
+
+                LLVMPositionBuilderAtEnd(ctx->builder, done_bb);
+            }
+
+            /* Render the minimized values before the fatal diagnostic. */
+            char failure_heading[512];
+            snprintf(failure_heading, sizeof(failure_heading),
+                     "  \x1b[31m✗\x1b[0m  %-*s  %-*s  \x1b[31;1mFAILED\x1b[0m\n",
+                     law_name_width, class_decl->law_names[law_index],
+                     law_type_width, class_decl->law_types[law_index]);
+            LLVMValueRef failure_heading_text =
+                LLVMBuildGlobalStringPtr(ctx->builder, failure_heading,
+                                         "law_failure_heading");
+            LLVMValueRef failure_heading_args[] = {failure_heading_text};
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                           printf_fn, failure_heading_args, 1, "");
+            LLVMValueRef counterexample_open = LLVMBuildGlobalStringPtr(
+                ctx->builder, "     counterexample  [",
+                "law_counterexample_open");
+            LLVMValueRef open_args[] = {counterexample_open};
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                           printf_fn, open_args, 1, "");
+            for (int i = 0; i < arity; i++) {
+                if (i) {
+                    LLVMValueRef separator = LLVMBuildGlobalStringPtr(
+                        ctx->builder, ", ", "law_counterexample_separator");
+                    LLVMValueRef separator_args[] = {separator};
+                    LLVMBuildCall2(
+                        ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                        printf_fn, separator_args, 1, "");
+                }
+                LLVMValueRef minimized = LLVMBuildLoad2(
+                    ctx->builder, argument_llvm, arg_slots[i],
+                    "law_minimized_argument");
+                LLVMValueRef boxed_minimized =
+                    codegen_box(ctx, minimized, argument_type);
+                emit_call_1(ctx, get_rt_print_value(ctx),
+                            LLVMVoidTypeInContext(ctx->context),
+                            boxed_minimized, "");
+            }
+            LLVMValueRef final_shrink_count = LLVMBuildLoad2(
+                ctx->builder, i64, shrink_count_slot,
+                "law_final_shrink_count");
+            LLVMValueRef counterexample_close = LLVMBuildGlobalStringPtr(
+                ctx->builder, "]\n     shrinking       %lld evaluations\n",
+                "law_counterexample_close");
+            LLVMValueRef close_args[] = {
+                counterexample_close, final_shrink_count
+            };
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                           printf_fn, close_args, 2, "");
+            LLVMValueRef fflush_fn =
+                LLVMGetNamedFunction(ctx->module, "fflush");
+            if (!fflush_fn) {
+                LLVMTypeRef fflush_type = LLVMFunctionType(
+                    LLVMInt32TypeInContext(ctx->context), &ptr, 1, 0);
+                fflush_fn = LLVMAddFunction(
+                    ctx->module, "fflush", fflush_type);
+                LLVMSetLinkage(fflush_fn, LLVMExternalLinkage);
+            }
+            emit_call_1(ctx, fflush_fn,
+                        LLVMInt32TypeInContext(ctx->context),
+                        LLVMConstNull(ptr), "");
+
+            char fail_coordinates[512];
+            snprintf(fail_coordinates, sizeof(fail_coordinates),
+                     "     case %%lld  •  size %%lld  •  seed %lld\n"
+                     "     replay  check-laws-seeded %s %s 1 %%lld\n"
+                     "Law failed: %s %s.%s; case=%%lld seed=%lld size=%%lld; replay: check-laws-seeded %s %s 1 %%lld\n",
+                     generated_seed, class_name, type_name,
+                     class_name, type_name, class_decl->law_names[law_index],
+                     generated_seed, class_name, type_name);
+            LLVMValueRef coordinates_text =
+                LLVMBuildGlobalStringPtr(ctx->builder, fail_coordinates,
+                                         "law_sample_coordinates");
+            LLVMValueRef failure_case =
+                LLVMBuildLoad2(ctx->builder, i64, case_slot,
+                               "law_failure_case");
+            LLVMValueRef failure_size = LLVMBuildSRem(
+                ctx->builder, failure_case, LLVMConstInt(i64, 100, 0),
+                "law_failure_size");
+            LLVMValueRef replay_seed = LLVMBuildAdd(
+                ctx->builder,
+                LLVMConstInt(i64, (uint64_t)generated_seed, 0),
+                LLVMBuildMul(
+                    ctx->builder, failure_case,
+                    LLVMConstInt(i64, (uint64_t)(arity ? arity : 1), 0),
+                    "law_failure_seed_offset"),
+                "law_failure_seed");
+            LLVMValueRef snprintf_fn =
+                LLVMGetNamedFunction(ctx->module, "snprintf");
+            if (!snprintf_fn) {
+                LLVMTypeRef params[] = {ptr, i64, ptr};
+                LLVMTypeRef fn_type = LLVMFunctionType(
+                    LLVMInt32TypeInContext(ctx->context),
+                    params, 3, true);
+                snprintf_fn = LLVMAddFunction(
+                    ctx->module, "snprintf", fn_type);
+                LLVMSetLinkage(snprintf_fn, LLVMExternalLinkage);
+            }
+            LLVMValueRef fail_text = LLVMBuildArrayAlloca(
+                ctx->builder, LLVMInt8TypeInContext(ctx->context),
+                LLVMConstInt(i64, 512, 0), "law_sample_fail_text");
+            LLVMValueRef coordinate_args[] = {
+                fail_text, LLVMConstInt(i64, 512, 0), coordinates_text,
+                failure_case, failure_size, replay_seed,
+                failure_case, failure_size, replay_seed
+            };
+            LLVMBuildCall2(ctx->builder,
+                           LLVMGlobalGetValueType(snprintf_fn), snprintf_fn,
+                           coordinate_args, 9, "");
+            emit_runtime_error_val(ctx, ast, fail_text);
+            if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
+                LLVMBuildUnreachable(ctx->builder);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, pass_bb);
+            char pass_message[1024];
+            snprintf(pass_message, sizeof(pass_message),
+                     "  \x1b[32m✓\x1b[0m  %-*s  %-*s  %*zu %s\n",
+                     law_name_width, class_decl->law_names[law_index],
+                     law_type_width, class_decl->law_types[law_index],
+                     case_count_width, case_count,
+                     case_count == 1 ? "case" : "cases");
+            LLVMValueRef pass_text =
+                LLVMBuildGlobalStringPtr(ctx->builder, pass_message,
+                                         "law_sample_pass_text");
+            LLVMValueRef pass_args[] = {pass_text};
+            LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                           printf_fn, pass_args, 1, "");
+            env_remove(ctx->env, case_name);
+            for (int i = 0; i < arity; i++)
+                env_remove(ctx->env, arg_names[i]);
+            free(arg_slots);
+            free(arg_names);
+            continue;
+        }
+
+        for (size_t case_index = 0; case_index < case_count; case_index++) {
+            LLVMValueRef condition =
+                codegen_law_condition(ctx, law, finite, case_index);
+            LLVMValueRef function =
+                LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+            LLVMBasicBlockRef next_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_case_next");
+            LLVMBasicBlockRef fail_bb =
+                LLVMAppendBasicBlockInContext(ctx->context, function,
+                                              "law_case_fail");
+            LLVMBuildCondBr(ctx->builder, condition, next_bb, fail_bb);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, fail_bb);
+            char values[256] = "[";
+            size_t values_len = 1;
+            size_t ordinal_product = case_index;
+            for (int arg_index = 0; arg_index < arity; arg_index++) {
+                size_t ordinal = ordinal_product % finite->member_count;
+                ordinal_product /= finite->member_count;
+                const char *spelling = finite->members[ordinal].spelling;
+                int written = snprintf(values + values_len,
+                                       sizeof(values) - values_len,
+                                       "%s%s", arg_index ? ", " : "",
+                                       spelling ? spelling : "?");
+                if (written > 0)
+                    values_len += (size_t)written < sizeof(values) - values_len
+                        ? (size_t)written : sizeof(values) - values_len - 1;
+            }
+            snprintf(values + values_len, sizeof(values) - values_len, "]");
+
+            char fail_message[1024];
+            snprintf(fail_message, sizeof(fail_message),
+                     "  \x1b[31m✗\x1b[0m  %-*s  %-*s  \x1b[31;1mFAILED\x1b[0m\n"
+                     "     counterexample  %s\n"
+                     "  Law failed: %s %s.%s; counterexample: %s",
+                     law_name_width, class_decl->law_names[law_index],
+                     law_type_width, class_decl->law_types[law_index],
+                     values,
+                     class_name, type_name, class_decl->law_names[law_index],
+                     values);
+            LLVMValueRef fail_text =
+                LLVMBuildGlobalStringPtr(ctx->builder, fail_message,
+                                         "law_fail_text");
+            emit_runtime_error_val(ctx, ast, fail_text);
+            if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(ctx->builder)))
+                LLVMBuildUnreachable(ctx->builder);
+
+            LLVMPositionBuilderAtEnd(ctx->builder, next_bb);
+        }
+
+        char pass_message[1024];
+        if (finite)
+            snprintf(pass_message, sizeof(pass_message),
+                     "  \x1b[32m✓\x1b[0m  %-*s  %-*s  %*zu %s\n",
+                     law_name_width, class_decl->law_names[law_index],
+                     law_type_width, class_decl->law_types[law_index],
+                     case_count_width, case_count,
+                     case_count == 1 ? "case" : "cases");
+        else
+            snprintf(pass_message, sizeof(pass_message),
+                     "  \x1b[32m✓\x1b[0m  %-*s  %-*s  %*zu %s\n",
+                     law_name_width, class_decl->law_names[law_index],
+                     law_type_width, class_decl->law_types[law_index],
+                     case_count_width, case_count,
+                     case_count == 1 ? "case" : "cases");
+        LLVMValueRef pass_text =
+            LLVMBuildGlobalStringPtr(ctx->builder, pass_message, "law_pass_text");
+        LLVMValueRef pass_args[] = {pass_text};
+        LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                       printf_fn, pass_args, 1, "");
+    }
+
+    char summary_message[512];
+    if (finite)
+        snprintf(summary_message, sizeof(summary_message),
+                 "\n"
+                 "  \x1b[32;1mPASS\x1b[0m  %d properties · %zu %s checked · exhaustive\n",
+                 class_decl->law_count,
+                 total_case_count, total_case_count == 1 ? "case" : "cases");
+    else
+        snprintf(summary_message, sizeof(summary_message),
+                 "\n"
+                 "  \x1b[32;1mPASS\x1b[0m  %d properties · %zu %s checked · seed %lld\n",
+                 class_decl->law_count,
+                 total_case_count, total_case_count == 1 ? "case" : "cases",
+                 generated_seed);
+    LLVMValueRef summary_text =
+        LLVMBuildGlobalStringPtr(ctx->builder, summary_message,
+                                 "law_suite_summary");
+    LLVMValueRef summary_args[] = {summary_text};
+    LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(printf_fn),
+                   printf_fn, summary_args, 1, "");
+    free(law_case_counts);
+
+    CodegenResult result = {
+        .value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0),
+        .type = type_int(),
+    };
+    return result;
 }
 
 CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
@@ -6960,6 +7709,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             codegen_print_ast(ctx, ast);
             fprintf(stderr, "\n");
         }
+
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "check-laws") == 0 ||
+             strcmp(head->symbol, "check-laws-seeded") == 0))
+            return codegen_check_laws(ctx, ast);
 
         if (ast_list_is_tuple_expr(ast)) {
             LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -9264,10 +10018,12 @@ if (ast->list.count >= 5) {
                         return result;
                     }
 
-                    // All other types: load and print
-                    LLVMValueRef loaded = LLVMBuildLoad2(ctx->builder,
-                                                         type_to_llvm(ctx, entry->type),
-                                                         entry->value, arg->symbol);
+                    /* All other types use the ordinary symbol path.  In a
+                     * persistent REPL that path may call an exported getter
+                     * backed by host storage; loading entry->value directly
+                     * creates a fragile cross-module data reference. */
+                    CodegenResult loaded_result = codegen_expr(ctx, arg);
+                    LLVMValueRef loaded = loaded_result.value;
                     if (entry->type->kind == TYPE_OPTIONAL || entry->type->kind == TYPE_NIL) {
                         LLVMValueRef print_fn = get_rt_print_value_newline(ctx);
                         LLVMBuildCall2(ctx->builder, LLVMGlobalGetValueType(print_fn), print_fn, &loaded, 1, "");

@@ -7651,6 +7651,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
             char *pending_pattern = NULL;
             int pending_pattern_line = 0;
+            char *pending_law_header = NULL;
 
             while (*p) {
                 const char *ls = p;
@@ -7681,6 +7682,27 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     lt_end--;
                 }
 
+                /* A class law has a signature line followed by a property
+                 * clause:
+                 *
+                 *   law associativity :: Eq a => a -> a -> a -> Bool
+                 *     x y z -> ...
+                 *
+                 * Preserve it as one reader-level `(law ... (x y z) => ...)`
+                 * form.  It must not be mistaken for another method
+                 * signature, because laws are metadata rather than dictionary
+                 * slots. */
+                if (strncmp(lt, "law", 3) == 0 &&
+                    (lt[3] == ' ' || lt[3] == '\t') &&
+                    strstr(lt, "::")) {
+                    free(pending_law_header);
+                    pending_law_header =
+                        wisp_trim_range_dup(lt + 3, lt_end);
+                    free(lraw);
+                    lineno++;
+                    continue;
+                }
+
                 char line_tag[48];
                 int line_tag_len =
                     snprintf(line_tag, sizeof(line_tag),
@@ -7693,6 +7715,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 if (fat_arrow || pending_pattern) {
                     char *pattern = NULL;
                     int pattern_line = lineno;
+                    bool is_law_clause = pending_law_header != NULL;
 
                     if (fat_arrow && fat_arrow > lt) {
                         pattern = wisp_trim_range_dup(lt, fat_arrow);
@@ -7809,12 +7832,18 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     }
 
                     char method_tag[48];
-                    int method_tag_len =
-                        snprintf(method_tag, sizeof(method_tag),
-                                 " (#line %d 1) ", pattern_line);
+                    int method_tag_len = is_law_clause
+                        ? 1
+                        : snprintf(method_tag, sizeof(method_tag),
+                                   " (#line %d 1) ", pattern_line);
+                    if (is_law_clause)
+                        method_tag[0] = ' ';
 
                     size_t need = acc_len + (size_t)method_tag_len +
-                                  strlen(pattern) + strlen(body_expanded) + 8;
+                                  strlen(pattern) + strlen(body_expanded) +
+                                  (is_law_clause
+                                      ? strlen(pending_law_header) + 10
+                                      : 8);
 
                     while (need >= acc_cap) {
                         acc_cap *= 2;
@@ -7823,6 +7852,15 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                     memcpy(acc + acc_len, method_tag, (size_t)method_tag_len);
                     acc_len += (size_t)method_tag_len;
+
+                    if (is_law_clause) {
+                        memcpy(acc + acc_len, "(law ", 5);
+                        acc_len += 5;
+                        memcpy(acc + acc_len, pending_law_header,
+                               strlen(pending_law_header));
+                        acc_len += strlen(pending_law_header);
+                        acc[acc_len++] = ' ';
+                    }
 
                     memcpy(acc + acc_len, pattern, strlen(pattern));
                     acc_len += strlen(pattern);
@@ -7835,8 +7873,14 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     memcpy(acc + acc_len, body_expanded,
                            strlen(body_expanded));
                     acc_len += strlen(body_expanded);
+                    if (is_law_clause)
+                        acc[acc_len++] = ')';
                     acc[acc_len] = '\0';
 
+                    if (is_law_clause) {
+                        free(pending_law_header);
+                        pending_law_header = NULL;
+                    }
                     free(pattern);
                     free(body_expanded);
                     free(lraw);
@@ -7877,7 +7921,18 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                 lineno++;
             }
 
+            if (pending_law_header) {
+                const char *name_end = pending_law_header;
+                while (*name_end && *name_end != ' ' && *name_end != '\t')
+                    name_end++;
+                READER_ERROR(lineno - 1, 1,
+                             "law '%.*s' requires a property clause on the next indented line",
+                             (int)(name_end - pending_law_header),
+                             pending_law_header);
+            }
+
             free(pending_pattern);
+            free(pending_law_header);
 
             while (acc_len + 2 >= acc_cap) {
                 acc_cap *= 2;
@@ -11590,6 +11645,86 @@ static void wisp_normalize_newlines_in_place(char *source) {
     *write = '\0';
 }
 
+/*
+ * Law checks use a deliberately contextual vocabulary:
+ *
+ *   laws C T
+ *     seeded C2 T2 count seed
+ *
+ *   seeded law C T
+ *
+ * `seeded` is not reserved globally.  It is recognized only directly below a
+ * `laws` form or when immediately followed by `law`.  Lowering here keeps the
+ * reader and compiler centered on the canonical check-laws forms while giving
+ * Wisp's indentation grammar a concise, extensible surface syntax.
+ */
+static char *desugar_contextual_law_checks(char *source) {
+    SB out;
+    sb_init(&out);
+    const char *cursor = source;
+    int laws_indent = -1;
+
+    while (*cursor) {
+        const char *line_start = cursor;
+        while (*cursor && *cursor != '\n') cursor++;
+        const char *line_end = cursor;
+
+        const char *content = line_start;
+        int indent = 0;
+        while (content < line_end && (*content == ' ' || *content == '\t')) {
+            indent += (*content == '\t') ? 4 : 1;
+            content++;
+        }
+
+        bool blank = content == line_end;
+        size_t content_len = (size_t)(line_end - content);
+        bool laws_form =
+            content_len > 5 && strncmp(content, "laws ", 5) == 0;
+        bool seeded_law_form =
+            content_len > 11 && strncmp(content, "seeded law ", 11) == 0;
+        bool nested_seeded =
+            laws_indent >= 0 && indent > laws_indent &&
+            content_len > 7 && strncmp(content, "seeded ", 7) == 0 &&
+            !seeded_law_form;
+
+        if (!blank && laws_indent >= 0 && indent <= laws_indent && !laws_form)
+            laws_indent = -1;
+
+        if (nested_seeded) {
+            for (int i = 0; i < laws_indent; i++) sb_putc(&out, ' ');
+            sb_puts(&out, "check-laws-seeded ");
+            for (const char *p = content + 7; p < line_end; p++)
+                sb_putc(&out, *p);
+        } else if (seeded_law_form) {
+            for (const char *p = line_start; p < content; p++)
+                sb_putc(&out, *p);
+            sb_puts(&out, "check-laws-seeded ");
+            for (const char *p = content + 11; p < line_end; p++)
+                sb_putc(&out, *p);
+            sb_puts(&out, " 100 0");
+        } else if (laws_form) {
+            for (const char *p = line_start; p < content; p++)
+                sb_putc(&out, *p);
+            sb_puts(&out, "check-laws ");
+            for (const char *p = content + 5; p < line_end; p++)
+                sb_putc(&out, *p);
+            laws_indent = indent;
+        } else {
+            for (const char *p = line_start; p < line_end; p++)
+                sb_putc(&out, *p);
+        }
+
+        if (*cursor == '\n') {
+            sb_putc(&out, '\n');
+            cursor++;
+        }
+    }
+
+    char *result = sb_take(&out);
+    free(source);
+    return result;
+}
+
 ASTList wisp_parse_all(const char *source, const char *filename) {
     wisp_pending_type_clear();
 
@@ -11608,6 +11743,7 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
 
     /* 2D Fraction Desugaring */
     stripped = desugar_fractions(stripped);
+    stripped = desugar_contextual_law_checks(stripped);
 
     /* Top-level :Keyword lines are module metadata, not executable code.
      * Blank them before Wisp detection, arity prescan, and token lowering so
@@ -11648,6 +11784,8 @@ ASTList wisp_parse_all(const char *source, const char *filename) {
     arity_set(&t, "doc", -1);
     arity_set(&t, "var", 2);
     arity_set(&t, "assert-eq", 3);
+    arity_set(&t, "check-laws", 2);
+    arity_set(&t, "check-laws-seeded", 4);
     arity_set(&t, "method", -1);
     /* def inside a function body must NOT be given arity 2 by wisp —
      * reader.c handles def specially. Setting arity -2 (unknown) makes

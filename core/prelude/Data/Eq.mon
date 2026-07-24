@@ -1,14 +1,17 @@
 ;;; Eq.mon --- Equality typeclass
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: eq equality typeclass
+:author "Laluxx"
+:version "1.2.0"
+:keywords "eq equality inequality typeclass relation"
 
 ;;; Commentary:
 
 ;; Equality belongs with data comparison, not in a monolithic class registry.
-;; Concrete equality is still provided by the language/runtime; this module
-;; names the lawful typeclass contract.
+;; An instance supplies equality only; inequality is its Boolean negation and
+;; is derived once by this class through Data.Bool.
+;;
+;; Primitive representations may optimize equality, but the public relation,
+;; its complement, and their law belong to this core abstraction.
 
 ;;; Code:
 
@@ -22,27 +25,42 @@ class Eq a where
   eq?     :: a -> a -> Bool
   not-eq? :: a -> a -> Bool
 
-  ;; law: not-eq? x y = not (eq? x y)
+  not-eq? x y ->
+    not? (eq? x y)
+
+  law reflexive :: a -> Bool
+    x -> eq? x x
+
+  law symmetric :: a -> a -> Bool
+    x y -> iff? (eq? x y) (eq? y x)
+
+  law transitive :: a -> a -> a -> Bool
+    x y z -> implies? (and? (eq? x y) (eq? y z)) (eq? x z)
+
+  law complement :: a -> a -> Bool
+    x y -> iff? (not-eq? x y) (not? (eq? x y))
+
+  ;; minimal complete definition: eq?
 
 
 instance Eq Int
-  (eq? x y)     => (= x y)
-  (not-eq? x y) => (not (= x y))
+  (eq? x y) => (= x y)
 
 
 instance Eq Bool
-  (eq? x y)     => (= x y)
-  (not-eq? x y) => (not (= x y))
+  (eq? x y) => (= x y)
 
 
 instance Eq Char
-  (eq? x y)     => (= x y)
-  (not-eq? x y) => (not (= x y))
+  (eq? x y) => (= x y)
 
 
 instance Eq String
-  (eq? x y)     => (= x y)
-  (not-eq? x y) => (not (= x y))
+  (eq? x y) => (= x y)
+
+
+instance Eq Float
+  (eq? x y) => (= x y)
 
 
 tests
@@ -73,3 +91,16 @@ tests
   assert-eq (eq?     "alpha" "beta") False "Eq String eq? false"
   assert-eq (not-eq? "alpha" "beta") True  "Eq String not-eq? true"
   :string-instance:
+
+  :equivalence-laws:
+  assert-eq (eq? 7 7) True "Eq Int is reflexive"
+  assert-eq (iff? (eq? 3 5) (eq? 5 3)) True "Eq Int is symmetric"
+  assert-eq
+    (implies? (and? (eq? 4 4) (eq? 4 4)) (eq? 4 4))
+    True
+    "Eq Int is transitive"
+  assert-eq
+    (iff? (not-eq? True False) (not? (eq? True False)))
+    True
+    "Eq Bool complement agrees with eq?"
+  :equivalence-laws:
