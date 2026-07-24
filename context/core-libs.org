@@ -1783,6 +1783,21 @@
   tested rather than remaining prose obligations. Heterogeneous and
   higher-kinded law generation remain separate future work.
 
+[FIX id:fix.core-libs.module-local-method-namespace-2026-07-24 date:2026-07-24 by:codex src:core/prelude/Sequence.mon,core/prelude/Data/Ord.mon,codegen.c,tests/test_core_api_dry.py conf:high]
+  A top-level =method= is an ordinary recursive definition inside its owning
+  type module, backed by a qualified internal identity such as
+  =Sequence.nth=. It may therefore use the natural source name =nth= even when
+  a class also declares the public dispatch operation =nth=. While compiling
+  that module, lexical resolution prefers the qualified module-local method;
+  outside it, the unqualified name remains the typeclass dispatch point.
+
+  Sequence algorithms retain their pattern clauses as methods and the
+  =Sequence Coll= instance only connects class slots to those methods. The
+  parallel =sequence-*= namespace has been deleted. An executable compiler
+  regression covers recursive local shadowing plus instance wiring, and a
+  whole-core audit rejects public method names prefixed by their own class
+  name. The same audit removed the remaining =ord-*= helper leakage.
+
 [FIX id:fix.core-libs.fast-verbose-law-suites-2026-07-24 date:2026-07-24 by:codex src:core/prelude/Test/QuickCheck.mon,codegen.c,tests/test_check_laws.py conf:high]
   Law checks report their execution contract before running and an aggregate
   result afterward. Randomized headers state class, instance, law count,

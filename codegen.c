@@ -2235,9 +2235,16 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
         free(module_prefix);
         return entry;
     } else {
-        // Unqualified symbol - check local environment first.
+        // Unqualified symbols prefer the current module's private method
+        // namespace. A class may declare `nth` while Sequence.mon also defines
+        // its Coll algorithm as `method nth`; inside that file, ordinary
+        // lexical lookup must select Sequence.nth. The unqualified `nth`
+        // registry entry remains the public typeclass dispatch point outside
+        // the module.
         EnvEntry *entry = env_lookup(ctx->env, symbol_name);
-        if (entry) {
+        bool public_class_method =
+            entry && tc_is_method(ctx->tc_registry, symbol_name);
+        if (entry && !public_class_method) {
             return entry;
         }
 
@@ -2275,6 +2282,10 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
                     return entry;
                 }
             }
+        }
+
+        if (entry) {
+            return entry;
         }
 
         // If not found locally and we have a module context, check imports.

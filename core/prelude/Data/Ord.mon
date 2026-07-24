@@ -107,11 +107,11 @@ class Ord a where
   ;; minimal complete definition: lt? and lte?
 
 
-method ord-bool-rank :: Bool -> Int
+method bool-rank :: Bool -> Int
   x -> if x then 1 else 0
 
 
-method ord-char-rank :: Char -> Int
+method char-rank :: Char -> Int
   x -> (Int x)
 
 
@@ -121,13 +121,13 @@ instance Ord Int
 
 
 instance Ord Bool
-  (lt? x y)       => (<  (ord-bool-rank x) (ord-bool-rank y))
-  (lte? x y)      => (<= (ord-bool-rank x) (ord-bool-rank y))
+  (lt? x y)       => (<  (bool-rank x) (bool-rank y))
+  (lte? x y)      => (<= (bool-rank x) (bool-rank y))
 
 
 instance Ord Char
-  (lt? x y)       => (<  (ord-char-rank x) (ord-char-rank y))
-  (lte? x y)      => (<= (ord-char-rank x) (ord-char-rank y))
+  (lt? x y)       => (<  (char-rank x) (char-rank y))
+  (lte? x y)      => (<= (char-rank x) (char-rank y))
 
 
 instance Ord Float
@@ -135,7 +135,7 @@ instance Ord Float
   lte? x y -> x <= y
 
 
-method ord-test-negate :: Int -> Int
+method negate-for-comparing :: Int -> Int
   x -> 0 - x
 
 
@@ -250,5 +250,5 @@ tests
   :float-instance:
 
   :comparing:
-  assert-eq (show (comparing ord-test-negate 1 2)) "GT" "Ord comparing projected"
+  assert-eq (show (comparing negate-for-comparing 1 2)) "GT" "Ord comparing projected"
   :comparing:
