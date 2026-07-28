@@ -131,6 +131,8 @@ def main() -> int:
             # makes every family a cold, order-independent acceptance test and
             # prevents one linker invocation from reusing another's objects.
             family_core = temp / f"core-{index}"
+            family_work = temp / f"work-{index}"
+            family_work.mkdir()
             shutil.copytree(
                 CORE,
                 family_core,
@@ -143,7 +145,7 @@ def main() -> int:
             env["MONAD_CORE"] = str(family_core)
             result = subprocess.run(
                 [str(MONAD), "test", str(source_path)],
-                cwd=ROOT,
+                cwd=family_work,
                 env=env,
                 text=True,
                 stdout=subprocess.PIPE,

@@ -244,9 +244,17 @@ typedef struct MacroScope {
 
 static MacroScope *g_macro_scope;
 
+static char *macro_absolute_path(const char *path) {
+#if defined(_WIN32)
+    return _fullpath(NULL, path, 0);
+#else
+    return realpath(path, NULL);
+#endif
+}
+
 static char *macro_owner_key(const char *path) {
     if (!path) return xstrdup("<input>");
-    char *absolute = realpath(path, NULL);
+    char *absolute = macro_absolute_path(path);
     return absolute ? absolute : xstrdup(path);
 }
 

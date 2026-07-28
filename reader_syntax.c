@@ -41,9 +41,17 @@ typedef struct RSScope {
 
 static RSScope *g_scope;
 
+static char *reader_syntax_absolute_path(const char *path) {
+#if defined(_WIN32)
+    return _fullpath(NULL, path, 0);
+#else
+    return realpath(path, NULL);
+#endif
+}
+
 static char *owner_key(const char *path) {
     if (!path) return strdup("<input>");
-    char *absolute = realpath(path, NULL);
+    char *absolute = reader_syntax_absolute_path(path);
     return absolute ? absolute : strdup(path);
 }
 
