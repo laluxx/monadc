@@ -82,6 +82,7 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("host_no_pie_flag", buildsystem_c)
         self.assertIn("host_exe_suffix", cli_c)
         self.assertIn("test_bin_name", cli_c)
+        self.assertIn('snprintf(test_bin, sizeof(test_bin), ".\\\\%s", test_bin_name);', cli_c)
 
     def test_bulk_file_readers_are_binary_and_use_actual_read_size(self):
         main_c = read("main.c")

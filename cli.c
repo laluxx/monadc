@@ -1500,7 +1500,11 @@ void cmd_test(const CompilerFlags *flags) {
     char test_bin[1024];
     char test_bin_name[1024];
     snprintf(test_bin_name, sizeof(test_bin_name), "%s_test%s", base, host_exe_suffix());
+#if defined(_WIN32)
+    snprintf(test_bin, sizeof(test_bin), ".\\%s", test_bin_name);
+#else
     snprintf(test_bin, sizeof(test_bin), "./%s", test_bin_name);
+#endif
 
     printf("\n");
     int run_rc = system(test_bin);
