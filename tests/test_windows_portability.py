@@ -157,6 +157,7 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("reader_syntax_absolute_path", reader_syntax_c)
         self.assertIn("_fullpath", macro_c)
         self.assertIn("_fullpath", reader_syntax_c)
+        self.assertIn('#include "compat.h"', reader_syntax_c)
         self.assertIn("ensure_cache_dir", main_c)
         self.assertIn("monad_mkdir", main_c)
         self.assertIn("llvm_config_link_flags", main_c)

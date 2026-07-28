@@ -30,12 +30,13 @@ module CoreSemigroupLaws []
 tests
   laws Semigroup Bool
 """,
-    "Monoid Bool": """\
+    "Monoid Coll": """\
 import Data.Eq
 import Data.Semigroup
+import Test.QuickCheck
 module CoreMonoidLaws []
 tests
-  laws Monoid Bool
+  seeded law Monoid Coll
 """,
     "Enum Int": """\
 import Data.Enum

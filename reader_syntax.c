@@ -1,5 +1,6 @@
 #include "reader_syntax.h"
 #include "reader.h"
+#include "compat.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>

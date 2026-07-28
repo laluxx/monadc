@@ -60,7 +60,7 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         for family in (
             "Eq Bool",
             "Semigroup Bool",
-            "Monoid Bool",
+            "Monoid Coll",
             "Enum Int",
             "Ord Int",
             "Ring Int",
