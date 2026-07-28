@@ -1,0 +1,35 @@
+#+TITLE: Unicode Core Roadmap
+#+AUTHOR: Codex
+#+DATE: 2026-07-26
+#+FILETAGS: :monadc:core:text:unicode:priority:
+
+* Priority
+
+[TODO id:todo.unicode.complete-core date:2026-07-26 priority:high]
+  Replace the minimal =Text.Unicode= boundary with a complete, data-driven,
+  versioned Unicode core module.  This is the first priority after the current
+  first-order modal logic and Wisp-reader cycle.
+
+* Required scope
+
+- Unicode scalar-value decoding and validation with explicit error policies.
+- Extended grapheme-cluster segmentation (Unicode Standard Annex #29).
+- Canonical and compatibility normalization: NFC, NFD, NFKC, and NFKD
+  (Unicode Standard Annex #15).
+- General categories, scripts, blocks, binary properties, and property lookup.
+- Locale-independent default case conversion and full case folding, including
+  multi-code-point mappings.
+- Word, sentence, and line-boundary algorithms (UAX #29 and UAX #14).
+- Terminal column width based on grapheme clusters, combining marks, emoji
+  sequences, variation selectors, and East Asian Width (UAX #11).
+- A generated Unicode Character Database with a pinned Unicode version,
+  reproducible update tooling, conformance fixtures, and property tests.
+- Clear distinctions among byte length, scalar count, grapheme count, and
+  terminal display width; none may be exposed under an ambiguous =length= API.
+
+* Current boundary
+
+[OBS id:obs.unicode.minimal-width src:core/Text/Unicode.mon conf:high]
+  =text-width= presently counts non-continuation UTF-8 bytes.  It is sufficient
+  only for the modal tutorial's single-cell mathematical symbols.  It does not
+  claim grapheme-cluster or terminal-width conformance.

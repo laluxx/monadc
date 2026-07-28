@@ -75,9 +75,9 @@ define when :: condition . body -> Syntax
 
 
 ;; ;; DONE Test 4 — assert (conditional expansion)
-(define (assert condition . body -> Syntax)
-  (when condition
-    (begin . body)))
+;; (define (assert condition . body -> Syntax)
+;;   (when condition
+;;     (begin . body)))
 
 ;; (define (main -> Int)
 ;;   (let [x 0]

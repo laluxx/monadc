@@ -1,0 +1,27 @@
+;;; reader_syntax_scope.mon --- Expected-type reader isolation regression
+
+import Logic.FirstOrder.Modal
+
+module Main
+
+define x :: Term (Variable "x")
+define Fx :: Formula (Predicate "F" (list x))
+
+define barcan :: Formula
+  ∀x. □Fx -> □∀x. Fx
+
+define identity :: Int -> Int
+  value -> value
+
+define classify :: Int -> Int
+  0 -> 10
+  value -> value
+
+define total 0
+
+for number -> [1 2 3]
+  total <- total + number
+
+show render-formula barcan
+show render-formula (¬ barcan)
+show identity (classify total)

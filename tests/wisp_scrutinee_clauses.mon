@@ -1,0 +1,16 @@
+module Main
+
+data BranchStatus
+  = OpenBranch
+  | ClosedBranch Int Int
+
+layout Tableau
+  [status -> BranchStatus]
+
+define tableau-closed? :: Tableau -> Bool
+  tableau.status
+    | [ClosedBranch _ _] -> True
+    | OpenBranch -> False
+
+show tableau-closed? (Tableau (ClosedBranch 2 7))
+show tableau-closed? (Tableau OpenBranch)

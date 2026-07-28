@@ -327,6 +327,12 @@ typedef struct AST {
     uint64_t raw_int;
     bool     has_raw_int;
 
+    /* Immutable lexical context carried by compile-time Syntax values.
+     * Contextualized identifiers retain their source spelling separately
+     * from the compiler-safe materialized symbol name. */
+    char *syntax_context;
+    char *syntax_original_symbol;
+
 
     // HM type inference result — set by infer_zonk_ast, NULL before inference
     struct Type *inferred_type;

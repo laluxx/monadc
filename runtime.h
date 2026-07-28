@@ -279,6 +279,8 @@ RuntimeValue *rt_value_array(size_t length);
 RuntimeValue *rt_value_set(RuntimeSet *s);
 RuntimeValue *rt_value_map(RuntimeMap *m);
 RuntimeValue *rt_value_opaque(void *p);
+void *rt_unbox_opaque(RuntimeValue *v);
+int64_t rt_utf8_width(const char *text);
 
 
 /// Unboxing
@@ -474,6 +476,7 @@ LLVMValueRef get_rt_unbox_float(CodegenContext *ctx);
 LLVMValueRef get_rt_unbox_char(CodegenContext *ctx);
 LLVMValueRef get_rt_unbox_string(CodegenContext *ctx);
 LLVMValueRef get_rt_unbox_list(CodegenContext *ctx);
+LLVMValueRef get_rt_unbox_opaque(CodegenContext *ctx);
 LLVMValueRef get_rt_value_is_nil(CodegenContext *ctx);
 LLVMValueRef get_rt_print_value_newline(CodegenContext *ctx);
 

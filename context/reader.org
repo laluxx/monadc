@@ -700,6 +700,41 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
 
 * Test Coverage Anchors
 
+* Expected-Type Reader Syntax
+
+[DEC id:dec.reader.expected-type-scope date:2026-07-26 by:human]
+  A module may declare a grammar with =reader-syntax Type=.  The grammar is
+  selected only for an indented expression whose enclosing typed value binding
+  explicitly expects =Type=.  Selection by expected type prevents imported DSL
+  punctuation from globally capturing arrows used by types, clauses, patterns,
+  or iteration.
+
+[OBS id:obs.reader.syntax-declarations src:reader_syntax.c conf:high]
+  The initial public declaration vocabulary is =binder=, =prefix=, and =infix=.
+  Rules name both their surface token and ordinary target function.  Infix and
+  binder rules carry binding power; infix rules additionally declare left or
+  right associativity.  The compiler kernel contains no knowledge of logic
+  tokens or constructors.
+
+[OBS id:obs.reader.syntax-phase src:wisp.c conf:high]
+  Reader-syntax expansion precedes commentary stripping, Wisp tokenization,
+  ordinary parsing, and hygienic macro expansion.  It emits canonical source
+  forms consumed by the existing shared AST pipeline while retaining original
+  line count for diagnostics.
+
+[OBS id:obs.reader.syntax-scope-regression src:tests/reader_syntax_scope.mon conf:high]
+  One executable fixture imports the logic grammar and simultaneously exercises
+  literal quantified modal syntax, an ordinary function type, pattern clauses,
+  and a Wisp for-arrow.  Negating the parsed formula proves that implication is
+  the outer constructor rather than being accidentally captured by =∀=.
+
+[TODO id:todo.reader.syntax-objects date:2026-07-26 priority:high]
+  Generalize declarative readers to first-class immutable =Syntax= and =Token=
+  values with source spans, lexical scope sets, hygienic constructors,
+  parser-combinator transformers, explicit import/export control, deterministic
+  expansion limits, and structured diagnostics.  Declarative rules remain the
+  safe common case rather than being replaced by raw mutable parser access.
+
 Test-driven observations and failure records for the corresponding subsystem.
 
 * Reader Sugar Address Of
@@ -1091,3 +1126,105 @@ Test-driven observations and failure records for the corresponding subsystem.
   one-argument partial call whose argument is =((lambda ...) list 1 2 3)=.
   =core/prelude/Coll.mon= now keeps active higher-order list tests for this
   regression, run through =python3 tests/run_core.py=.
+* Scoped Reader Extensions
+
+[DEC id:dec.reader.extension-boundary date:2026-07-26 by:human,codex]
+  Reader extensions are declared by core modules and selected by the expected
+  result type of a definition. Logic notation therefore applies to a =Formula=
+  body without capturing =->= in function types, pattern clauses, or iteration.
+  Modal logic remains an ordinary core library; the compiler owns only the
+  general extension protocol.
+
+[OBS id:obs.reader.public-model src:core/Syntax/Reader.mon conf:high]
+  =Syntax.Reader= exposes immutable =SourceSpan=, =Token=, =ReaderRule=, and
+  =ReaderDescription= values. These form a language-visible description model,
+  not raw lexer, parser, AST, or LLVM pointers.
+
+[FIX id:fix.reader.consecutive-layout-arity src:wisp.c,tests/syntax_reader_values.mon conf:high]
+  Wisp arity discovery now restores the lexer position when a layout scan
+  reaches the next top-level declaration. Previously it consumed that
+  declaration, so constructors for consecutive layouts could be parsed as
+  unrelated expressions.
+
+[FIX id:fix.reader.codegen-null-symbol src:codegen.c,tests/syntax_reader_values.mon conf:high]
+  Code generation diagnoses a typed symbol without generated storage instead
+  of passing a null LLVM value to =LLVMGetValueName= and segfaulting.
+
+[TODO id:todo.reader-procedural-transformer-evaluator priority:high]
+  Extend syntax transformers beyond hygienic template substitution to a
+  phase-separated compile-time evaluator over immutable Syntax values. Preserve
+  lexical context and source spans, sandbox effects, make expansion deterministic,
+  and diagnose import/export conflicts explicitly.
+
+[TODO id:todo.reader.nested-layout-collections priority:high]
+  Repair and test the runtime ABI for layouts containing collections of layout
+  values before =ReaderDescription= stores a typed collection of =ReaderRule=.
+  Until then its rule source is deliberately serializable text.
+
+[FIX id:fix.reader.dynamic-storage src:reader_syntax.c,tests/reader_syntax_dynamic_capacity.mon conf:high]
+  Reader and rule registries use dynamically growing owned storage. There is no
+  language-visible 32-reader or 32-rule ceiling. Duplicate, conflict, and clear
+  paths release their owned token, target, type, and source-location strings.
+
+[DEC id:dec.reader.canonical-pass-through date:2026-07-27 by:codex]
+  Expected-type selection accepts both DSL notation and canonical Monad.
+  A parenthesized body whose head names a declared rule target is combined with
+  its typed definition but is not reparsed by the Pratt reader. Parenthesized
+  mathematical expressions whose head is not a target remain DSL grouping.
+
+[OBS id:obs.reader.precedence-contract src:tests/reader_syntax_precedence.mon conf:high]
+  Executable coverage checks prefix binding, left-associative conjunction and
+  disjunction, right-associative implication, and quantified scope by asserting
+  the exact canonical lowering and runtime equivalence with an explicitly
+  constructed Formula.
+
+[FIX id:fix.reader.rule-validation src:reader_syntax.c,tests/reader_syntax_invalid_rule.mon conf:high]
+  Reader declarations have an exact Agda-style mixfix grammar. Prefix, postfix,
+  binder, and infix placement are inferred from holes in patterns such as
+  =~_=, =_⁻=, =∀_._=, and =_⊕_=. Rules
+  reject malformed field counts, negative binding powers, invalid integers,
+  and associativity other than =left= or =right= with source-located errors.
+
+[OBS id:obs.reader.module-activation src:tests/test_how_to_examples.py conf:high]
+  A reader declaration owned by an imported module is active while parsing its
+  client, on both cold and populated-cache builds. The same notation is not
+  available to a source file that does not import the owner. The integration
+  fixture constructs and evaluates both canonical and surface expressions.
+
+[FIX id:fix.reader.direct-owner-activation-2026-07-27 src:reader_syntax.c,reader_syntax.h,main.c,tests/test_how_to_examples.py conf:high]
+  Reader registries key each grammar by both result type and canonical owning
+  source file. Compilation maintains a nested module scope: the module's own
+  declarations and its direct imports are active, while grammars used by an
+  intermediary dependency do not leak transitively into the client. Scope
+  storage grows dynamically and is restored after recursive dependency
+  compilation. Importing two owners of the same result type is diagnosed with
+  both owner paths instead of silently merging their operator tables.
+
+[DOC id:doc.reader.small-dsl src:how_to/ReaderSyntax.mon conf:high]
+  The focused executable tutorial defines an arithmetic object language,
+  declares prefix, postfix, and precedence-aware infix notation, and evaluates
+  canonical and surface programs to the same result. A =Syntax -> Syntax=
+  transformer written in Monad is invoked by the =twice_= mixfix rule. The
+  tutorial also explains expected-type isolation and module activation.
+
+[FIX id:fix.reader.mixfix-identifier-boundary src:reader_syntax.c,tests/test_how_to_examples.py conf:high]
+  Identifier-like mixfix parts match complete lexical words. A =twice_= rule
+  expands =twice one= but does not split the ordinary identifier =twicefold=.
+
+[DEC id:dec.data.multiline-canonical-style date:2026-07-27 by:human]
+  Wisp source writes algebraic alternatives in the multiline Haskell layout:
+  =data T= followed by indented = A= and aligned =| B= lines. Active Monad
+  sources under core, how_to, and tests are guarded against reverting to
+  single-line pipe declarations.
+
+[OBS id:obs.reader.procedural-transformer-live-path-2026-07-27 src:how_to/ReaderSyntax.mon,macro.c,tests/test_how_to_examples.py conf:high]
+  An imported mixfix rule can target a Monad =Syntax -> Syntax= transformer
+  which constructs its result using immutable syntax constructors. The result
+  is evaluated during expansion and then enters ordinary inference and codegen;
+  no DSL-specific parser or runtime hook is involved.
+
+[OBS id:obs.reader.installed-read-only-dsl-2026-07-27 src:tests/test_how_to_examples.py conf:high]
+  The Reader DSL tutorial compiles and executes using a copied installed
+  compiler, runtime archive, and read-only installed core without development
+  environment overrides. This covers discovery, module loading, expansion,
+  inference, linking, and runtime behavior in the public deployment topology.

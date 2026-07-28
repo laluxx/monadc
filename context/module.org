@@ -565,3 +565,40 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   module object; mergeable specialization symbols prevent duplicate definitions
   such as =bool_Int= or =pair_Int_Int= while preserving required module-mangled
   exports for self-tests.
+
+[FIX id:fix.module.installed-core-object-cache-contract-2026-07-24 date:2026-07-24 by:codex src:main.c,tests/test_how_to_examples.py conf:high]
+  An installed core is immutable program data. Dependency objects for sources
+  beneath the resolved core root must be emitted under
+  =$HOME/.cache/monad/core= using flattened relative names, never beside
+  =/usr/local/lib/monad/core= sources. The installed-layout QuickCheck
+  regression makes the core tree read-only so a fallback to source-adjacent
+  object emission fails immediately.
+
+[FIX id:fix.module.for-syntax-phase-import-2026-07-27 src:module.h,module.c,main.c,wisp.c,tests/test_how_to_examples.py conf:high]
+  =import for-syntax Module.Name= compiles the dependency before reader and
+  transformer expansion, while omitting its runtime extern declarations and
+  initializer call. Wisp preserves the two-word phase marker. Executable
+  coverage proves imported transformers work and ordinary exports remain
+  unavailable.
+
+[FIX id:fix.module.reader-direct-import-scope-2026-07-27 src:main.c,reader_syntax.c,tests/test_how_to_examples.py conf:high]
+  Each recursive =compile_one= invocation owns a nested reader-activation
+  scope. A dependency is added to its caller only at the direct import site,
+  after the dependency's nested compilation has returned. Consequently a
+  dependency's private reader imports cannot become accidental public
+  re-exports, on cold or cached compilation paths.
+
+[FIX id:fix.module.transformer-direct-import-scope-2026-07-27 src:main.c,macro.c,tests/test_how_to_examples.py conf:high]
+  The dependency pre-scan activates each resolved direct import in both the
+  reader and Syntax-transformer phase environments after nested dependency
+  compilation returns. Runtime-only imports may make an exported transformer
+  available during compilation; =for-syntax= additionally prevents runtime
+  bindings and initialization from entering the client. Neither form implies
+  transitive re-export.
+
+[FIX id:fix.module.transformer-export-boundary-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Syntax-transformer imports obey the same explicit module export list as
+  runtime definitions. Export status is recorded during the module's expansion
+  pass, while definition-site phase imports are captured separately from the
+  client's activation scope. This distinguishes lexical helper access from
+  public importability.

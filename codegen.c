@@ -3303,6 +3303,19 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
 
         for (int fi = 0; fi < nfields; fi++) {
             Type *ft = type_from_name(ctor->field_types[fi]);
+            /* User-defined ADTs are registered as layouts before their
+             * constructors are emitted.  Resolve constructor fields through
+             * that registry as well as the builtin type parser; otherwise a
+             * recursive field such as `Negation Formula` silently degrades to
+             * Int and discards the nested pointer at runtime. */
+            if (!ft || ft->kind == TYPE_UNKNOWN) {
+                Type *layout_ft = env_lookup_layout(ctx->env,
+                                                    ctor->field_types[fi]);
+                if (layout_ft) {
+                    type_free(ft);
+                    ft = type_clone(layout_ft);
+                }
+            }
             if (!ft || ft->kind == TYPE_UNKNOWN) ft = type_int();
             field_type_objs[fi]  = ft;
             param_types[fi]      = type_to_llvm(ctx, ft);
@@ -7394,6 +7407,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             }
         }
 
+        if (!load_target) {
+            CODEGEN_ERROR(ctx,
+                          "%s:%d:%d: error: symbol ‘%s’ has type information but no generated storage",
+                          parser_get_filename(), ast->line, ast->column, ast->symbol);
+        }
+
         const char *global_name = LLVMGetValueName(load_target);
         if (global_name && *global_name) {
             char getter_name[512];
@@ -11149,7 +11168,14 @@ if (ast->list.count >= 5) {
                 else
                     result.type = type_unknown();
                 LLVMTypeRef native_type = type_to_llvm(ctx, result.type);
-                result.value = emit_type_cast(ctx, boxed_head, native_type);
+                /* Imported collection element metadata may be conservative
+                 * (TYPE_UNKNOWN), even though the value has an ADT payload.
+                 * Peeling RT_OPAQUE is safe for every other RuntimeValue: the
+                 * helper returns non-opaque boxes unchanged. */
+                LLVMValueRef head_value = emit_call_1(
+                    ctx, get_rt_unbox_opaque(ctx), ptr_t,
+                    boxed_head, "pattern_head_value");
+                result.value = emit_type_cast(ctx, head_value, native_type);
                 return result;
             }
 
@@ -11279,6 +11305,18 @@ if (ast->list.count >= 5) {
                     "collection_count");
                 result.type = type_int();
                 return result;
+            }
+
+            if (strcmp(head->symbol, "__rt_utf8_width") == 0) {
+                REQUIRE_ARGS(1);
+                CodegenResult ref = codegen_expr(ctx, ast->list.items[1]);
+                LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_utf8_width");
+                if (!fn) fn = LLVMAddFunction(ctx->module, "rt_utf8_width",
+                    LLVMFunctionType(i64_t, &ptr_t, 1, 0));
+                result.value = emit_call_1(ctx, fn, i64_t, ref.value, "utf8_width");
+                result.type = type_int(); return result;
             }
 
 
@@ -18144,6 +18182,7 @@ static void register_legacy_collection_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "__rt_prepend", 2, 0, "Private typed Sequence prepend primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_concat",  2, 0, "Private typed Sequence concatenation primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_count",   1, 0, "Private collection cardinality primitive", NULL);
+    env_insert_builtin(ctx->env, "__rt_utf8_width", 1, 0, "Private UTF-8 width primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_set_singleton", 1, 0, "Private Set singleton predicate", NULL);
     env_insert_builtin(ctx->env, "__rt_set_intersection", 2, 0, "Private Set intersection primitive", NULL);
     env_insert_builtin(ctx->env, "rt_coll_head", 1, 0, "Private collection pattern projection", NULL);

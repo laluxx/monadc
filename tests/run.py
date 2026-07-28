@@ -372,6 +372,8 @@ def discover_corpus_files() -> list[Path]:
 
 
 def should_skip_path(path: Path) -> bool:
+    if path.name.startswith(".#"):
+        return True
     rel_parts = path.relative_to(ROOT).parts if path.is_absolute() else path.parts
     return any(part in IGNORED_DISCOVERY_DIRS or part.startswith(".monadc-tests-") for part in rel_parts)
 

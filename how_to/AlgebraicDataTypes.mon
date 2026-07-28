@@ -19,7 +19,10 @@ class Enum a where
   ;; (pred x) => toEnum ((fromEnum x) - 1)
 
 
-data TrafficLight Red | Yellow | Green
+data TrafficLight
+  = Red
+  | Yellow
+  | Green
   deriving [Eq]
 
 
@@ -151,11 +154,24 @@ show (Red != Red)
 ;;       improve    g -> (g + x / g) / 2
 ;;       goodEnough g -> (< (abs (- (improve g) g)) (* 1e-12 (max 1 g)))
 
+
+
+
+
 ;; define sqrt :: Float -> Float
 ;;   x | x <= 0    -> 0
 ;;     | otherwise -> improve improve (x / 2)
 ;;     where
 ;;       improve g -> (g + x / g) / 2
+
+
+
+
+
+
+
+
+
 
 ;; show √3
 
@@ -186,12 +202,40 @@ show (Red != Red)
 ;;     ((v.x ^ exp) + (v.y ^ exp) + (v.z ^ exp))
 
 
-;; ;; DONE Make this compile
+;; TODO Activate this after layout-pattern inference and Floating dispatch agree.
+
 ;; define normalize :: Vec3 -> Vec3
 ;;   v[x y z] -> def len √v²
 ;;                     x   y   z
 ;;               Vec3 ─── ─── ───
 ;;                    len len len
+
+
+
+
+;; ⌜1 2 3 ⌞2 + 2⌟ 5 6 7⌝
+
+
+;; ¬∀x. Px  =  ∃x ¬Px
+
+;; id = λx.x
+
+
+
+
+;; TODO
+
+;; ∀x. □Fx -> □∀x. Fx
+
+;; 1.  ¬(∀x. □Fx -> □∀x. Fx)   (w)
+;; 2.  ∀x□Fx                    (w)(1)
+;; 3.  ¬□∀xFx                   (w)(1)
+;; 4.  wRv                      (3)
+;; 5.  ¬∀xFx                    (v)(3)
+;; 6.  ¬Fa                      (v)(5)
+;; 7.  □Fa                      (w)(2)
+;; 8.  Fa                       (v)(7,4)
+;;     x
 
 
 ;; define v Vec3 3.0 4.0 5.0

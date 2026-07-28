@@ -1,0 +1,15 @@
+;;; syntax_reader_values.mon --- Public first-class reader model regression
+
+import Syntax.Reader
+
+module Main
+
+define span :: SourceSpan (source-span "Example.mon" 3 5 3 9)
+define name :: Token (token IdentifierToken "name" span)
+define rule :: ReaderRule (mixfix-rule "_⊕_" "add" 1 LeftAssociative)
+define grammar :: ReaderDescription (reader-description "example-reader" "Example" "_⊕_ add 1 left")
+
+show span.start-line
+show name.lexeme
+show grammar.result-type
+show rule.pattern

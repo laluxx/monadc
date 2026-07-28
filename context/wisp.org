@@ -907,3 +907,14 @@ Test-driven observations and failure records for the corresponding subsystem.
   the internal =__dot= form. Codegen projects the requested field from the
   expression result instead of resolving the field name as a standalone
   function symbol.
+
+[FIX id:fix.wisp.scrutinee-clauses-2026-07-27 src:wisp.c,tests/wisp_scrutinee_clauses.mon,tests/test_how_to_examples.py,core/Logic/FirstOrder/Modal.mon conf:high]
+  A projection or otherwise syntactically unambiguous expression followed by
+  more deeply indented pattern bars lowers to an ordinary =match=. For a root
+  projection such as =tableau.status=, the root identifier is also the single
+  anonymous signature parameter, permitting equation-style definitions
+  without repeating =tableau ->=. Existing function guards are protected by
+  rejecting candidate lines that already contain =|= or =->=. Bare identifier
+  scrutinees remain ambiguous with guard parameter heads and use explicit
+  =(value)= when this case-analysis form is intended. The lowering preserves
+  input line count for diagnostics.

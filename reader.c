@@ -897,6 +897,9 @@ AST *ast_clone(AST *ast) {
     if (!ast) return NULL;
     AST *c = calloc(1, sizeof(AST));
     *c = *ast;  /* shallow copy all fields */
+    c->syntax_context = ast->syntax_context ? strdup(ast->syntax_context) : NULL;
+    c->syntax_original_symbol = ast->syntax_original_symbol
+                              ? strdup(ast->syntax_original_symbol) : NULL;
     c->literal_str = NULL;
     if ((ast->type == AST_NUMBER || ast->type == AST_SYMBOL) &&
         ast->literal_str) {
@@ -1345,6 +1348,8 @@ void ast_free(AST *ast) {
     }
     if (ast->type == AST_NUMBER || ast->type == AST_SYMBOL)
         free(ast->literal_str);
+    free(ast->syntax_context);
+    free(ast->syntax_original_symbol);
     free(ast);
 }
 
@@ -10137,6 +10142,10 @@ static void ast_to_json_sb(SB *b, AST *ast) {
 
     sb_puts(b, "{");
     json_loc(b, ast);
+    if (ast->syntax_context) {
+        sb_puts(b, ",\"syntax_context\":");
+        json_escape(b, ast->syntax_context);
+    }
     sb_puts(b, ",\"type\":");
 
     switch (ast->type) {

@@ -1,10 +1,20 @@
 ;;; Functor.mon --- Mapping abstractions
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: functor bifunctor contravariant typeclass
+:author "Laluxx"
+:version "1.1.0"
+:keywords "functor bifunctor contravariant typeclass mapping"
+
+;;; Commentary:
+
+;; These classes describe structure-preserving changes to type parameters.
+;; Functor and Contravariant each have one primitive mapping operation.
+;; Bifunctor likewise requires only bimap: changing either side independently
+;; is derived here so every binary type constructor receives the same lawful
+;; implementation for free.
 
 ;;; Code:
+
+import Data.Bool
 
 module Data.Functor
   [Functor map
@@ -21,6 +31,15 @@ class Functor f where
   ;; law: map (compose f g) = compose (map f) (map g)
 
 
+method map-list :: (a -> b) -> [a] -> [b]
+  _ []     -> []
+  f [x|xs] -> __rt_prepend (f x) (map-list f xs)
+
+
+instance Functor Coll
+  map f xs -> map-list f xs
+
+
 class Contravariant f where
   contramap :: (a -> b) -> f b -> f a
 
@@ -33,7 +52,14 @@ class Bifunctor p where
   first-map  :: (a -> b) -> p a c -> p b c
   second-map :: (c -> d) -> p a c -> p a d
 
+  first-map f value ->
+    bimap f (lambda (x) x) value
+
+  second-map g value ->
+    bimap (lambda (x) x) g value
+
   ;; higher-kinded: p :: Type -> Type -> Type
+  ;; minimal complete definition: bimap
   ;; law: first-map f = bimap f id
   ;; law: second-map g = bimap id g
 

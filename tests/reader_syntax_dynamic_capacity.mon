@@ -1,0 +1,53 @@
+;;; reader_syntax_dynamic_capacity.mon --- Reader tables grow dynamically
+
+reader-syntax Expression
+  !0_ identity
+  !1_ identity
+  !2_ identity
+  !3_ identity
+  !4_ identity
+  !5_ identity
+  !6_ identity
+  !7_ identity
+  !8_ identity
+  !9_ identity
+  !10_ identity
+  !11_ identity
+  !12_ identity
+  !13_ identity
+  !14_ identity
+  !15_ identity
+  !16_ identity
+  !17_ identity
+  !18_ identity
+  !19_ identity
+  !20_ identity
+  !21_ identity
+  !22_ identity
+  !23_ identity
+  !24_ identity
+  !25_ identity
+  !26_ identity
+  !27_ identity
+  !28_ identity
+  !29_ identity
+  !30_ identity
+  !31_ identity
+  !32_ identity
+  !33_ identity
+  !34_ identity
+  !35_ identity
+  !36_ identity
+  !37_ identity
+  !38_ identity
+  !39_ identity
+
+module Main
+
+define identity :: Int -> Int
+  value -> value
+
+define answer :: Expression
+  !39 42
+
+show answer

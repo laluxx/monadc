@@ -1,0 +1,431 @@
+;;; Modal.mon --- First-order modal logic and labelled analytic tableaux
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "logic first-order modal Kripke semantics labelled analytic tableau"
+
+;;; Commentary:
+
+;; This module owns the object language of quantified modal logic.  A Term is
+;; an individual-language term; a Formula is a proposition of the object
+;; language.  Universal and existential quantifiers bind variable names in a
+;; Formula.  Necessity and possibility are interpreted over a Kripke model:
+;; a set of worlds, an accessibility relation R, a domain policy, and an
+;; interpretation at each world.
+;;
+;; A labelled tableau records Formula@World assertions and accessibility edges.
+;; Each entry retains the analytic-tableau rule and its premise line numbers.
+;; An open saturated branch describes a countermodel; a closed tableau is a
+;; validity certificate only when every branch closes.  The requested branch
+;; closes because line 6 and line 8 contain ¬Fa and Fa at the same world v.
+;; Instantiating line 2 with the parameter introduced at v uses constant-domain
+;; semantics: every world has the same domain, and parameters rigidly designate
+;; the same individual across worlds.  Under varying-domain semantics that
+;; instantiation needs a separate domain-membership side condition.
+;;
+;; The constructors are ordinary core values. Unicode functions ∀, ∃, □, ◇,
+;; ¬, ∧, and ∨ are conveniences over those constructors. The reader declaration
+;; below maps mathematical notation to these same functions only when the
+;; enclosing definition explicitly expects Formula. Thus `->` keeps its normal
+;; meanings in types, clauses, patterns, and iteration syntax.
+
+;;; Code:
+
+reader-syntax Formula
+  ∀_._ ∀       2
+  ∃_._ ∃       2
+  □_   □
+  ◇_   ◇
+  ¬_   ¬
+  _->_ implies 1 right
+  _∨_  ∨       2 left
+  _∧_  ∧       3 left
+
+import Text.Unicode
+import Data.Semigroup
+
+module Logic.FirstOrder.Modal
+  [Term Variable Constant Function
+   Formula Predicate Equality Negation Conjunction Disjunction Implication
+   Universal Existential Necessity Possibility
+   TableauRule Assumption FromNegatedImplication FromNegatedNecessity
+   FromNegatedUniversal FromUniversal FromNecessity
+   TableauEntry FormulaAt Accessibility
+   BranchStatus OpenBranch ClosedBranch
+   Tableau
+   DomainPolicy ConstantDomains IncreasingDomains DecreasingDomains VaryingDomains
+   ProofResult Valid Countermodel Inconclusive
+   prove proof-valid? proof-countermodel? proof-inconclusive? prove-valid?
+   ∀ ∃ □ ◇ ¬ ∧ ∨ implies
+   barcan-formula
+   barcan-tableau
+   render-term
+   render-formula
+   render-entry
+   render-tableau
+   render-barcan-tableau]
+
+
+data Term
+  = Variable String
+  | Constant String
+  | Function String (Coll Term)
+
+
+data Formula
+  = Predicate String (Coll Term)
+  | Equality Term Term
+  | Negation Formula
+  | Conjunction Formula Formula
+  | Disjunction Formula Formula
+  | Implication Formula Formula
+  | Universal String Formula
+  | Existential String Formula
+  | Necessity Formula
+  | Possibility Formula
+
+
+data TableauRule
+  = Assumption
+  | FromNegatedImplication Int
+  | FromNegatedNecessity Int
+  | FromNegatedUniversal Int
+  | FromUniversal Int String
+  | FromNecessity Int Int
+
+
+data TableauEntry
+  = FormulaAt Int String Formula TableauRule
+  | Accessibility Int String String TableauRule
+
+
+data BranchStatus
+  = OpenBranch
+  | ClosedBranch Int Int
+
+
+layout Tableau [entries :: [TableauEntry]] [status -> BranchStatus]
+
+data DomainPolicy
+  = ConstantDomains
+  | IncreasingDomains
+  | DecreasingDomains
+  | VaryingDomains
+
+layout SearchOptions [domain-policy -> DomainPolicy] [step-limit -> Int]
+
+define search-options :: DomainPolicy -> Int -> SearchOptions
+  domain-policy step-limit -> (SearchOptions domain-policy step-limit)
+
+data ProofResult
+  = Valid Tableau
+  | Countermodel Tableau
+  | Inconclusive Tableau String
+
+data SearchOutcome
+  = SearchClosed
+  | SearchOpen
+  | SearchLimited
+
+
+
+
+define ∀ :: String -> Formula -> Formula
+  variable body -> (Universal variable body)
+
+
+define ∃ :: String -> Formula -> Formula
+  variable body -> (Existential variable body)
+
+
+define □ :: Formula -> Formula
+  formula -> (Necessity formula)
+
+
+define ◇ :: Formula -> Formula
+  formula -> (Possibility formula)
+
+
+define ¬ :: Formula -> Formula
+  formula -> (Negation formula)
+
+
+define ∧ :: Formula -> Formula -> Formula
+  left right -> (Conjunction left right)
+
+
+define ∨ :: Formula -> Formula -> Formula
+  left right -> (Disjunction left right)
+
+
+define implies :: Formula -> Formula -> Formula
+  antecedent consequent -> (Implication antecedent consequent)
+
+
+define spaces :: Int -> String
+  0 -> ""
+  amount -> (" " ++ (spaces (amount - 1)))
+
+
+define pad-right :: String -> Int -> String
+  text width -> (text ++ (spaces (width - (text-width text))))
+
+
+define digit-text :: Int -> String
+  0 -> "0"
+  1 -> "1"
+  2 -> "2"
+  3 -> "3"
+  4 -> "4"
+  5 -> "5"
+  6 -> "6"
+  7 -> "7"
+  8 -> "8"
+  9 -> "9"
+
+
+define natural-text :: Int -> String
+  0 -> "0"
+  number -> natural-text-positive number
+
+
+define natural-text-positive :: Int -> String
+  number -> if number < 10 then digit-text number else ((natural-text-positive (number / 10)) ++ (digit-text (number % 10)))
+
+
+define render-term-list :: [Term] -> String
+  [] -> ""
+  [term|rest] -> concat (render-term term) (render-term-tail rest)
+
+
+define render-term-tail :: [Term] -> String
+  [] -> ""
+  [term|rest] -> concat ", " (concat (render-term term) (render-term-tail rest))
+
+
+define render-term :: Term -> String
+  [Variable name] -> name
+  [Constant name] -> name
+  [Function name arguments] -> (name ++ "(" ++ (render-term-list arguments) ++ ")")
+
+
+define render-predicate :: String -> [Term] -> String
+  name arguments -> (match arguments with
+    | [] -> name
+    | [argument] -> (name ++ (render-term argument))
+    | _ -> (name ++ "(" ++ (render-term-list arguments) ++ ")"))
+
+
+define render-formula :: Formula -> String
+  [Predicate name arguments] -> render-predicate name arguments
+  [Equality left right] -> ((render-term left) ++ " = " ++ (render-term right))
+  [Negation inner] -> (match inner with
+    | [Predicate name arguments] -> ("¬" ++ (render-predicate name arguments))
+    | [Equality left right] -> ("¬" ++ (render-term left) ++ " = " ++ (render-term right))
+    | [Negation nested] -> ("¬¬" ++ (render-formula nested))
+    | [Conjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
+    | [Disjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
+    | [Implication left right] -> ("¬(" ++ (render-formula left) ++ " -> " ++ (render-formula right) ++ ")")
+    | [Universal variable body] -> ("¬∀" ++ variable ++ ". " ++ (render-formula body))
+    | [Existential variable body] -> ("¬∃" ++ variable ++ ". " ++ (render-formula body))
+    | [Necessity body] -> ("¬□" ++ (render-formula body))
+    | [Possibility body] -> ("¬◇" ++ (render-formula body)))
+  [Conjunction left right] -> ("(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
+  [Disjunction left right] -> ("(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
+  [Implication left right] -> ((render-formula left) ++ " -> " ++ (render-formula right))
+  [Universal variable body] -> ("∀" ++ variable ++ ". " ++ (render-formula body))
+  [Existential variable body] -> ("∃" ++ variable ++ ". " ++ (render-formula body))
+  [Necessity body] -> ("□" ++ (render-formula body))
+  [Possibility body] -> ("◇" ++ (render-formula body))
+
+
+define render-rule :: TableauRule -> String
+  [Assumption] -> ""
+  [FromNegatedImplication premise] -> ("(" ++ (natural-text premise) ++ ")")
+  [FromNegatedNecessity premise] -> ("(" ++ (natural-text premise) ++ ")")
+  [FromNegatedUniversal premise] -> ("(" ++ (natural-text premise) ++ ")")
+  [FromUniversal premise parameter] -> ("(" ++ (natural-text premise) ++ ")")
+  [FromNecessity formula-premise edge-premise] -> ("(" ++ (natural-text formula-premise) ++ "," ++ (natural-text edge-premise) ++ ")")
+
+
+define render-entry :: TableauEntry -> String
+  [FormulaAt number world formula rule] -> ((natural-text number) ++ ".  " ++ (pad-right (render-formula formula) 24) ++ "(" ++ world ++ ")" ++ (render-rule rule))
+  [Accessibility number source target rule] -> ((natural-text number) ++ ".  " ++ (pad-right (source ++ "R" ++ target) 24) ++ (render-rule rule))
+
+
+define render-entries :: [TableauEntry] -> String
+  [] -> ""
+  [entry|rest] -> ((render-entry entry) ++ (render-entry-lines rest))
+
+
+define render-entry-lines :: [TableauEntry] -> String
+  [] -> ""
+  [entry|rest] -> ("\n" ++ (render-entry entry) ++ (render-entry-lines rest))
+
+
+define render-status :: BranchStatus -> String
+  [OpenBranch] -> "OPEN: a countermodel can be extracted from this branch."
+  [ClosedBranch first second] -> ("CLOSED: contradictory lines " ++ (natural-text first) ++ " and " ++ (natural-text second) ++ ".")
+
+
+define render-tableau :: Tableau -> String
+  tableau -> ((render-entries tableau.entries) ++ "\n\n" ++ (render-status tableau.status))
+
+
+define tableau-closed? :: Tableau -> Bool
+  tableau.status
+    | [ClosedBranch _ _] -> True
+    | OpenBranch -> False
+
+
+define predicate-application1 :: String -> Term -> Formula
+  predicate term -> (Predicate predicate (list term))
+
+;;; Total bounded proof search
+
+define symbol-key :: String -> String
+  name -> ((natural-text (text-width name)) ++ ":" ++ name)
+
+define term-list-key :: [Term] -> String
+  [] -> "z"
+  [term|rest] -> ("s" ++ (term-key term) ++ (term-list-key rest))
+
+define term-key :: Term -> String
+  [Variable name] -> ("v" ++ (symbol-key name))
+  [Constant name] -> ("c" ++ (symbol-key name))
+  [Function name arguments] -> ("f" ++ (symbol-key name) ++ (term-list-key arguments))
+
+define formula-key :: Formula -> String
+  [Predicate name arguments] -> ("p" ++ (symbol-key name) ++ (term-list-key arguments))
+  [Equality left right] -> ("e" ++ (term-key left) ++ (term-key right))
+  [Negation body] -> ("n" ++ (formula-key body))
+  [Conjunction left right] -> ("a" ++ (formula-key left) ++ (formula-key right))
+  [Disjunction left right] -> ("o" ++ (formula-key left) ++ (formula-key right))
+  [Implication left right] -> ("i" ++ (formula-key left) ++ (formula-key right))
+  [Universal variable body] -> ("u" ++ (symbol-key variable) ++ (formula-key body))
+  [Existential variable body] -> ("x" ++ (symbol-key variable) ++ (formula-key body))
+  [Necessity body] -> ("b" ++ (formula-key body))
+  [Possibility body] -> ("d" ++ (formula-key body))
+
+define formula-same? :: Formula -> Formula -> Bool
+  left right -> (formula-key left) = (formula-key right)
+
+define contains-formula-in? :: [Formula] -> Formula -> Bool
+  [] formula -> False
+  [candidate|rest] formula -> (if (formula-same? formula candidate) True (contains-formula-in? rest formula))
+
+define complementary? :: Formula -> [Formula] -> Bool
+  [Negation body] rest -> (contains-formula-in? rest body)
+  formula rest -> (contains-formula-in? rest (Negation formula))
+
+define closed-formulas? :: [Formula] -> Bool
+  [] -> False
+  [formula|rest] -> (if (complementary? formula rest) True (closed-formulas? rest))
+
+define prepend-formula :: Formula -> [Formula] -> [Formula]
+  formula formulas -> prepend formula formulas
+
+define combine-search :: SearchOutcome -> SearchOutcome -> SearchOutcome
+  [SearchOpen] right -> SearchOpen
+  [SearchClosed] [SearchClosed] -> SearchClosed
+  [SearchClosed] [SearchOpen] -> SearchOpen
+  [SearchClosed] [SearchLimited] -> SearchLimited
+  [SearchLimited] [SearchOpen] -> SearchOpen
+  [SearchLimited] right -> SearchLimited
+
+define search-negated-formula :: Formula -> Int -> [Formula] -> [Formula] -> SearchOutcome
+  [Negation body] fuel pending settled -> (search-formulas (fuel - 1) (prepend-formula body pending) settled)
+  [Disjunction left right] fuel pending settled -> (search-formulas (fuel - 1) (prepend-formula (Negation left) (prepend-formula (Negation right) pending)) settled)
+  [Implication left right] fuel pending settled -> (search-formulas (fuel - 1) (prepend-formula left (prepend-formula (Negation right) pending)) settled)
+  [Conjunction left right] fuel pending settled -> (combine-search (search-formulas (fuel - 1) (prepend-formula (Negation left) pending) settled) (search-formulas (fuel - 1) (prepend-formula (Negation right) pending) settled))
+  [Universal _ _] fuel pending settled -> SearchLimited
+  [Existential _ _] fuel pending settled -> SearchLimited
+  [Necessity _] fuel pending settled -> SearchLimited
+  [Possibility _] fuel pending settled -> SearchLimited
+  formula fuel pending settled -> (search-formulas (fuel - 1) pending (prepend-formula (Negation formula) settled))
+
+define search-formula :: Formula -> Int -> [Formula] -> [Formula] -> SearchOutcome
+  [Negation body] fuel pending settled -> (search-negated-formula body fuel pending settled)
+  [Conjunction left right] fuel pending settled -> (search-formulas (fuel - 1) (prepend-formula left (prepend-formula right pending)) settled)
+  [Disjunction left right] fuel pending settled -> (combine-search (search-formulas (fuel - 1) (prepend-formula left pending) settled) (search-formulas (fuel - 1) (prepend-formula right pending) settled))
+  [Implication left right] fuel pending settled -> (combine-search (search-formulas (fuel - 1) (prepend-formula (Negation left) pending) settled) (search-formulas (fuel - 1) (prepend-formula right pending) settled))
+  [Universal _ _] fuel pending settled -> SearchLimited
+  [Existential _ _] fuel pending settled -> SearchLimited
+  [Necessity _] fuel pending settled -> SearchLimited
+  [Possibility _] fuel pending settled -> SearchLimited
+  formula fuel pending settled -> (search-formulas (fuel - 1) pending (prepend-formula formula settled))
+
+define search-pending :: [Formula] -> Int -> [Formula] -> SearchOutcome
+  [] fuel settled -> (if (closed-formulas? settled) SearchClosed SearchOpen)
+  [formula|rest] fuel settled -> (if (closed-formulas? (prepend-formula formula settled)) SearchClosed (search-formula formula fuel rest settled))
+
+define search-formulas :: Int -> [Formula] -> [Formula] -> SearchOutcome
+  fuel pending settled -> (if (fuel <= 0) SearchLimited (search-pending pending fuel settled))
+
+define proof-from-search :: SearchOutcome -> ProofResult
+  [SearchClosed] -> (Valid (Tableau (list) (ClosedBranch 0 0)))
+  [SearchOpen] -> (Countermodel (Tableau (list) OpenBranch))
+  [SearchLimited] -> (Inconclusive (Tableau (list) OpenBranch) "search frontier requires quantifier/modal saturation or more steps")
+
+define prove-with :: SearchOptions -> Formula -> ProofResult
+  options formula -> (proof-from-search (search-formulas options.step-limit (prepend-formula (Negation formula) (list)) (list)))
+
+define prove :: DomainPolicy -> Int -> Formula -> ProofResult
+  domain-policy step-limit formula -> (proof-from-search (search-formulas step-limit (prepend-formula (Negation formula) (list)) (list)))
+
+define proof-valid? :: ProofResult -> Bool
+  [Valid _] -> True
+  _ -> False
+
+define proof-countermodel? :: ProofResult -> Bool
+  [Countermodel _] -> True
+  _ -> False
+
+define proof-inconclusive? :: ProofResult -> Bool
+  [Inconclusive _ _] -> True
+  _ -> False
+
+define prove-valid? :: DomainPolicy -> Int -> Formula -> Bool
+  domain-policy step-limit formula -> (proof-valid? (prove domain-policy step-limit formula))
+
+
+
+define barcan-formula :: String -> Formula
+  predicate -> (implies (∀ "x" (□ (predicate-application1 predicate (Variable "x")))) (□ (∀ "x" (predicate-application1 predicate (Variable "x")))))
+
+
+define barcan-tableau :: String -> Tableau
+  predicate -> (Tableau
+    [(FormulaAt 1 "w" (¬ (barcan-formula predicate)) Assumption)
+     (FormulaAt 2 "w" (∀ "x" (□ (predicate-application1 predicate (Variable "x")))) (FromNegatedImplication 1))
+     (FormulaAt 3 "w" (¬ (□ (∀ "x" (predicate-application1 predicate (Variable "x"))))) (FromNegatedImplication 1))
+     (Accessibility 4 "w" "v" (FromNegatedNecessity 3))
+     (FormulaAt 5 "v" (¬ (∀ "x" (predicate-application1 predicate (Variable "x")))) (FromNegatedNecessity 3))
+     (FormulaAt 6 "v" (¬ (predicate-application1 predicate (Constant "a"))) (FromNegatedUniversal 5))
+     (FormulaAt 7 "w" (□ (predicate-application1 predicate (Constant "a"))) (FromUniversal 2 "a"))
+     (FormulaAt 8 "v" (predicate-application1 predicate (Constant "a")) (FromNecessity 7 4))]
+    (ClosedBranch 6 8))
+
+
+define render-barcan-tableau :: String -> String
+  predicate -> render-tableau (barcan-tableau predicate)
+
+tests
+  :bounded-proof-search:
+  assert-eq (proof-valid? (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "P" [])))) True "identity implication closes for an arbitrary atom"
+  assert-eq (proof-valid? (prove ConstantDomains 128 (implies (Predicate "P" [(Constant "a")]) (Predicate "P" [(Constant "a")])))) True "identity implication closes for a first-order atom"
+  assert-eq (proof-countermodel? (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "Q" [])))) True "an open saturated propositional branch yields a countermodel outcome"
+  assert-eq (proof-inconclusive? (prove ConstantDomains 0 (Predicate "P" []))) True "a zero search budget is explicit rather than misclassified"
+  assert-eq (proof-inconclusive? (prove ConstantDomains 128 (Universal "x" (Predicate "P" [(Variable "x")])))) True "an unsaturated quantifier frontier is explicit"
+  assert-eq (formula-same? (Predicate "F" [(Variable "x")]) (Predicate "Fx" [])) False "structural keys cannot collide with pretty-printed surface notation"
+  :bounded-proof-search:
+
+  :formula-rendering:
+  assert-eq (render-formula (barcan-formula "F")) "∀x. □Fx -> □∀x. Fx" "render the requested first-order modal formula"
+  :formula-rendering:
+
+  :labelled-tableau:
+  show (render-barcan-tableau "F")
+  assert-eq (render-barcan-tableau "F") "1.  ¬(∀x. □Fx -> □∀x. Fx)   (w)\n2.  ∀x. □Fx                 (w)(1)\n3.  ¬□∀x. Fx                (w)(1)\n4.  wRv                     (3)\n5.  ¬∀x. Fx                 (v)(3)\n6.  ¬Fa                     (v)(5)\n7.  □Fa                     (w)(2)\n8.  Fa                      (v)(7,4)\n\nCLOSED: contradictory lines 6 and 8." "render a stable aligned labelled-tableau process and its closed-branch result"
+  assert-eq (tableau-closed? (barcan-tableau "F")) True "scrutinee clauses inspect the generated tableau status"
+  :labelled-tableau:

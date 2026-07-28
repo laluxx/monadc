@@ -114,12 +114,11 @@
       #(when (not condition) (error message))
       #(begin)))=
 
-[THINK id:think.context.macro.quasi-output-eval date:2026-06-13 by:codex]
-  Full compile-time evaluation of code outside =#()= is TODO.  Currently the
-  whole body is substituted and =#()= is stripped, so conditionals like
-  =(if debug-mode ...)= are not evaluated at compile time — both branches
-  survive into the output.  Future work: evaluate the non-=#()= portion at
-  expansion time.
+[FIX id:fix.context.macro.quasi-output-eval date:2026-07-27 by:codex supersedes:think.context.macro.quasi-output-eval]
+  Supported forms outside =#()= execute in the deterministic Syntax evaluator.
+  Boolean conditionals select one branch at expansion time; syntax constructors
+  build the returned tree explicitly. The remaining work is to expand the
+  evaluator kernel and lexical-context API, not to introduce evaluation itself.
 
 * Hygiene (Macro-Generated Name Renaming)
 :PROPERTIES:
@@ -351,3 +350,106 @@
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+* Procedural Syntax Evaluation
+
+[FIX id:fix.macro.syntax-evaluator-kernel-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Syntax-returning Monad functions pass their substituted tree through a
+  deterministic compile-time evaluator. It executes Boolean conditionals,
+  sequencing, numeric arithmetic and comparisons, and reader-lowered lexical
+  bindings. Calls outside the evaluator kernel remain syntax constructors, so
+  object-language applications are not accidentally executed by the compiler.
+
+[OBS id:obs.macro.immutable-syntax-constructors-2026-07-27 src:macro.c,how_to/ReaderSyntax.mon conf:high]
+  =syntax-list=, =syntax-symbol=, =syntax-string=, and =syntax-number= construct
+  fresh owned AST values during expansion. The Reader DSL tutorial uses these
+  primitives to build an application procedurally from Monad code.
+
+[FIX id:fix.macro.syntax-evaluator-diagnostics-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Compile-time type errors from syntax primitives include the active source
+  filename and source coordinates. Evaluation is capped by a deterministic
+  step budget so malformed transformers cannot consume unbounded compiler work.
+
+[FIX id:fix.macro.structural-syntax-api-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Syntax transformers can inspect number, string, symbol, and list shapes;
+  measure and index syntax lists; extract symbol text; and compare compile-time
+  strings. Indexing validates integral bounds and reports a source-located
+  diagnostic instead of exposing an AST address.
+
+[FIX id:fix.macro.compile-time-helper-calls-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  A Syntax-returning function may call another Syntax-returning function during
+  evaluation. Helper calls reuse parameter binding, hygienic introduced-name
+  collection, the caller's evaluation budget, and deterministic evaluation;
+  they do not emit runtime functions.
+
+[OBS id:obs.macro.expansion-json-trace-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  =MONAD_MACRO_TRACE=1= emits one JSON object per expansion with the expansion
+  phase, macro name, input AST, and output AST. Tracing is opt-in and normal
+  compiler output remains quiet.
+
+[FIX id:fix.macro.quasiquote-depth-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Compile-time quasiquote constructs syntax and evaluates unquote holes at
+  depth one. Nested quasiquotes increment depth and preserve inner unquotes
+  until their matching quotation level.
+
+[FIX id:fix.macro.user-source-diagnostic-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  =syntax-source-*= exposes copied source coordinates, and =syntax-error= lets a
+  transformer attach a custom diagnostic to the argument syntax that caused
+  it. The diagnostic therefore points to the DSL use site rather than the
+  transformer's implementation body.
+
+[FIX id:fix.macro.quasiquote-splicing-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  =unquote-splicing= evaluates its expression at quotation depth one, requires
+  list Syntax, and inserts cloned elements into the surrounding immutable list.
+  Use outside a quasiquoted list and non-list results are source-located errors.
+
+[FIX id:fix.macro.explicit-hygiene-api-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  =syntax-gensym= and =syntax-introduce= create globally fresh compiler-safe
+  identifiers. =syntax-capture= is the explicit escape hatch that constructs
+  an unscoped identifier for intentional use-site capture. Fresh-name tests
+  prove distinct introductions cannot collide.
+
+[OBS id:obs.macro.syntax-kind-match-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  =syntax-kind= returns a compile-time String describing the immutable node.
+  Ordinary Monad =match= lowers to lexical lambdas and conditionals already
+  understood by the evaluator, providing structural pattern dispatch without
+  a second compiler-only pattern language.
+
+[FIX id:fix.macro.lexical-context-metadata-2026-07-27 src:reader.h,reader.c,macro.c,tests/test_how_to_examples.py conf:high]
+  Syntax nodes own optional immutable lexical-context metadata. AST cloning,
+  destruction, and JSON tracing preserve it. =syntax-fresh-context= creates a
+  fresh context, =syntax-add-context= materializes a compiler-distinct
+  identifier while retaining its source spelling, =syntax-context= inspects
+  the context, and =syntax-remove-context= is the explicit de-scoping operation.
+
+[FIX id:fix.macro.recursive-syntax-containers-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Compile-time helpers may recursively traverse immutable Syntax lists with
+  =syntax-list-tail= and construct them with =syntax-list-cons=. Arrays have a
+  distinct syntax kind and are constructed and inspected through
+  =syntax-array=, =syntax-array?=, =syntax-array-length=, and
+  =syntax-array-ref=; list and array access both perform checked indexing.
+
+[FIX id:fix.macro.evaluation-depth-bound-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Syntax evaluation enforces independent deterministic step and nesting
+  limits. The nesting guard is checked before entering the recursive evaluator
+  and is reset for each top-level transformation, preventing a recursively
+  defined transformer from reaching the host C stack limit. Exhaustion exits
+  normally with a source-located compiler error rather than a signal crash.
+
+[FIX id:fix.macro.module-owned-transformers-2026-07-27 src:macro.c,macro.h,main.c,tests/test_how_to_examples.py conf:high]
+  Every Syntax transformer records the canonical source file of its defining
+  module. Recursive compilation maintains nested expansion scopes containing
+  the current owner and only its direct imports. A transformer imported by an
+  intermediary module therefore does not leak transitively. A module-local
+  transformer shadows imported names; otherwise equal names from two active
+  imported owners produce a deterministic ambiguity diagnostic naming both
+  source files.
+
+[FIX id:fix.macro.transformer-export-and-definition-scope-2026-07-27 src:macro.c,tests/test_how_to_examples.py conf:high]
+  Macro registration derives transformer visibility from the owning module's
+  explicit export array. Private transformers remain callable within their
+  owner but are invisible across an import boundary. Each transformer captures
+  its definition-time direct-import set; evaluation temporarily restores that
+  lexical phase environment, allowing an exported transformer to call private
+  local helpers or its own imported helpers without dynamically inheriting the
+  client's unrelated transformer bindings.

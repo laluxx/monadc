@@ -6,10 +6,10 @@
 
 ;;; Commentary:
 
-;; The polymorphic sequence module for Monad.
-;; Provides a unified interface for Lists, Arrays, and Strings.
-;; Includes structural manipulation (take, drop), concatenation,
-;; and higher-order sequence utilities that work across all Coll types.
+ The polymorphic sequence module for Monad.
+ Provides a unified interface for Lists, Arrays, and Strings.
+ Includes structural manipulation (take, drop), concatenation,
+ and higher-order sequence utilities that work across all Coll types.
 
 ;;; Code:
 

@@ -92,6 +92,7 @@ set(MONADC_COMPILER_SOURCES
   optimizations.c
   pmatch.c
   reader.c
+  reader_syntax.c
   repl.c
   typeclass.c
   types.c

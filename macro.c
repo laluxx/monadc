@@ -19,6 +19,50 @@ static char *xstrdup(const char *s) {
  * a globally unique suffix even across multiple calls to macro_expand_all. */
 static unsigned long g_macro_gensym = 0;
 
+static bool macro_debug(void) {
+    const char *value = getenv("MONAD_MACRO_DEBUG");
+    return value && value[0] && strcmp(value, "0") != 0;
+}
+
+static bool macro_trace_enabled(void) {
+    const char *value = getenv("MONAD_MACRO_TRACE");
+    return value && value[0] && strcmp(value, "0") != 0;
+}
+
+static void macro_trace_json_string(FILE *stream, const char *text) {
+    fputc('"', stream);
+    for (const unsigned char *p = (const unsigned char *)(text ? text : "");
+         *p; p++) {
+        switch (*p) {
+        case '"': fputs("\\\"", stream); break;
+        case '\\': fputs("\\\\", stream); break;
+        case '\n': fputs("\\n", stream); break;
+        case '\r': fputs("\\r", stream); break;
+        case '\t': fputs("\\t", stream); break;
+        default:
+            if (*p < 0x20) fprintf(stream, "\\u%04x", *p);
+            else fputc(*p, stream);
+        }
+    }
+    fputc('"', stream);
+}
+
+static void macro_trace_expansion(const char *name, const char *phase,
+                                  AST *input, AST *output) {
+    if (!macro_trace_enabled()) return;
+    char *input_json = ast_to_json(input);
+    char *output_json = ast_to_json(output);
+    fputs("[macro-trace] {\"event\":\"expand\",\"phase\":", stderr);
+    macro_trace_json_string(stderr, phase);
+    fputs(",\"macro\":", stderr);
+    macro_trace_json_string(stderr, name);
+    fprintf(stderr, ",\"input\":%s,\"output\":%s}\n",
+            input_json ? input_json : "null",
+            output_json ? output_json : "null");
+    free(input_json);
+    free(output_json);
+}
+
 /* Produce "macroname__varname__N" */
 static char *gensym(const char *macro_name, const char *var_name) {
     char buf[512];
@@ -164,6 +208,10 @@ static const char *rt_lookup(RenameTable *rt, const char *name) {
 //
 typedef struct {
     char     *name;
+    char     *owner_file;
+    bool      exported;
+    char    **lexical_imports;
+    size_t    lexical_import_count;
     ASTParam *params;
     int       param_count;
     AST      *body;       // NOT owned — points into a live lambda node
@@ -186,6 +234,70 @@ typedef struct {
 
 static MacroRegistry g_reg = {0};
 
+typedef struct MacroScope {
+    char *owner_file;
+    char **allowed_files;
+    size_t allowed_count;
+    size_t allowed_capacity;
+    struct MacroScope *previous;
+} MacroScope;
+
+static MacroScope *g_macro_scope;
+
+static char *macro_owner_key(const char *path) {
+    if (!path) return xstrdup("<input>");
+    char *absolute = realpath(path, NULL);
+    return absolute ? absolute : xstrdup(path);
+}
+
+void macro_scope_push(const char *owner_file) {
+    MacroScope *scope = calloc(1, sizeof(*scope));
+    if (!scope) { fprintf(stderr, "error: out of memory creating macro scope\n"); exit(1); }
+    scope->owner_file = macro_owner_key(owner_file);
+    scope->previous = g_macro_scope;
+    g_macro_scope = scope;
+}
+
+void macro_scope_allow(const char *owner_file) {
+    if (!g_macro_scope) return;
+    char *key = macro_owner_key(owner_file);
+    for (size_t i = 0; i < g_macro_scope->allowed_count; i++) {
+        if (strcmp(g_macro_scope->allowed_files[i], key) == 0) {
+            free(key);
+            return;
+        }
+    }
+    if (g_macro_scope->allowed_count == g_macro_scope->allowed_capacity) {
+        size_t capacity = g_macro_scope->allowed_capacity
+                        ? g_macro_scope->allowed_capacity * 2 : 8;
+        char **files = realloc(g_macro_scope->allowed_files,
+                               capacity * sizeof(*files));
+        if (!files) { free(key); fprintf(stderr, "error: out of memory growing macro scope\n"); exit(1); }
+        g_macro_scope->allowed_files = files;
+        g_macro_scope->allowed_capacity = capacity;
+    }
+    g_macro_scope->allowed_files[g_macro_scope->allowed_count++] = key;
+}
+
+void macro_scope_pop(void) {
+    if (!g_macro_scope) return;
+    MacroScope *scope = g_macro_scope;
+    g_macro_scope = scope->previous;
+    free(scope->owner_file);
+    for (size_t i = 0; i < scope->allowed_count; i++)
+        free(scope->allowed_files[i]);
+    free(scope->allowed_files);
+    free(scope);
+}
+
+static int macro_owner_is_active(const char *owner_file) {
+    if (!g_macro_scope) return 1;
+    if (strcmp(g_macro_scope->owner_file, owner_file) == 0) return 1;
+    for (size_t i = 0; i < g_macro_scope->allowed_count; i++)
+        if (strcmp(g_macro_scope->allowed_files[i], owner_file) == 0) return 1;
+    return 0;
+}
+
 static unsigned int macro_hash(const char *s) {
     unsigned int h = 5381;
     while (*s) h = ((h << 5) + h) + (unsigned char)*s++;
@@ -198,6 +310,10 @@ void macro_clear(void) {
         while (e) {
             MacroEntry *next = e->next;
             free(e->def.name);
+            free(e->def.owner_file);
+            for (size_t j = 0; j < e->def.lexical_import_count; j++)
+                free(e->def.lexical_imports[j]);
+            free(e->def.lexical_imports);
             for (int j = 0; j < e->def.param_count; j++) {
                 free(e->def.params[j].name);
                 free(e->def.params[j].type_name);
@@ -215,6 +331,7 @@ void macro_clear(void) {
     g_reg.lambdas      = NULL;
     g_reg.lambda_count = 0;
     g_reg.lambda_cap   = 0;
+    while (g_macro_scope) macro_scope_pop();
 }
 
 static void registry_keep_lambda(AST *lam) {
@@ -225,7 +342,7 @@ static void registry_keep_lambda(AST *lam) {
     g_reg.lambdas[g_reg.lambda_count++] = lam;
 }
 
-static void registry_add(const char *name, AST *lambda) {
+static void registry_add(const char *name, AST *lambda, bool exported) {
     if (!lambda || lambda->type != AST_LAMBDA) return;
 
     /* Copy params so the MacroDef is self-contained */
@@ -241,6 +358,24 @@ static void registry_add(const char *name, AST *lambda) {
     unsigned int h = macro_hash(name);
     MacroEntry *e  = malloc(sizeof(MacroEntry));
     e->def.name        = xstrdup(name);
+    e->def.owner_file  = macro_owner_key(g_macro_scope
+                                       ? g_macro_scope->owner_file
+                                       : current_filename);
+    e->def.exported    = exported;
+    e->def.lexical_imports = NULL;
+    e->def.lexical_import_count = 0;
+    if (g_macro_scope && g_macro_scope->allowed_count) {
+        e->def.lexical_import_count = g_macro_scope->allowed_count;
+        e->def.lexical_imports = calloc(e->def.lexical_import_count,
+                                        sizeof(*e->def.lexical_imports));
+        if (!e->def.lexical_imports) {
+            fprintf(stderr, "error: out of memory capturing transformer imports\n");
+            exit(1);
+        }
+        for (size_t i = 0; i < e->def.lexical_import_count; i++)
+            e->def.lexical_imports[i] =
+                xstrdup(g_macro_scope->allowed_files[i]);
+    }
     e->def.params      = params;
     e->def.param_count = n;
     e->def.body        = lambda->lambda.body; // pointer into lambda; lambda kept alive
@@ -249,17 +384,43 @@ static void registry_add(const char *name, AST *lambda) {
 
     /* Keep the lambda alive so body stays valid */
     registry_keep_lambda(lambda);
-    fprintf(stderr, "[macro] registered '%s' (%d param%s%s)\n",
-            name, n, n == 1 ? "" : "s",
-            (n > 0 && params[n-1].is_rest) ? " + rest" : "");
+    if (macro_debug()) {
+        fprintf(stderr, "[macro] registered '%s' (%d param%s%s)",
+                name, n, n == 1 ? "" : "s",
+                (n > 0 && params[n-1].is_rest) ? " + rest" : "");
+        for (int i = 0; i < n; i++)
+            fprintf(stderr, " %s", params[i].name);
+        fputc('\n', stderr);
+    }
 }
 
 static MacroDef *registry_lookup(const char *name) {
     unsigned int h = macro_hash(name);
-    for (MacroEntry *e = g_reg.buckets[h]; e; e = e->next)
-        if (strcmp(e->def.name, name) == 0)
+    MacroDef *imported = NULL;
+    for (MacroEntry *e = g_reg.buckets[h]; e; e = e->next) {
+        if (strcmp(e->def.name, name) != 0 ||
+            !macro_owner_is_active(e->def.owner_file))
+            continue;
+        if (!g_macro_scope) return &e->def;
+        if (strcmp(e->def.owner_file, g_macro_scope->owner_file) == 0)
             return &e->def;
-    return NULL;
+        if (!e->def.exported) continue;
+        if (imported && strcmp(imported->owner_file, e->def.owner_file) != 0) {
+            fprintf(stderr,
+                    "%s:1:1: error: ambiguous Syntax transformer '%s' imported from %s and %s\n",
+                    g_macro_scope->owner_file, name,
+                    imported->owner_file, e->def.owner_file);
+            exit(1);
+        }
+        imported = &e->def;
+    }
+    return imported;
+}
+
+static void macro_definition_scope_push(const MacroDef *def) {
+    macro_scope_push(def->owner_file);
+    for (size_t i = 0; i < def->lexical_import_count; i++)
+        macro_scope_allow(def->lexical_imports[i]);
 }
 
 int macro_is_registered(const char *name) {
@@ -366,6 +527,690 @@ static void collect_introduced(AST *node, BindTable *bt,
 // Forward declaration
 static AST *subst(AST *node, BindTable *bt, RenameTable *rt,
                   const char *macro_name);
+static bool bind_args(MacroDef *def, AST **args, int argc, BindTable *bt);
+
+/*
+ * Compile-time Syntax evaluator
+ *
+ * Macro substitution produces an owned syntax tree.  This evaluator reduces
+ * the deliberately small, deterministic computation kernel used by Syntax
+ * transformers.  Calls outside that kernel are syntax constructors: their
+ * shape is preserved while their children are reduced.  This is the staging
+ * boundary that lets `(add-expression x x)` construct object-language syntax
+ * while `x + 1` computes when both operands are numeric syntax literals.
+ */
+static AST *syntax_eval(AST *node);
+static AST *syntax_eval_impl(AST *node);
+static AST *syntax_quasiquote(AST *node, int depth);
+static size_t g_syntax_eval_steps = 0;
+static size_t g_syntax_eval_depth = 0;
+
+#define SYNTAX_EVAL_STEP_LIMIT 100000u
+#define SYNTAX_EVAL_DEPTH_LIMIT 512u
+
+static void syntax_eval_error(const AST *node, const char *message) {
+    fprintf(stderr, "%s:%d:%d: error: %s\n",
+            current_filename ? current_filename : "<input>",
+            node ? node->line : 0, node ? node->column : 0, message);
+    exit(1);
+}
+
+static int syntax_boolean(AST *node, bool *value) {
+    if (!node || node->type != AST_SYMBOL) return 0;
+    if (strcmp(node->symbol, "True") == 0) { *value = true; return 1; }
+    if (strcmp(node->symbol, "False") == 0) { *value = false; return 1; }
+    return 0;
+}
+
+static AST *syntax_number(double value, const AST *source) {
+    AST *result = ast_new_number(value, NULL);
+    if (source) {
+        result->line = source->line;
+        result->column = source->column;
+        result->end_column = source->end_column;
+    }
+    return result;
+}
+
+static AST *syntax_bool(bool value, const AST *source) {
+    AST *result = ast_new_symbol(value ? "True" : "False");
+    if (source) {
+        result->line = source->line;
+        result->column = source->column;
+        result->end_column = source->end_column;
+    }
+    return result;
+}
+
+static AST *syntax_eval_transformer_call(MacroDef *def, AST *call) {
+    int argc = (int)call->list.count - 1;
+    AST **args = call->list.items + 1;
+    BindTable bindings;
+    bt_init(&bindings);
+    if (!bind_args(def, args, argc, &bindings)) {
+        bt_free(&bindings);
+        syntax_eval_error(call, "invalid compile-time helper call");
+    }
+
+    char **introduced = NULL;
+    int introduced_count = 0;
+    int introduced_capacity = 0;
+    collect_introduced(def->body, &bindings, &introduced,
+                       &introduced_count, &introduced_capacity);
+    RenameTable renames;
+    rt_init(&renames);
+    for (int i = 0; i < introduced_count; i++) {
+        rt_rename(&renames, introduced[i], def->name);
+        free(introduced[i]);
+    }
+    free(introduced);
+
+    AST *substituted = subst(def->body, &bindings, &renames, def->name);
+    macro_definition_scope_push(def);
+    AST *result = syntax_eval(substituted);
+    macro_scope_pop();
+    ast_free(substituted);
+    rt_free(&renames);
+    bt_free(&bindings);
+    macro_trace_expansion(def->name, "helper", call, result);
+    return result;
+}
+
+static AST *syntax_quasiquote(AST *node, int depth) {
+    if (!node || node->type != AST_LIST)
+        return ast_clone(node);
+
+    AST *head = node->list.count ? node->list.items[0] : NULL;
+    const char *name = head && head->type == AST_SYMBOL ? head->symbol : NULL;
+    if (name && strcmp(name, "unquote") == 0 && node->list.count == 2) {
+        if (depth == 1)
+            return syntax_eval(node->list.items[1]);
+        AST *result = ast_new_list();
+        ast_list_append(result, ast_clone(head));
+        ast_list_append(result, syntax_quasiquote(node->list.items[1], depth - 1));
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        return result;
+    }
+    if (name && strcmp(name, "unquote-splicing") == 0 &&
+        node->list.count == 2 && depth == 1)
+        syntax_eval_error(node,
+            "unquote-splicing is only valid inside a quasiquoted list");
+
+    AST *result = ast_new_list();
+    result->line = node->line;
+    result->column = node->column;
+    result->end_column = node->end_column;
+    int child_depth = name && strcmp(name, "quasiquote") == 0
+                    ? depth + 1 : depth;
+    for (size_t i = 0; i < node->list.count; i++) {
+        AST *child = node->list.items[i];
+        AST *child_head = child && child->type == AST_LIST && child->list.count
+                        ? child->list.items[0] : NULL;
+        bool splice = child_depth == 1 && child_head &&
+                      child_head->type == AST_SYMBOL &&
+                      strcmp(child_head->symbol, "unquote-splicing") == 0 &&
+                      child->list.count == 2;
+        if (!splice) {
+            ast_list_append(result, syntax_quasiquote(child, child_depth));
+            continue;
+        }
+        AST *values = syntax_eval(child->list.items[1]);
+        if (!values || values->type != AST_LIST) {
+            ast_free(values);
+            ast_free(result);
+            syntax_eval_error(child,
+                "unquote-splicing expects list Syntax");
+        }
+        for (size_t j = 0; j < values->list.count; j++)
+            ast_list_append(result, ast_clone(values->list.items[j]));
+        ast_free(values);
+    }
+    return result;
+}
+
+static AST *syntax_eval_numeric(AST *node, const char *operator_name) {
+    size_t argc = node->list.count - 1;
+    if (argc != 2) return NULL;
+    AST *left = syntax_eval(node->list.items[1]);
+    AST *right = syntax_eval(node->list.items[2]);
+    if (!left || !right || left->type != AST_NUMBER || right->type != AST_NUMBER) {
+        ast_free(left);
+        ast_free(right);
+        return NULL;
+    }
+    double value = 0;
+    if (strcmp(operator_name, "+") == 0) value = left->number + right->number;
+    else if (strcmp(operator_name, "-") == 0) value = left->number - right->number;
+    else if (strcmp(operator_name, "*") == 0) value = left->number * right->number;
+    else if (strcmp(operator_name, "/") == 0) {
+        if (right->number == 0) {
+            ast_free(left); ast_free(right);
+            syntax_eval_error(node, "division by zero in Syntax transformer");
+        }
+        value = left->number / right->number;
+    } else {
+        ast_free(left); ast_free(right);
+        return NULL;
+    }
+    ast_free(left);
+    ast_free(right);
+    return syntax_number(value, node);
+}
+
+static AST *syntax_eval_comparison(AST *node, const char *operator_name) {
+    if (node->list.count != 3) return NULL;
+    AST *left = syntax_eval(node->list.items[1]);
+    AST *right = syntax_eval(node->list.items[2]);
+    if (!left || !right || left->type != right->type) {
+        ast_free(left);
+        ast_free(right);
+        return NULL;
+    }
+    bool value = false;
+    if (left->type == AST_NUMBER) {
+        if (strcmp(operator_name, "<") == 0) value = left->number < right->number;
+        else if (strcmp(operator_name, "<=") == 0) value = left->number <= right->number;
+        else if (strcmp(operator_name, ">") == 0) value = left->number > right->number;
+        else if (strcmp(operator_name, ">=") == 0) value = left->number >= right->number;
+        else if (strcmp(operator_name, "==") == 0 || strcmp(operator_name, "=") == 0)
+            value = left->number == right->number;
+        else if (strcmp(operator_name, "!=") == 0) value = left->number != right->number;
+        else { ast_free(left); ast_free(right); return NULL; }
+    } else if (left->type == AST_STRING || left->type == AST_SYMBOL) {
+        const char *left_text = left->type == AST_STRING ? left->string : left->symbol;
+        const char *right_text = right->type == AST_STRING ? right->string : right->symbol;
+        bool equal = strcmp(left_text, right_text) == 0;
+        if (strcmp(operator_name, "==") == 0 || strcmp(operator_name, "=") == 0)
+            value = equal;
+        else if (strcmp(operator_name, "!=") == 0)
+            value = !equal;
+        else { ast_free(left); ast_free(right); return NULL; }
+    } else {
+        ast_free(left); ast_free(right); return NULL;
+    }
+    ast_free(left);
+    ast_free(right);
+    return syntax_bool(value, node);
+}
+
+static AST *syntax_eval(AST *node) {
+    if (++g_syntax_eval_steps > SYNTAX_EVAL_STEP_LIMIT)
+        syntax_eval_error(node,
+            "Syntax transformer exceeded the deterministic evaluation limit");
+    if (++g_syntax_eval_depth > SYNTAX_EVAL_DEPTH_LIMIT)
+        syntax_eval_error(node,
+            "Syntax transformer exceeded the deterministic evaluation limit");
+
+    AST *result = syntax_eval_impl(node);
+    g_syntax_eval_depth--;
+    return result;
+}
+
+static AST *syntax_eval_impl(AST *node) {
+    if (!node) return NULL;
+    if (node->type != AST_LIST || node->list.count == 0)
+        return ast_clone(node);
+
+    AST *head = node->list.items[0];
+    const char *name = head && head->type == AST_SYMBOL ? head->symbol : NULL;
+
+    /* Syntax functions may call other Syntax functions as ordinary Monad
+     * helpers. They share the current deterministic step budget and hygiene
+     * machinery; no runtime call is emitted. */
+    MacroDef *helper = name ? registry_lookup(name) : NULL;
+    if (helper)
+        return syntax_eval_transformer_call(helper, node);
+
+    if (name && strcmp(name, "quote") == 0 && node->list.count == 2)
+        return ast_clone(node->list.items[1]);
+
+    if (name && strcmp(name, "quasiquote") == 0 && node->list.count == 2)
+        return syntax_quasiquote(node->list.items[1], 1);
+
+    /* The reader lowers `let` to an immediately invoked lambda.  Evaluating
+     * that form here gives Syntax transformers ordinary lexical bindings
+     * without inventing a second binding language. */
+    if (head && head->type == AST_LAMBDA) {
+        int parameter_count = head->lambda.param_count;
+        int argument_count = (int)node->list.count - 1;
+        if (parameter_count != argument_count)
+            syntax_eval_error(node,
+                "compile-time lambda called with the wrong number of arguments");
+
+        AST **arguments = calloc((size_t)(argument_count ? argument_count : 1),
+                                 sizeof(*arguments));
+        BindTable bindings;
+        bt_init(&bindings);
+        for (int i = 0; i < argument_count; i++) {
+            arguments[i] = syntax_eval(node->list.items[i + 1]);
+            bt_push(&bindings, head->lambda.params[i].name, arguments[i]);
+        }
+        RenameTable renames;
+        rt_init(&renames);
+        AST *body = head->lambda.body;
+        AST *substituted = subst(body, &bindings, &renames, "syntax-lambda");
+        AST *result = syntax_eval(substituted);
+        ast_free(substituted);
+        rt_free(&renames);
+        bt_free(&bindings);
+        for (int i = 0; i < argument_count; i++) ast_free(arguments[i]);
+        free(arguments);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-list") == 0) {
+        AST *result = ast_new_list();
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        for (size_t i = 1; i < node->list.count; i++)
+            ast_list_append(result, syntax_eval(node->list.items[i]));
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-array") == 0) {
+        AST *result = ast_new_array();
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        for (size_t i = 1; i < node->list.count; i++)
+            ast_array_append(result, syntax_eval(node->list.items[i]));
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-symbol") == 0 && node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_STRING) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-symbol expects a String literal");
+        }
+        AST *result = ast_new_symbol(argument->string);
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && (strcmp(name, "syntax-gensym") == 0 ||
+                 strcmp(name, "syntax-capture") == 0) &&
+        node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_STRING) {
+            ast_free(argument);
+            syntax_eval_error(node,
+                "syntax-gensym and syntax-capture expect a String literal");
+        }
+        char *text = strcmp(name, "syntax-gensym") == 0
+                   ? gensym("syntax", argument->string)
+                   : xstrdup(argument->string);
+        AST *result = ast_new_symbol(text);
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        free(text);
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-introduce") == 0 &&
+        node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_SYMBOL) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-introduce expects symbol Syntax");
+        }
+        char *fresh = gensym("syntax", argument->symbol);
+        AST *result = ast_new_symbol(fresh);
+        result->line = argument->line;
+        result->column = argument->column;
+        result->end_column = argument->end_column;
+        free(fresh);
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-string") == 0 && node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_STRING) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-string expects a String literal");
+        }
+        return argument;
+    }
+
+    if (name && strcmp(name, "syntax-number") == 0 && node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_NUMBER) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-number expects a numeric literal");
+        }
+        return argument;
+    }
+
+    if (name && strcmp(name, "syntax-symbol-text") == 0 &&
+        node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_SYMBOL) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-symbol-text expects symbol Syntax");
+        }
+        AST *result = ast_new_string(argument->syntax_original_symbol
+                                   ? argument->syntax_original_symbol
+                                   : argument->symbol);
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-fresh-context") == 0 &&
+        node->list.count == 2) {
+        AST *label = syntax_eval(node->list.items[1]);
+        if (!label || label->type != AST_STRING) {
+            ast_free(label);
+            syntax_eval_error(node,
+                "syntax-fresh-context expects a String literal");
+        }
+        char *fresh = gensym("context", label->string);
+        AST *result = ast_new_string(fresh);
+        free(fresh);
+        ast_free(label);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-add-context") == 0 &&
+        node->list.count == 3) {
+        AST *identifier = syntax_eval(node->list.items[1]);
+        AST *context = syntax_eval(node->list.items[2]);
+        if (!identifier || identifier->type != AST_SYMBOL ||
+            !context || context->type != AST_STRING) {
+            ast_free(identifier);
+            ast_free(context);
+            syntax_eval_error(node,
+                "syntax-add-context expects symbol Syntax and a lexical context");
+        }
+        const char *original = identifier->syntax_original_symbol
+                             ? identifier->syntax_original_symbol
+                             : identifier->symbol;
+        size_t context_size = strlen(context->string) + 1;
+        if (identifier->syntax_context)
+            context_size += strlen(identifier->syntax_context) + 1;
+        char *scope_set = malloc(context_size);
+        if (identifier->syntax_context)
+            snprintf(scope_set, context_size, "%s+%s",
+                     identifier->syntax_context, context->string);
+        else
+            snprintf(scope_set, context_size, "%s", context->string);
+        size_t symbol_size = strlen(scope_set) + strlen(original) + 3;
+        char *materialized = malloc(symbol_size);
+        snprintf(materialized, symbol_size, "%s__%s", scope_set, original);
+        AST *result = ast_new_symbol(materialized);
+        result->syntax_context = scope_set;
+        result->syntax_original_symbol = xstrdup(original);
+        result->line = identifier->line;
+        result->column = identifier->column;
+        result->end_column = identifier->end_column;
+        free(materialized);
+        ast_free(identifier);
+        ast_free(context);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-context") == 0 && node->list.count == 2) {
+        AST *identifier = syntax_eval(node->list.items[1]);
+        if (!identifier || identifier->type != AST_SYMBOL) {
+            ast_free(identifier);
+            syntax_eval_error(node, "syntax-context expects symbol Syntax");
+        }
+        AST *result = ast_new_string(identifier->syntax_context
+                                   ? identifier->syntax_context : "");
+        ast_free(identifier);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-remove-context") == 0 &&
+        node->list.count == 2) {
+        AST *identifier = syntax_eval(node->list.items[1]);
+        if (!identifier || identifier->type != AST_SYMBOL) {
+            ast_free(identifier);
+            syntax_eval_error(node,
+                "syntax-remove-context expects symbol Syntax");
+        }
+        AST *result = ast_new_symbol(identifier->syntax_original_symbol
+                                   ? identifier->syntax_original_symbol
+                                   : identifier->symbol);
+        result->line = identifier->line;
+        result->column = identifier->column;
+        result->end_column = identifier->end_column;
+        ast_free(identifier);
+        return result;
+    }
+
+    if (name && node->list.count == 2 &&
+        (strcmp(name, "syntax-source-line") == 0 ||
+         strcmp(name, "syntax-source-column") == 0 ||
+         strcmp(name, "syntax-source-end-column") == 0 ||
+         strcmp(name, "syntax-source-file") == 0)) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument)
+            syntax_eval_error(node, "source inspection expects Syntax");
+        AST *result = NULL;
+        if (strcmp(name, "syntax-source-file") == 0)
+            result = ast_new_string(current_filename ? current_filename : "<input>");
+        else if (strcmp(name, "syntax-source-line") == 0)
+            result = syntax_number((double)argument->line, argument);
+        else if (strcmp(name, "syntax-source-column") == 0)
+            result = syntax_number((double)argument->column, argument);
+        else
+            result = syntax_number((double)argument->end_column, argument);
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-error") == 0 && node->list.count == 3) {
+        AST *target = syntax_eval(node->list.items[1]);
+        AST *message = syntax_eval(node->list.items[2]);
+        if (!target || !message || message->type != AST_STRING) {
+            ast_free(target);
+            ast_free(message);
+            syntax_eval_error(node,
+                "syntax-error expects Syntax and a String literal");
+        }
+        fprintf(stderr, "%s:%d:%d: error: %s\n",
+                current_filename ? current_filename : "<input>",
+                target->line, target->column, message->string);
+        ast_free(target);
+        ast_free(message);
+        exit(1);
+    }
+
+    if (name && node->list.count == 2 &&
+        (strcmp(name, "syntax-list?") == 0 ||
+         strcmp(name, "syntax-array?") == 0 ||
+         strcmp(name, "syntax-symbol?") == 0 ||
+         strcmp(name, "syntax-string?") == 0 ||
+         strcmp(name, "syntax-number?") == 0)) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        ASTType expected = AST_LIST;
+        if (strcmp(name, "syntax-array?") == 0) expected = AST_ARRAY;
+        else if (strcmp(name, "syntax-symbol?") == 0) expected = AST_SYMBOL;
+        else if (strcmp(name, "syntax-string?") == 0) expected = AST_STRING;
+        else if (strcmp(name, "syntax-number?") == 0) expected = AST_NUMBER;
+        AST *result = syntax_bool(argument && argument->type == expected, node);
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-kind") == 0 && node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument)
+            syntax_eval_error(node, "syntax-kind expects Syntax");
+        const char *kind = "other";
+        switch (argument->type) {
+        case AST_NUMBER: kind = "number"; break;
+        case AST_SYMBOL: kind = "symbol"; break;
+        case AST_STRING: kind = "string"; break;
+        case AST_LIST: kind = "list"; break;
+        case AST_ARRAY: kind = "array"; break;
+        case AST_CHAR: kind = "character"; break;
+        case AST_KEYWORD: kind = "keyword"; break;
+        case AST_LAMBDA: kind = "lambda"; break;
+        default: break;
+        }
+        AST *result = ast_new_string(kind);
+        result->line = argument->line;
+        result->column = argument->column;
+        result->end_column = argument->end_column;
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-list-length") == 0 &&
+        node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_LIST) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-list-length expects list Syntax");
+        }
+        AST *result = syntax_number((double)argument->list.count, node);
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-list-ref") == 0 &&
+        node->list.count == 3) {
+        AST *list = syntax_eval(node->list.items[1]);
+        AST *index = syntax_eval(node->list.items[2]);
+        if (!list || list->type != AST_LIST || !index || index->type != AST_NUMBER ||
+            index->number < 0 || (double)(size_t)index->number != index->number ||
+            (size_t)index->number >= list->list.count) {
+            ast_free(list);
+            ast_free(index);
+            syntax_eval_error(node,
+                "syntax-list-ref expects list Syntax and an in-range integer index");
+        }
+        AST *result = ast_clone(list->list.items[(size_t)index->number]);
+        ast_free(list);
+        ast_free(index);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-list-tail") == 0 &&
+        node->list.count == 2) {
+        AST *list = syntax_eval(node->list.items[1]);
+        if (!list || list->type != AST_LIST) {
+            ast_free(list);
+            syntax_eval_error(node, "syntax-list-tail expects list Syntax");
+        }
+        AST *result = ast_new_list();
+        result->line = list->line;
+        result->column = list->column;
+        result->end_column = list->end_column;
+        for (size_t i = 1; i < list->list.count; i++)
+            ast_list_append(result, ast_clone(list->list.items[i]));
+        ast_free(list);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-list-cons") == 0 &&
+        node->list.count == 3) {
+        AST *item = syntax_eval(node->list.items[1]);
+        AST *list = syntax_eval(node->list.items[2]);
+        if (!item || !list || list->type != AST_LIST) {
+            ast_free(item);
+            ast_free(list);
+            syntax_eval_error(node,
+                "syntax-list-cons expects Syntax and list Syntax");
+        }
+        AST *result = ast_new_list();
+        result->line = list->line;
+        result->column = list->column;
+        result->end_column = list->end_column;
+        ast_list_append(result, item);
+        for (size_t i = 0; i < list->list.count; i++)
+            ast_list_append(result, ast_clone(list->list.items[i]));
+        ast_free(list);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-array-length") == 0 &&
+        node->list.count == 2) {
+        AST *array = syntax_eval(node->list.items[1]);
+        if (!array || array->type != AST_ARRAY) {
+            ast_free(array);
+            syntax_eval_error(node, "syntax-array-length expects array Syntax");
+        }
+        AST *result = syntax_number((double)array->array.element_count, node);
+        ast_free(array);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-array-ref") == 0 &&
+        node->list.count == 3) {
+        AST *array = syntax_eval(node->list.items[1]);
+        AST *index = syntax_eval(node->list.items[2]);
+        if (!array || array->type != AST_ARRAY || !index ||
+            index->type != AST_NUMBER || index->number < 0 ||
+            (double)(size_t)index->number != index->number ||
+            (size_t)index->number >= array->array.element_count) {
+            ast_free(array);
+            ast_free(index);
+            syntax_eval_error(node,
+                "syntax-array-ref expects array Syntax and an in-range integer index");
+        }
+        AST *result = ast_clone(array->array.elements[(size_t)index->number]);
+        ast_free(array);
+        ast_free(index);
+        return result;
+    }
+
+    if (name && strcmp(name, "if") == 0 && node->list.count == 4) {
+        AST *condition = syntax_eval(node->list.items[1]);
+        bool selected = false;
+        if (!syntax_boolean(condition, &selected)) {
+            ast_free(condition);
+            syntax_eval_error(node,
+                "Syntax transformer condition did not evaluate to Bool");
+        }
+        ast_free(condition);
+        return syntax_eval(node->list.items[selected ? 2 : 3]);
+    }
+
+    if (name && strcmp(name, "begin") == 0) {
+        AST *result = ast_new_symbol("unit");
+        for (size_t i = 1; i < node->list.count; i++) {
+            ast_free(result);
+            result = syntax_eval(node->list.items[i]);
+        }
+        return result;
+    }
+
+    if (name && (strcmp(name, "+") == 0 || strcmp(name, "-") == 0 ||
+                 strcmp(name, "*") == 0 || strcmp(name, "/") == 0)) {
+        AST *number = syntax_eval_numeric(node, name);
+        if (number) return number;
+    }
+
+    if (name && (strcmp(name, "<") == 0 || strcmp(name, "<=") == 0 ||
+                 strcmp(name, ">") == 0 || strcmp(name, ">=") == 0 ||
+                 strcmp(name, "==") == 0 || strcmp(name, "=") == 0 ||
+                 strcmp(name, "!=") == 0)) {
+        AST *boolean = syntax_eval_comparison(node, name);
+        if (boolean) return boolean;
+    }
+
+    AST *result = ast_new_list();
+    result->line = node->line;
+    result->column = node->column;
+    result->end_column = node->end_column;
+    for (size_t i = 0; i < node->list.count; i++)
+        ast_list_append(result, syntax_eval(node->list.items[i]));
+    return result;
+}
 
 static AST *subst_list(AST *tmpl, BindTable *bt, RenameTable *rt,
                         const char *macro_name) {
@@ -661,7 +1506,14 @@ static AST *try_expand(AST *node, bool *changed) {
     free(intro);
 
     /* §6 — substitute */
-    AST *result = subst(def->body, &bt, &rt, def->name);
+    AST *substituted = subst(def->body, &bt, &rt, def->name);
+    g_syntax_eval_steps = 0;
+    g_syntax_eval_depth = 0;
+    macro_definition_scope_push(def);
+    AST *result = syntax_eval(substituted);
+    macro_scope_pop();
+    ast_free(substituted);
+    macro_trace_expansion(def->name, "transformer", node, result);
 
     bt_free(&bt);
     rt_free(&rt);
@@ -677,7 +1529,8 @@ static AST *try_expand(AST *node, bool *changed) {
     ast_free(node);
 
     *changed = true;
-    fprintf(stderr, "[macro] expanded '%s'\n", def->name);
+    if (macro_debug())
+        fprintf(stderr, "[macro] expanded '%s'\n", def->name);
     return result;
 }
 
@@ -762,12 +1615,17 @@ static AST *expand_node(AST *node, bool *changed) {
 /*
  * is_syntax_return(ret_type)
  *
- * A lambda is a macro if its return_type string contains "Syntax".
- * We accept "Syntax", "-> Syntax", "Pointer :: Syntax", etc.
+ * A lambda is a macro only when its declared result type is exactly Syntax.
+ * Substring matching made ordinary types such as SyntaxObject impossible.
  */
 static bool is_syntax_return(const char *ret_type) {
     if (!ret_type) return false;
-    return strstr(ret_type, "Syntax") != NULL;
+    while (*ret_type == ' ' || *ret_type == '\t') ret_type++;
+    size_t length = strlen(ret_type);
+    while (length && (ret_type[length - 1] == ' ' ||
+                      ret_type[length - 1] == '\t')) length--;
+    return length == strlen("Syntax") &&
+           strncmp(ret_type, "Syntax", length) == 0;
 }
 
 /*
@@ -795,6 +1653,28 @@ static bool is_macro_define(AST *node, const char **out_name, AST **out_lambda) 
     return true;
 }
 
+static bool module_exports_name(AST **exprs, size_t count, const char *name) {
+    for (size_t i = 0; i < count; i++) {
+        AST *node = exprs[i];
+        if (!node || node->type != AST_LIST || node->list.count < 3)
+            continue;
+        AST *head = node->list.items[0];
+        AST *exports = node->list.items[2];
+        if (!head || head->type != AST_SYMBOL ||
+            strcmp(head->symbol, "module") != 0 ||
+            !exports || exports->type != AST_ARRAY)
+            continue;
+        for (size_t j = 0; j < exports->array.element_count; j++) {
+            AST *item = exports->array.elements[j];
+            if (item && item->type == AST_SYMBOL &&
+                strcmp(item->symbol, name) == 0)
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
 ASTList macro_expand_all(AST **exprs, size_t count) {
     /* ---- Phase 1: register macros, remove their defines from output ---- */
     AST  **kept       = malloc(sizeof(AST*) * (count ? count : 1));
@@ -814,7 +1694,8 @@ ASTList macro_expand_all(AST **exprs, size_t count) {
             AST *define_node = exprs[i];
 
             /* Register first, then detach and free the shell */
-            registry_add(mac_name, mac_lam);
+            registry_add(mac_name, mac_lam,
+                         module_exports_name(exprs, count, mac_name));
 
             /* Detach lambda from define so ast_free doesn't kill it */
             define_node->list.items[2] = NULL;
@@ -844,6 +1725,7 @@ ASTList macro_expand_all(AST **exprs, size_t count) {
                 "64 rounds — recursive macro detected, aborting\n");
         exit(1);
     }
+
 
     ASTList result;
     result.exprs = kept;

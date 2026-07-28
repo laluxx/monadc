@@ -1,0 +1,11 @@
+import Logic.FirstOrder.Modal
+
+module Main
+
+define P :: Formula (Predicate "P" (list (Constant "a")))
+
+define Q :: Formula (Predicate "Q" (list (Constant "a")))
+
+show (proof-valid? (prove ConstantDomains 128 (implies P P)))
+show (proof-countermodel? (prove ConstantDomains 128 (implies P Q)))
+show (proof-inconclusive? (prove ConstantDomains 0 P))

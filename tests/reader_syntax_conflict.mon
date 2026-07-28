@@ -1,0 +1,7 @@
+;;; reader_syntax_conflict.mon --- Conflicting reader rule diagnostic
+
+reader-syntax Example
+  !_ first-target
+  !_ second-target
+
+module Main

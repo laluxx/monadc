@@ -11,6 +11,8 @@
 #endif
 
 #include "reader.h"
+#include "reader_syntax.h"
+#include "macro.h"
 #include "compat.h"
 #include "cli.h"
 #include "types.h"
@@ -47,6 +49,7 @@ typedef struct CompiledExport {
     int           param_count;
     LLVMValueRef  func_ref;     // FUNC only — valid only when not skipped
     AST          *source_ast;    // FUNC only — core-owned implementation metadata
+    int           adt_tag;       // ADT constructor only
 } CompiledExport;
 
 typedef struct CompiledLayout {
@@ -286,22 +289,66 @@ static Type *registry_function_return_type(Type *t) {
     return t ? t : type_unknown();
 }
 
+static bool registry_type_is_unresolved(Type *type) {
+    return !type || type->kind == TYPE_UNKNOWN || type->kind == TYPE_VAR;
+}
+
+static Type *registry_resolve_user_type(Env *env, const char *name) {
+    Type *layout = env_lookup_layout(env, name);
+    if (layout) return layout;
+
+    /* codegen_data also records the result layout on every constructor.
+     * Consult those entries because a same-named value can shadow the
+     * standalone ENV_LAYOUT binding in the hash environment. */
+    for (Env *scope = env; scope; scope = scope->parent) {
+        for (size_t i = 0; i < scope->size; i++) {
+            for (EnvEntry *entry = scope->buckets[i]; entry; entry = entry->next) {
+                Type *type = entry->return_type ? entry->return_type : entry->type;
+                if (entry->kind == ENV_ADT_CTOR && type &&
+                    type->kind == TYPE_LAYOUT && type->layout_name &&
+                    strcmp(type->layout_name, name) == 0)
+                    return type;
+            }
+        }
+    }
+    return NULL;
+}
+
 
 
 
 static void registry_push_func(CompiledModule *m, const char *local,
                                 const char *mangled, Type *ret,
                                 EnvParam *params, int pc, LLVMValueRef fn,
-                                AST *source_ast) {
+                                AST *source_ast, EnvEntryKind kind,
+                                int adt_tag, Env *provider_env) {
     registry_grow(m);
     CompiledExport *e = &m->exports[m->export_count++];
     memset(e, 0, sizeof(*e));
 
     Type *abi_ret = registry_function_return_type(ret);
+    AST *lambda = source_ast && source_ast->type == AST_LAMBDA
+        ? source_ast : NULL;
+    if (!lambda && source_ast && source_ast->type == AST_LIST) {
+        for (size_t i = 0; i < source_ast->list.count; i++) {
+            AST *candidate = source_ast->list.items[i];
+            if (candidate && candidate->type == AST_LAMBDA) {
+                lambda = candidate;
+                break;
+            }
+        }
+    }
+    if (lambda && lambda->lambda.return_type &&
+        registry_type_is_unresolved(abi_ret)) {
+        Type *resolved = registry_resolve_user_type(
+            provider_env, lambda->lambda.return_type);
+        if (resolved) abi_ret = resolved;
+    }
 
     e->local_name   = strdup(local);
     e->mangled_name = strdup(mangled);
-    e->kind         = ENV_FUNC;
+    e->kind         = kind;
+    e->adt_tag      = adt_tag;
     e->return_type  = type_clone(abi_ret);
     e->param_count  = pc;
     e->func_ref     = fn;
@@ -310,8 +357,25 @@ static void registry_push_func(CompiledModule *m, const char *local,
         e->params = malloc(sizeof(EnvParam) * pc);
         for (int i = 0; i < pc; i++) {
             e->params[i].name = strdup(params[i].name ? params[i].name : "_");
-            e->params[i].type = type_clone(params[i].type);
+            Type *param_type = params[i].type;
+            if (lambda && i < lambda->lambda.param_count &&
+                lambda->lambda.params[i].type_name &&
+                registry_type_is_unresolved(param_type)) {
+                Type *resolved = registry_resolve_user_type(
+                    provider_env, lambda->lambda.params[i].type_name);
+                if (resolved) param_type = resolved;
+            }
+            e->params[i].type = type_clone(param_type ? param_type
+                                                      : type_unknown());
         }
+    }
+    if (getenv("MONAD_MODULE_DEBUG")) {
+        fprintf(stderr, "[module-export] %s kind=%d return=%s", local,
+                (int)kind, type_to_string(e->return_type));
+        for (int i = 0; i < e->param_count; i++)
+            fprintf(stderr, " param%d=%s", i,
+                    type_to_string(e->params[i].type));
+        fprintf(stderr, "\n");
     }
 }
 
@@ -615,6 +679,18 @@ static char *runtime_archive_path(void) {
         free(installed);
     }
 
+    /* A per-user installation normally places the compiler in ~/.local/bin
+     * and the static runtime in ~/.local/lib.  argv[0] may be only `monad`
+     * when the shell resolved it through PATH, so g_program_path alone cannot
+     * locate the sibling archive. */
+    const char *user_home = getenv("HOME");
+    if (user_home && *user_home) {
+        char *local_lib = path_join_dup(user_home, ".local/lib/libmonad.a");
+        if (file_exists(local_lib))
+            return local_lib;
+        free(local_lib);
+    }
+
     return strdup("/usr/local/lib/libmonad.a");
 }
 
@@ -748,6 +824,18 @@ static void declare_externals(CodegenContext *ctx,
                 if (el) el->llvm_name = strdup(e->mangled_name);
             }
         } else { /* FUNC */
+            /* Constructor metadata is also a reliable declaration of its
+             * result ADT.  Register that layout before function signatures
+             * are materialized so imported clients can name the sum type and
+             * preserve its pointer ABI even when the standalone layout entry
+             * was filtered or shadowed in the provider environment. */
+            if (e->kind == ENV_ADT_CTOR && e->return_type &&
+                e->return_type->kind == TYPE_LAYOUT &&
+                e->return_type->layout_name &&
+                !env_lookup_layout(ctx->env, e->return_type->layout_name)) {
+                env_insert_layout(ctx->env, e->return_type->layout_name,
+                                  type_clone(e->return_type), NULL);
+            }
             LLVMTypeRef *pt = e->param_count > 0
                 ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
             for (int j = 0; j < e->param_count; j++)
@@ -764,6 +852,11 @@ static void declare_externals(CodegenContext *ctx,
                             clone_params(e->params, e->param_count),
                             e->param_count, type_clone(e->return_type), fn, NULL, NULL);
             EnvEntry *ent = env_lookup(ctx->env, qn);
+            if (e->kind == ENV_ADT_CTOR) {
+                env_insert_adt_ctor(ctx->env, qn, e->adt_tag,
+                                    type_clone(e->return_type), fn);
+                ent = env_lookup(ctx->env, qn);
+            }
             if (ent) { ent->module_name = strdup(dep->module_name);
                        ent->llvm_name   = strdup(e->mangled_name);
                        ent->source_ast  = ast_clone(e->source_ast); }
@@ -773,6 +866,11 @@ static void declare_externals(CodegenContext *ctx,
                                 clone_params(e->params, e->param_count),
                                 e->param_count, type_clone(e->return_type), fn, NULL, NULL);
                 EnvEntry *ent2 = env_lookup(ctx->env, e->local_name);
+                if (e->kind == ENV_ADT_CTOR) {
+                    env_insert_adt_ctor(ctx->env, e->local_name, e->adt_tag,
+                                        type_clone(e->return_type), fn);
+                    ent2 = env_lookup(ctx->env, e->local_name);
+                }
                 if (ent2) { ent2->module_name = strdup(dep->module_name);
                             ent2->llvm_name   = strdup(e->mangled_name);
                             ent2->source_ast  = ast_clone(e->source_ast); }
@@ -1108,6 +1206,8 @@ static CompiledModule *compile_one(const char *source_path,
 
     // Read + parse
     char *source = read_file(my_source_path);
+    reader_syntax_scope_push(my_source_path);
+    macro_scope_push(my_source_path);
 
     PHASE_START();
 
@@ -1323,6 +1423,10 @@ skip_primitive_type_autoload:
                 (p[7] == ' ' || p[7] == '\t')) {
                 const char *q = p + 7;
                 while (*q == ' ' || *q == '\t') q++;
+                if (strncmp(q, "for-syntax", 10) == 0 &&
+                    (q[10] == ' ' || q[10] == '\t'))
+                    q += 10;
+                while (*q == ' ' || *q == '\t') q++;
                 /* skip optional 'qualified' */
                 if (strncmp(q, "qualified", 9) == 0 &&
                     (q[9] == ' ' || q[9] == '\t'))
@@ -1341,6 +1445,8 @@ skip_primitive_type_autoload:
                         if (dep_src && file_exists(dep_src)) {
                             CompiledModule *dep_cm = compile_one(dep_src, flags, false);
                             register_compiled_module_wisp_arities(dep_cm);
+                            reader_syntax_scope_allow(dep_src);
+                            macro_scope_allow(dep_src);
                             parser_set_context(my_source_path, source);
                             /* dep headers already in global FFI context */
                         }
@@ -1352,6 +1458,10 @@ skip_primitive_type_autoload:
             else if (strncmp(p, "import", 6) == 0 &&
                      (p[6] == ' ' || p[6] == '\t')) {
                 const char *q = p + 6;
+                while (*q == ' ' || *q == '\t') q++;
+                if (strncmp(q, "for-syntax", 10) == 0 &&
+                    (q[10] == ' ' || q[10] == '\t'))
+                    q += 10;
                 while (*q == ' ' || *q == '\t') q++;
                 if (strncmp(q, "qualified", 9) == 0 &&
                     (q[9] == ' ' || q[9] == '\t'))
@@ -1369,6 +1479,8 @@ skip_primitive_type_autoload:
                         if (dep_src && file_exists(dep_src)) {
                             CompiledModule *dep_cm = compile_one(dep_src, flags, false);
                             register_compiled_module_wisp_arities(dep_cm);
+                            reader_syntax_scope_allow(dep_src);
+                            macro_scope_allow(dep_src);
                             parser_set_context(my_source_path, source);
                             /* Re-parse dep's headers into our FFI context
                              * so types like VkApplicationInfo are visible */
@@ -1433,6 +1545,8 @@ skip_primitive_type_autoload:
     ast_free(_feat_early);
     wisp_set_trace(flags->trace_ast);
     ASTList exprs = wisp_parse_all(source, my_source_path);
+    reader_syntax_scope_pop();
+    macro_scope_pop();
 
     if (flags->optimization_level > 0) {
         OptimizationOptions opt_options = optimization_options_default();
@@ -1693,7 +1807,8 @@ skip_primitive_type_autoload:
             fprintf(stderr, "internal error: '%s' not in registry after compile\n",
                     imp->module_name); exit(1);
         }
-        declare_externals(&ctx, dep, imp);
+        if (!imp->for_syntax)
+            declare_externals(&ctx, dep, imp);
 
         /* Headers from imported modules are already in the global FFI context
          * (parsed when that module was compiled) — nothing to do here. */
@@ -1872,6 +1987,7 @@ skip_primitive_type_autoload:
     if (is_main_module) {
         for (size_t i = 0; i < mod_ctx->import_count; i++) {
             ImportDecl *imp = mod_ctx->imports[i];
+            if (imp->for_syntax) continue;
             // Build the init function name the same way compile_one does
             char dep_init[256];
             snprintf(dep_init, sizeof(dep_init), "__init_%s", imp->module_name);
@@ -2047,7 +2163,8 @@ skip_primitive_type_autoload:
                                    export_signature->params,
                                    export_signature->param_count,
                                    ent->func_ref,
-                                   export_signature->source_ast);
+                                   export_signature->source_ast,
+                                   ent->kind, ent->adt_tag, ctx.env);
                 if (ent->func_ref) {
                     const char *cur = LLVMGetValueName(ent->func_ref);
                     if (!cur || strcmp(cur, ms) != 0)
@@ -2071,7 +2188,9 @@ skip_primitive_type_autoload:
                                                ent->func_ref,
                                                other->source_ast
                                                    ? other->source_ast
-                                                   : ent->source_ast);
+                                                   : ent->source_ast,
+                                               other->kind, other->adt_tag,
+                                               ctx.env);
                         }
                     }
                 }
@@ -2299,13 +2418,10 @@ static bool compile(CompilerFlags *flags) {
         }
     }
 
+    /* Use Clang's target-default linker.  Selecting an optional linker merely
+     * because it is installed is not semantics-preserving: linker support and
+     * accepted object metadata vary by target and toolchain version. */
     const char *ld_flag = "";
-    if (access("/usr/bin/mold", X_OK) == 0 ||
-        access("/usr/local/bin/mold", X_OK) == 0)
-        ld_flag = " -fuse-ld=mold";
-    else if (access("/usr/bin/ld.lld", X_OK) == 0 ||
-             access("/usr/local/bin/ld.lld", X_OK) == 0)
-        ld_flag = " -fuse-ld=lld";
 
     char cmd[4096];
     int w = snprintf(cmd, sizeof(cmd), "clang%s", ld_flag);
@@ -2316,10 +2432,16 @@ static bool compile(CompilerFlags *flags) {
     char *llvm_flags = llvm_config_link_flags();
     w += snprintf(cmd + w, sizeof(cmd) - w,
                   " -o %s %s"
-                  " %s -lm -lgmp%s%s",
+                  " %s -lm -lgmp%s%s%s",
                   exec_name, runtime_archive,
                   llvm_flags,
-                  host_no_pie_flag(), g_ffi_link_libs);
+                  host_no_pie_flag(), g_ffi_link_libs,
+#ifdef __linux__
+                  " -Wl,--no-eh-frame-hdr"
+#else
+                  ""
+#endif
+                  );
     free(llvm_flags);
 
 

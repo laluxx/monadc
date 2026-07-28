@@ -147,7 +147,9 @@ typedef enum {
 
 //// Import declaration
  //
- //  Describes a single `(import ...)` form.  `alias`, when present, is the
+ //  Describes a single `(import ...)` form. `for_syntax` marks an expansion-
+ //  phase dependency whose runtime exports and initializer stay hidden.
+ //  `alias`, when present, is the
  //  prefix used for qualified access; otherwise the prefix defaults to the
  //  last dot-component of `module_name`.
  //
@@ -156,6 +158,7 @@ typedef struct ImportDecl {
     char *alias;           // Alias for qualified access, or NULL
     ImportMode mode;
     bool qualified;        // True if declared with `qualified`
+    bool for_syntax;       // Expansion/reader phase only; no runtime symbols
     char **symbols;        // For IMPORT_SELECTIVE / IMPORT_HIDING
     size_t symbol_count;
 } ImportDecl;

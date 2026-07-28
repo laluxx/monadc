@@ -2,6 +2,7 @@
 #include "compat.h"
 #include "reader.h"
 #include "macro.h"
+#include "reader_syntax.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -299,9 +300,16 @@ static void arity_prescan(ArityTable *t, const char *source) {
                 char *lname = strdup(tok.value);
                 free(tok.value);
                 int field_count = 0;
+                int paren_depth = 0;
                 while (true) {
+                    Lexer token_start = lex;
                     tok = lexer_next_token(&lex);
-                    if (tok.type == TOK_EOF || tok.type == TOK_RPAREN) { free(tok.value); break; }
+                    if (tok.type == TOK_EOF) { free(tok.value); break; }
+                    if (tok.type == TOK_LPAREN) { paren_depth++; free(tok.value); continue; }
+                    if (tok.type == TOK_RPAREN) {
+                        if (paren_depth > 0) { paren_depth--; free(tok.value); continue; }
+                        free(tok.value); break;
+                    }
                     /* stop at next top-level symbol (next define/layout/etc) */
                     if (tok.type == TOK_SYMBOL && tok.value &&
                         (strcmp(tok.value, "define") == 0 ||
@@ -309,43 +317,8 @@ static void arity_prescan(ArityTable *t, const char *source) {
                          strcmp(tok.value, "data")   == 0 ||
                          strcmp(tok.value, "type")   == 0 ||
                          strcmp(tok.value, "class")  == 0)) {
-                        /* Put this token back by re-initialising the lexer
-                         * to the position just before this token — we can't
-                         * unget, so instead process it directly here.       */
-                        if (strcmp(tok.value, "define") == 0) {
-                            free(tok.value);
-                            tok = lexer_next_token(&lex); /* fname */
-                            if (tok.type == TOK_SYMBOL) {
-                                char *fname = strdup(tok.value);
-                                free(tok.value);
-                                tok = lexer_next_token(&lex);
-                                if (tok.type == TOK_LBRACKET) {
-                                    int arity = 0;
-                                    while (tok.type == TOK_LBRACKET) {
-                                        arity++;
-                                        int depth = 1;
-                                        while (depth > 0) {
-                                            free(tok.value);
-                                            tok = lexer_next_token(&lex);
-                                            if (tok.type == TOK_EOF) { depth = 0; break; }
-                                            if (tok.type == TOK_LBRACKET) depth++;
-                                            if (tok.type == TOK_RBRACKET) depth--;
-                                        }
-                                        free(tok.value);
-                                        tok = lexer_next_token(&lex);
-                                    }
-                                    free(tok.value);
-                                    arity_set(t, fname, arity);
-                                } else {
-                                    free(tok.value);
-                                }
-                                free(fname);
-                            } else {
-                                free(tok.value);
-                            }
-                        } else {
-                            free(tok.value);
-                        }
+                        free(tok.value);
+                        lex = token_start;
                         break;
                     }
                     if (tok.type == TOK_LBRACKET) {
@@ -764,10 +737,16 @@ static void arity_prescan(ArityTable *t, const char *source) {
                 char *lname = strdup(tok.value);
                 free(tok.value);
                 int field_count = 0;
+                int paren_depth = 0;
                 /* count [ tokens at depth 0 until ) or EOF */
                 while (true) {
                     tok = lexer_next_token(&lex);
-                    if (tok.type == TOK_EOF || tok.type == TOK_RPAREN) { free(tok.value); break; }
+                    if (tok.type == TOK_EOF) { free(tok.value); break; }
+                    if (tok.type == TOK_LPAREN) { paren_depth++; free(tok.value); continue; }
+                    if (tok.type == TOK_RPAREN) {
+                        if (paren_depth > 0) { paren_depth--; free(tok.value); continue; }
+                        free(tok.value); break;
+                    }
                     if (tok.type == TOK_LBRACKET) {
                         if (wisp_layout_lbracket_is_field(&lex))
                             field_count++;
@@ -10929,7 +10908,11 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                                   strcmp(text, "module") == 0);
             ArityEntry *entry = arity_get_entry(t, text);
 
-            for (int i = 0; i < arity && s->pos < s->count; i++) {
+            int surface_arity = arity;
+            if (strcmp(text, "import") == 0 && s->pos < s->count &&
+                strcmp(s->tokens[s->pos].text, "for-syntax") == 0)
+                surface_arity++;
+            for (int i = 0; i < surface_arity && s->pos < s->count; i++) {
                 /* Skip any #line directive tokens transparently —
                  * they are location markers, not real arguments,
                  * and must not consume an arity slot.             */
@@ -10947,7 +10930,7 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
                 ParamKind kind = (entry && i < WISP_MAX_PARAMS)
                                ? entry->param_kinds[i] : PARAM_VALUE;
                 bool preserve_later_fixed_slots = false;
-                if (!args_are_bare && kind == PARAM_VALUE && i < arity - 1) {
+                if (!args_are_bare && kind == PARAM_VALUE && i < surface_arity - 1) {
                     WToken *arg = &s->tokens[s->pos];
                     bool arg_is_atom = arg->text[0] != '(' &&
                                        arg->text[0] != '[' &&
@@ -11773,6 +11756,109 @@ static void wisp_normalize_newlines_in_place(char *source) {
     *write = '\0';
 }
 
+/* Equation-style case analysis on an arbitrary expression:
+ *
+ *   value.field
+ *     | Pattern -> result
+ *     | Other   -> fallback
+ *
+ * is surface sugar for an ordinary match expression.  This pass runs before
+ * tokenization, keeps one newline per input line for stable diagnostics, and
+ * deliberately requires the clause bars to be more deeply indented than the
+ * scrutinee.  Function clauses and data alternatives therefore remain
+ * unambiguous.
+ */
+static char *desugar_scrutinee_clauses(char *source) {
+    SB out;
+    sb_init(&out);
+    const char *cursor = source;
+
+    while (*cursor) {
+        const char *line_start = cursor;
+        while (*cursor && *cursor != '\n') cursor++;
+        const char *line_end = cursor;
+        bool had_newline = *cursor == '\n';
+        const char *next_start = had_newline ? cursor + 1 : cursor;
+
+        const char *content = line_start;
+        while (content < line_end && (*content == ' ' || *content == '\t'))
+            content++;
+        int indent = measure_indent(line_start);
+
+        const char *next_end = next_start;
+        while (*next_end && *next_end != '\n') next_end++;
+        const char *next_content = next_start;
+        while (next_content < next_end &&
+               (*next_content == ' ' || *next_content == '\t'))
+            next_content++;
+        int next_indent = *next_start ? measure_indent(next_start) : -1;
+
+        bool expression_punctuation = false;
+        bool existing_clause = false;
+        for (const char *p = content; p < line_end; p++) {
+            unsigned char c = (unsigned char)*p;
+            if (c == '|' || (c == '-' && p + 1 < line_end && p[1] == '>')) {
+                existing_clause = true;
+                break;
+            }
+            if (!(isalnum(c) || c == '_' || c == '-' || c == '?' ||
+                  c == '!' || c == ' ' || c == '\t' || c >= 0x80)) {
+                expression_punctuation = true;
+            }
+        }
+        bool candidate = content < line_end && *content != '|' &&
+                         !existing_clause &&
+                         expression_punctuation &&
+                         next_content < next_end && *next_content == '|' &&
+                         next_indent > indent;
+        if (!candidate) {
+            for (const char *p = line_start; p < line_end; p++) sb_putc(&out, *p);
+            if (had_newline) sb_putc(&out, '\n');
+            cursor = next_start;
+            continue;
+        }
+
+        for (const char *p = line_start; p < content; p++) sb_putc(&out, *p);
+        const char *projection_dot = NULL;
+        for (const char *p = content; p < line_end; p++) {
+            if (*p == '.') { projection_dot = p; break; }
+            if (!(isalnum((unsigned char)*p) || *p == '_' || *p == '-')) break;
+        }
+        if (projection_dot && projection_dot > content) {
+            for (const char *p = content; p < projection_dot; p++)
+                sb_putc(&out, *p);
+            sb_puts(&out, " -> ");
+        }
+        sb_puts(&out, "(match ");
+        for (const char *p = content; p < line_end; p++) sb_putc(&out, *p);
+        sb_puts(&out, " with");
+
+        const char *scan = next_start;
+        int consumed = 0;
+        while (*scan) {
+            const char *clause_end = scan;
+            while (*clause_end && *clause_end != '\n') clause_end++;
+            const char *clause = scan;
+            while (clause < clause_end && (*clause == ' ' || *clause == '\t'))
+                clause++;
+            if (measure_indent(scan) != next_indent || clause >= clause_end ||
+                *clause != '|')
+                break;
+            sb_putc(&out, ' ');
+            for (const char *p = clause; p < clause_end; p++) sb_putc(&out, *p);
+            consumed++;
+            scan = *clause_end == '\n' ? clause_end + 1 : clause_end;
+        }
+        sb_putc(&out, ')');
+        if (had_newline) sb_putc(&out, '\n');
+        for (int i = 0; i < consumed; i++) sb_putc(&out, '\n');
+        cursor = scan;
+    }
+
+    free(source);
+    return sb_take(&out);
+}
+
 /*
  * Law checks use a deliberately contextual vocabulary:
  *
@@ -11856,11 +11942,17 @@ static char *desugar_contextual_law_checks(char *source) {
 ASTList wisp_parse_all(const char *source, const char *filename) {
     wisp_pending_type_clear();
 
+    char *reader_expanded = reader_syntax_expand(source, filename);
+    if (!reader_expanded) {
+        READER_ERROR(1, 1, "reader syntax declaration failed");
+    }
+
     /* Commentary sections are documentation, not code. Strip them before
      * ordinary comment stripping so raw ASCII art and prose between
      * ;;; Commentary: and ;;; Code: never reach the lexer. */
-    char *section_stripped = strdup(source);
+    char *section_stripped = reader_expanded;
     wisp_normalize_newlines_in_place(section_stripped);
+    section_stripped = desugar_scrutinee_clauses(section_stripped);
     strip_commentary_sections_in_place(section_stripped);
 
     /* Strip comments first, preserving line structure */

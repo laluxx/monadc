@@ -1,8 +1,18 @@
 ;;; Monad.mon --- Monad abstractions
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: monad transformer reader state writer error comonad typeclass
+:author "Laluxx"
+:version "1.1.0"
+:keywords "monad transformer reader state writer error comonad typeclass"
+
+;;; Commentary:
+
+;; Monad extends Applicative with value-dependent sequencing. An instance
+;; supplies bind and its failure policy; return is inherited from pure, while
+;; join and non-dependent sequencing are derived from bind.
+;;
+;; Reader, State, Writer, Error, transformers, and Comonad remain separate
+;; capability abstractions. Their derived operations should move here only when
+;; a smaller basis is executable and covered by a concrete instance.
 
 ;;; Code:
 
@@ -26,7 +36,17 @@ class Applicative m => Monad m where
   then   :: m a -> m b -> m b
   fail   :: String -> m a
 
+  return x ->
+    pure x
+
+  join value ->
+    bind value (lambda (x) x)
+
+  then value next ->
+    bind value (lambda (ignored) next)
+
   ;; higher-kinded: m :: Type -> Type
+  ;; minimal complete definition: bind and fail, plus inherited pure/applyA
 
 
 class Monad m => MonadPlus m where

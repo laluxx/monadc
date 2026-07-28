@@ -1,0 +1,6 @@
+;;; reader_syntax_invalid_rule.mon --- Invalid reader rules are diagnosed
+
+reader-syntax Formula
+  _->_ implies not-a-binding-power sideways
+
+module Main

@@ -19,6 +19,7 @@ or directly:
 from __future__ import annotations
 
 import random
+import tempfile
 import unittest
 
 import fuzz_codegen as fc
@@ -82,6 +83,44 @@ class TestSexprRoundtrip(unittest.TestCase):
         self.assertIsInstance(tree, list)
         # Top-level form is `with`.
         self.assertEqual(tree[0], "with")
+
+
+class TestCoreLawMetadata(unittest.TestCase):
+    def test_core_law_metadata_loads_and_emits_imports(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="monadc-core-law-spec-") as temp:
+            path = fc.Path(temp) / "semigroup-associative.fuzz"
+            path.write_text(
+                "\n".join(
+                    (
+                        "name: semigroup_int_associative",
+                        "section: core-laws",
+                        "tier: stable",
+                        "kind: law",
+                        "imports: Data.Semigroup",
+                        "law-owner: Data.Semigroup.Semigroup",
+                        "law-name: associativity",
+                        "instance: Int",
+                        "args: a:Int b:Int c:Int",
+                        "type: Bool",
+                        "expect: True",
+                        "description: Semigroup Int append is associative.",
+                        "law: (= (append (append {a} {b}) {c}) (append {a} (append {b} {c})))",
+                    )
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            spec = fc.load_property(path)
+            self.assertEqual(spec.imports, ("Data.Semigroup",))
+            self.assertEqual(spec.law_owner, "Data.Semigroup.Semigroup")
+            self.assertEqual(spec.law_name, "associativity")
+            self.assertEqual(spec.instance, "Int")
+
+            case = fc.generate_case(spec, random.Random(7), 7, 1, 2)
+            source, _ = fc.build_program(7, [case])
+            self.assertIn("import Data.Semigroup", source)
+            self.assertLess(source.index("import Data.Semigroup"), source.index("(module Main)"))
 
 
 class TestVariadicEqRewrite(unittest.TestCase):

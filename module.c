@@ -202,6 +202,7 @@ ImportDecl *import_decl_create(const char *module_name, const char *alias,
     decl->alias       = alias ? mod_xstrdup(alias) : NULL;
     decl->mode        = mode;
     decl->qualified   = false;
+    decl->for_syntax  = false;
     decl->symbols     = NULL;
     decl->symbol_count = 0;
     return decl;
@@ -1041,6 +1042,13 @@ ImportDecl *parse_import_decl(AST *ast)
 
     size_t idx = 1;
     bool qualified = false;
+    bool for_syntax = false;
+
+    if (idx < ast->list.count && ast->list.items[idx]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[idx]->symbol, "for-syntax") == 0) {
+        for_syntax = true;
+        idx++;
+    }
 
     if (idx < ast->list.count && ast->list.items[idx]->type == AST_SYMBOL &&
         strcmp(ast->list.items[idx]->symbol, "qualified") == 0) {
@@ -1127,6 +1135,7 @@ ImportDecl *parse_import_decl(AST *ast)
                 idx++;
             }
         }
+        decl->for_syntax = for_syntax;
         return decl;
     }
 
@@ -1166,5 +1175,6 @@ ImportDecl *parse_import_decl(AST *ast)
     }
 
     decl->qualified = false;
+    decl->for_syntax = for_syntax;
     return decl;
 }

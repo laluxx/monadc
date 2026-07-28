@@ -1,0 +1,19 @@
+;;; Unicode.mon --- Minimal Unicode text boundary
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "text unicode utf-8 display width"
+
+;;; Commentary:
+
+;; `text-width` currently counts UTF-8 scalar starts.  It is intentionally a
+;; minimal boundary used by aligned core renderers, not the completed Unicode
+;; API.  See context/unicode.org for the required full implementation.
+
+;;; Code:
+
+module Text.Unicode [text-width]
+
+
+define text-width :: String -> Int
+  text -> __rt_utf8_width text

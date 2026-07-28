@@ -2000,11 +2000,11 @@ static char *fmt_expr(const char *fmt, ...) {
 static char *value_expr(BcValue value) {
     char buf[96];
     switch (value.kind) {
-        case BC_VALUE_NIL: return bc_strdup("nil");
+        case BC_VALUE_NIL:  return bc_strdup("nil");
         case BC_VALUE_BOOL: return bc_strdup(value.as.boolean ? "true" : "false");
-        case BC_VALUE_I64: snprintf(buf, sizeof(buf), "%" PRId64, value.as.i64); return bc_strdup(buf);
-        case BC_VALUE_F64: snprintf(buf, sizeof(buf), "%g", value.as.f64); return bc_strdup(buf);
-        case BC_VALUE_PTR: snprintf(buf, sizeof(buf), "<ptr:%p>", value.as.ptr); return bc_strdup(buf);
+        case BC_VALUE_I64:  snprintf(buf, sizeof(buf), "%" PRId64, value.as.i64); return bc_strdup(buf);
+        case BC_VALUE_F64:  snprintf(buf, sizeof(buf), "%g", value.as.f64);       return bc_strdup(buf);
+        case BC_VALUE_PTR:  snprintf(buf, sizeof(buf), "<ptr:%p>", value.as.ptr); return bc_strdup(buf);
     }
     return bc_strdup("<unknown>");
 }

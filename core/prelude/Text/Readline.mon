@@ -1,8 +1,8 @@
 ;;; Readline.mon --- Pure readline editing core
 
-;; Author: Laluxx
-;; Version: 0.1.0
-;; Keywords: readline terminal emacs editing text
+:author "Laluxx"
+:version "0.2.0"
+:keywords "readline terminal emacs editing text sequence"
 
 ;;; Commentary:
 
@@ -10,6 +10,11 @@
 ;; Emacs-style movement and deletion over character-code lists. Terminal
 ;; raw-mode, rendering, escape-sequence decoding, and byte input can layer on
 ;; top of these pure operations using System.Posix.Term.
+;;
+;; Ordered prefix, suffix, length, construction, and concatenation behavior is
+;; inherited from Sequence. This module owns only cursor/editing policy and the
+;; byte-oriented terminal boundary; it must not maintain local list algorithms
+;; parallel to the sequence abstraction.
 
 ;;; Code:
 
@@ -45,23 +50,6 @@ define key-arrow-left 1001
 define key-arrow-right 1002
 define key-home 1003
 define key-end 1004
-
-
-define length-list :: [Int] -> Int
-  []     -> 0
-  [x|xs] -> (+ 1 (length-list xs))
-
-
-define take-list :: Int -> [Int] -> [Int]
-  n _      | (<= n 0) -> []
-  n []                -> []
-  n [x|xs]            -> prepend x (take-list (- n 1) xs)
-
-
-define drop-list :: Int -> [Int] -> [Int]
-  n xs     | (<= n 0) -> xs
-  n []                -> []
-  n [x|xs]            -> drop-list (- n 1) xs
 
 
 define insert-at :: Int -> Int -> [Int] -> [Int]
@@ -111,7 +99,7 @@ define move-begin :: Int -> [Int] -> Int
 
 
 define move-end :: Int -> [Int] -> Int
-  _ text -> length-list text
+  _ text -> length text
 
 
 define move-forward :: Int -> [Int] -> Int
@@ -138,19 +126,19 @@ define delete-backward :: Int -> [Int] -> [Int]
 
 
 define kill-word-forward :: Int -> [Int] -> [Int]
-  cursor text -> concat (take-list cursor text) (drop-forward-word (drop-list cursor text))
+  cursor text -> concat (take text cursor) (drop-forward-word (drop text cursor))
 
 
 define kill-word-backward :: Int -> [Int] -> [Int]
-  cursor text -> concat (take-list (word-start cursor text) text) (drop-list cursor text)
+  cursor text -> concat (take text (word-start cursor text)) (drop text cursor)
 
 
 define kill-line-backward :: Int -> [Int] -> [Int]
-  cursor text -> drop-list cursor text
+  cursor text -> drop text cursor
 
 
 define kill-line-forward :: Int -> [Int] -> [Int]
-  cursor text -> take-list cursor text
+  cursor text -> take text cursor
 
 
 define byte-string :: Int -> String

@@ -2710,6 +2710,8 @@ static void repl_seed_wisp_arities(REPLContext *ctx) {
      * the REPL parses small chunks, so it must seed them explicitly. */
     wisp_register_arity("define", -1);
     wisp_register_arity("show", 1);
+    wisp_register_arity("import", 1);
+    wisp_register_arity("module", -1);
 
     wisp_register_arity("+", 2);
     wisp_register_arity("-", 2);
@@ -2743,11 +2745,12 @@ static void repl_seed_wisp_arities(REPLContext *ctx) {
                 break;
 
             case ENV_BUILTIN:
-                if (e->arity_min >= 0 && e->arity_max == e->arity_min) {
-                    wisp_register_arity(e->name, e->arity_min);
-                } else {
+                if (e->arity_max == -1)
                     wisp_register_arity(e->name, -1);
-                }
+                else if (e->arity_max == 0)
+                    wisp_register_arity(e->name, e->arity_min);
+                else
+                    wisp_register_arity(e->name, e->arity_max);
                 break;
 
             default:

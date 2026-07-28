@@ -50,6 +50,42 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "the compiler must not turn the core finite-set declaration back into TYPE_BOOL",
         )
 
+    def test_bool_uses_real_module_metadata_and_commentary(self):
+        bool_core = source("core/prelude/Data/Bool.mon")
+
+        self.assertRegex(bool_core, r'(?m)^:author\s+"Laluxx"$')
+        self.assertRegex(bool_core, r'(?m)^:version\s+"[^"]+"$')
+        self.assertRegex(bool_core, r'(?m)^:keywords\s+"[^"]+"$')
+        self.assertNotRegex(bool_core, r"(?mi)^;;\s*(?:Author|Version|Keywords):")
+        self.assertIn(";;; Commentary:", bool_core)
+        self.assertIn("finite set {True, False}", bool_core)
+
+    def test_refactored_core_modules_use_real_metadata_and_commentary(self):
+        modules = (
+            "core/prelude/Control/Applicative.mon",
+            "core/prelude/Control/Category.mon",
+            "core/prelude/Control/Monad.mon",
+            "core/prelude/Data/Bool.mon",
+            "core/prelude/Data/Either.mon",
+            "core/prelude/Data/Eq.mon",
+            "core/prelude/Data/Functor.mon",
+            "core/prelude/Data/Maybe.mon",
+            "core/prelude/Data/Ord.mon",
+            "core/prelude/Data/Profunctor.mon",
+            "core/prelude/Data/Semigroup.mon",
+            "core/prelude/Numeric.mon",
+            "core/prelude/Text/Readline.mon",
+        )
+
+        for module in modules:
+            text = source(module)
+            with self.subTest(module=module):
+                self.assertRegex(text, r'(?m)^:author\s+"[^"]+"$')
+                self.assertRegex(text, r'(?m)^:version\s+"[^"]+"$')
+                self.assertRegex(text, r'(?m)^:keywords\s+"[^"]+"$')
+                self.assertNotRegex(text, r"(?mi)^;;\s*(?:Author|Version|Keywords):")
+                self.assertIn(";;; Commentary:", text)
+
     def test_bool_behavior_is_owned_by_core_methods(self):
         bool_core = source("core/prelude/Data/Bool.mon")
         for name in ("bool", "not?", "and?", "or?", "xor?", "implies?", "iff?"):
@@ -74,6 +110,55 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             for name in names:
                 self.assertRegex(text, rf"(?m)^method\s+{re.escape(name)}\s+::")
                 self.assertNotRegex(text, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
+    def test_bifunctor_derives_one_sided_maps_from_bimap(self):
+        functor_core = source("core/prelude/Data/Functor.mon")
+        either_core = source("core/prelude/Data/Either.mon")
+        bifunctor = functor_core.split("class Bifunctor p where", 1)[1]
+        either_instance = either_core.split("instance Bifunctor Either", 1)[1].split(
+            "\n\nmethod ", 1
+        )[0]
+
+        self.assertIn("first-map f value ->", bifunctor)
+        self.assertIn("second-map g value ->", bifunctor)
+        self.assertNotRegex(either_instance, r"(?m)^\s+first-map\s+")
+        self.assertNotRegex(either_instance, r"(?m)^\s+second-map\s+")
+
+    def test_applicative_and_monad_derive_operations_from_smaller_bases(self):
+        applicative = source("core/prelude/Control/Applicative.mon")
+        monad = source("core/prelude/Control/Monad.mon")
+        maybe = source("core/prelude/Data/Maybe.mon")
+        applicative_class = applicative.split("class Functor f => Applicative f where", 1)[1].split(
+            "\n\nclass Applicative f => Alternative", 1
+        )[0]
+        monad_class = monad.split("class Applicative m => Monad m where", 1)[1].split(
+            "\n\nclass Monad m => MonadPlus", 1
+        )[0]
+        maybe_applicative = maybe.split("instance Applicative Maybe", 1)[1].split(
+            "\n\ninstance Monad Maybe", 1
+        )[0]
+        maybe_monad = maybe.split("instance Monad Maybe", 1)[1].split(
+            "\n\nmethod ", 1
+        )[0]
+
+        for name in ("liftA", "liftA2", "liftA3"):
+            self.assertRegex(applicative_class, rf"(?m)^\s+{name}\s+.*->")
+            self.assertNotRegex(maybe_applicative, rf"(?m)^\s+{name}\s+")
+
+        for name in ("return", "join", "then"):
+            self.assertRegex(monad_class, rf"(?m)^\s+{name}\s+.*->")
+            self.assertNotRegex(maybe_monad, rf"(?m)^\s+{name}\s+")
+
+    def test_category_and_profunctor_derive_directional_conveniences(self):
+        category = source("core/prelude/Control/Category.mon")
+        profunctor = source("core/prelude/Data/Profunctor.mon")
+
+        self.assertRegex(category, r"(?m)^\s+pipeCategory\s+f\s+g\s+->")
+        self.assertIn("composeCategory g f", category)
+        self.assertRegex(profunctor, r"(?m)^\s+lmap\s+f\s+value\s+->")
+        self.assertRegex(profunctor, r"(?m)^\s+rmap\s+g\s+value\s+->")
+        self.assertIn("dimap f (lambda (x) x) value", profunctor)
+        self.assertIn("dimap (lambda (x) x) g value", profunctor)
 
     def test_string_behavior_is_owned_by_core_methods(self):
         string_core = source("core/prelude/Data/String.mon")
@@ -148,8 +233,13 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
         self.assertIn("import Sequence", readline_core)
         self.assertNotRegex(readline_core, r"(?m)^define\s+append-list\s+::")
+        self.assertNotRegex(
+            readline_core,
+            r"(?m)^define\s+(?:length-list|take-list|drop-list)\s+::",
+        )
         self.assertNotIn(" ++ ", readline_core)
-        self.assertIn("-> concat (take-list", readline_core)
+        self.assertIn("-> concat (take text cursor)", readline_core)
+        self.assertIn("-> drop text cursor", readline_core)
 
     def test_semigroup_owns_same_shaped_collection_append(self):
         semigroup_core = source("core/prelude/Data/Semigroup.mon")
@@ -178,6 +268,19 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
                 f'dep_env_declare(env, "{primitive}"',
                 dependent_checker,
             )
+
+    def test_semigroup_and_monoid_derive_nonminimal_operations(self):
+        semigroup_core = source("core/prelude/Data/Semigroup.mon")
+        class_source, instances = semigroup_core.split("instance Semigroup Int", 1)
+
+        self.assertIn("sconcat []", class_source)
+        self.assertIn("sconcat [x|xs]", class_source)
+        self.assertIn("mappend x y", class_source)
+        self.assertIn("mconcat []", class_source)
+        self.assertIn("mconcat [x|xs]", class_source)
+        self.assertNotRegex(instances, r"(?m)^\s+sconcat\s+")
+        self.assertNotRegex(instances, r"(?m)^\s+mappend\s+")
+        self.assertNotRegex(instances, r"(?m)^\s+mconcat\s+")
 
     def test_char_methods_are_typed_by_the_char_module(self):
         char_core = source("core/prelude/Data/Char.mon")
@@ -226,6 +329,24 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertNotRegex(numeric, r"(?m)^class\s+(?:Additive|Multiplicative)\s+")
         self.assertNotRegex(numeric, r"(?m)^\s*(?:plus|minus|times)\s+::")
 
+    def test_numeric_instances_inherit_derived_num_and_integral_operations(self):
+        numeric = source("core/prelude/Numeric.mon")
+        num_class = numeric.split("class Num a where", 1)[1].split(
+            "\n\nclass Num a => Integral", 1
+        )[0]
+        integral_class = numeric.split("class Num a => Integral a where", 1)[1].split(
+            "\n\nclass Num a => Fractional", 1
+        )[0]
+        instances = numeric.split("instance Num Int", 1)[1].split("\n\ntests", 1)[0]
+
+        for name in ("inc", "dec", "double", "square", "cube"):
+            self.assertRegex(num_class, rf"(?m)^\s+{re.escape(name)}\b.*->")
+            self.assertNotRegex(instances, rf"(?m)^\s+\(?{re.escape(name)}\b")
+
+        for name in ("quotRem", "divMod", "even?", "odd?", "gcd", "lcm"):
+            self.assertRegex(integral_class, rf"(?m)^\s+{re.escape(name)}\s+.*->")
+            self.assertNotRegex(instances, rf"(?m)^\s+\(?{re.escape(name)}(?:\s|\))")
+
     def test_integral_methods_are_not_reimplemented_by_math_or_data_int(self):
         self.assertNotRegex(source("core/Math.mon"), r"(?m)^define\s+(even\?|odd\?|gcd|lcm)\s+::")
         self.assertNotRegex(source("core/prelude/Data/Int.mon"), r"(?m)^method\s+(even\?|odd\?)\s+::")
@@ -238,6 +359,22 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         ord_source = source("core/prelude/Data/Ord.mon")
         self.assertRegex(ord_source, r"(?m)^class\s+Ord\s+a\s+where")
         self.assertRegex(ord_source, r"(?m)^\s*clamp\s+::")
+
+    def test_eq_and_ord_instances_inherit_derived_relations(self):
+        eq_source = source("core/prelude/Data/Eq.mon")
+        ord_source = source("core/prelude/Data/Ord.mon")
+        eq_class, eq_instances = eq_source.split("instance Eq Int", 1)
+        ord_class, ord_instances = ord_source.split("instance Ord Int", 1)
+
+        self.assertRegex(eq_class, r"(?m)^\s+not-eq\?\s+.*->")
+        self.assertNotRegex(eq_instances, r"(?m)^\s+\(?not-eq\?(?:\s|\))")
+
+        for name in ("gt?", "gte?"):
+            self.assertRegex(ord_class, rf"(?m)^\s+{re.escape(name)}\s+.*->")
+            self.assertNotRegex(
+                ord_instances,
+                rf"(?m)^\s+\(?{re.escape(name)}(?:\s|\))",
+            )
 
     def test_enum_deriving_uses_the_core_defaults(self):
         codegen = source("codegen.c")
@@ -258,6 +395,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
     def test_sequence_composes_functor_and_foldable(self):
         functor = source("core/prelude/Data/Functor.mon")
+        foldable = source("core/prelude/Data/Foldable.mon")
         sequence = source("core/prelude/Sequence.mon")
 
         self.assertRegex(functor, r"(?m)^\s*map\s+::")
@@ -266,8 +404,9 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
         class_body = sequence.split("class ", 1)[1].split("\n\ndefine ", 1)[0]
         self.assertNotRegex(class_body, r"(?m)^\s*(?:map|foldl|foldr)\s+::")
-        self.assertRegex(sequence, r"(?m)^instance\s+Functor\s+Coll$")
-        self.assertRegex(sequence, r"(?m)^instance\s+Foldable\s+Coll$")
+        self.assertRegex(functor, r"(?m)^instance\s+Functor\s+Coll$")
+        self.assertRegex(foldable, r"(?m)^instance\s+Foldable\s+Coll$")
+        self.assertNotRegex(sequence, r"(?m)^instance\s+(?:Functor|Foldable)\s+Coll$")
 
     def test_public_names_do_not_hide_unrelated_abstractions(self):
         coll = source("core/prelude/Sequence.mon")
@@ -276,7 +415,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
         self.assertNotRegex(coll, r"(?m)^define\s+(?:append|both)\s+::")
         self.assertRegex(coll, r"(?m)^\s+snoc\s+::")
-        self.assertRegex(coll, r"(?m)^define\s+bothPredicates\s+::")
+        self.assertRegex(coll, r"(?m)^method\s+bothPredicates\s+::")
         self.assertNotRegex(function, r"(?m)^define\s+times\s+::")
         self.assertNotRegex(data_list, r"(?m)^define\s+length\s+::")
 
@@ -372,6 +511,25 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertRegex(data_string, r"(?m)^method\s+startsWith\?\s+::")
         self.assertRegex(data_string, r"(?m)^method\s+endsWith\?\s+::")
         self.assertRegex(data_string, r"(?m)^method\s+includes\?\s+::")
+
+    def test_sequence_implementations_do_not_create_a_coll_shadow_api(self):
+        sequence = source("core/prelude/Sequence.mon")
+
+        self.assertNotRegex(sequence, r"\bcoll-[A-Za-z0-9?!-]+")
+        self.assertNotRegex(sequence, r"(?m)^define\s+[A-Za-z0-9?!-]+\s+::")
+
+    def test_data_modules_use_methods_for_function_declarations(self):
+        violations = []
+        for path in sorted((ROOT / "core/prelude/Data").glob("*.mon")):
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if re.match(r"^define\s+[A-Za-z0-9?!-]+\s+::.*->", line):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{line_number}: {line}"
+                    )
+
+        self.assertEqual(violations, [], "\n".join(violations))
 
 
 if __name__ == "__main__":

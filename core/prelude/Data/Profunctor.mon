@@ -1,8 +1,14 @@
 ;;; Profunctor.mon --- Profunctor abstraction
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: profunctor dimap typeclass
+:author "Laluxx"
+:version "1.1.0"
+:keywords "profunctor dimap contravariant covariant typeclass"
+
+;;; Commentary:
+
+;; Profunctor maps its input contravariantly and its output covariantly.
+;; Instances supply the combined dimap operation; mapping either side alone is
+;; derived with an identity function so the directional laws have one owner.
 
 ;;; Code:
 
@@ -15,7 +21,14 @@ class Profunctor p where
   lmap  :: (a -> b) -> p b c -> p a c
   rmap  :: (b -> c) -> p a b -> p a c
 
+  lmap f value ->
+    dimap f (lambda (x) x) value
+
+  rmap g value ->
+    dimap (lambda (x) x) g value
+
   ;; higher-kinded: p :: Type -> Type -> Type
+  ;; minimal complete definition: dimap
   ;; law: lmap f = dimap f id
   ;; law: rmap g = dimap id g
 

@@ -303,7 +303,7 @@ Term *dep_shift(Term *t, int delta, int cutoff);
 Term *dep_subst_fvar(Term *t, const char *name, Term *replacement);
 
 
-// Values and closures  — semantic domain for the evaluator
+/// Values and closures  — semantic domain for the evaluator
 //
 //  Evaluation uses a closure-based NbE (Normalisation by Evaluation)
 //  approach.  Terms evaluate to Values; Values are compared for

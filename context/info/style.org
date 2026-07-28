@@ -193,7 +193,10 @@ module MyModule
 import Prelude
 import Coll
 
-data Color = Red | Green | Blue
+data Color
+  = Red
+  | Green
+  | Blue
 
 (define (greet name)
   (show "Hello, " ++ name))
@@ -207,7 +210,10 @@ module MyModule
 import Prelude
 import Coll
 
-data Color = Red | Green | Blue
+data Color
+  = Red
+  | Green
+  | Blue
 
 define greet name
   show "Hello, " ++ name

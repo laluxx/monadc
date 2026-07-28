@@ -1798,6 +1798,20 @@ RuntimeValue *rt_value_opaque(void *p) {
     return v;
 }
 
+int64_t rt_utf8_width(const char *text) {
+    int64_t width = 0;
+    if (!text) return 0;
+    for (const unsigned char *p = (const unsigned char *)text; *p; p++)
+        if ((*p & 0xc0u) != 0x80u) width++;
+    return width;
+}
+
+void *rt_unbox_opaque(RuntimeValue *v) {
+    if (!v || (uintptr_t)v < 0x10000) return NULL;
+    if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
+    return v && v->type == RT_OPAQUE ? v->data.opaque_val : (void *)v;
+}
+
 RuntimeValue *rt_value_list(RuntimeList *val) {
     RuntimeValue *v = alloc_value();
     v->type = RT_LIST; v->data.list_val = val; return v;
@@ -2695,6 +2709,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_unbox_char",   i8,     ptr);
     DECL("rt_unbox_string", ptr,    ptr);
     DECL("rt_unbox_list",   ptr,    ptr);
+    DECL("rt_unbox_opaque", ptr,    ptr);
     DECL("rt_value_is_nil", i32,    ptr);
     DECL("rt_print_value_newline", void_t, ptr);
 
@@ -2884,6 +2899,7 @@ GET_RUNTIME_FUNCTION(rt_ratio_to_float)
 
 GET_RUNTIME_FUNCTION(rt_value_array)
 GET_RUNTIME_FUNCTION(rt_value_opaque)
+GET_RUNTIME_FUNCTION(rt_unbox_opaque)
 GET_RUNTIME_FUNCTION(rt_array_set)
 GET_RUNTIME_FUNCTION(rt_array_get)
 GET_RUNTIME_FUNCTION(rt_array_length)

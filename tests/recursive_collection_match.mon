@@ -1,0 +1,20 @@
+module Main
+
+data Formula
+  = Atom String
+  | Negation Formula
+
+define same? :: Formula -> Formula -> Bool
+  left right -> True
+
+define contains-formula? :: Formula -> [Formula] -> Bool
+  formula formulas -> (match formulas with
+    | [] -> False
+    | [candidate|rest] -> (if (same? formula candidate) True (contains-formula? formula rest)))
+
+define contradicts? :: Formula -> [Formula] -> Bool
+  formula rest -> (match formula with
+    | [Negation body] -> (contains-formula? body rest)
+    | _ -> (contains-formula? (Negation formula) rest))
+
+show (contradicts? (Negation (Atom "P")) [(Atom "P")])

@@ -1,14 +1,18 @@
 ;;; Either.mon --- Typed alternatives and errors
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: either result error functor monad
+:author "Laluxx"
+:version "1.1.0"
+:keywords "either result error bifunctor typed-alternative"
 
 ;;; Commentary:
 
-;; Either models computations with a typed error/alternative on the Left and a
-;; success value on the Right.  This is the public Result-like building block for
+;; Either models computations with a typed error or alternative on the Left and
+;; a success value on the Right. It is the public Result-like building block for
 ;; core code that needs more information than Maybe can carry.
+;;
+;; Its instance supplies only the primitive two-sided Bifunctor mapping.
+;; One-sided mappings are inherited from Data.Functor, keeping their laws and
+;; implementation at the abstraction that owns them.
 
 ;;; Code:
 
@@ -22,13 +26,13 @@ module Data.Either
    mapLeft mapRight flatMap mapBoth]
 
 
-data Either e a = Left e | Right a
+data Either e a
+  = Left  e
+  | Right a
 
 
 instance Bifunctor Either
   bimap f g value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right (g x)))
-  first-map f value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right x))
-  second-map g value -> (match value with | (Left e) -> (Left e) | (Right x) -> (Right (g x)))
 
 
 method either :: Either e a -> (e -> c) -> (a -> c) -> c
@@ -82,3 +86,10 @@ tests
   assert-eq ((Right 1).right?) True "Either right? Right"
   assert-eq ((Left 1).right?)  False "Either right? Left"
   :predicates:
+
+  :bifunctor-defaults:
+  assert-eq (show (first-map (lambda (x) (x + 1)) (Left 4)))  "(Left 5)"  "Either inherits Bifunctor first-map"
+  assert-eq (show (first-map (lambda (x) (x + 1)) (Right 9))) "(Right 9)" "Either first-map preserves Right"
+  assert-eq (show (second-map (lambda (x) (x + 1)) (Right 4))) "(Right 5)" "Either inherits Bifunctor second-map"
+  assert-eq (show (second-map (lambda (x) (x + 1)) (Left 9)))  "(Left 9)"  "Either second-map preserves Left"
+  :bifunctor-defaults:

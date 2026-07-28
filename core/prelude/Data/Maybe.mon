@@ -1,13 +1,17 @@
 ;;; Maybe.mon --- Optional values
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: maybe optional functor applicative monad
+:author "Laluxx"
+:version "1.1.0"
+:keywords "maybe optional functor applicative monad absence"
 
 ;;; Commentary:
 
 ;; Maybe is the core optional-value type.  Do not encode optional public APIs as
 ;; [] / [x]; use Nothing and Just so absence is explicit in types and patterns.
+;;
+;; Its instances provide only their primitive structural behavior. Applicative
+;; lifting and Monad return/join/sequencing are inherited from the owning
+;; abstractions rather than repeated as Maybe-specific pattern matches.
 
 ;;; Code:
 
@@ -24,7 +28,9 @@ module Data.Maybe
    orElse firstJust safeHead safeTail]
 
 
-data Maybe a = Nothing | Just a
+data Maybe a
+  = Nothing
+  | Just a
 
 
 instance Functor Maybe
@@ -34,16 +40,10 @@ instance Functor Maybe
 instance Applicative Maybe
   pure x -> Just x
   applyA fvalue value -> (match fvalue with | Nothing -> Nothing | (Just f) -> (map f value))
-  liftA f value -> map f value
-  liftA2 f x y -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> Just (f a b)))
-  liftA3 f x y z -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> (match z with | Nothing -> Nothing | (Just c) -> Just (f a b c))))
 
 
 instance Monad Maybe
   bind value f -> (match value with | Nothing -> Nothing | (Just x) -> (f x))
-  return x -> Just x
-  join value -> (match value with | Nothing -> Nothing | (Just x) -> x)
-  then value next -> (match value with | Nothing -> Nothing | (Just ignored) -> next)
   fail message -> Nothing
 
 
@@ -106,17 +106,13 @@ method listToMaybe :: [a] -> Maybe a
   [x|ignored] -> Just x
 
 
-define maybe-or-else :: Maybe a -> Maybe a -> Maybe a
-  value rhs -> (match value with | Nothing -> rhs | (Just x) -> value)
-
-
 method orElse :: Maybe a -> Maybe a -> Maybe a
-  value rhs -> maybe-or-else value rhs
+  value rhs -> (match value with | Nothing -> rhs | (Just x) -> value)
 
 
 method firstJust :: [Maybe a] -> Maybe a
   []       -> Nothing
-  [m|rest] -> maybe-or-else m (firstJust rest)
+  [m|rest] -> (Maybe.orElse m (firstJust rest))
 
 
 method safeHead :: [a] -> Maybe a
@@ -129,15 +125,15 @@ method safeTail :: [a] -> Maybe [a]
   [ignored|xs] -> Just xs
 
 
-define maybe-test-inc :: Int -> Int
+method maybe-test-inc :: Int -> Int
   x -> x + 1
 
 
-define maybe-test-add :: Int -> Int -> Int
+method maybe-test-add :: Int -> Int -> Int
   x y -> x + y
 
 
-define maybe-test-add3 :: Int -> Int -> Int -> Int
+method maybe-test-add3 :: Int -> Int -> Int -> Int
   x y z -> x + y + z
 
 
@@ -162,6 +158,17 @@ tests
   assert-eq (show ((Just 1).replace 9))        "(Just 9)"  "Maybe replace Just"
   assert-eq (show (replace Nothing 9))         "Nothing"   "Maybe replace Nothing"
   :transform:
+
+  :inherited-effects:
+  assert-eq (show (liftA maybe-test-inc (Just 4))) "(Just 5)" "Maybe inherits Applicative liftA"
+  assert-eq (show (liftA2 maybe-test-add (Just 2) (Just 3))) "(Just 5)" "Maybe inherits Applicative liftA2"
+  assert-eq (show (liftA2 maybe-test-add Nothing (Just 3))) "Nothing" "Maybe liftA2 preserves absence"
+  assert-eq (show (liftA3 maybe-test-add3 (Just 1) (Just 2) (Just 3))) "(Just 6)" "Maybe inherits Applicative liftA3"
+  assert-eq (show (return 7)) "(Just 7)" "Maybe inherits Monad return from pure"
+  assert-eq (show (join (Just (Just 8)))) "(Just 8)" "Maybe inherits Monad join"
+  assert-eq (show (then (Just 1) (Just 9))) "(Just 9)" "Maybe inherits Monad then"
+  assert-eq (show (then Nothing (Just 9))) "Nothing" "Maybe Monad then preserves absence"
+  :inherited-effects:
 
   :list:
   assert-eq (show ((Just 5).toList))          "(5)"        "Maybe to list Just"

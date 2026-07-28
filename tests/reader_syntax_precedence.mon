@@ -1,0 +1,27 @@
+;;; reader_syntax_precedence.mon --- Reader precedence and associativity
+
+import Logic.FirstOrder.Modal
+
+module Main
+
+define x :: Term (Variable "x")
+define y :: Term (Variable "y")
+define Fx :: Formula (Predicate "F" (list x))
+define Gx :: Formula (Predicate "G" (list x))
+define Gy :: Formula (Predicate "G" (list y))
+define Hx :: Formula (Predicate "H" (list x))
+
+define mathematical :: Formula
+  ¬Fx ∧ Gx ∨ Hx -> Fx -> Gx
+
+define canonical :: Formula
+  (implies (∨ (∧ (¬ Fx) Gx) Hx) (implies Fx Gx))
+
+define quantified :: Formula
+  ∀x. Fx ∧ ∃y. □Gy
+
+define quantified-canonical :: Formula
+  (∀ "x" (∧ Fx (∃ "y" (□ (Predicate "G" (list (Variable "y")))))))
+
+show render-formula quantified
+show render-formula quantified-canonical

@@ -1,0 +1,104 @@
+;;; ReaderSyntax.mon --- A small reader DSL
+
+;;; Commentary:
+
+;; A reader DSL gives a type its own expression notation.  This example builds
+;; a tiny arithmetic language; the compiler knows nothing about arithmetic.
+
+;;; Code:
+
+reader-syntax Expression
+  ~_   negate-expression
+  twice_ duplicate-expression
+  _⁻   negate-expression
+  _⊕_  add-expression      1 left
+  _⊗_  multiply-expression 2 left
+
+module Main
+
+
+;;; 1. Define the object language
+
+data Expression
+  = Number     Int
+  | Negated    Expression
+  | Added      Expression Expression
+  | Multiplied Expression Expression
+
+
+define negate-expression :: Expression -> Expression
+  value -> Negated value
+
+
+define add-expression :: Expression -> Expression -> Expression
+  left right -> Added left right
+
+
+define multiply-expression :: Expression -> Expression -> Expression
+  left right -> Multiplied left right
+
+
+;; A rule target may also be a compile-time transformer written in Monad.
+;; Syntax parameters are immutable, unevaluated trees.  `syntax-symbol`
+;; constructs an identifier and `syntax-list` constructs an application.  This
+;; transformer therefore builds `add-expression value value` procedurally,
+;; without adding arithmetic or duplication to the compiler.
+
+define duplicate-expression :: Syntax -> Syntax
+  value -> (syntax-list (syntax-symbol "add-expression") value value)
+
+
+define evaluate :: Expression -> Int
+  [Number value]          -> value
+  [Negated value]         -> 0 - (evaluate value)
+  [Added left right]      -> (evaluate left) + (evaluate right)
+  [Multiplied left right] -> (evaluate left) * (evaluate right)
+
+
+;;; 2. Give Expression a reader
+
+;; `reader-syntax Expression` maps surface tokens to the ordinary functions
+;; above.  Larger binding powers bind more tightly, so ⊗ binds before ⊕.
+;; Associativity determines how repeated infix operators group.
+
+define one   :: Expression (Number 1)
+define two   :: Expression (Number 2)
+define three :: Expression (Number 3)
+
+
+;;; 3. Write the same program both ways
+
+;; Canonical Monad remains available.  A target-headed S-expression bypasses
+;; the surface reader and calls the functions directly.
+
+define canonical :: Expression
+  (add-expression one (multiply-expression two three))
+
+
+;; Mathematical notation is selected because the definition explicitly
+;; expects Expression.  It lowers to the canonical expression above.
+
+define surface :: Expression
+  one ⊕ two ⊗ three
+
+
+define negated :: Expression
+  (one ⊕ two ⊗ three)⁻
+
+
+define transformed :: Expression
+  twice three
+
+
+show evaluate canonical
+show evaluate surface
+show evaluate negated
+show evaluate transformed
+
+
+;;; 4. The safety boundary
+
+;; The reader is expected-type-directed.  Its tokens do not change function
+;; types, pattern clauses, loops, or definitions of another result type.  Put
+;; the type, constructor functions, and reader declaration in a normal module
+;; to share the DSL; importing that module activates its grammar for clients.

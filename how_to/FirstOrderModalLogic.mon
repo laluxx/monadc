@@ -1,0 +1,172 @@
+;;; FirstOrderModalLogic.mon --- First-order modal logic as executable mathematics
+
+;;; Commentary:
+
+;; This chapter studies quantified modal logic (QML): classical first-order
+;; logic extended by □ (necessity) and ◇ (possibility).  Every displayed result
+;; below is produced by the core-owned Logic.FirstOrder.Modal module.
+
+;;; Code:
+
+import Logic.FirstOrder.Modal
+
+module Main
+
+
+;;; 1. The object language
+
+;; Terms denote individuals.  Formula values express propositions about those
+;; individuals.  Here x is a variable, a is a constant, Fx is the atomic
+;; formula obtained by applying the unary predicate symbol F to x, and Rxy is a
+;; binary predicate application.
+
+define x :: Term (Variable "x")
+
+
+define a :: Term (Constant "a")
+
+
+define Fx :: Formula (Predicate "F" (list x))
+
+
+define Fa :: Formula (Predicate "F" (list a))
+
+
+define Rxy :: Formula (Predicate "R" (list x (Variable "y")))
+
+
+;; Mathematical readings:
+;;
+;;   Fx       F holds of x
+;;   x = a    x and a denote the same individual
+;;   ¬Fx      F does not hold of x
+;;   Fx ∧ Gx  both conjuncts hold
+;;   Fx ∨ Gx  at least one disjunct holds
+
+
+;;; 2. Binding and modal scope
+
+;; ∀ binds every free occurrence of x in its body; ∃ is its existential dual.
+;; □A holds when A is true at every accessible world.  ◇A holds when A is true
+;; at some accessible world.
+
+define every-individual-is-F :: Formula (∀ "x" Fx)
+
+
+define some-individual-is-F :: Formula (∃ "x" Fx)
+
+
+define necessarily-Fx :: Formula (□ Fx)
+
+
+define possibly-Fx :: Formula (◇ Fx)
+
+
+;; Scope matters:
+;;
+;;   ∀x. □Fx    every individual is necessarily F
+;;   □∀x. Fx    necessarily, every individual is F
+;;
+;; These formulas need not coincide when domains vary between worlds.
+
+
+;;; 3. The Barcan formula
+
+;; The formula studied in this chapter is
+;;
+;;   ∀x. □Fx -> □∀x. Fx
+;;
+;; This direction is commonly called the Barcan formula.  Its reverse,
+;; □∀x. Fx -> ∀x. □Fx, is commonly called the converse Barcan formula.
+;; Naming conventions vary, so quote the formula as well as its name.
+;;
+;; The core module supports two equivalent notations.  The first is ordinary
+;; canonical Monad syntax: every logical connective is an ordinary function.
+
+define barcan-sexp :: Formula
+  (implies (∀ "x" (□ Fx)) (□ (∀ "x" Fx)))
+
+
+;; The second is mathematical surface syntax.  Because the expected type is
+;; Formula, the scoped reader exported by Logic.FirstOrder.Modal applies only
+;; to this body.  It lowers to the same ordinary function applications as the
+;; definition above; there is no modal-logic AST hidden in the compiler.
+
+define barcan-math :: Formula
+  ∀x. □Fx -> □∀x. Fx
+
+
+show render-formula barcan-sexp
+show render-formula barcan-math
+
+
+;;; 4. How the two notations are related
+
+;; The mathematical reader is a precedence parser.  Its declaration lives in
+;; Logic.FirstOrder.Modal, beside Formula and its constructors:
+;;
+;;   ¬, □, ◇       prefix operators (tightest)
+;;   ∧              binding power 3, left associative
+;;   ∨              binding power 2, left associative
+;;   ->             binding power 1, right associative
+;;   ∀x. and ∃x.    bind a body at binding power 2
+;;
+;; Consequently A -> B -> C means A -> (B -> C), while A ∧ B ∨ C means
+;; (A ∧ B) ∨ C.  Binding quantifiers at power 2 makes the implication in the
+;; displayed Barcan formula the outermost connective:
+;;
+;;   (∀x. □Fx) -> (□∀x. Fx)
+;;
+;; This is expected-type-directed syntax.  The notation is enabled for the
+;; body of a definition explicitly typed Formula; it cannot reinterpret -> in
+;; an Int -> Int type, a pattern clause, or a for binding.  A body headed by a
+;; declared target function, such as (implies ...), remains canonical Monad and
+;; bypasses mathematical lowering.  Both paths construct precisely the same
+;; core Formula values.
+
+
+;;; 5. Kripke semantics
+
+;; A Kripke frame is a pair (W,R): W is a set of worlds and R is the
+;; accessibility relation.  A Kripke model adds a domain of individuals and an
+;; interpretation of predicates at each world.
+;;
+;; The proof below uses constant-domain semantics: every world has the same
+;; domain.  Parameters designate rigidly, so the witness a introduced at v is
+;; also available for universal instantiation at w.
+
+
+;;; 6. A labelled analytic tableau
+
+;; To test validity, assume the negation of the Barcan formula at world w and
+;; apply truth-preserving tableau rules.  Formula labels name worlds; wRv means
+;; that v is accessible from w.
+;;
+;;   1.  ¬(∀x. □Fx -> □∀x. Fx)   (w)       assumption
+;;   2.  ∀x. □Fx                  (w)(1)    ¬ implication, antecedent
+;;   3.  ¬□∀x. Fx                 (w)(1)    ¬ implication, ¬ consequent
+;;   4.  wRv                      (3)       fresh accessible world
+;;   5.  ¬∀x. Fx                  (v)(3)    ¬ necessity
+;;   6.  ¬Fa                      (v)(5)    fresh parameter a
+;;   7.  □Fa                      (w)(2)    universal instantiation
+;;   8.  Fa                       (v)(7,4)  necessity along wRv
+;;                                      × 6,8
+;;
+;; Lines 6 and 8 assert ¬Fa and Fa at the same world.  The branch therefore
+;; closes.  Since this example has only one branch, the tableau establishes the
+;; formula under the stated constant-domain assumptions.  An open saturated
+;; branch would instead determine a countermodel.
+
+show render-barcan-tableau "F"
+
+
+;;; 7. Vocabulary for further study
+
+;; Search for: object language, term, atomic formula, free and bound variable,
+;; substitution, alpha-equivalence, quantified modal logic, Kripke frame,
+;; Kripke model, accessibility relation, rigid designation, constant domain,
+;; varying domain, increasing domain, decreasing domain, labelled analytic
+;; tableau, witness, parameter, branch saturation, branch closure, countermodel,
+;; Barcan formula, converse Barcan formula, embedded domain-specific language
+;; (EDSL), expected-type-directed syntax, Pratt parser, binding power,
+;; associativity, precedence, desugaring, and conservative language extension.

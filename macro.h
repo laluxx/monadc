@@ -46,9 +46,8 @@
  * -------------------
  * If the body contains no #(…) the entire body is the template.
  * If #(…) appears, only the subtree inside #(…) is the macro output;
- * the surrounding code runs at expand time (full compile-time eval is
- * TODO — currently the whole body is substituted and the #() marker
- * is stripped).
+ * supported surrounding forms run in the deterministic Syntax evaluator.
+ * Quasiquote/unquote and unquote-splicing construct immutable output trees.
  *
  * Variadic macros
  * ---------------
@@ -76,6 +75,11 @@
  * Macro define nodes consumed in step 1 are freed internally.
  */
 ASTList macro_expand_all(AST **exprs, size_t count);
+
+/* Establish the module-local compile-time visibility environment. */
+void macro_scope_push(const char *owner_file);
+void macro_scope_allow(const char *owner_file);
+void macro_scope_pop(void);
 
 /*
  * macro_is_registered(name)

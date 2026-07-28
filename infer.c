@@ -1879,6 +1879,10 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        if (head->type == AST_SYMBOL && strcmp(head->symbol, "__rt_utf8_width") == 0 && ast->list.count == 2) {
+            (void)infer_expr(ctx, ast->list.items[1]); result = type_int(); break;
+        }
+
         if (head->type == AST_SYMBOL &&
             strcmp(head->symbol, "rt_coll_drop") == 0 &&
             ast->list.count == 3) {
@@ -2493,6 +2497,8 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "rt_coll_is_empty", rt_is_empty_sc);
     infer_env_insert(ctx->env, "__rt_count",
                      scheme_mono(type_arrow(type_coll(), type_int())));
+    infer_env_insert(ctx->env, "__rt_utf8_width",
+                     scheme_mono(type_arrow(type_string(), type_int())));
     infer_env_insert(ctx->env, "__rt_set_singleton",
                      scheme_mono(type_arrow(type_set(), type_bool())));
 

@@ -11,6 +11,13 @@ define [half-pi :: Float] 1.5707963267948966
 define [e :: Float] 2.718281828459045
 define [phi :: Float] 1.6180339887498949
 
+define [pi      :: Float] 3.141592653589793
+define [tau     :: Float] 6.283185307179586
+define [half-pi :: Float] 1.5707963267948966
+define [e       :: Float] 2.718281828459045
+define [phi     :: Float] 1.6180339887498949
+
+
 define factorial :: Int -> Int
   n | n <= 1    -> 1
     | otherwise -> n * (factorial (n - 1))

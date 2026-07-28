@@ -164,6 +164,8 @@ The `how_to/` directory contains executable language examples:
 ./build/monad how_to/AlgebraicDataTypes.mon
 ./build/monad how_to/Macros.mon
 ./build/monad how_to/Iter.mon
+./build/monad how_to/ReaderSyntax.mon
+./build/monad how_to/FirstOrderModalLogic.mon
 ```
 
 Some examples depend on external graphics libraries or platform-specific

@@ -95,26 +95,27 @@ define assert condition message -> Syntax
     #(begin)
 #+END_SRC
 
-Currently, code outside =#()= is not evaluated at compile time — both branches
-of the conditional survive into the output. Full compile-time evaluation of the
-non-=#()= portion is future work ([[file:../context/macro.org::think.context.macro.quasi-output-eval]]).
+Code outside =#()= runs in the deterministic Syntax evaluator. A Boolean
+conditional selects one branch during expansion; the unselected branch does not
+enter inference or code generation. See
+[[file:../context/macro.org][the macro architecture record]].
 
 * 4. How Syntax Works
 
 =Syntax= is the type of unevaluated S-expressions. A macro receives its
 arguments as =Syntax= values and must construct a valid S-expression to return.
-Construction uses plain function calls — no quasiquotation needed:
+Use immutable syntax constructors when the tree shape is computed explicitly:
 
 #+BEGIN_SRC monad
-(define (double-it x -> Syntax)
-  (list '* 2 x))
+(define (double-it [x : Syntax] -> Syntax)
+  (syntax-list (syntax-symbol "*") 2 x))
 
 (double-it 5)  ;; expands to (* 2 5)
 #+END_SRC
 
 #+BEGIN_SRC wisp
-define double-it x -> Syntax
-  list '* 2 x
+define double-it :: Syntax -> Syntax
+  x -> (syntax-list (syntax-symbol "*") 2 x)
 
 double-it 5  ;; expands to (* 2 5)
 #+END_SRC
@@ -122,6 +123,20 @@ double-it 5  ;; expands to (* 2 5)
 =Syntax= is a first-class type in the surface type system but does not exist at
 runtime — macro defines are consumed during expansion and no LLVM IR is emitted
 for them.
+
+Structural operations available during expansion include:
+
+- predicates: =syntax-list?=, =syntax-symbol?=, =syntax-string?=,
+  =syntax-number?=;
+- decomposition: =syntax-list-length=, =syntax-list-ref=,
+  =syntax-symbol-text=;
+- locations: =syntax-source-file=, =syntax-source-line=,
+  =syntax-source-column=, =syntax-source-end-column=;
+- diagnostics: =syntax-error syntax "message"=.
+
+Syntax-returning helper functions may call each other. Set
+=MONAD_MACRO_TRACE=1= to receive newline-delimited JSON expansion records for
+tooling or compiler debugging.
 
 For details on the =Syntax= type and its place in the type hierarchy, see
 [[file:syntax.org][Syntax Reference]] and [[file:types.org][Types]].
@@ -276,8 +291,8 @@ and the type inference phase:
   flat in list position; in non-list position a single-element rest wraps
   in =(begin ...)= ([[file:../context/macro.org::macro-variadic-splicing][context/macro.org — variadic splicing]]).
 - **Quasi-output =#()=**: the expander strips the =#()= wrapper and uses
-  only the inner subtree as output; code outside is reserved for future
-  compile-time evaluation
+  only the inner subtree as output; surrounding supported forms execute in
+  the deterministic compile-time evaluator
   ([[file:../context/macro.org::marco-quasi-output][context/macro.org — quasi-output]]).
 
 Key Points
@@ -285,8 +300,9 @@ Key Points
 - Macros are =define= forms whose return type is =Syntax= — no separate
   =macro= keyword.
 - Arguments are received **unevaluated** as =Syntax= values.
-- Template construction uses ordinary function calls (no quasiquotation
-  required, though supported via =⌜…⌟=).
+- Procedural construction uses =syntax-list=, =syntax-symbol=,
+  =syntax-string=, and =syntax-number=; unknown calls remain object-language
+  syntax for compatibility with template-style transformers.
 - =#(...)= quasi-output syntax delimits the template output region.
 - Hygienic renaming prevents capture: =macroname__varname__N=.
 - Variadic macros use =. name= for rest args; splicing vs wrapping

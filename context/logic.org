@@ -1,0 +1,223 @@
+#+TITLE: First-Order Modal Logic Context
+#+AUTHOR: Codex
+#+DATE: 2026-07-26
+#+FILETAGS: :monadc:core:logic:first-order:modal:tableau:kripke:
+
+* Scope
+
+[DEC id:dec.logic.core-owned date:2026-07-26 by:human]
+  First-order and modal-logic semantics belong to core language modules.  The
+  compiler may provide general recursive ADTs, Unicode identifiers, syntax
+  objects, and reader-macro facilities, but it must not contain special cases
+  for quantifiers, modal operators, tableaux, or Kripke semantics.
+
+[DEC id:dec.logic.quality-bar date:2026-07-26 by:human]
+  Logic modules set a high quality bar: use established mathematical
+  terminology, executable examples, deterministic rendering, and regression
+  tests.  Documentation must name concepts precisely enough to support later
+  literature searches.
+
+* Mathematical vocabulary
+
+- *Object language*: the formal language represented by =Term= and =Formula=.
+- *Term*: a variable, constant, or function-symbol application.
+- *Atomic formula*: a predicate-symbol application or equality of terms.
+- *Quantified modal logic (QML)*: first-order logic extended with =□=
+  (necessity) and =◇= (possibility).
+- *Kripke frame*: a pair =(W,R)= of worlds and an accessibility relation.
+- *Kripke model*: a frame together with domains and interpretations.
+- *Constant-domain semantics*: every world has the same domain.
+- *Varying-domain semantics*: domains may vary by world; common special cases
+  are increasing/expanding and decreasing/contracting domains.
+- *Rigid designation*: a parameter denotes the same individual at every world.
+- *Labelled analytic tableau*: a proof-search tree whose formula entries carry
+  world labels and whose relational entries record accessibility edges.
+- *Witness/parameter*: a fresh name introduced when expanding an existential
+  formula or a negated universal formula.
+- *Branch closure*: a branch closes when it contains =A= and =¬A= at the same
+  world (subject to the calculus's term and equality rules).
+- *Open saturated branch*: a fully expanded branch without a contradiction;
+  it supports countermodel extraction.
+- *Justification*: the tableau rule and premise line numbers producing a line.
+- *Barcan formula*: commonly =∀x□F(x) → □∀xF(x)=.
+- *Converse Barcan formula*: commonly =□∀xF(x) → ∀x□F(x)=.
+
+Terminology conventions vary in the literature, so formulas should always be
+shown alongside the names “Barcan” and “Converse Barcan.”
+
+* Initial theorem trace
+
+The core example negates =∀x. □Fx -> □∀x. Fx=.  Under constant-domain
+semantics, the parameter =a= introduced at =v= is available at =w=.  Universal
+instantiation at =w= yields =□Fa=; necessity propagation along =wRv= yields
+=Fa= at =v=.  The branch already contains =¬Fa= at =v=, so lines 6 and 8 close
+the branch.
+
+[OBS id:obs.logic.barcan-regression src:core/Logic/FirstOrder/Modal.mon conf:high]
+  The embedded core test pins formula rendering, world labels, accessibility,
+  premise references, and the final closed-branch report.
+
+[OBS id:obs.logic.tutorial src:how_to/FirstOrderModalLogic.mon conf:high]
+  The compile-checked tutorial teaches terms, unary and binary predicates,
+  quantifier scope, modal operators, Kripke accessibility, constant-domain
+  parameter discipline, the Barcan formula, and labelled-tableau closure.  It
+  is listed by the README and =tests/test_how_to_examples.py=.
+
+* Representation decisions
+
+[DEC id:dec.logic.sum-product date:2026-07-26 by:codex]
+  Use =data= for genuine alternatives: terms, formulas, tableau rules, tableau
+  entries, and branch status.  Use =layout= for fixed product records with named
+  fields; =Tableau= is therefore a layout containing =entries= and =status=.
+
+[OBS id:obs.logic.imported-layout-abi src:tests/test_how_to_examples.py conf:high]
+  Recursive =Formula= values, collection-contained =Term= and =TableauEntry=
+  values, and the =Tableau= layout now execute across separately compiled core
+  module boundaries.  The regression compiles and runs the public tutorial and
+  checks its complete Unicode formula and labelled-tableau output.
+
+[OBS id:obs.logic.typed-collection-unboxing src:codegen.c conf:high]
+  Algebraic values stored in runtime collections use =RT_OPAQUE=.  Typed
+  collection-pattern projection must peel that wrapper before binding the
+  native ADT pointer.  =rt_unbox_opaque= is deliberately idempotent for other
+  runtime values so conservative imported element metadata remains safe.
+
+[OBS id:obs.logic.forward-adt-call src:core/Logic/FirstOrder/Modal.mon conf:high]
+  A forward call whose parameter metadata is still unknown can box a native
+  recursive ADT argument.  The renderer avoids an accidental mutually
+  recursive helper ABI by using one exhaustive structural match.  A general
+  compiler solution requires collecting annotated function signatures before
+  emitting any function bodies.
+
+[OBS id:obs.logic.adt-recursive-field-resolution src:codegen.c conf:high]
+  ADT constructor fields naming a user-defined ADT must resolve through the
+  environment layout registry.  Falling back to =Int= discards recursive
+  formula pointers.  The modal formula rendering test exercises this contract.
+
+[OBS id:obs.logic.adt-coll-type-spelling src:core/Logic/FirstOrder/Modal.mon conf:high]
+  Collection-valued ADT constructor fields use explicit =(Coll Term)= type
+  application.  Bare =[Term]= in this declaration position is currently read as
+  constructor syntax rather than as a second constructor field.
+
+* Next layers
+
+[OBS id:obs.logic.expected-type-reader src:core/Logic/FirstOrder/Modal.mon conf:high]
+  The module declares the surface grammar for =Formula= with
+  =reader-syntax Formula=.  Binder, prefix, and infix rules map mathematical
+  notation to ordinary exported functions.  A client can therefore compile
+  =define barcan :: Formula= followed by =∀x. □Fx -> □∀x. Fx= without any
+  modal-logic special case in the compiler.
+
+[DEC id:dec.logic.reader-scope date:2026-07-26 by:human]
+  Logic syntax is selected by the expected =Formula= type.  The ASCII arrow is
+  implication only in that reader scope; function types, pattern clauses, and
+  iteration retain their established meanings in the same compilation unit.
+
+- Capture-avoiding substitution, alpha-equivalence, and free-variable sets.
+- A rule-driven tableau expander rather than only immutable trace values.
+- Branch saturation, automatic closure detection, and countermodel extraction.
+- Explicit constant, increasing, and decreasing domain policies.
+- Kripke frame conditions for K, T, B, S4, and S5.
+- Procedural syntax transformers over immutable syntax objects, extending the
+  initial declarative reader without weakening its expected-type scoping.
+[OBS id:obs.logic.general-tableau-blocked-by-dependent-match-2026-07-27 src:core/Logic/FirstOrder/Modal.mon,wisp.c conf:high]
+  A test-first attempt to replace the fixed Barcan trace with core-owned general
+  proof search exposed two frontend defects: multi-argument functions with ADT
+  patterns incorrectly type remaining parameters as the matched ADT, and
+  =match= branches returning heterogeneous constructors of the same recursive
+  ADT specialize the result to the first constructor's field telescope. The
+  experimental engine was removed and the last green modal module restored;
+  implementing the general prover honestly requires regression tests and fixes
+  for these dependent-pattern/result inference defects rather than a C runtime
+  escape hatch. Equation-style scrutinee clauses now provide the desired core
+  surface once that semantic blocker is repaired.
+
+[OBS id:obs.logic.general-engine-second-cycle-compiler-boundary-2026-07-27 src:tests/test_how_to_examples.py,pmatch.c,dep.c conf:high]
+  Minimisation refined the blocker.  Different constructors of one ADT may be
+  returned from a match when constructor applications are parenthesised, and a
+  constructor pattern in one argument does preserve a later scalar argument;
+  both contracts now have positive regression coverage.  The general search
+  worklist instead fails where a multi-parameter helper recursively inspects a
+  =Coll Formula=: Wisp/pmatch lowering can generate an invalid local =define=,
+  or dependent elaboration checks a fully applied =Bool= expression against
+  the helper's unapplied Π telescope.  Nested collection/constructor patterns
+  trigger the same invalid binding path.  The experimental prover was removed
+  rather than hiding this with rendered-string identity or moving semantics to
+  C.  The next compiler cycle must minimise and repair collection-pattern
+  binding elaboration before the core-owned saturation engine is reinstated.
+
+[OBS id:obs.logic.general-engine-syntax-boundary-resolved-2026-07-27 src:tests/recursive_collection_match.mon,tests/test_how_to_examples.py conf:high]
+  The alleged collection-pattern/dependent-elaboration blocker above was
+  falsified by further minimisation.  An explicitly parenthesised
+  =(match ...)= is canonical syntax, so its branch bodies must also use the
+  canonical =(if condition then else)= form.  Embedding Wisp
+  =if condition then ... else ...= tokens inside that canonical expression
+  produced the invalid local binding and Π-telescope diagnostics.  With one
+  syntax level used consistently, recursive =Coll Formula= traversal followed
+  by an ADT match compiles and executes.  The regression
+  =test_recursive_collection_match_keeps_fully_applied_result_type= preserves
+  this exact composition.  No dependent checker relaxation is warranted.
+
+[DEC id:dec.logic.total-search-outcomes date:2026-07-27 by:codex]
+  A total API for full first-order modal proof search must not claim a decision
+  procedure: validity is undecidable.  Bounded search will return distinct
+  =Valid=, =Countermodel= (only for an open saturated branch), and
+  =Inconclusive= outcomes when its resource bound or an unsupported semantic
+  frontier is reached.
+
+[FIX id:fix.logic.imported-constructor-tags-2026-07-27 src:main.c,tests/test_how_to_examples.py conf:high]
+  Compiled-module exports now retain =ENV_ADT_CTOR= identity and the numeric
+  constructor tag instead of flattening every constructor into =ENV_FUNC=.
+  Import registration restores both qualified and unqualified constructors,
+  allowing exported functions and client code to compile tag tests reliably.
+  The regression includes an exported result ADT, a private intermediate
+  search ADT, a layout payload, constructor-producing functions, and a public
+  pattern-matching observer.
+
+[OBS id:obs.logic.proof-result-abi-second-boundary-2026-07-27 src:main.c,core/Logic/FirstOrder/Modal.mon conf:high]
+  Constructor tags are necessary but not sufficient for the public proof API.
+  Provider-side inference currently records several annotated user-ADT
+  signatures as unknown; across the module boundary, =prove= can therefore
+  return a boxed =ProofResult= that an imported observer reads with the wrong
+  ABI, turning internal =Valid= into apparent =Countermodel=.  The API remains
+  private until exported parameter and return annotations are materialised as
+  their provider =TYPE_LAYOUT= values.  Silent semantic corruption is not an
+  acceptable compatibility fallback.
+
+[OBS id:obs.logic.public-search-boundary-regression-2026-07-27 src:tests/public_modal_search.mon,tests/test_how_to_examples.py conf:high]
+  The separately compiled public proof-search acceptance test remains the
+  release gate.  Propositional identity is valid in the provider's embedded
+  test but is currently observed as =False= when its =Formula= originates in
+  an importing client; open-branch and budget outcomes cross the same boundary
+  correctly.  Experiments ruled out domain-policy argument shifting and a
+  blanket =rt_unbox_opaque= boundary repair.  The latter is unsafe as a type
+  discriminator because a native ADT constructor tag occupies the same first
+  word inspected as =RuntimeValue.type=.  Do not publish or push the prover
+  until this regression prints =True / True / True= without modal-specific C
+  semantics.
+
+[FIX id:fix.logic.ci-reader-syntax-cmake-2026-07-27 src:CMakeLists.txt conf:high]
+  The explicit CMake compiler source list includes =reader_syntax.c=, matching
+  the wildcard Make build and preventing Linux/Windows undefined references.
+
+[FIX id:fix.logic.ci-repl-fixed-builtin-arities-2026-07-27 src:repl.c,tests/test_repl.py conf:high]
+  REPL Wisp seeding now uses the compiler convention =arity_max == 0= for a
+  fixed builtin arity.  This keeps =import Function= as one form after other
+  modules have populated the live arity registry.
+
+[DEC id:dec.logic.show-render-separation-2026-07-27 src:core/prelude/Text/Show.mon conf:high]
+  The pure =Show= typeclass operation is named =render=; effectful language
+  output remains =show=.  Importing every core module must not silently disable
+  REPL display through a typeclass-method name collision.
+
+[FIX id:fix.logic.forward-wrapper-formula-abi-2026-07-28 src:core/Logic/FirstOrder/Modal.mon,tests/public_modal_search.mon,tests/test_how_to_examples.py conf:high]
+  The public proof-search gate now observes =True / True / True=.  The previous
+  failure was not modal semantics or constructor-tag transport: three
+  unnecessary forward helper wrappers called definitions whose signatures had
+  not yet been materialised.  Those calls were lowered through the unknown
+  value ABI and boxed =Formula= values as runtime opaque values before pattern
+  matching.  Calling the already typed search and collection helpers directly
+  preserves the native =Formula= layout.  The separately compiled client test
+  remains the release regression; it covers a valid identity, a saturated open
+  branch, and an explicitly bounded inconclusive search.  This supersedes
+  =obs.logic.public-search-boundary-regression-2026-07-27=.

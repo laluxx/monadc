@@ -59,9 +59,19 @@ For the Wisp syntax variant see [[file:wisp.org][Wisp]].
 #+END_SRC
 
 #+BEGIN_SRC wisp
-data Color ~ Red | Green | Blue
-data Maybe a = Nothing | Just a
-data T = A | B | C
+data Color
+  = Red
+  | Green
+  | Blue
+
+data Maybe a
+  = Nothing
+  | Just a
+
+data T
+  = A
+  | B
+  | C
 #+END_SRC
 
 The =~= or ==== separator sits between the type parameters and the constructors.
@@ -103,7 +113,11 @@ Deriving provides auto-generated instance implementations for common typeclasses
 #+BEGIN_SRC wisp
 data Color Red Green Blue deriving Eq
 data Suit deriving [Eq Enum]
-data T = A | B | C deriving [Bounded Enum Show]
+data T
+  = A
+  | B
+  | C
+  deriving [Bounded Enum Show]
 #+END_SRC
 
 The =deriving= clause appears at the end of a data declaration. Multiple classes

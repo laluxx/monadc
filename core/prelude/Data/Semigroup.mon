@@ -1,8 +1,19 @@
 ;;; Semigroup.mon --- Associative append abstractions
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: semigroup monoid append algebra typeclass
+:author "Laluxx"
+:version "1.2.0"
+:keywords "semigroup monoid append algebra typeclass fold"
+
+;;; Commentary:
+
+;; Semigroup owns associative same-shaped combination. An instance supplies
+;; only append; non-empty concatenation is derived once here for every
+;; instance. Monoid adds only the identity element, from which ordinary binary
+;; and whole-collection combination are also derived.
+;;
+;; This minimal basis is intentional: an instance should describe its algebra,
+;; not duplicate generic recursion. Backends may specialize these defaults to
+;; representation primitives when doing so preserves the class laws.
 
 ;;; Code:
 
@@ -17,7 +28,19 @@ class Semigroup a where
   append  :: a -> a -> a
   sconcat :: [a] -> a
 
-  ;; law: append is associative
+  sconcat []       ->
+    error "Semigroup.sconcat: empty sequence"
+
+  sconcat [x|[]]   ->
+    x
+
+  sconcat [x|xs]   ->
+    append x (sconcat xs)
+
+  law associativity :: Eq a => a -> a -> a -> Bool
+    x y z -> eq? (append (append x y) z) (append x (append y z))
+
+  ;; minimal complete definition: append
 
 
 class Semigroup a => Monoid a where
@@ -25,70 +48,50 @@ class Semigroup a => Monoid a where
   mappend :: a -> a -> a
   mconcat :: [a] -> a
 
-  ;; law: mappend mempty x = x
-  ;; law: mappend x mempty = x
+  mappend x y ->
+    append x y
 
+  mconcat [] ->
+    mempty
 
-define sum-ints :: [Int] -> Int
-  []     -> error "Semigroup.sconcat: empty sequence"
-  [x|xs] -> sum-ints-from x xs
+  mconcat [x|xs] ->
+    mappend x (mconcat xs)
 
+  law left-identity :: Eq a => a -> Bool
+    x -> eq? (mappend mempty x) x
 
-define sum-ints-from :: Int -> [Int] -> Int
-  acc []     -> acc
-  acc [x|xs] -> sum-ints-from (acc + x) xs
+  law right-identity :: Eq a => a -> Bool
+    x -> eq? (mappend x mempty) x
 
-
-define concat-colls :: [[a]] -> [a]
-  []       -> error "Semigroup.sconcat: empty sequence"
-  [xs|xss] -> concat-colls-from xs xss
-
-
-define concat-colls-from :: [a] -> [[a]] -> [a]
-  acc []       -> acc
-  acc [xs|xss] -> concat-colls-from (__rt_concat acc xs) xss
-
-
-define mconcat-colls :: [[a]] -> [a]
-  []       -> list
-  [xs|xss] -> __rt_concat xs (mconcat-colls xss)
+  ;; minimal complete definition: mempty, plus inherited append
 
 
 instance Semigroup Int
   append x y -> x + y
-  sconcat xs -> sum-ints xs
 
 
 instance Semigroup Bool
   append x y -> x and y
-  sconcat xs -> conjoin-bools? xs
+
+
+instance Semigroup String
+  append left right -> __rt_concat left right
 
 
 instance Monoid Bool
-  mempty        -> True
-  mappend x y   -> x and y
-  mconcat xs    -> conjoin-bools-from? True xs
+  mempty -> True
+
+
+instance Monoid String
+  mempty -> ""
 
 
 instance Semigroup Coll
   append xs ys -> __rt_concat xs ys
-  sconcat xss  -> concat-colls xss
 
 
 instance Monoid Coll
-  mempty        -> list
-  mappend xs ys -> __rt_concat xs ys
-  mconcat xss   -> mconcat-colls xss
-
-
-define conjoin-bools? :: [Bool] -> Bool
-  []     -> error "Semigroup.sconcat: empty sequence"
-  [x|xs] -> conjoin-bools-from? x xs
-
-
-define conjoin-bools-from? :: Bool -> [Bool] -> Bool
-  acc []     -> acc
-  acc [x|xs] -> conjoin-bools-from? (acc and x) xs
+  mempty -> list
 
 
 tests
@@ -113,4 +116,5 @@ tests
   :surface-operator-dispatch:
   assert-eq (True ++ False) False "++ resolves the core Semigroup Bool instance"
   assert-eq (True ++ True)  True  "++ is not compiler-specialized to collections"
+  assert-eq ("modal" ++ " logic") "modal logic" "++ resolves the core Semigroup String instance"
   :surface-operator-dispatch:
