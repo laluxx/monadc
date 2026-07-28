@@ -50,6 +50,7 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
             [str(MONAD), "test", "laws"],
             cwd=ROOT,
             text=True,
+            encoding="utf-8",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,

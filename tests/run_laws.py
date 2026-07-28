@@ -111,6 +111,8 @@ def validate_inventory() -> bool:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     if not validate_inventory():
         return 2
     programs = LAW_PROGRAMS
