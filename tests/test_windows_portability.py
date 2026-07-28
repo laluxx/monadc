@@ -188,6 +188,8 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn('"%s__mrepl_%ld_%s.dll"', repl_c)
         self.assertIn("repl_llvm_config_command", repl_c)
         self.assertIn('"llvm-config --ldflags --libs core 2>NUL"', repl_c)
+        self.assertIn("repl_format_nm_command", repl_c)
+        self.assertIn('"nm -D --defined-only \\\"%s\\\" 2>NUL"', repl_c)
         self.assertIn("signal(SIGSEGV, repl_signal_handler)", repl_c)
         self.assertIn("struct sigaction", repl_c)
         self.assertIn('#include "compat.h"', types_c)

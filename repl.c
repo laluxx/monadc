@@ -1888,6 +1888,17 @@ static const char *repl_llvm_config_command(void) {
 #endif
 }
 
+static void repl_format_nm_command(char *command, size_t capacity,
+                                   const char *module_path) {
+#if defined(_WIN32)
+    snprintf(command, capacity,
+             "nm -D --defined-only \"%s\" 2>NUL", module_path);
+#else
+    snprintf(command, capacity,
+             "nm -D --defined-only \"%s\" 2>/dev/null", module_path);
+#endif
+}
+
 static bool repl_cache_prepare_dir(char *dir, size_t capacity) {
     const char *enabled = getenv("MONAD_CACHE");
     if (enabled &&
@@ -2418,8 +2429,7 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
     size_t prefix_len = ml + 2;
 
     char nm_cmd[1600];
-    snprintf(nm_cmd, sizeof(nm_cmd),
-             "nm -D --defined-only \"%s\" 2>/dev/null", so_path);
+    repl_format_nm_command(nm_cmd, sizeof(nm_cmd), so_path);
     FILE *nm = popen(nm_cmd, "r");
     int count = 0;
     if (nm) {

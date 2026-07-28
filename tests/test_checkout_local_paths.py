@@ -134,6 +134,7 @@ class CheckoutLocalPathTests(unittest.TestCase):
         self.assertIn('"libmonad.a"', repl_c)
         self.assertIn("repl_llvm_config_command", repl_c)
         self.assertIn('popen(repl_llvm_config_command(), "r")', repl_c)
+        self.assertIn("repl_format_nm_command", repl_c)
         self.assertNotIn("`llvm-config --ldflags --libs core`", repl_c)
         self.assertIn('" \\"%s\\" %s -lm -lgmp 2>&1"', repl_c)
         self.assertIn('"%s__mrepl_%ld_%s.dll"', repl_c)
