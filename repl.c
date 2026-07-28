@@ -1877,6 +1877,17 @@ static bool repl_cache_trace_enabled(void) {
     return value && value[0] && strcmp(value, "0") != 0;
 }
 
+static const char *repl_llvm_config_command(void) {
+#if defined(_WIN32)
+    /* popen() is serviced by cmd.exe for this native executable.  Keep shell
+     * diagnostics out of the language protocol; command failure is handled by
+     * the empty-flags/link failure path below. */
+    return "llvm-config --ldflags --libs core 2>NUL";
+#else
+    return "llvm-config --ldflags --libs core 2>/dev/null";
+#endif
+}
+
 static bool repl_cache_prepare_dir(char *dir, size_t capacity) {
     const char *enabled = getenv("MONAD_CACHE");
     if (enabled &&
@@ -2247,7 +2258,7 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
         const char **all_objs = repl_get_compiled_obj_paths();
         char *runtime_archive = repl_runtime_archive_path();
         char llvm_flags[2048] = "";
-        FILE *llvm_pipe = popen("llvm-config --ldflags --libs core", "r");
+        FILE *llvm_pipe = popen(repl_llvm_config_command(), "r");
         if (llvm_pipe) {
             size_t used = fread(llvm_flags, 1, sizeof(llvm_flags) - 1,
                                 llvm_pipe);

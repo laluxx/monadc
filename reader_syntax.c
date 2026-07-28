@@ -368,8 +368,12 @@ static int parse_declaration_line(RSReader *reader, const char *start,
     size_t word_count = 0;
     int too_many_words = 0;
     char *save = NULL;
-    for (char *word = strtok_r(line, " \t", &save); word;
-         word = strtok_r(NULL, " \t", &save)) {
+    /* Source files checked out with CRLF retain the carriage return because
+     * declaration slices end at '\n'.  Treat it as horizontal whitespace so
+     * the final precedence/associativity word has identical semantics on
+     * every host. */
+    for (char *word = strtok_r(line, " \t\r", &save); word;
+         word = strtok_r(NULL, " \t\r", &save)) {
         if (word_count == 6) { too_many_words = 1; break; }
         words[word_count++] = word;
     }

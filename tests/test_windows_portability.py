@@ -186,9 +186,17 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("LoadLibraryA", repl_c)
         self.assertIn("GetProcAddress", repl_c)
         self.assertIn('"%s__mrepl_%ld_%s.dll"', repl_c)
+        self.assertIn("repl_llvm_config_command", repl_c)
+        self.assertIn('"llvm-config --ldflags --libs core 2>NUL"', repl_c)
         self.assertIn("signal(SIGSEGV, repl_signal_handler)", repl_c)
         self.assertIn("struct sigaction", repl_c)
         self.assertIn('#include "compat.h"', types_c)
+
+    def test_reader_declarations_tokenize_crlf_as_whitespace(self):
+        reader_syntax_c = read("reader_syntax.c")
+
+        self.assertIn('strtok_r(line, " \\t\\r", &save)', reader_syntax_c)
+        self.assertIn('strtok_r(NULL, " \\t\\r", &save)', reader_syntax_c)
 
     def test_repl_uses_orc_jit_not_mcjit(self):
         repl_c = read("repl.c")

@@ -466,6 +466,32 @@ class HowToExampleTests(unittest.TestCase):
             self.assertIn("invalid reader-syntax rule", result.stdout)
             self.assertIn("reader_syntax_invalid_rule.mon:4:", result.stdout)
 
+    def test_reader_declarations_accept_crlf_source_files(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-reader-crlf-") as td:
+            temp = Path(td)
+            source = temp / "ReaderCRLF.mon"
+            output = temp / "reader-crlf"
+            source.write_bytes(
+                b"reader-syntax Expression\r\n"
+                b"  _+_ add-expression 1 left\r\n\r\n"
+                b"module Main\r\n\r\n"
+                b"data Expression\r\n"
+                b"  = Number Int\r\n"
+            )
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+
+            result = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+
     def test_reader_rule_storage_grows_without_a_hidden_fixed_limit(self):
         with tempfile.TemporaryDirectory(prefix="monadc-reader-capacity-") as td:
             temp = Path(td)
