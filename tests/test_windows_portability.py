@@ -114,6 +114,11 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn(":blanks-line-breaks:", char_mon)
         self.assertNotIn(":Blanks and line breaks:", char_mon)
 
+    def test_core_law_runner_decodes_mathematical_output_as_utf8(self):
+        law_runner = read("tests/run_laws.py")
+
+        self.assertIn('encoding="utf-8"', law_runner)
+
     def test_posix_only_headers_are_guarded_for_windows_builds(self):
         compat_h = read("compat.h")
         cli_c = read("cli.c")
