@@ -109,6 +109,11 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         self.assertNotIn('py("tests/test_checkout_local_paths.py")', runner)
         self.assertIn('py("tests/test_checkout_local_paths.py")', windows)
 
+    def test_runner_forces_utf8_for_mathematical_source_fixtures(self):
+        test_main = read("tests/main.py")
+
+        self.assertIn('env["PYTHONUTF8"] = "1"', test_main)
+
     def test_readme_advertises_unified_test_entrypoint(self):
         readme = read("README.md")
 

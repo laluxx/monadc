@@ -471,13 +471,8 @@ class HowToExampleTests(unittest.TestCase):
             temp = Path(td)
             source = temp / "ReaderCRLF.mon"
             output = temp / "reader-crlf"
-            source.write_bytes(
-                b"reader-syntax Expression\r\n"
-                b"  _+_ add-expression 1 left\r\n\r\n"
-                b"module Main\r\n\r\n"
-                b"data Expression\r\n"
-                b"  = Number Int\r\n"
-            )
+            fixture = (ROOT / "tests/reader_syntax_precedence.mon").read_bytes()
+            source.write_bytes(fixture.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
             env = os.environ.copy()
             env["HOME"] = str(temp / "home")
             Path(env["HOME"]).mkdir()

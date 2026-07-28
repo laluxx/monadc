@@ -550,12 +550,33 @@ static char *scan_declarations(const char *source, const char *filename) {
     return out;
 }
 
+static char *normalize_source_newlines(const char *source) {
+    size_t length = strlen(source);
+    char *normalized = malloc(length + 1);
+    if (!normalized) return NULL;
+    size_t write = 0;
+    for (size_t read = 0; read < length; read++) {
+        if (source[read] == '\r' && read + 1 < length &&
+            source[read + 1] == '\n')
+            continue;
+        normalized[write++] = source[read];
+    }
+    normalized[write] = '\0';
+    return normalized;
+}
+
 char *reader_syntax_expand(const char *source, const char *filename) {
     if (!g_cleanup_registered) {
         atexit(reader_syntax_clear);
         g_cleanup_registered = 1;
     }
-    char *out = scan_declarations(source, filename);
+    /* The reader owns the first source-to-source pass, so normalize CRLF once
+     * at its boundary.  This keeps declaration tokens, expression extents,
+     * and the Wisp source returned to later compiler stages byte-consistent. */
+    char *normalized = normalize_source_newlines(source);
+    if (!normalized) return NULL;
+    char *out = scan_declarations(normalized, filename);
+    free(normalized);
     if (!out) return NULL;
     char *line = out;
     int line_number = 1;
@@ -574,12 +595,17 @@ char *reader_syntax_expand(const char *source, const char *filename) {
             char *body = end + 1;
             char *body_end = strchr(body, '\n');
             if (!body_end) body_end = body + strlen(body);
+            char *body_content_end = body_end;
+            if (body_content_end > body && body_content_end[-1] == '\r')
+                body_content_end--;
             int header_indent = line_indent(line, end);
-            int body_indent = line_indent(body, body_end);
+            int body_indent = line_indent(body, body_content_end);
             if (body_indent > header_indent) {
-                if (canonical_target_call(reader, body + body_indent, body_end)) {
+                if (canonical_target_call(reader, body + body_indent,
+                                          body_content_end)) {
                     const char *expression = body + body_indent;
-                    size_t expression_length = (size_t)(body_end - expression);
+                    size_t expression_length =
+                        (size_t)(body_content_end - expression);
                     size_t old_len = strlen(out);
                     size_t before = (size_t)(line - out);
                     size_t after = old_len - (size_t)(body_end - out);
@@ -604,7 +630,7 @@ char *reader_syntax_expand(const char *source, const char *filename) {
                 }
                 RSParser parser = {0};
                 parser.cursor = body + body_indent;
-                parser.end = body_end;
+                parser.end = body_content_end;
                 parser.reader = reader;
                 parser.filename = filename;
                 parser.line = line_number + 1;

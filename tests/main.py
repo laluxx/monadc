@@ -107,6 +107,10 @@ def list_suites() -> int:
 
 def run_command(command: tuple[str, ...]) -> int:
     env = os.environ.copy()
+    # Monad source and diagnostics are UTF-8 on every supported host.  Python
+    # otherwise inherits a legacy Windows code page for text=True and Path
+    # helpers, which corrupts mathematical operators in test fixtures.
+    env["PYTHONUTF8"] = "1"
     printable = " ".join(command)
     print(f"\n==> {printable}", flush=True)
     result = subprocess.run(command, cwd=ROOT, env=env, check=False)
