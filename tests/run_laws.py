@@ -129,11 +129,9 @@ def main() -> int:
             source_path = temp / f"CoreLaw{index}.mon"
             source_path.write_text(source, encoding="utf-8")
             # Core compilation materializes module artifacts.  A private copy
-            # makes every family a cold, order-independent acceptance test and
-            # prevents one linker invocation from reusing another's objects.
+            # keeps those artifacts out of the checkout and prevents one law
+            # family from reusing another family's compiled core objects.
             family_core = temp / f"core-{index}"
-            family_work = temp / f"work-{index}"
-            family_work.mkdir()
             shutil.copytree(
                 CORE,
                 family_core,
@@ -146,7 +144,7 @@ def main() -> int:
             env["MONAD_CORE"] = str(family_core)
             result = subprocess.run(
                 [str(MONAD), "test", str(source_path)],
-                cwd=family_work,
+                cwd=ROOT,
                 env=env,
                 text=True,
                 stdout=subprocess.PIPE,
