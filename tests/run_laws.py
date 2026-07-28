@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -126,9 +127,20 @@ def main() -> int:
             print(f"\n[{index}/{len(programs)}] {family}", flush=True)
             source_path = temp / f"CoreLaw{index}.mon"
             source_path.write_text(source, encoding="utf-8")
+            # Core compilation materializes module artifacts.  A private copy
+            # makes every family a cold, order-independent acceptance test and
+            # prevents one linker invocation from reusing another's objects.
+            family_core = temp / f"core-{index}"
+            shutil.copytree(
+                CORE,
+                family_core,
+                ignore=shutil.ignore_patterns(
+                    "*.json", "*.ll", "*.module.o", "*.o", "*.exe"
+                ),
+            )
             env = os.environ.copy()
             env["HOME"] = str(temp / f"home-{index}")
-            env["MONAD_CORE"] = str(CORE)
+            env["MONAD_CORE"] = str(family_core)
             result = subprocess.run(
                 [str(MONAD), "test", str(source_path)],
                 cwd=ROOT,
