@@ -80,6 +80,7 @@ instance Semigroup String
 
 instance Monoid Bool
   mempty -> True
+  mappend x y -> append x y
 
 
 instance Monoid String
