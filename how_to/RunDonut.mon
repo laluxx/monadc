@@ -1,0 +1,20 @@
+;;; RunDonut.mon --- Render the spinning donut in a terminal
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "cli terminal graphics donut example"
+
+;;; Commentary:
+
+ This executable entry point keeps Donut importable and testable without side
+ effects. Compile and run this file to draw one frame in an 80-column terminal;
+ Donut.mon remains the reusable renderer and animation API.
+
+;;; Code:
+
+import Donut
+
+module RunDonut []
+
+
+spin-frames 0.0 0.0 1

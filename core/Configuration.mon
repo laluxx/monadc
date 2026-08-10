@@ -1,0 +1,174 @@
+;;; Configuration.mon --- Typed, language-owned project configuration
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "configuration validation diagnostics provenance DSL"
+
+;;; Commentary:
+
+ Configuration files are ordinary Monad modules. Applications define their
+ schema with typed layouts and algebraic data, construct a public
+ configuration value, and may compute that value with ordinary pure Monad
+ functions. This module supplies the reusable protocol around those values;
+ it does not replace static types with a universal string-keyed value tree.
+
+ A ConfigValidation either retains the fully typed application value or
+ contains structured diagnostics. ConfigPath identifies an option
+ independently of presentation, while ConfigDiagnostic records severity and
+ an explanatory message. ConfigurationSource lets a tool record whether a
+ setting came from defaults, a project module, an environment variable, or a
+ command-line argument directly in its own typed schema.
+
+ Loading and evaluating a project configuration belongs to each tool's
+ compiler-facing entry point. Because the source is Monad, ordinary module
+ resolution, typing, purity policy, and diagnostics remain authoritative;
+ there is no second configuration parser or evaluator hidden in the runtime.
+
+ Importing this module activates its scoped literal block reader:
+
+   configuration formatting :: FormatOptions
+     line-width  = 100
+     indentation = 2
+
+ `expand-configuration` is an ordinary exported Syntax transformer. It turns
+ each `name = expression` line into a keyword constructor argument and emits
+ a typed definition. Consequently layout checking owns unknown, duplicate,
+ missing, and incorrectly typed fields; the compiler has no FormatOptions or
+ configuration-key special case.
+
+;;; Code:
+
+reader-block configuration_ expand-configuration
+
+import Sequence
+
+module Configuration
+  [ConfigPath config-path child-path render-path
+   DiagnosticSeverity Information Warning Error
+   ConfigDiagnostic diagnostic
+   ConfigValidation ConfigurationValid ConfigurationInvalid require
+   ConfigurationSource BuiltInDefaults ProjectFile EnvironmentVariable CommandLineArgument
+   expand-configuration]
+
+
+layout ConfigPath
+  [segments :: [String]]
+
+
+data DiagnosticSeverity
+  = Information
+  | Warning
+  | Error
+
+
+layout ConfigDiagnostic
+  [path     :: ConfigPath]
+  [severity :: DiagnosticSeverity]
+  [message :: String]
+
+
+data ConfigValidation a
+  = ConfigurationInvalid [ConfigDiagnostic]
+  | ConfigurationValid   a
+
+
+data ConfigurationSource
+  = BuiltInDefaults
+  | ProjectFile         String
+  | EnvironmentVariable String
+  | CommandLineArgument String
+
+
+define config-path :: [String] -> ConfigPath
+  segments -> ConfigPath segments
+
+
+define child-path :: ConfigPath -> String -> ConfigPath
+  path segment -> ConfigPath (snoc path.segments segment)
+
+
+define render-path-segments :: [String] -> String
+  []             -> ""
+  [segment]      -> segment
+  [segment|rest] -> concat segment (concat "." (render-path-segments rest))
+
+
+define render-path :: ConfigPath -> String
+  path | null? path.segments -> "<configuration>"
+       | otherwise           -> render-path-segments path.segments
+
+
+define diagnostic :: ConfigPath -> DiagnosticSeverity -> String -> ConfigDiagnostic
+  path severity message -> ConfigDiagnostic path severity message
+
+
+define require :: ConfigPath -> String -> Bool -> [ConfigDiagnostic]
+  _ _ True          -> (list)
+  path message False -> list (diagnostic path Error message)
+
+
+define configuration-line-key :: Syntax -> Syntax
+  line -> (syntax-list-ref (configuration-checked-line line) 2)
+
+
+define configuration-line-value :: Syntax -> Syntax
+  line -> (syntax-list-ref (configuration-checked-line line) 4)
+
+
+define configuration-line-marker-valid? :: Syntax -> Syntax
+  line -> (= (syntax-symbol-text (syntax-list-ref line 3)) "=")
+
+
+define configuration-checked-line :: Syntax -> Syntax
+  line -> (if (= (syntax-list-length line) 5)
+              (if (configuration-line-marker-valid? line)
+                  line
+                  (syntax-error (syntax-list-ref line 3) "configuration entry must use '=' between its name and value"))
+              (syntax-error line "configuration entry must have the form NAME = VALUE"))
+
+
+define configuration-ignorable-line? :: Syntax -> Syntax
+  line -> (if (= (syntax-symbol-text (syntax-list-ref line 0)) "reader-blank")
+              True
+              (= (syntax-symbol-text (syntax-list-ref line 0)) "reader-comment"))
+
+
+define configuration-fields :: Syntax -> Syntax
+  lines -> (if (= (syntax-list-length lines) 0)
+               (syntax-list)
+               (if (configuration-ignorable-line? (syntax-list-ref lines 0))
+                   (configuration-fields (syntax-list-tail lines))
+                   (syntax-list-cons
+                    (syntax-keyword (syntax-symbol-text (configuration-line-key (syntax-list-ref lines 0))))
+                    (syntax-list-cons
+                     (configuration-line-value (syntax-list-ref lines 0))
+                     (configuration-fields (syntax-list-tail lines))))))
+
+
+define configuration-constructor :: Syntax -> Syntax -> Syntax
+  schema body -> (syntax-list-cons schema (configuration-fields (syntax-list-tail body)))
+
+
+define expand-configuration :: Syntax -> Syntax -> Syntax -> Syntax -> Syntax
+  name separator schema body -> (syntax-list
+                                  (syntax-symbol "define")
+                                  (syntax-list name separator schema)
+                                  (configuration-constructor schema body))
+
+
+tests
+  :paths:
+  define formatter-path (child-path (config-path (list "format")) "line-width")
+  assert-eq (render-path formatter-path) "format.line-width" "path segments render with stable dots"
+  :paths:
+
+  :validation:
+  assert-eq (show (ConfigurationValid 42)) "(ConfigurationValid 42)" "successful validation retains its typed value"
+  assert-eq (show (require formatter-path "must be positive" False)) "((ConfigDiagnostic (ConfigPath (format line-width)) Error must be positive))" "requirements produce structured diagnostics"
+  assert-eq (show (require formatter-path "must be positive" True)) "()" "satisfied requirements produce no diagnostics"
+  :validation:
+
+  :provenance:
+  assert-eq (show (ProjectFile "format.mon")) "(ProjectFile format.mon)" "project provenance is an ordinary value"
+  assert-eq (show (EnvironmentVariable "MONAD_FORMAT_WIDTH")) "(EnvironmentVariable MONAD_FORMAT_WIDTH)" "environment provenance names its variable"
+  :provenance:

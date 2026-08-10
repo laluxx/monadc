@@ -1,0 +1,19 @@
+;;; unicode_public_api.mon --- Imported Text.Unicode ABI regression
+
+import Text.Unicode
+
+module Main
+
+show byte-count "Aλ🙂"
+show valid-utf8? "Aλ🙂"
+show decode-utf8 "Aλ🙂"
+show scalar-count "Aλ🙂"
+show grapheme-count "é"
+show display-width "∀x. □Fx"
+show grapheme-count "\r\n"
+show grapheme-count "🇺🇸"
+show grapheme-count "🇺🇸🇮"
+show grapheme-count "가"
+show grapheme-count "각"
+show display-width "🇺🇸"
+show display-width "각"

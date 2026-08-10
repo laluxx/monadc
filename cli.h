@@ -12,6 +12,7 @@ typedef enum {
     CMD_INSTALL,
     CMD_TEST,
     CMD_CHECK,
+    CMD_LINT,
     CMD_LSP,
     CMD_EVAL,
     CMD_DEBUG,
@@ -38,7 +39,10 @@ typedef struct {
     bool trace_ast;
     bool trace_semantic;
     bool trace_dep;
+    int trace_qtt;       /* 0=off, 1=summary, 2=proof, 3=all modules */
     bool trace_codegen;
+    bool lint_json;
+    bool lint_fix;
     bool debug_no_mouse;
     bool debug_truecolor;
     int debug_target_fps;

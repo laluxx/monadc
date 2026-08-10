@@ -1,21 +1,88 @@
-;;; List.mon --- Small active list helpers
+;;; List.mon --- Productive finite-list algorithms
 
-;; Author: Laluxx
-;; Version: 0.2.0
-;; Keywords: Data.List list prelude
+:author "Laluxx"
+:version "1.0.0"
+:keywords "list partition span chunks intersperse intercalate replace"
 
 ;;; Commentary:
 
-;; Composite Lisp accessors retained for compatibility. General sequence
-;; structure belongs to Sequence and is available through its typeclass.
+ Data.List owns algorithms whose semantics depend specifically on the spine of
+ a finite list. Generic collection structure remains in Sequence. Partitioning
+ and span preserve source order. Composition operations retain list element
+ order and never use sentinel values.
+
+ The composite Lisp accessors remain available for compatibility, but they are
+ no longer the substance of this module.
 
 ;;; Code:
 
 import Sequence
+import Data.Tuple
 
 module Data.List
-  [caar cadr cdar cddr caddr cdddr]
+  [partition span
+   split-at chunks-of
+   replace-at
+   intersperse intercalate
+   caar cadr cdar cddr caddr cdddr]
 
+
+;;; Stable Splitting
+
+define partition-into :: [a] -> (a -> Bool) -> [a] -> [a] -> ([a], [a])
+  [] _ accepted rejected -> (reverse accepted, reverse rejected)
+  [x|xs] predicate accepted rejected | predicate x -> (partition-into xs predicate (prepend x accepted) rejected)
+  [x|xs] predicate accepted rejected -> (partition-into xs predicate accepted (prepend x rejected))
+
+
+method partition :: [a] -> (a -> Bool) -> ([a], [a])
+  values predicate -> partition-into values predicate [] []
+
+
+define span-into :: [a] -> (a -> Bool) -> [a] -> ([a], [a])
+  [] _ prefix -> (reverse prefix, [])
+  [x|xs] predicate prefix | predicate x -> (span-into xs predicate (prepend x prefix))
+  [x|xs] _ prefix -> (reverse prefix, prepend x xs)
+
+
+method span :: [a] -> (a -> Bool) -> ([a], [a])
+  values predicate -> span-into values predicate []
+
+
+method split-at :: Int -> [a] -> ([a], [a])
+  amount values -> (take values amount, drop values amount)
+
+
+method chunks-of :: Int -> [a] -> [[a]]
+  amount _ | amount <= 0 -> []
+  _ []                   -> []
+  amount values -> prepend (take values amount) (chunks-of amount (drop values amount))
+
+
+;;; Positional Updates
+
+method replace-at :: Int -> a -> [a] -> [a]
+  index _ _ | index < 0      -> []
+  _ _ []                     -> []
+  0 value [_|xs]             -> prepend value xs
+  index value [x|xs]         -> prepend x (replace-at (index - 1) value xs)
+
+
+;;; List Composition
+
+method intersperse :: a -> [a] -> [a]
+  _ []      -> []
+  _ [x|[]]  -> list x
+  separator [x|xs] -> prepend x (prepend separator (intersperse separator xs))
+
+
+method intercalate :: [a] -> [[a]] -> [a]
+  _ [] -> []
+  _ [values|[]] -> values
+  separator [values|remaining] -> (append values (append separator (intercalate separator remaining)))
+
+
+;;; Compatibility Accessors
 
 method caar :: [[a]] -> a
   xs -> nth (nth xs 0) 0
@@ -42,6 +109,24 @@ method cdddr :: [a] -> [a]
 
 
 tests
+  :partitioning:
+  assert-eq (show (fst (partition (list 1 2 3 4 5) (lambda (x) (= (% x 2) 0))))) "(2 4)" "Data.List partition preserves matching order"
+  assert-eq (show (snd (partition (list 1 2 3 4 5) (lambda (x) (= (% x 2) 0))))) "(1 3 5)" "Data.List partition preserves rejected order"
+  assert-eq (show (fst (span (list 2 4 5 6) (lambda (x) (= (% x 2) 0))))) "(2 4)" "Data.List span takes the longest prefix"
+  assert-eq (show (snd (span (list 2 4 5 6) (lambda (x) (= (% x 2) 0))))) "(5 6)" "Data.List span returns the untouched suffix"
+  assert-eq (show (fst (split-at 3 (list 1 2 3 4 5)))) "(1 2 3)" "Data.List split-at returns the requested prefix"
+  assert-eq (show (snd (split-at 3 (list 1 2 3 4 5)))) "(4 5)" "Data.List split-at returns the remaining suffix"
+  assert-eq (show (chunks-of 2 (list 1 2 3 4 5))) "((1 2) (3 4) (5))" "Data.List chunks-of retains a short final chunk"
+  assert-eq (show (replace-at 1 9 (list 1 2 3))) "(1 9 3)" "Data.List replace-at updates one position"
+  assert-eq (show (replace-at 9 9 (list 1 2 3))) "(1 2 3)" "Data.List replace-at preserves out-of-range input"
+  :partitioning:
+
+  :composition:
+  assert-eq (show (intersperse 0 (list 1 2 3))) "(1 0 2 0 3)" "Data.List intersperse separates values"
+  assert-eq (show (intersperse 0 (list))) "()" "Data.List intersperse preserves empty input"
+  assert-eq (show (intercalate (list 0) (list (list 1 2) (list 3) (list 4 5)))) "(1 2 0 3 0 4 5)" "Data.List intercalate joins collections"
+  :composition:
+
   :legacy-accessors:
   assert-eq (caar (list (list 7 8))) 7 "Data.List caar"
   assert-eq (cadr (list 1 2 3)) 2 "Data.List cadr"

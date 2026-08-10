@@ -6,28 +6,28 @@
 
 ;;; Commentary:
 
-;; This module owns the object language of quantified modal logic.  A Term is
-;; an individual-language term; a Formula is a proposition of the object
-;; language.  Universal and existential quantifiers bind variable names in a
-;; Formula.  Necessity and possibility are interpreted over a Kripke model:
-;; a set of worlds, an accessibility relation R, a domain policy, and an
-;; interpretation at each world.
-;;
-;; A labelled tableau records Formula@World assertions and accessibility edges.
-;; Each entry retains the analytic-tableau rule and its premise line numbers.
-;; An open saturated branch describes a countermodel; a closed tableau is a
-;; validity certificate only when every branch closes.  The requested branch
-;; closes because line 6 and line 8 contain ¬Fa and Fa at the same world v.
-;; Instantiating line 2 with the parameter introduced at v uses constant-domain
-;; semantics: every world has the same domain, and parameters rigidly designate
-;; the same individual across worlds.  Under varying-domain semantics that
-;; instantiation needs a separate domain-membership side condition.
-;;
-;; The constructors are ordinary core values. Unicode functions ∀, ∃, □, ◇,
-;; ¬, ∧, and ∨ are conveniences over those constructors. The reader declaration
-;; below maps mathematical notation to these same functions only when the
-;; enclosing definition explicitly expects Formula. Thus `->` keeps its normal
-;; meanings in types, clauses, patterns, and iteration syntax.
+ This module owns the object language of quantified modal logic.  A Term is
+ an individual-language term; a Formula is a proposition of the object
+ language.  Universal and existential quantifiers bind variable names in a
+ Formula.  Necessity and possibility are interpreted over a Kripke model:
+ a set of worlds, an accessibility relation R, a domain policy, and an
+ interpretation at each world.
+
+ A labelled tableau records Formula@World assertions and accessibility edges.
+ Each entry retains the analytic-tableau rule and its premise line numbers.
+ An open saturated branch describes a countermodel; a closed tableau is a
+ validity certificate only when every branch closes.  The requested branch
+ closes because line 6 and line 8 contain ¬Fa and Fa at the same world v.
+ Instantiating line 2 with the parameter introduced at v uses constant-domain
+ semantics: every world has the same domain, and parameters rigidly designate
+ the same individual across worlds.  Under varying-domain semantics that
+ instantiation needs a separate domain-membership side condition.
+
+ The constructors are ordinary core values. Unicode functions ∀, ∃, □, ◇,
+ ¬, ∧, and ∨ are conveniences over those constructors. The reader declaration
+ below maps mathematical notation to these same functions only when the
+ enclosing definition explicitly expects Formula. Thus `->` keeps its normal
+ meanings in types, clauses, patterns, and iteration syntax.
 
 ;;; Code:
 
@@ -73,30 +73,30 @@ data Term
 
 
 data Formula
-  = Predicate String (Coll Term)
-  | Equality Term Term
-  | Negation Formula
+  = Predicate   String (Coll Term)
+  | Equality    Term    Term
+  | Negation    Formula
   | Conjunction Formula Formula
   | Disjunction Formula Formula
   | Implication Formula Formula
-  | Universal String Formula
-  | Existential String Formula
-  | Necessity Formula
+  | Universal   String  Formula
+  | Existential String  Formula
+  | Necessity   Formula
   | Possibility Formula
 
 
 data TableauRule
   = Assumption
   | FromNegatedImplication Int
-  | FromNegatedNecessity Int
-  | FromNegatedUniversal Int
-  | FromUniversal Int String
-  | FromNecessity Int Int
+  | FromNegatedNecessity   Int
+  | FromNegatedUniversal   Int
+  | FromUniversal          Int String
+  | FromNecessity          Int Int
 
 
 data TableauEntry
-  = FormulaAt Int String Formula TableauRule
-  | Accessibility Int String String TableauRule
+  = FormulaAt     Int String Formula TableauRule
+  | Accessibility Int String String  TableauRule
 
 
 data BranchStatus
@@ -104,7 +104,9 @@ data BranchStatus
   | ClosedBranch Int Int
 
 
-layout Tableau [entries :: [TableauEntry]] [status -> BranchStatus]
+layout Tableau
+  entries :: [TableauEntry]
+  status  :: BranchStatus
 
 data DomainPolicy
   = ConstantDomains
@@ -112,7 +114,7 @@ data DomainPolicy
   | DecreasingDomains
   | VaryingDomains
 
-layout SearchOptions [domain-policy -> DomainPolicy] [step-limit -> Int]
+layout SearchOptions [domain-policy :: DomainPolicy] [step-limit :: Int]
 
 define search-options :: DomainPolicy -> Int -> SearchOptions
   domain-policy step-limit -> (SearchOptions domain-policy step-limit)
@@ -210,26 +212,28 @@ define render-term :: Term -> String
 
 
 define render-predicate :: String -> [Term] -> String
-  name arguments -> (match arguments with
-    | [] -> name
-    | [argument] -> (name ++ (render-term argument))
-    | _ -> (name ++ "(" ++ (render-term-list arguments) ++ ")"))
+  name []            -> name
+  name [argument|[]] -> concat name (render-term argument)
+  name arguments     -> concat name (concat "(" (concat (render-term-list arguments) ")"))
+
+
+define render-negation :: Formula -> String
+  [Predicate name arguments] -> ("¬" ++ (render-predicate name arguments))
+  [Equality left right] -> ("¬" ++ (render-term left) ++ " = " ++ (render-term right))
+  [Negation nested] -> ("¬¬" ++ (render-formula nested))
+  [Conjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
+  [Disjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
+  [Implication left right] -> ("¬(" ++ (render-formula left) ++ " -> " ++ (render-formula right) ++ ")")
+  [Universal variable body] -> ("¬∀" ++ variable ++ ". " ++ (render-formula body))
+  [Existential variable body] -> ("¬∃" ++ variable ++ ". " ++ (render-formula body))
+  [Necessity body] -> ("¬□" ++ (render-formula body))
+  [Possibility body] -> ("¬◇" ++ (render-formula body))
 
 
 define render-formula :: Formula -> String
   [Predicate name arguments] -> render-predicate name arguments
   [Equality left right] -> ((render-term left) ++ " = " ++ (render-term right))
-  [Negation inner] -> (match inner with
-    | [Predicate name arguments] -> ("¬" ++ (render-predicate name arguments))
-    | [Equality left right] -> ("¬" ++ (render-term left) ++ " = " ++ (render-term right))
-    | [Negation nested] -> ("¬¬" ++ (render-formula nested))
-    | [Conjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
-    | [Disjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
-    | [Implication left right] -> ("¬(" ++ (render-formula left) ++ " -> " ++ (render-formula right) ++ ")")
-    | [Universal variable body] -> ("¬∀" ++ variable ++ ". " ++ (render-formula body))
-    | [Existential variable body] -> ("¬∃" ++ variable ++ ". " ++ (render-formula body))
-    | [Necessity body] -> ("¬□" ++ (render-formula body))
-    | [Possibility body] -> ("¬◇" ++ (render-formula body)))
+  [Negation formula] -> render-negation formula
   [Conjunction left right] -> ("(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
   [Disjunction left right] -> ("(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
   [Implication left right] -> ((render-formula left) ++ " -> " ++ (render-formula right))
@@ -275,7 +279,7 @@ define render-tableau :: Tableau -> String
 define tableau-closed? :: Tableau -> Bool
   tableau.status
     | [ClosedBranch _ _] -> True
-    | OpenBranch -> False
+    | OpenBranch         -> False
 
 
 define predicate-application1 :: String -> Term -> Formula

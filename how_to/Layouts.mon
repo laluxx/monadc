@@ -13,7 +13,7 @@ layout Vec3
   [y :: Float]
   [z :: Float]
   where
-    method ->array :: Self -> Array
+    method -> Array
       s -> [s.x s.y s.z]
 
 define v Vec3 1.0 2.0 3.0

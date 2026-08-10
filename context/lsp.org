@@ -260,3 +260,20 @@
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+* Shared lint diagnostics
+:PROPERTIES:
+:ID: monadc.context.lsp.shared-lint
+:CONTEXT_KIND: architecture
+:CONTEXT_STATUS: active
+:END:
+
+The language server consumes the compiler-owned lint result model. It converts
+the model's one-based source spans to LSP's zero-based ranges and publishes the
+stable lint rule ID as the diagnostic code. A semantics-preserving replacement
+becomes a preferred quick fix; the LSP does not duplicate rule recognition.
+
+Syntax-, type-, and effect-aware rules must be invoked from the corresponding
+compiler analysis phase and then flow through this same result model. This is
+the required route for future rules about optional types, inferred effects,
+bindings, exhaustiveness, and ownership.

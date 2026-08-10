@@ -1,0 +1,12 @@
+:TEST-PURPOSE Wisp signatures preserve compact effect-arrow labels.
+
+module EffectArrowWisp []
+
+define effect-arrow-wisp :: Int -e-> Int
+  x -> 9
+
+define effect-arrow-stages :: Int -e-> Int -f-> Int
+  x y -> 11
+
+tests
+  assert-eq (effect-arrow-wisp 1) 9 "effect arrow Wisp"

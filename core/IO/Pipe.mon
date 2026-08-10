@@ -1,0 +1,48 @@
+;;; Pipe.mon --- effect-typed anonymous byte channels
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "io pipe ipc descriptors ownership effects"
+
+;;; Commentary:
+
+ Pipe is an opaque pair of connected descriptor capabilities. This module
+ owns channel creation and endpoint identity; IO.File turns either endpoint
+ into its higher-level FileHandle capability when requested by the caller.
+
+;;; Code:
+
+import System.Posix.FileDescriptor
+
+module IO.Pipe
+  [Pipe PipeEnds PipeOpenResult
+   create-pipe pipe-reader-descriptor pipe-writer-descriptor]
+
+
+data Pipe
+  = PipeEnds Int Int
+
+
+layout PipeOpenResult
+  [status :: Int]
+  [reader-descriptor :: Int]
+  [writer-descriptor :: Int]
+
+
+define pipe-reader-descriptor :: Pipe -> Int
+  [PipeEnds reader _] -> reader
+
+
+define pipe-writer-descriptor :: Pipe -> Int
+  [PipeEnds _ writer] -> writer
+
+
+define decode-pipe-result :: Int -> PipeOpenResult
+  packed -> def status (if (< packed 0) packed 0)
+            def reader (if (< packed 0) (0 - 1) (& packed 4294967295))
+            def writer (if (< packed 0) (0 - 1) (>>> packed 32))
+            PipeOpenResult status reader writer
+
+
+define create-pipe :: () -io-> PipeOpenResult
+  _ -> decode-pipe-result (sys-pipe 0)

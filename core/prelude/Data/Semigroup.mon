@@ -6,14 +6,14 @@
 
 ;;; Commentary:
 
-;; Semigroup owns associative same-shaped combination. An instance supplies
-;; only append; non-empty concatenation is derived once here for every
-;; instance. Monoid adds only the identity element, from which ordinary binary
-;; and whole-collection combination are also derived.
-;;
-;; This minimal basis is intentional: an instance should describe its algebra,
-;; not duplicate generic recursion. Backends may specialize these defaults to
-;; representation primitives when doing so preserves the class laws.
+ Semigroup owns associative same-shaped combination. An instance supplies
+ only append; non-empty concatenation is derived once here for every
+ instance. Monoid adds only the identity element, from which ordinary binary
+ and whole-collection combination are also derived.
+
+ This minimal basis is intentional: an instance should describe its algebra,
+ not duplicate generic recursion. Backends may specialize these defaults to
+ representation primitives when doing so preserves the class laws.
 
 ;;; Code:
 
@@ -80,7 +80,6 @@ instance Semigroup String
 
 instance Monoid Bool
   mempty -> True
-  mappend x y -> append x y
 
 
 instance Monoid String

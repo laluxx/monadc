@@ -103,6 +103,8 @@ static const Entry ENTRIES[] = {
      "Run tests", "Without a file or with list, prints the self-documenting test suite menu. With a suite, runs it. With a file, builds and runs that test binary."},
     {ENTRY_COMMAND, "commands", 'c', "k", "check", "[file.mon]", "monad check file.mon",
      "Type-check only", "Useful for editors because the exit status is the diagnostic result."},
+    {ENTRY_COMMAND, "commands", 'c', "L", "lint", "[--json|--fix] <path>", "monad lint core",
+     "Lint Monad source", "Checks one file or recursively checks every .mon file in a directory."},
     {ENTRY_COMMAND, "commands", 'c', "e", "eval", "<code>", "monad eval \"3 + 3\"",
      "Evaluate one expression", "Runs the REPL evaluator once and exits."},
     {ENTRY_COMMAND, "commands", 'c', "R", "repl", "", "monad repl",

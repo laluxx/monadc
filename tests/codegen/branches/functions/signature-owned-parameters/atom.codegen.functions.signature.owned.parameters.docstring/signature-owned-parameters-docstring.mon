@@ -1,0 +1,26 @@
+:TEST-ID tests.codegen.functions.signature-owned-parameters-docstring
+:TEST-TIER regression
+:TEST-STATUS active-2026-08-10
+:TEST-CODEGEN-ATOM atom.codegen.functions.signature.owned.parameters.docstring
+:TEST-QUALITY branch-regression
+:TEST-SUBSET typed-functions
+:TEST-CATEGORY functions
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.style, monadc.context.wisp
+:TEST-PURPOSE Named parameters in a signature own the function parameters.
+:TEST-ATOM A following docstring and expression form the body without a redundant arrow clause.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE wisp.c signature-owned parameter body lowering
+:TEST-MENU branches/functions/signature-owned-parameters
+:TEST-MENU-PATH codegen/branches/functions/signature-owned-parameters
+:TEST-CLI-TARGET codegen signature owned parameters
+
+module SignatureOwnedParametersDocstring
+
+
+define abs :: [x : Float] -> Float
+  "Return the absolute value of X."
+  (if (x < 0.0) (0.0 - x) x)
+
+
+show abs -3.5

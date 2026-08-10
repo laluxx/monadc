@@ -9,6 +9,39 @@
 
 // Forward declaration
 typedef struct InferCtx InferCtx;
+struct QttGradeArena;
+struct QttGradeExpr;
+struct QttGradeScheme;
+struct QttEffectArena;
+struct QttEffectSolver;
+struct QttEffectRow;
+struct QttEffectScheme;
+struct QttClosureEnvironment;
+struct QttEffectConstraintSet;
+
+typedef struct {
+    struct QttEffectScheme *effect_scheme;
+    bool effects_complete;
+    struct QttEffectScheme **arrow_effect_schemes;
+    bool *arrow_effects_complete;
+    size_t arrow_effect_count;
+    size_t *effect_trait_predicate_stages;
+    char **effect_trait_predicate_names;
+    size_t effect_trait_predicate_count;
+} InferCallableContract;
+
+typedef struct {
+    Type *type;
+    struct QttEffectScheme *effects;
+    bool effects_complete;
+    struct QttEffectScheme **arrow_effect_schemes;
+    bool *arrow_effects_complete;
+    size_t arrow_effect_count;
+    size_t *effect_trait_predicate_stages;
+    char **effect_trait_predicate_names;
+    size_t effect_trait_predicate_count;
+    bool recursively_fused;
+} InferExpressionJudgment;
 
 /// Type Variables
 //
@@ -25,6 +58,38 @@ typedef struct InferHole {
     int col;
     int var_id;   /* the fresh type variable ID assigned to this hole */
 } InferHole;
+
+typedef struct InferGradeApplication {
+    const AST *application;
+    struct QttGradeExpr **domain_grades;
+    size_t applied_count;
+    uint64_t *closure_module_ids;
+    uint64_t *closure_ids;
+    uint64_t *closure_binder_ids;
+    size_t *closure_slots;
+    size_t *closure_parameter_indices;
+    int *closure_origin_kinds;
+    uint64_t *closure_origin_ids;
+    struct QttGradeExpr **closure_grades;
+    size_t closure_grade_count;
+    uint64_t *closure_domain_module_ids;
+    uint64_t *closure_domain_ids;
+    size_t *closure_domain_indices;
+    struct QttGradeExpr **closure_domain_grades;
+    size_t closure_domain_grade_count;
+    uint64_t *result_closure_module_ids;
+    uint64_t *result_closure_ids;
+    uint64_t *result_closure_instance_ids;
+    struct QttClosureEnvironment **result_closure_environments;
+    size_t result_closure_count;
+    size_t *callable_parameter_indices;
+    struct QttGradeExpr **callable_invocation_grades;
+    size_t callable_parameter_count;
+    size_t *callable_domain_parameter_indices;
+    size_t *callable_domain_indices;
+    struct QttGradeExpr **callable_domain_grades;
+    size_t callable_domain_count;
+} InferGradeApplication;
 
 
 /// Type Schemes
@@ -43,6 +108,16 @@ typedef struct TypeScheme {
     int   *quantified;
     int    quantified_count;
     Type  *type;
+    struct QttGradeScheme *grade_scheme;
+    struct QttEffectScheme *effect_scheme;
+    bool effects_complete;
+    struct QttEffectScheme **arrow_effect_schemes;
+    bool *arrow_effects_complete;
+    size_t arrow_effect_count;
+    size_t *effect_trait_predicate_stages;
+    char **effect_trait_predicate_names;
+    size_t effect_trait_predicate_count;
+    bool owns_type;
 } TypeScheme;
 
 
@@ -111,6 +186,8 @@ int           subst_find(Substitution *s, int id);   // path-compressed find
 bool          subst_union(Substitution *s, int a, int b); // union two var roots
 void          subst_bind(Substitution *s, int id, Type *t); // bind root to concrete t
 Type         *subst_apply(Substitution *s, Type *t);  // walk & substitute
+Type         *infer_substitute_type_vars(Type *t, int *from, Type **to,
+                                         int count);
 Type         *subst_apply_shallow(Substitution *s, Type *t); // one-level dereference
 
 
@@ -148,6 +225,16 @@ typedef struct InferCtx {
     bool             has_holes;
     int              hole_count;
     InferHole        hole_positions[INFER_MAX_HOLES];
+    struct QttGradeArena *grade_arena;
+    struct QttEffectArena *effect_arena;
+    struct QttEffectSolver *effect_solver;
+    size_t last_effect_constraint_count;
+    uint64_t last_effect_certificate_fingerprint;
+    bool last_effect_constraints_residual;
+    InferGradeApplication *grade_applications;
+    size_t grade_application_count;
+    size_t grade_application_cap;
+    uint64_t next_closure_instance_id;
 } InferCtx;
 
 InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filename);
@@ -204,7 +291,98 @@ Type *infer_expr(InferCtx *ctx, AST *ast);
 //  with a fresh type variable, returning a new monomorphic Type.
 //
 TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env);
+TypeScheme *infer_generalise_excluding(
+    InferCtx *ctx, Type *t, InferEnv *outer_env, const char *excluded_name);
 Type       *infer_instantiate(InferCtx *ctx, TypeScheme *scheme);
+
+/*
+ * A quantitative instantiation is one coherent view of an HM instance:
+ * every leading arrow domain is paired with exactly one freshly-instantiated
+ * grade.  Advancing the view consumes both components together, preventing
+ * partial application from silently shifting or dropping grade evidence.
+ */
+typedef enum InferQuantitativeResult {
+    INFER_QUANTITATIVE_OK,
+    INFER_QUANTITATIVE_INVALID_ARGUMENT,
+    INFER_QUANTITATIVE_GRADE_ARITY_MISMATCH,
+    INFER_QUANTITATIVE_EFFECT_ARITY_MISMATCH,
+    INFER_QUANTITATIVE_OUT_OF_MEMORY,
+} InferQuantitativeResult;
+
+typedef struct InferQuantitativeType {
+    Type *type;
+    struct QttGradeExpr **domain_grades;
+    size_t domain_count;
+    size_t domain_offset;
+    uint64_t *closure_module_ids;
+    uint64_t *closure_ids;
+    uint64_t *closure_binder_ids;
+    size_t *closure_slots;
+    size_t *closure_parameter_indices;
+    int *closure_origin_kinds;
+    uint64_t *closure_origin_ids;
+    struct QttGradeExpr **closure_grades;
+    size_t closure_grade_count;
+    uint64_t *closure_domain_module_ids;
+    uint64_t *closure_domain_ids;
+    size_t *closure_domain_indices;
+    struct QttGradeExpr **closure_domain_grades;
+    size_t closure_domain_grade_count;
+    uint64_t *result_closure_module_ids;
+    uint64_t *result_closure_ids;
+    size_t result_closure_count;
+    size_t *callable_parameter_indices;
+    struct QttGradeExpr **callable_invocation_grades;
+    size_t callable_parameter_count;
+    size_t *callable_domain_parameter_indices;
+    size_t *callable_domain_indices;
+    struct QttGradeExpr **callable_domain_grades;
+    size_t callable_domain_count;
+    struct QttEffectArena *effect_arena;
+    struct QttEffectSolver *effect_solver;
+    struct QttEffectRow *latent_effects;
+    bool effects_complete;
+    struct QttEffectRow **domain_effects;
+    bool *domain_effects_complete;
+    size_t domain_effect_count;
+    size_t domain_effect_offset;
+} InferQuantitativeType;
+
+InferQuantitativeResult infer_instantiate_quantitative(
+    InferCtx *ctx, TypeScheme *scheme, InferQuantitativeType *out);
+bool infer_quantitative_take_domain(
+    InferQuantitativeType *instance,
+    Type **parameter,
+    struct QttGradeExpr **grade);
+bool infer_quantitative_take_domain_contract(
+    InferQuantitativeType *instance,
+    Type **parameter,
+    struct QttGradeExpr **grade,
+    struct QttEffectRow **effects,
+    bool *effects_complete);
+struct QttGradeExpr *infer_quantitative_closure_grade(
+    const InferQuantitativeType *instance,
+    uint64_t module_id,
+    uint64_t closure_id,
+    uint64_t binder_id);
+struct QttGradeExpr *infer_quantitative_closure_slot_grade(
+    const InferQuantitativeType *instance,
+    uint64_t module_id,
+    uint64_t closure_id,
+    size_t slot);
+struct QttGradeExpr *infer_quantitative_closure_domain_grade(
+    const InferQuantitativeType *instance,
+    uint64_t module_id,
+    uint64_t closure_id,
+    size_t parameter_index);
+struct QttGradeExpr *infer_quantitative_callable_domain_grade(
+    const InferQuantitativeType *instance,
+    size_t callable_parameter_index,
+    size_t domain_index);
+void infer_quantitative_type_free(InferQuantitativeType *instance);
+size_t infer_grade_application_count(const InferCtx *ctx);
+const InferGradeApplication *infer_grade_application(
+    const InferCtx *ctx, size_t index);
 
 
 /// Scheme Constructors
@@ -212,6 +390,72 @@ Type       *infer_instantiate(InferCtx *ctx, TypeScheme *scheme);
 TypeScheme *scheme_mono(Type *t);            /* trivial scheme with no quantifiers */
 TypeScheme *scheme_clone(TypeScheme *s);
 void        scheme_free(TypeScheme *s);
+char *infer_type_scheme_serialize(const TypeScheme *scheme);
+TypeScheme *infer_type_scheme_deserialize(const char *text);
+char *infer_operation_scheme_serialize(
+    const char *payload_type, const char *result_type);
+bool infer_operation_scheme_instantiate(
+    InferCtx *ctx, const char *portable_scheme,
+    Type **payload_type, Type **result_type);
+bool infer_operation_scheme_accepts(
+    const char *portable_scheme,
+    Type *payload_type, Type *result_type);
+bool scheme_set_effect_trait_predicates(
+    TypeScheme *scheme, const size_t *stages,
+    const char *const *traits, size_t count);
+size_t scheme_effect_trait_predicate_count(const TypeScheme *scheme);
+size_t scheme_effect_trait_predicate_stage(
+    const TypeScheme *scheme, size_t index);
+const char *scheme_effect_trait_predicate_name(
+    const TypeScheme *scheme, size_t index);
+bool scheme_instantiate_effect_trait_constraints(
+    const TypeScheme *scheme, struct QttEffectArena *arena,
+    struct QttEffectConstraintSet *constraints);
+void scheme_set_grade_scheme(
+    TypeScheme *scheme, struct QttGradeScheme *grades);
+void scheme_set_effect_scheme(
+    TypeScheme *scheme, struct QttEffectScheme *effects,
+    bool complete);
+bool scheme_set_arrow_effect_schemes(
+    TypeScheme *scheme,
+    struct QttEffectScheme *const *effects,
+    const bool *complete,
+    size_t count);
+bool infer_callable_contract_from_judgment(
+    InferCallableContract *contract,
+    const InferExpressionJudgment *judgment);
+bool infer_callable_contract_from_scheme(
+    InferCallableContract *contract, const TypeScheme *scheme);
+bool scheme_set_callable_contract(
+    TypeScheme *scheme, const InferCallableContract *contract);
+bool infer_validate_effect_annotations(
+    InferCtx *ctx, const TypeScheme *scheme,
+    size_t *failing_stage, const char **failing_label);
+bool infer_elaborate_effect_row_binders(
+    InferCtx *ctx, TypeScheme *scheme);
+uint64_t infer_callable_contract_fingerprint(
+    const InferCallableContract *contract);
+char *infer_callable_contract_serialize(
+    const InferCallableContract *contract);
+bool infer_callable_contract_deserialize(
+    InferCallableContract *contract, const char *text);
+void infer_callable_contract_free(InferCallableContract *contract);
+uint64_t scheme_effect_fingerprint(const TypeScheme *scheme);
+struct QttEffectScheme *infer_effect_scheme_for_lambda(
+    InferCtx *ctx, const struct AST *lambda, bool *complete);
+struct QttEffectScheme *infer_effect_scheme_for_expression(
+    InferCtx *ctx, const struct AST *expression, bool *complete);
+size_t infer_effect_constraint_count(const InferCtx *ctx);
+uint64_t infer_effect_certificate_fingerprint(const InferCtx *ctx);
+bool infer_effect_constraints_residual(const InferCtx *ctx);
+size_t scheme_grade_count(const TypeScheme *scheme);
+size_t scheme_closure_grade_count(const TypeScheme *scheme);
+struct QttGradeExpr **scheme_instantiate_grades(
+    const TypeScheme *scheme,
+    struct QttGradeArena *target,
+    size_t *count);
+struct QttGradeExpr **infer_instantiate_scheme_grades(
+    InferCtx *ctx, const TypeScheme *scheme, size_t *count);
 
 
 /// Free Variables
@@ -251,6 +495,9 @@ void infer_register_builtins(InferCtx *ctx);
 //  Sets ctx->had_error and ctx->error_msg on failure.
 
 Type *infer_toplevel(InferCtx *ctx, AST *ast);
+bool infer_toplevel_judgment(
+    InferCtx *ctx, AST *ast, InferExpressionJudgment *judgment);
+void infer_expression_judgment_free(InferExpressionJudgment *judgment);
 
 
 /// Pretty Printing (debug)

@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-06-26
+#+LAST_MODIFIED: 2026-08-10
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1316,3 +1316,18 @@ Test-driven observations and failure records for the corresponding subsystem.
   function clauses and checks that ordinary range expressions still use Enum.
   =test_core_abstraction_ownership.py= prevents generic numeric and ordering
   operations from being redeclared by =Math=, =Data.Int=, or =Data.Float=.
+* First-Class Monad Test Metadata
+:PROPERTIES:
+:ID: monadc.context.tests.first-class-metadata
+:CUSTOM_ID: first-class-test-metadata
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.tests.first-class-monad-metadata-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Monad test fixtures declare =TEST-*= records as top-level language metadata,
+  for example =:TEST-ID tests.codegen.example=. Do not encode fixture metadata
+  as =;; TEST-ID:= comments. Test discovery, context tooling, and generators
+  consume the first-class form.

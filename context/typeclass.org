@@ -428,15 +428,15 @@
   class system, instance resolution, and method dispatch.
 
 #+CAPTION: Type Class System Category Contract
-| Field | Contract |
-|-------+----------|
-| Owned phase | Class declaration registration, instance declaration registration, method dispatch via tc_is_method hook in strcmp dispatch, dictionary pass construction for polymorphic method calls. |
-| Inputs | Type class definitions (class name, method signatures), instance declarations (type, method implementations), method call sites in codegen dispatch. |
-| Outputs | Instance method resolution, dispatched calls through tc_is_method hook, zero-cost abstraction via monomorphization (codegen already specializes by type). |
-| Invariants | At most one instance per class+type combination; instance resolution terminates; tc_is_method hook checked before each comparison operation; monomorphization provides zero-cost dispatch without runtime dictionary overhead. |
-| Test hooks | Type class test suite, method dispatch correctness tests, instance resolution tests, overlap detection tests, performance overhead benchmarks for tc_is_method path. |
-| Failure symptoms | Ambiguous instance detection, missing instance for required method call, method dispatch routed to wrong instance, tc_is_method overhead on hot comparison loops, instance registration collision. |
-| Context neighbors | codegen-ops, infer, env, language, tests |
+| Field             | Contract                                                                                                                                                                                                                       |
+|-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Owned phase       | Class declaration registration, instance declaration registration, method dispatch via tc_is_method hook in strcmp dispatch, dictionary pass construction for polymorphic method calls.                                        |
+| Inputs            | Type class definitions (class name, method signatures), instance declarations (type, method implementations), method call sites in codegen dispatch.                                                                           |
+| Outputs           | Instance method resolution, dispatched calls through tc_is_method hook, zero-cost abstraction via monomorphization (codegen already specializes by type).                                                                      |
+| Invariants        | At most one instance per class+type combination; instance resolution terminates; tc_is_method hook checked before each comparison operation; monomorphization provides zero-cost dispatch without runtime dictionary overhead. |
+| Test hooks        | Type class test suite, method dispatch correctness tests, instance resolution tests, overlap detection tests, performance overhead benchmarks for tc_is_method path.                                                           |
+| Failure symptoms  | Ambiguous instance detection, missing instance for required method call, method dispatch routed to wrong instance, tc_is_method overhead on hot comparison loops, instance registration collision.                             |
+| Context neighbors | codegen-ops, infer, env, language, tests                                                                                                                                                                                       |
 
 [DEC id:dec.typeclass.category-contract-owner date:2026-06-18 by:big-pickle]
   Failures matching the symptoms above should start triage in this category, then
@@ -501,3 +501,17 @@
   imported instance calls share exact closure ABI metadata. The first-order
   =maybe-join -> join= delegation is executable in both Wisp and canonical
   S-expression test paths.
+[IDEA id:idea.typeclass.contextual-bare-constraint-2026-08-10 date:2026-08-10 by:laluxx status:deferred]
+  Consider permitting a bare class constructor before the constraint arrow
+  when its missing type argument is uniquely determined by the constrained
+  function type. For example, =Eq => a -> a -> Bool= could elaborate to
+  =Eq a => a -> a -> Bool=. The surface ==>= would read as both the evidence
+  boundary and the entrance to the ordinary function arrow chain.
+
+  The broader motivating family also includes signatures such as
+  =Eq a => a -> Bool= and multi-argument laws such as
+  =Eq a => a -> a -> a -> Bool=. Any future implementation must define these
+  by constraint elaboration, not by arity-changing textual substitution, and
+  must reject a bare class whenever more than one type variable is a plausible
+  argument. This is a design record only; bare constraints are not currently
+  accepted syntax.

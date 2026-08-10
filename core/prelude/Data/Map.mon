@@ -2,15 +2,14 @@
 
 ;;; Commentary:
 
-;; Map is the core-owned interface to the optimized runtime hash-map
-;; representation. The semantic type is Map k v: every key in one value has
-;; type k and every stored value has type v. The __rt_map_* names below are
-;; private representation intrinsics, never public language operations.
+ Map is the core-owned interface to the optimized runtime hash-map
+ representation. The semantic type is Map k v: every key in one value has
+ type k and every stored value has type v. The __rt_map_* names below are
+ private representation intrinsics, never public language operations.
 
 ;;; Code:
 
 import Data.Bool
-import Data.Maybe
 
 module Data.Map
   [member? keys values insert delete merge
@@ -77,7 +76,7 @@ method vals :: Map k v -> [v]
 
 
 tests
-  assert-eq (member? #{:answer 42} :answer) True "Data.Map membership"
-  assert-eq (member? #{:answer 42} :missing) False "Data.Map missing key"
-  assert-eq (member? (insert #{:answer 42} :extra 7) :extra) True "Data.Map insert"
-  assert-eq (member? (delete #{:answer 42 :extra 7} :extra) :extra) False "Data.Map delete"
+  assert-eq (member? {:answer -> 42} :answer) True "Data.Map membership"
+  assert-eq (member? {:answer -> 42} :missing) False "Data.Map missing key"
+  assert-eq (member? (insert {:answer -> 42} :extra 7) :extra) True "Data.Map insert"
+  assert-eq (member? (delete {:answer -> 42, :extra -> 7} :extra) :extra) False "Data.Map delete"

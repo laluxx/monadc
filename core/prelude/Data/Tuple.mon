@@ -6,19 +6,19 @@
 
 ;;; Commentary:
 
-;; Tuple helpers for two-element products.
-;;
-;; Native tuple syntax is preferred over encoding pairs as ad-hoc lists.
-;; Both tuple type spellings are canonical:
-;;
-;;   (a, b)
-;;   (a b)
-;;
-;; and both denote the same two-element product type.
-;;
-;; This module intentionally stays focused on binary products.  Nested product
-;; transformations such as reassociation can be added later once nested tuple
-;; codegen and printing are fully stable.
+ Tuple helpers for two-element products.
+
+ Native tuple syntax is preferred over encoding pairs as ad-hoc lists.
+ Both tuple type spellings are canonical:
+
+   (a, b)
+   (a b)
+
+ and both denote the same two-element product type.
+
+ This module intentionally stays focused on binary products.  Nested product
+ transformations such as reassociation can be added later once nested tuple
+ codegen and printing are fully stable.
 
 ;;; Code:
 

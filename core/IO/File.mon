@@ -1,0 +1,560 @@
+;;; File.mon --- structured effect-typed file IO
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "io files handles seek flush ownership"
+
+;;; Commentary:
+
+ FileHandle is a portable capability over a backend descriptor. Operations
+ never hide failure in sentinels. Whole-file helpers close handles on both
+ success and failure paths. The explicit handle boundary is ready for QTT
+ linear ownership, although source-level exactly-once enforcement remains a
+ later proof layer.
+
+ `with-file` is the owned-handle boundary for higher-order workflows. The
+ callback borrows the handle for the dynamic extent of the scope; Core closes
+ it exactly once after the callback returns. A callback failure remains
+ authoritative, while a cleanup failure replaces an otherwise successful
+ result.
+
+;;; Code:
+
+import IO
+import System.Posix.FileDescriptor
+import Data.Either
+import Data.Bool
+import Sequence
+
+module IO.File
+  [OpenMode ReadOnly WriteOnly ReadWrite Append
+   SeekOrigin FromStart FromCurrent FromEnd
+   PathKind RegularFile Directory SymbolicLink Other
+   FileHandle FileMetadata
+   standard-input standard-output standard-error
+   file-descriptor open-file with-file close-file flush-file seek-file file-position
+   duplicate-file-descriptor redirect-file-handle
+   file-status-flags set-file-status-flags
+   file-descriptor-flags set-file-descriptor-flags
+   enable-nonblocking disable-nonblocking nonblocking-status
+   enable-close-on-exec disable-close-on-exec close-on-exec-status
+   read-file-byte read-handle-bytes write-file-byte write-file-text
+   read-file-bytes read-file-prefix
+   write-file append-file
+   file-size touch-file truncate-file copy-file move-file
+   rename-file remove-file create-directory remove-directory
+   path-exists path-kind metadata list-directory-names join-path
+   metadata-size metadata-permissions metadata-links metadata-modified-seconds
+   is-directory is-regular-file
+   is-symbolic-link is-other
+   sync-file-data set-file-size set-file-permissions]
+
+
+data OpenMode
+  = ReadOnly
+  | WriteOnly
+  | ReadWrite
+  | Append
+
+
+data SeekOrigin
+  = FromStart
+  | FromCurrent
+  | FromEnd
+
+
+data PathKind
+  = RegularFile
+  | Directory
+  | SymbolicLink
+  | Other
+
+
+layout FileHandle
+  [descriptor :: Int]
+
+
+layout FileMetadata
+  [kind :: PathKind]
+  [size        :: Int]
+  [permissions :: Int]
+  [links       :: Int]
+  [modified    :: Int]
+
+
+define open-mode-flags :: OpenMode -> Int
+  mode | ReadOnly  -> O_RDONLY
+       | WriteOnly -> (bit-or O_WRONLY (bit-or O_CREAT O_TRUNC))
+       | ReadWrite -> (bit-or O_RDWR O_CREAT)
+       | Append    -> (bit-or O_WRONLY (bit-or O_CREAT O_APPEND))
+
+
+define seek-origin-code :: SeekOrigin -> Int
+  origin | FromStart   -> SEEK_SET
+         | FromCurrent -> SEEK_CUR
+         | FromEnd     -> SEEK_END
+
+
+;;; Descriptor identity
+
+define file-descriptor :: FileHandle -> Int
+  handle -> handle.descriptor
+
+
+define status-result :: Int -> Either IOError Int
+  status | < 0       -> Left (IOStatus status)
+         | otherwise -> Right status
+
+
+define duplicate-file-descriptor :: FileHandle -io-> Either IOError Int
+  handle -> status-result (sys-dup handle.descriptor)
+
+
+;; Duplicate source onto target. The returned status equals target's descriptor.
+define redirect-file-handle :: FileHandle -> FileHandle -io-> Either IOError Int
+  source target -> status-result (sys-dup2 source.descriptor target.descriptor)
+
+
+;;; Status and inheritance flags
+
+define file-status-flags :: FileHandle -io-> Either IOError Int
+  handle -> status-result (sys-fcntl handle.descriptor F_GETFL 0)
+
+
+define set-file-status-flags :: FileHandle -> Int -io-> Either IOError Int
+  handle flags -> status-result (sys-fcntl handle.descriptor F_SETFL flags)
+
+
+define file-descriptor-flags :: FileHandle -io-> Either IOError Int
+  handle -> status-result (sys-fcntl handle.descriptor F_GETFD 0)
+
+
+define set-file-descriptor-flags :: FileHandle -> Int -io-> Either IOError Int
+  handle flags -> status-result (sys-fcntl handle.descriptor F_SETFD flags)
+
+
+define enable-nonblocking :: FileHandle -io-> Either IOError Int
+  handle -> def flags (sys-fcntl handle.descriptor F_GETFL 0)
+            if flags < 0 then Left (IOStatus flags)
+            else status-result (sys-fcntl handle.descriptor F_SETFL (bit-or flags O_NONBLOCK))
+
+
+define disable-nonblocking :: FileHandle -io-> Either IOError Int
+  handle -> def flags (sys-fcntl handle.descriptor F_GETFL 0)
+            if flags < 0 then Left (IOStatus flags)
+            else status-result (sys-fcntl handle.descriptor F_SETFL (& flags (0 - 2049)))
+
+
+define nonblocking-status :: FileHandle -io-> Either IOError Int
+  handle -> def flags (sys-fcntl handle.descriptor F_GETFL 0)
+            if flags < 0 then Left (IOStatus flags)
+            else Right (if (= (& flags O_NONBLOCK) 0) 0 1)
+
+
+define enable-close-on-exec :: FileHandle -io-> Either IOError Int
+  handle -> def flags (sys-fcntl handle.descriptor F_GETFD 0)
+            if flags < 0 then Left (IOStatus flags)
+            else status-result (sys-fcntl handle.descriptor F_SETFD (bit-or flags FD_CLOEXEC))
+
+
+define disable-close-on-exec :: FileHandle -io-> Either IOError Int
+  handle -> def flags (sys-fcntl handle.descriptor F_GETFD 0)
+            if flags < 0 then Left (IOStatus flags)
+            else status-result (sys-fcntl handle.descriptor F_SETFD (& flags (0 - 2)))
+
+
+define close-on-exec-status :: FileHandle -io-> Either IOError Int
+  handle -> def flags (sys-fcntl handle.descriptor F_GETFD 0)
+            if flags < 0 then Left (IOStatus flags)
+            else Right (if (= (& flags FD_CLOEXEC) 0) 0 1)
+
+
+;;; Handle lifecycle
+
+define open-file :: Path -> OpenMode -io-> Either IOError FileHandle
+  path mode -> def status (sys-open path (open-mode-flags mode) 420)
+               if status < 0 then Left (IOStatus status)
+               else Right (FileHandle status)
+
+
+define close-file :: FileHandle -io-> Either IOError Int
+  handle -> status-result (sys-close handle.descriptor)
+
+
+;;; Resource scopes
+
+define finish-file-scope-success :: a -> Either IOError Int -> Either IOError a
+  _ [Left error] -> Left error
+  value [Right _] -> Right value
+
+
+define finish-file-scope :: Either IOError a -> Either IOError Int -> Either IOError a
+  [Left error] _ -> Left error
+  [Right value] closed -> finish-file-scope-success value closed
+
+
+define run-file-scope :: FileHandle -> (FileHandle -> Either IOError a) -io-> Either IOError a
+  handle use -> def result (use handle)
+                def closed (close-file handle)
+                finish-file-scope result closed
+
+
+define enter-file-scope :: Either IOError FileHandle -> (FileHandle -> Either IOError a) -io-> Either IOError a
+  [Left error] _ -> Left error
+  [Right handle] use -> run-file-scope handle use
+
+
+define with-file :: Path -> OpenMode -> (FileHandle -> Either IOError a) -io-> Either IOError a
+  path mode use -> def opened (open-file path mode)
+                   enter-file-scope opened use
+
+
+define flush-file :: FileHandle -io-> Either IOError Int
+  handle -> status-result (sys-fsync handle.descriptor)
+
+
+define sync-file-data :: FileHandle -io-> Either IOError Int
+  handle -> status-result (sys-fdatasync handle.descriptor)
+
+
+define set-file-size :: FileHandle -> Int -io-> Either IOError Int
+  handle size -> status-result (sys-ftruncate handle.descriptor size)
+
+
+define seek-file :: FileHandle -> Int -> SeekOrigin -io-> Either IOError Int
+  handle offset origin -> def status (sys-lseek handle.descriptor offset (seek-origin-code origin))
+                          if status < 0 then Left (IOStatus status)
+                          else Right status
+
+
+define file-position :: FileHandle -io-> Either IOError Int
+  handle -> seek-file handle 0 FromCurrent
+
+
+define read-file-byte :: FileHandle -io-> Either IOError Int
+  handle -> read-byte-result handle.descriptor
+
+
+define write-file-byte :: FileHandle -> Int -io-> Either IOError Int
+  handle byte -> write-byte-result handle.descriptor byte
+
+
+define write-file-text :: FileHandle -> String -io-> Either IOError Int
+  handle text -> write-text-result handle.descriptor text
+
+
+;;; Borrowed-handle streaming
+
+define finish-read-error :: IOError -> [Int] -> Either IOError [Int]
+  [IOEndOfInput] bytes -> Right bytes
+  error bytes          -> Left error
+
+
+define read-open-bytes-loop :: FileHandle -> [Int] -io-> Either IOError [Int]
+  handle bytes -> def result (read-file-byte handle)
+                  (match result with | (Left error) -> (finish-read-error error bytes) | (Right byte) -> (read-open-bytes-loop handle (snoc bytes byte)))
+
+
+define read-handle-bytes :: FileHandle -io-> Either IOError [Int]
+  handle -> read-open-bytes-loop handle []
+
+
+;;; Owned path workflows
+
+define read-open-bytes-and-close :: FileHandle -io-> Either IOError [Int]
+  handle -> def result (read-open-bytes-loop handle [])
+            def closed (close-file handle)
+            finish-file-scope result closed
+
+
+define read-file-bytes :: Path -io-> Either IOError [Int]
+  path -> def opened (open-file path ReadOnly)
+          (match opened with | (Left error) -> (Left error) | (Right handle) -> (read-open-bytes-and-close handle))
+
+
+define read-prefix-loop :: FileHandle -> Int -> [Int] -io-> Either IOError [Int]
+  handle remaining bytes | remaining <= 0 -> Right bytes
+  handle remaining bytes -> def result (read-file-byte handle)
+                            (match result with | (Left error) -> (finish-read-error error bytes) | (Right byte) -> (read-prefix-loop handle (remaining - 1) (snoc bytes byte)))
+
+
+define read-prefix-opened :: FileHandle -> Int -io-> Either IOError [Int]
+  handle limit -> def result (read-prefix-loop handle limit [])
+                  def closed (close-file handle)
+                  finish-file-scope result closed
+
+
+define read-file-prefix :: Path -> Int -io-> Either IOError [Int]
+  path limit -> def opened (open-file path ReadOnly)
+                (match opened with | (Left error) -> (Left error) | (Right handle) -> (read-prefix-opened handle limit))
+
+
+define finish-copy-read-error :: IOError -> Int -> Either IOError Int
+  [IOEndOfInput] copied -> Right copied
+  error copied          -> Left error
+
+
+define copy-loop :: FileHandle -> FileHandle -> Int -io-> Either IOError Int
+  source target copied -> def input (read-file-byte source)
+                          (match input with | (Left error) -> (finish-copy-read-error error copied) | (Right byte) -> (with [status (write-byte target.descriptor byte)] (if (< status 0) (Left (IOStatus status)) (copy-loop source target (copied + status)))))
+
+
+define finish-copy :: Either IOError Int -> FileHandle -> FileHandle -io-> Either IOError Int
+  result source target -> def target-closed (close-file target)
+                          def after-target (finish-file-scope result target-closed)
+                          def source-closed (close-file source)
+                          finish-file-scope after-target source-closed
+
+
+define copy-with-handles :: FileHandle -> FileHandle -io-> Either IOError Int
+  source target -> finish-copy (copy-loop source target 0) source target
+
+
+define copy-open-target-failed :: FileHandle -> IOError -io-> Either IOError Int
+  source error -> (match (close-file source) with | (Left _) -> (Left error) | (Right _) -> (Left error))
+
+
+define copy-after-source-open :: FileHandle -> Path -io-> Either IOError Int
+  source target-path -> def target-opened (open-file target-path WriteOnly)
+                        (match target-opened with | (Left error) -> (copy-open-target-failed source error) | (Right target) -> (copy-with-handles source target))
+
+
+define copy-file :: Path -> Path -io-> Either IOError Int
+  source-path target-path -> def source-opened (open-file source-path ReadOnly)
+                             (match source-opened with | (Left error) -> (Left error) | (Right source) -> (copy-after-source-open source target-path))
+
+
+define write-open-text-and-close :: FileHandle -> String -io-> Either IOError Int
+  handle text -> def result (write-file-text handle text)
+                 def closed (close-file handle)
+                 finish-file-scope result closed
+
+
+define write-path-mode :: Path -> String -> OpenMode -io-> Either IOError Int
+  path text mode -> def opened (open-file path mode)
+                    (match opened with | (Left error) -> (Left error) | (Right handle) -> (write-open-text-and-close handle text))
+
+
+define write-file :: Path -> String -io-> Either IOError Int
+  path text -> write-path-mode path text WriteOnly
+
+
+define append-file :: Path -> String -io-> Either IOError Int
+  path text -> write-path-mode path text Append
+
+
+define file-size-opened :: FileHandle -io-> Either IOError Int
+  handle -> def result (seek-file handle 0 FromEnd)
+            def closed (close-file handle)
+            finish-file-scope result closed
+
+
+define file-size :: Path -io-> Either IOError Int
+  path -> def opened (open-file path ReadOnly)
+          (match opened with | (Left error) -> (Left error) | (Right handle) -> (file-size-opened handle))
+
+
+define touch-opened :: FileHandle -io-> Either IOError Int
+  handle -> close-file handle
+
+
+define touch-file :: Path -io-> Either IOError Int
+  path -> def opened (open-file path Append)
+          (match opened with | (Left error) -> (Left error) | (Right handle) -> (touch-opened handle))
+
+
+define truncate-opened :: FileHandle -> Int -io-> Either IOError Int
+  handle size -> def result (set-file-size handle size)
+                 def closed (close-file handle)
+                 finish-file-scope result closed
+
+
+define truncate-file :: Path -> Int -io-> Either IOError Int
+  path size -> def opened (open-file path ReadWrite)
+               (match opened with | (Left error) -> (Left error) | (Right handle) -> (truncate-opened handle size))
+
+
+define rename-file :: Path -> Path -io-> Either IOError Int
+  source target -> status-result (sys-rename source target)
+
+
+define move-file :: Path -> Path -io-> Either IOError Int
+  source target -> rename-file source target
+
+
+define remove-file :: Path -io-> Either IOError Int
+  path -> status-result (sys-unlink path)
+
+
+define create-directory :: Path -io-> Either IOError Int
+  path -> status-result (sys-mkdir path 493)
+
+
+define remove-directory :: Path -io-> Either IOError Int
+  path -> status-result (sys-rmdir path)
+
+
+define path-exists :: Path -io-> Either IOError Bool
+  path -> def status (sys-access path 0)
+          (if (= status 0) (Right True) (if (= status (0 - 2)) (Right False) (Left (IOStatus status))))
+
+
+define finish-directory-names :: Int -> [String] -> Either IOError [String]
+  status names -> if status < 0 then Left (IOStatus status) else Right names
+
+
+define list-directory-names :: Path -io-> Either IOError [String]
+  path -> def status 0
+          def names (__rt_directory_names path &status)
+          finish-directory-names status names
+
+
+define join-path :: Path -> String -> Path
+  parent child -> __rt_join_path parent child
+
+
+define classify-path-mode :: Int -> PathKind
+  mode -> def kind (& mode 61440)
+          (match kind with | 32768 -> RegularFile | 16384 -> Directory | 40960 -> SymbolicLink | _ -> Other)
+
+
+define stat-buffer-kind :: PosixStatBuffer -> PathKind
+  information -> classify-path-mode information.mode-owner
+
+
+define finish-path-kind :: Int -> PosixStatBuffer -> Either IOError PathKind
+  status information -> if status < 0 then Left (IOStatus status) else Right (stat-buffer-kind information)
+
+
+define path-kind :: Path -io-> Either IOError PathKind
+  path -> def information (PosixStatBuffer 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
+          def status (sys-lstat path &information)
+          finish-path-kind status information
+
+
+define metadata-from-buffer :: Int -> PosixStatBuffer -> Either IOError FileMetadata
+  status information -> if status < 0 then Left (IOStatus status) else Right (FileMetadata (stat-buffer-kind information) information.size (& information.mode-owner 4095) information.links information.mtime)
+
+
+define metadata :: Path -io-> Either IOError FileMetadata
+  path -> def information (PosixStatBuffer 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
+          def status (sys-lstat path &information)
+          metadata-from-buffer status information
+
+
+define metadata-size-result :: Either IOError FileMetadata -> Either IOError Int
+  [Left error]        -> Left error
+  [Right information] -> Right information.size
+
+
+define metadata-size :: Path -io-> Either IOError Int
+  path -> metadata-size-result (metadata path)
+
+
+define metadata-permissions-result :: Either IOError FileMetadata -> Either IOError Int
+  [Left error]        -> Left error
+  [Right information] -> Right information.permissions
+
+
+define metadata-permissions :: Path -io-> Either IOError Int
+  path -> metadata-permissions-result (metadata path)
+
+
+define metadata-links-result :: Either IOError FileMetadata -> Either IOError Int
+  [Left error]        -> Left error
+  [Right information] -> Right information.links
+
+
+define metadata-links :: Path -io-> Either IOError Int
+  path -> metadata-links-result (metadata path)
+
+
+define metadata-modified-seconds-result :: Either IOError FileMetadata -> Either IOError Int
+  [Left error]        -> Left error
+  [Right information] -> Right information.modified
+
+
+define metadata-modified-seconds :: Path -io-> Either IOError Int
+  path -> metadata-modified-seconds-result (metadata path)
+
+
+define path-kind-is-directory? :: PathKind -> Bool
+  kind | Directory    -> True
+       | RegularFile  -> False
+       | SymbolicLink -> False
+       | Other        -> False
+
+
+define kind-is-directory :: Either IOError PathKind -> Either IOError Bool
+  [Left error] -> Left error
+  [Right kind] -> Right (path-kind-is-directory? kind)
+
+
+define is-directory :: Path -io-> Either IOError Bool
+  path -> kind-is-directory (path-kind path)
+
+
+define path-kind-is-regular-file? :: PathKind -> Bool
+  kind | RegularFile  -> True
+       | Directory    -> False
+       | SymbolicLink -> False
+       | Other        -> False
+
+
+define kind-is-regular-file :: Either IOError PathKind -> Either IOError Bool
+  [Left error] -> Left error
+  [Right kind] -> Right (path-kind-is-regular-file? kind)
+
+
+define is-regular-file :: Path -io-> Either IOError Bool
+  path -> kind-is-regular-file (path-kind path)
+
+
+define path-kind-is-symbolic-link? :: PathKind -> Bool
+  kind | SymbolicLink -> True
+       | RegularFile  -> False
+       | Directory    -> False
+       | Other        -> False
+
+
+define kind-is-symbolic-link :: Either IOError PathKind -> Either IOError Bool
+  [Left error] -> Left error
+  [Right kind] -> Right (path-kind-is-symbolic-link? kind)
+
+
+define is-symbolic-link :: Path -io-> Either IOError Bool
+  path -> kind-is-symbolic-link (path-kind path)
+
+
+define path-kind-is-other? :: PathKind -> Bool
+  kind | Other        -> True
+       | RegularFile  -> False
+       | Directory    -> False
+       | SymbolicLink -> False
+
+
+define kind-is-other :: Either IOError PathKind -> Either IOError Bool
+  [Left error] -> Left error
+  [Right kind] -> Right (path-kind-is-other? kind)
+
+
+define is-other :: Path -io-> Either IOError Bool
+  path -> kind-is-other (path-kind path)
+
+
+define set-file-permissions :: Path -> Int -io-> Either IOError Int
+  path mode -> status-result (sys-chmod path mode)
+
+
+;;; Standard streams
+
+define standard-input :: () -> FileHandle
+  _ -> FileHandle stdin
+
+
+define standard-output :: () -> FileHandle
+  _ -> FileHandle stdout
+
+
+define standard-error :: () -> FileHandle
+  _ -> FileHandle stderr

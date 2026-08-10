@@ -30,6 +30,11 @@
 #include "typst_emit.h"
 #include "optimizations.h"
 #include "bytecode.h"
+#include "tooling/lint.h"
+#include "qtt/usage.h"
+#include "qtt/bindings.h"
+#include "qtt/compiler.h"
+#include "qtt/interface.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/Target.h>
@@ -49,6 +54,7 @@ typedef struct CompiledExport {
     int           param_count;
     LLVMValueRef  func_ref;     // FUNC only — valid only when not skipped
     AST          *source_ast;    // FUNC only — core-owned implementation metadata
+    char         *hm_scheme;     // FUNC only — portable principal type scheme
     int           adt_tag;       // ADT constructor only
 } CompiledExport;
 
@@ -61,6 +67,7 @@ typedef struct CompiledModule {
     char           *module_name;
     char           *obj_path;
     bool            was_skipped;    // compiled from .o timestamp, no LLVMValueRef
+    bool            object_reused;  // linked object predates this compiler run
     bool            compiling;      // reserved during recursive dependency scan
     CompiledExport *exports;
     size_t          export_count;
@@ -69,6 +76,7 @@ typedef struct CompiledModule {
     size_t          layout_count;
     size_t          layout_cap;
     TypeClassRegistry *tc_registry;
+    QttInterface      *qtt_interface;
     struct CompiledModule *next;
 } CompiledModule;
 
@@ -88,6 +96,30 @@ static bool ast_list_contains_typeclass_call(AST *ast, TypeClassRegistry *regist
         if (ast_list_contains_typeclass_call(ast->list.items[i], registry)) return true;
     }
     return false;
+}
+
+static void trace_qtt_toplevel(AST *ast) {
+    if (!ast || ast->type != AST_LIST || ast->list.count < 3)
+        return;
+    AST *head = ast->list.items[0];
+    AST *name = ast->list.items[1];
+    AST *value = ast->list.items[2];
+    if (!head || head->type != AST_SYMBOL ||
+        strcmp(head->symbol, "define") != 0 ||
+        !name || name->type != AST_SYMBOL ||
+        !value || value->type != AST_LAMBDA)
+        return;
+
+    QttUsageReport *report = qtt_usage_analyze_lambda(value);
+    if (!report) return;
+    for (size_t i = 0; i < qtt_usage_report_count(report); i++) {
+        printf("[qtt] %s/%s#%llu = %s\n",
+               name->symbol,
+               qtt_usage_report_name(report, i),
+               (unsigned long long)qtt_usage_report_binder_id(report, i),
+               qtt_usage_report_format(report, i));
+    }
+    qtt_usage_report_free(report);
 }
 
 /* FFI libraries to link, accumulated during compile_one */
@@ -321,7 +353,8 @@ static void registry_push_func(CompiledModule *m, const char *local,
                                 const char *mangled, Type *ret,
                                 EnvParam *params, int pc, LLVMValueRef fn,
                                 AST *source_ast, EnvEntryKind kind,
-                                int adt_tag, Env *provider_env) {
+                                int adt_tag, Env *provider_env,
+                                TypeScheme *provider_scheme) {
     registry_grow(m);
     CompiledExport *e = &m->exports[m->export_count++];
     memset(e, 0, sizeof(*e));
@@ -353,6 +386,8 @@ static void registry_push_func(CompiledModule *m, const char *local,
     e->param_count  = pc;
     e->func_ref     = fn;
     e->source_ast   = ast_clone(source_ast);
+    if (provider_scheme)
+        e->hm_scheme = infer_type_scheme_serialize(provider_scheme);
     if (pc > 0 && params) {
         e->params = malloc(sizeof(EnvParam) * pc);
         for (int i = 0; i < pc; i++) {
@@ -432,6 +467,7 @@ static void registry_free_all(void) {
             type_free(e->type);
             type_free(e->return_type);
             ast_free(e->source_ast);
+            free(e->hm_scheme);
             if (e->params) {
                 for (int j = 0; j < e->param_count; j++) {
                     free(e->params[j].name);
@@ -447,6 +483,7 @@ static void registry_free_all(void) {
         }
         free(m->layouts);
         tc_registry_free(m->tc_registry);
+        qtt_interface_free(m->qtt_interface);
         free(m);
         m = next;
     }
@@ -479,6 +516,22 @@ static char *read_file(const char *path) {
 static time_t file_mtime(const char *path) {
     struct stat st;
     return (stat(path, &st) == 0) ? st.st_mtime : 0;
+}
+
+static uint64_t file_content_fingerprint(const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return 0;
+    uint64_t hash = UINT64_C(1469598103934665603);
+    unsigned char buffer[8192];
+    size_t count;
+    while ((count = fread(buffer, 1, sizeof(buffer), file)) != 0)
+        for (size_t i = 0; i < count; i++) {
+            hash ^= buffer[i];
+            hash *= UINT64_C(1099511628211);
+        }
+    bool valid = !ferror(file);
+    fclose(file);
+    return valid ? (hash ? hash : 1) : 0;
 }
 
 static const char *host_exe_suffix(void) {
@@ -652,6 +705,17 @@ static char *monad_core_dir(void) {
         free(installed);
     }
 
+    /* PATH invocation commonly leaves argv[0] as only `monad`. A per-user
+     * installation still has a deterministic sibling Core under ~/.local,
+     * matching the runtime archive lookup below. */
+    const char *user_home = getenv("HOME");
+    if (user_home && *user_home) {
+        char *local_core = path_join_dup(user_home, ".local/lib/monad/core");
+        if (dir_exists(local_core))
+            return local_core;
+        free(local_core);
+    }
+
     return strdup("/usr/local/lib/monad/core");
 }
 
@@ -772,9 +836,87 @@ static bool emit_object(LLVMModuleRef mod, const char *obj_path, int opt_level) 
     return ok;
 }
 
-static void declare_externals(CodegenContext *ctx,
+static const QttInterfaceContract *compiled_qtt_contract(
+    const CompiledModule *module, const char *name) {
+    if (!module || !module->qtt_interface || !name) return NULL;
+    for (size_t i = 0;
+         i < qtt_interface_count(module->qtt_interface); i++) {
+        const QttInterfaceContract *contract =
+            qtt_interface_contract(module->qtt_interface, i);
+        if (contract && strcmp(contract->name, name) == 0)
+            return contract;
+    }
+    return NULL;
+}
+
+static bool register_interface_effect_judgment(
+    const char *identity, const char *name,
+    const QttInterfaceContract *contract) {
+    if (!contract || contract->interface_version < 12) return true;
+    if (!contract->has_effect_judgment) return false;
+    size_t count = contract->effect_predicate_count;
+    size_t *stages = count ? malloc(count * sizeof(*stages)) : NULL;
+    const char **names = count ? malloc(count * sizeof(*names)) : NULL;
+    if (count && (!stages || !names)) {
+        free(stages); free(names); return false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        stages[i] = contract->effect_predicates[i].stage;
+        names[i] = contract->effect_predicates[i].trait;
+    }
+    bool registered = qtt_compiler_register_effect_judgment(
+        identity, name, contract->effect_row_fingerprint,
+        contract->effect_constraint_fingerprint,
+        (int)contract->effect_constraint_result,
+        stages, names, count);
+    free(stages);
+    free(names);
+    return registered;
+}
+
+static bool declare_externals(CodegenContext *ctx,
                                CompiledModule *dep,
                                ImportDecl *import) {
+    if (dep && dep->qtt_interface) {
+        for (size_t i = 0;
+             i < qtt_interface_effect_declaration_count(dep->qtt_interface);
+             i++) {
+            const QttEffectDeclaration *declaration =
+                qtt_interface_effect_declaration(dep->qtt_interface, i);
+            if (!qtt_effect_declaration_register(declaration)) {
+                fprintf(stderr,
+                        "conflicting imported effect declaration: %s\n",
+                        declaration && declaration->name
+                            ? declaration->name : "<invalid>");
+                return false;
+            }
+        }
+        for (size_t i = 0;
+             i < qtt_interface_handler_profile_count(dep->qtt_interface);
+             i++) {
+            const QttEffectHandlerProfile *profile =
+                qtt_interface_handler_profile(dep->qtt_interface, i);
+            if (!qtt_effect_handler_profile_register(profile)) {
+                fprintf(stderr,
+                        "conflicting imported effect-handler profile: %s\n",
+                        profile && profile->name ? profile->name : "<invalid>");
+                return false;
+            }
+        }
+        for (size_t i = 0;
+             i < qtt_interface_trait_implication_count(dep->qtt_interface);
+             i++) {
+            const QttEffectTraitImplication *edge =
+                qtt_interface_trait_implication(dep->qtt_interface, i);
+            if (!edge || !qtt_effect_trait_implication_register(
+                    edge->premise, edge->consequence)) {
+                fprintf(stderr,
+                    "invalid imported effect-trait implication from %s\n",
+                    edge && edge->provenance ? edge->provenance : "<unknown>");
+                return false;
+            }
+        }
+    }
     /* Re-register all layouts from the imported module first so that
      * field access on imported types works in the importing module. */
     for (size_t i = 0; i < dep->layout_count; i++) {
@@ -860,6 +1002,56 @@ static void declare_externals(CodegenContext *ctx,
             if (ent) { ent->module_name = strdup(dep->module_name);
                        ent->llvm_name   = strdup(e->mangled_name);
                        ent->source_ast  = ast_clone(e->source_ast); }
+            if (e->hm_scheme)
+                (void)env_set_portable_scheme(ctx->env, qn, e->hm_scheme);
+            const QttInterfaceContract *qtt_contract =
+                compiled_qtt_contract(dep, e->local_name);
+            if (qtt_contract && qtt_contract->hm_scheme)
+                (void)env_install_hm_scheme(
+                    ctx->env, qn, qtt_contract->hm_scheme);
+            if (qtt_contract && qtt_contract->has_ownership_signature)
+                (void)qtt_compiler_register_contract(
+                    parser_get_filename(), qn,
+                    dep->module_name, e->local_name,
+                    &qtt_contract->signature);
+            bool installed_qtt_callable =
+                qtt_contract && qtt_contract->callable_contract &&
+                env_install_callable_contract(
+                    ctx->env, qn, qtt_contract->callable_contract,
+                    qtt_contract->callable_contract_fingerprint,
+                    qtt_contract->hm_scheme);
+            if (installed_qtt_callable) {
+                bool registered_callable =
+                    qtt_compiler_register_callable_contract(
+                    parser_get_filename(), qn,
+                    qtt_contract->callable_contract,
+                    qtt_contract->callable_contract_fingerprint);
+                bool registered_judgment = !registered_callable ||
+                    register_interface_effect_judgment(
+                        parser_get_filename(), qn, qtt_contract);
+                if (registered_callable && !registered_judgment) {
+                    fprintf(stderr,
+                        "incoherent imported effect judgment: %s.%s\n",
+                        dep->module_name, e->local_name);
+                    return false;
+                }
+                if (qtt_contract->hm_scheme)
+                    (void)qtt_compiler_register_hm_scheme(
+                        parser_get_filename(), qn,
+                        qtt_contract->hm_scheme);
+            }
+            if (installed_qtt_callable && qtt_compiler_trace_detailed())
+                printf("[effects] imported callable contract %s.%s as %s "
+                       "fingerprint=%016llx\n",
+                       dep->module_name, e->local_name, qn,
+                       (unsigned long long)
+                           qtt_contract->callable_contract_fingerprint);
+            if ((!qtt_contract || !qtt_contract->has_ownership_signature) &&
+                e->source_ast && !dep->object_reused)
+                qtt_compiler_register_import(
+                    parser_get_filename(), qn,
+                    dep->module_name, e->local_name,
+                    e->source_ast);
 
             if (import->mode != IMPORT_QUALIFIED) {
                 env_insert_func(ctx->env, e->local_name,
@@ -874,9 +1066,63 @@ static void declare_externals(CodegenContext *ctx,
                 if (ent2) { ent2->module_name = strdup(dep->module_name);
                             ent2->llvm_name   = strdup(e->mangled_name);
                             ent2->source_ast  = ast_clone(e->source_ast); }
+                if (e->hm_scheme)
+                    (void)env_set_portable_scheme(
+                        ctx->env, e->local_name, e->hm_scheme);
+                if (qtt_contract && qtt_contract->has_ownership_signature)
+                    (void)qtt_compiler_register_contract(
+                        parser_get_filename(), e->local_name,
+                        dep->module_name, e->local_name,
+                        &qtt_contract->signature);
+                if (qtt_contract && qtt_contract->hm_scheme)
+                    (void)env_install_hm_scheme(
+                        ctx->env, e->local_name, qtt_contract->hm_scheme);
+                bool installed_unqualified_callable =
+                    qtt_contract && qtt_contract->callable_contract &&
+                    env_install_callable_contract(
+                        ctx->env, e->local_name,
+                        qtt_contract->callable_contract,
+                        qtt_contract->callable_contract_fingerprint,
+                        qtt_contract->hm_scheme);
+                if (installed_unqualified_callable) {
+                    bool registered_callable =
+                        qtt_compiler_register_callable_contract(
+                        parser_get_filename(), e->local_name,
+                        qtt_contract->callable_contract,
+                        qtt_contract->callable_contract_fingerprint);
+                    bool registered_judgment = !registered_callable ||
+                        register_interface_effect_judgment(
+                            parser_get_filename(), e->local_name,
+                            qtt_contract);
+                    if (registered_callable && !registered_judgment) {
+                        fprintf(stderr,
+                            "incoherent imported effect judgment: %s.%s\n",
+                            dep->module_name, e->local_name);
+                        return false;
+                    }
+                    if (qtt_contract->hm_scheme)
+                        (void)qtt_compiler_register_hm_scheme(
+                            parser_get_filename(), e->local_name,
+                            qtt_contract->hm_scheme);
+                }
+                if (installed_unqualified_callable &&
+                    qtt_compiler_trace_detailed())
+                    printf("[effects] imported callable contract %s.%s as %s "
+                           "fingerprint=%016llx\n",
+                           dep->module_name, e->local_name, e->local_name,
+                           (unsigned long long)
+                               qtt_contract->callable_contract_fingerprint);
+                if ((!qtt_contract ||
+                     !qtt_contract->has_ownership_signature) &&
+                    e->source_ast && !dep->object_reused)
+                    qtt_compiler_register_import(
+                        parser_get_filename(), e->local_name,
+                        dep->module_name, e->local_name,
+                        e->source_ast);
             }
         }
     }
+    return true;
 }
 
 static char *get_obj_path(const char *source_path, bool is_main_module) {
@@ -923,6 +1169,115 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
     sprintf(obj, "%s%s", base, suffix);
     free(base);
     return obj;
+}
+
+/*
+ * Core objects are a persistent compiler cache, not disposable linker
+ * temporaries.  get_obj_path() places both imported and directly compiled
+ * core modules here; deleting them after a successful link leaves .mqti
+ * metadata pointing at artifacts which no longer exist.
+ */
+static bool is_persistent_core_object(const char *path) {
+    const char *home = getenv("HOME");
+    if (!path || !home || !home[0]) return false;
+    char prefix[1024];
+    int length = snprintf(
+        prefix, sizeof(prefix), "%s/.cache/monad/core/", home);
+    return length > 0 && (size_t)length < sizeof(prefix) &&
+           strncmp(path, prefix, (size_t)length) == 0;
+}
+
+/* Load the certified callable fragment of a dependency without its source.
+ * The object fingerprint binds executable code to the .mqti evidence; only
+ * contracts carrying a complete ownership/ABI signature become linkable
+ * exports.  Layouts, macros, typeclasses, and FFI headers remain deliberately
+ * unavailable until their own manifests are proof-carrying. */
+static CompiledModule *load_certified_binary_module(
+    const char *module_name, const char *source_path) {
+    if (!module_name || !source_path) return NULL;
+
+    CompiledModule *cached = registry_find(module_name);
+    if (cached) return cached;
+
+    char *base = base_no_ext(source_path);
+    size_t base_len = strlen(base);
+    char *object_path = malloc(base_len + strlen(".module.o") + 1);
+    char *interface_path = malloc(base_len + strlen(".module.mqti") + 1);
+    if (!object_path || !interface_path) {
+        free(base); free(object_path); free(interface_path);
+        return NULL;
+    }
+    sprintf(object_path, "%s.module.o", base);
+    sprintf(interface_path, "%s.module.mqti", base);
+    free(base);
+
+    if (!file_exists(object_path) || !file_exists(interface_path)) {
+        free(object_path); free(interface_path);
+        return NULL;
+    }
+
+    QttInterfaceError error = QTT_INTERFACE_OK;
+    QttInterface *interface = qtt_interface_read(interface_path, &error);
+    uint64_t object_fingerprint = file_content_fingerprint(object_path);
+    if (!interface || !object_fingerprint ||
+        qtt_interface_artifact_fingerprint(interface) != object_fingerprint ||
+        !qtt_interface_module(interface) ||
+        strcmp(qtt_interface_module(interface), module_name) != 0) {
+        fprintf(stderr,
+                "error: certified binary interface rejected for module '%s' "
+                "(interface error=%d, object binding mismatch)\n",
+                module_name, (int)error);
+        qtt_interface_free(interface);
+        free(object_path); free(interface_path);
+        return NULL;
+    }
+
+    CompiledModule *module = registry_new(module_name, object_path, true);
+    module->object_reused = true;
+    module->compiling = false;
+    module->qtt_interface = interface;
+
+    for (size_t i = 0; i < qtt_interface_count(interface); i++) {
+        const QttInterfaceContract *contract =
+            qtt_interface_contract(interface, i);
+        if (!contract || !contract->name ||
+            !contract->has_ownership_signature)
+            continue;
+
+        const QttFunctionSignature *signature = &contract->signature;
+        EnvParam *parameters = NULL;
+        if (signature->parameter_count > 0) {
+            parameters = calloc(signature->parameter_count, sizeof(EnvParam));
+            if (!parameters) continue;
+            for (size_t p = 0; p < signature->parameter_count; p++) {
+                char parameter_name[32];
+                snprintf(parameter_name, sizeof(parameter_name), "__p%zu", p);
+                parameters[p].name = strdup(parameter_name);
+                parameters[p].type = type_clone(
+                    (Type *)signature->parameters[p].type);
+            }
+        }
+
+        char *mangled = mangle(module_name, contract->name);
+        registry_push_func(
+            module, contract->name, mangled,
+            (Type *)(signature->result_type ? signature->result_type
+                                            : signature->result.type),
+            parameters, (int)signature->parameter_count, NULL, NULL,
+            ENV_FUNC, 0, NULL, NULL);
+        free(mangled);
+        if (parameters) {
+            for (size_t p = 0; p < signature->parameter_count; p++) {
+                free(parameters[p].name);
+                type_free(parameters[p].type);
+            }
+            free(parameters);
+        }
+    }
+
+    register_compiled_module_wisp_arities(module);
+    free(object_path); free(interface_path);
+    return module;
 }
 
 static FFIContext *g_ffi = NULL;
@@ -1449,6 +1804,8 @@ skip_primitive_type_autoload:
                             macro_scope_allow(dep_src);
                             parser_set_context(my_source_path, source);
                             /* dep headers already in global FFI context */
+                        } else if (dep_src) {
+                            load_certified_binary_module(mod_name, dep_src);
                         }
                         free(dep_src);
                     }
@@ -1530,6 +1887,8 @@ skip_primitive_type_autoload:
                                                         dep_ffi->structs[si].field_count);
                             ffi_context_free(dep_ffi);
                             free(dep_source);
+                        } else if (dep_src) {
+                            load_certified_binary_module(mod_name, dep_src);
                         }
                         free(dep_src);
                     }
@@ -1763,11 +2122,16 @@ skip_primitive_type_autoload:
             // Fallback: pre-scan missed it (e.g. non-standard path)
             char *dep_src = module_name_to_path(imp->module_name);
             if (!file_exists(dep_src)) {
-                fprintf(stderr, "error: cannot find module '%s' (tried: %s)",
-                        imp->module_name, dep_src);
-                free(dep_src); exit(1);
+                if (!load_certified_binary_module(imp->module_name, dep_src)) {
+                    fprintf(stderr,
+                            "error: cannot find source or certified binary module '%s' "
+                            "(tried: %s)",
+                            imp->module_name, dep_src);
+                    free(dep_src); exit(1);
+                }
+            } else {
+                compile_one(dep_src, flags, false);
             }
-            compile_one(dep_src, flags, false);
             parser_set_context(my_source_path, source);
             free(dep_src);
         }
@@ -1807,8 +2171,11 @@ skip_primitive_type_autoload:
             fprintf(stderr, "internal error: '%s' not in registry after compile\n",
                     imp->module_name); exit(1);
         }
-        if (!imp->for_syntax)
-            declare_externals(&ctx, dep, imp);
+        if (!imp->for_syntax && !declare_externals(&ctx, dep, imp)) {
+            fprintf(stderr, "failed to declare imports from '%s'\n",
+                    imp->module_name);
+            exit(1);
+        }
 
         /* Headers from imported modules are already in the global FFI context
          * (parsed when that module was compiled) — nothing to do here. */
@@ -1862,7 +2229,11 @@ skip_primitive_type_autoload:
             type_mod->module_name = (char *)stem2;  /* temporary, not freed */
 
             ImportDecl *syn = import_decl_create(stem2, NULL, IMPORT_UNQUALIFIED);
-            declare_externals(&ctx, type_mod, syn);
+            if (!declare_externals(&ctx, type_mod, syn)) {
+                fprintf(stderr, "failed to declare core imports from '%s'\n",
+                        stem2);
+                exit(1);
+            }
             import_decl_free(syn);
 
             type_mod->module_name = old_mn;  /* restore */
@@ -1893,6 +2264,31 @@ skip_primitive_type_autoload:
     LLVMPositionBuilderAtEnd(ctx.builder, entry_blk);
     ctx.init_fn = init_fn;
     ctx.top_level_fn = init_fn;
+
+    if (!is_main_module) {
+        /* Module initialization is a graph operation, not a main-module
+         * convention. Guard every library initializer so diamonds and
+         * explicit+transitive imports remain idempotent. */
+        char guard_name[320];
+        snprintf(guard_name, sizeof(guard_name), "%s_guard", init_name);
+        LLVMTypeRef i1 = LLVMInt1TypeInContext(ctx.context);
+        LLVMValueRef guard = LLVMAddGlobal(ctx.module, i1, guard_name);
+        LLVMSetInitializer(guard, LLVMConstInt(i1, 0, 0));
+        LLVMSetLinkage(guard, LLVMInternalLinkage);
+
+        LLVMBasicBlockRef init_body = LLVMAppendBasicBlockInContext(
+            ctx.context, init_fn, "initialize");
+        LLVMBasicBlockRef already_initialized = LLVMAppendBasicBlockInContext(
+            ctx.context, init_fn, "already_initialized");
+        LLVMValueRef initialized = LLVMBuildLoad2(
+            ctx.builder, i1, guard, "initialized");
+        LLVMBuildCondBr(ctx.builder, initialized, already_initialized,
+                        init_body);
+        LLVMPositionBuilderAtEnd(ctx.builder, already_initialized);
+        LLVMBuildRetVoid(ctx.builder);
+        LLVMPositionBuilderAtEnd(ctx.builder, init_body);
+        LLVMBuildStore(ctx.builder, LLVMConstInt(i1, 1, 0), guard);
+    }
 
 /// Phase 6: *features* global
 
@@ -1976,15 +2372,68 @@ skip_primitive_type_autoload:
         exit(1);
     }
 
+    /* Recursive module/type work may change the reader's process-global
+     * diagnostic context. Restore this compilation unit before HM/QTT
+     * registration so portable contracts use the same module identity as
+     * the source pipeline and interface writer. */
+    parser_set_context(my_source_path, source);
+
+/// Phase 6.75: Quantitative ownership analysis
+
+    qtt_compiler_set_user_module(is_main_module);
+    if (qtt_compiler_trace_enabled() && !flags->trace_qtt)
+        printf("[qtt] running quantitative ownership analysis...\n");
+    QttBindingSummary qtt_bindings =
+        qtt_bindings_resolve_many(exprs.exprs, exprs.count);
+    if (qtt_bindings.error != QTT_BINDINGS_OK) {
+        if (qtt_bindings.error == QTT_BINDINGS_DUPLICATE_BINDER &&
+            qtt_bindings.duplicate_name) {
+            fprintf(stderr,
+                    "%s: error: quantitative binder resolution failed: "
+                    "duplicate binder '%s'\n",
+                    my_source_path, qtt_bindings.duplicate_name);
+        } else {
+            fprintf(stderr,
+                    "%s: error: quantitative binder resolution failed "
+                    "(code %d, after %llu binder(s))\n",
+                    my_source_path, (int)qtt_bindings.error,
+                    (unsigned long long)qtt_bindings.binder_count);
+        }
+        dep_ctx_free(dep_ctx);
+        exit(1);
+    }
+
+    if (is_main_module &&
+        (qtt_compiler_trace_detailed())) {
+        for (size_t i = first_code; i < exprs.count; i++)
+            trace_qtt_toplevel(exprs.exprs[i]);
+    }
+    QttCompilerPipelineResult qtt_pipeline =
+        qtt_compiler_run_source_pipeline(
+            my_source_path, exprs.exprs + first_code,
+            exprs.count - first_code);
+    if (qtt_pipeline.status == QTT_COMPILER_PIPELINE_INTERNAL_ERROR &&
+        qtt_compiler_trace_detailed())
+        fprintf(stderr,
+                "[qtt] internal verification failure; "
+                "using conservative code generation\n");
 /// Phase 7: Codegen top-level expressions
 
     PHASE_START();
+    /* Nominal layouts are declarations, not order-sensitive computations.
+     * Register them before function predeclaration so annotated parameters
+     * and returns receive their real ABI even in large grouped modules. */
+    for (size_t i = first_code; i < exprs.count; i++) {
+        if (exprs.exprs[i]->type == AST_LAYOUT)
+            (void)codegen_expr(&ctx, exprs.exprs[i]);
+    }
     codegen_predeclare_toplevel_functions(&ctx, exprs.exprs, exprs.count,
                                            first_code);
 
-    // For the main module: call each imported library's init function first
-    // so their top-level variable stores (e.g. phi = 3.14) run before we use them.
-    if (is_main_module) {
+    // Every module initializes its direct runtime imports before evaluating
+    // its own top-level stores. Per-module guards make the transitive graph
+    // safe under diamonds and repeated direct imports.
+    {
         for (size_t i = 0; i < mod_ctx->import_count; i++) {
             ImportDecl *imp = mod_ctx->imports[i];
             if (imp->for_syntax) continue;
@@ -2008,6 +2457,8 @@ skip_primitive_type_autoload:
     CodegenResult last = {NULL, NULL};
     for (size_t i = first_code; i < exprs.count; i++) {
         AST *expr = exprs.exprs[i];
+        if (expr->type == AST_LAYOUT)
+            continue; /* registered in the nominal-declaration pass above */
         if (expr->type == AST_LIST && expr->list.count > 0 &&
             expr->list.items[0]->type == AST_SYMBOL) {
             const char *h = expr->list.items[0]->symbol;
@@ -2022,6 +2473,7 @@ skip_primitive_type_autoload:
         }
         last = codegen_expr(&ctx, expr);
     }
+    qtt_compiler_trace_module(my_source_path);
 
     PHASE_END("codegen");
 
@@ -2069,6 +2521,7 @@ skip_primitive_type_autoload:
         free(cm->module_name);
         cm->module_name = strdup(mod_name);
         cm->was_skipped = false;
+        cm->object_reused = skip_emit;
         cm->compiling = false;
     } else {
         cm = registry_new(mod_name, obj_path, false);
@@ -2126,6 +2579,16 @@ skip_primitive_type_autoload:
                 if (!alias_exported) { ent = ent->next; continue; }
             }
 
+            /* Nominal layout declarations are type metadata, not linkable
+             * value exports. They are recorded in CompiledModule.layouts
+             * below. Exporting the same name as an ENV_VAR overwrites the
+             * imported ENV_LAYOUT entry and makes the type disappear from
+             * client annotations and constructor dispatch. */
+            if (ent->kind == ENV_LAYOUT) {
+                ent = ent->next;
+                continue;
+            }
+
             char *ms = NULL;
             if (ent->kind == ENV_FUNC && ent->func_ref) {
                 const char *implementation_name = LLVMGetValueName(ent->func_ref);
@@ -2164,7 +2627,8 @@ skip_primitive_type_autoload:
                                    export_signature->param_count,
                                    ent->func_ref,
                                    export_signature->source_ast,
-                                   ent->kind, ent->adt_tag, ctx.env);
+                                   ent->kind, ent->adt_tag, ctx.env,
+                                   export_signature->scheme);
                 if (ent->func_ref) {
                     const char *cur = LLVMGetValueName(ent->func_ref);
                     if (!cur || strcmp(cur, ms) != 0)
@@ -2190,7 +2654,10 @@ skip_primitive_type_autoload:
                                                    ? other->source_ast
                                                    : ent->source_ast,
                                                other->kind, other->adt_tag,
-                                               ctx.env);
+                                               ctx.env,
+                                               other->scheme
+                                                   ? other->scheme
+                                                   : ent->scheme);
                         }
                     }
                 }
@@ -2317,6 +2784,46 @@ skip_primitive_type_autoload:
 
     PHASE_END("emit object");
 
+    {
+        uint64_t object_fingerprint =
+            file_content_fingerprint(obj_path);
+        size_t object_length = strlen(obj_path);
+        char *interface_path = malloc(object_length + 6);
+        if (interface_path) {
+            memcpy(interface_path, obj_path, object_length + 1);
+            char *extension = strrchr(interface_path, '.');
+            if (extension && strcmp(extension, ".o") == 0)
+                strcpy(extension, ".mqti");
+            else
+                strcat(interface_path, ".mqti");
+            if (!skip_emit && object_fingerprint &&
+                !qtt_compiler_write_interface(
+                    my_source_path, mod_name, interface_path,
+                    object_fingerprint) &&
+                qtt_compiler_trace_detailed())
+                printf("[qtt] interface omitted: %s\n",
+                       interface_path);
+            QttInterfaceError interface_error = QTT_INTERFACE_OK;
+            QttInterface *loaded =
+                qtt_interface_read(interface_path, &interface_error);
+            if (loaded && object_fingerprint &&
+                qtt_interface_artifact_fingerprint(loaded) ==
+                    object_fingerprint) {
+                qtt_interface_free(cm->qtt_interface);
+                cm->qtt_interface = loaded;
+            } else {
+                qtt_interface_free(loaded);
+                if (qtt_compiler_trace_detailed())
+                    printf("[qtt] interface rejected: %s error=%d "
+                           "artifact=%s\n",
+                           interface_path, (int)interface_error,
+                           object_fingerprint
+                               ? "mismatch-or-missing" : "unreadable");
+            }
+            free(interface_path);
+        }
+    }
+
 ///// Cleanup
 
     dep_ctx_free(dep_ctx);
@@ -2339,6 +2846,7 @@ static bool compile(CompilerFlags *flags) {
     g_ffi_link_libs_len = 0;
     codegen_set_trace(flags->trace_codegen || flags->verbose_level > 0);
     infer_set_trace(flags->trace_dep || flags->verbose_level > 1);
+    qtt_compiler_set_trace(flags->verbose_level, flags->trace_qtt);
 
     CompiledModule *main_mod = compile_one(flags->input_file, flags, true);
     if (!main_mod) return true;  /* emit-json/JIT mode, no linking needed */
@@ -2462,7 +2970,9 @@ static bool compile(CompilerFlags *flags) {
         bool keep_objects = flags->emit_obj || flags->emit_ir ||
                              flags->emit_asm || flags->emit_bc;
         if (!keep_objects)
-            for (size_t i = 0; i < n; i++) remove(objs[i]);
+            for (size_t i = 0; i < n; i++)
+                if (!is_persistent_core_object(objs[i]))
+                    remove(objs[i]);
     } else {
         fprintf(stderr, "[error] linking failed\n");
     }
@@ -2506,8 +3016,7 @@ bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {
     }
 
     /* Inject the module's exports into the REPL's env + current LLVM module */
-    declare_externals(ctx, cm, imp);
-    return true;
+    return declare_externals(ctx, cm, imp);
 }
 
 void cmd_eval(const char *code) {
@@ -2561,6 +3070,8 @@ int main(int argc, char **argv) {
     case CMD_INSTALL: cmd_install();                     return 0;
     case CMD_TEST:    cmd_test(&flags);                  return 0;
     case CMD_CHECK:   cmd_check(flags.input_file);       return 0;
+    case CMD_LINT:    return cmd_lint(flags.input_file, flags.lint_json,
+                                     flags.lint_fix);
     case CMD_LSP:     cmd_lsp();                         return 0;
     case CMD_EVAL:    cmd_eval(flags.eval_code);         return 0;
     case CMD_DEBUG:   cmd_debug(&flags);                 return 0;

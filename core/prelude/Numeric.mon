@@ -6,29 +6,29 @@
 
 ;;; Commentary:
 
-;; Numeric classes are separate from Class.mon so the non-numeric abstraction
-;; vocabulary stays dependency-light. These typeclasses and their instances are
-;; the canonical home of generic arithmetic; concrete primitive modules must
-;; not publish parallel implementations of the same operations.
-;;
-;; Num is a typeclass, not a refinement: it describes an algebra of operations.
-;; Refinements belong on values inside an instance, e.g. a non-zero divisor or a
-;; positive exponent. Keep the algebra in Num/Integral/Fractional and use
-;; refinement types for domain restrictions when the type checker can enforce
-;; them.
-;;
-;; Instances state their primitive arithmetic only. Convenience operations and
-;; algorithms are defaults expressed through the preceding abstractions, so a
-;; new numeric type receives the shared behavior without copying implementation
-;; code. Specialization may erase the dictionary boundary, but must not move
-;; these public definitions back into compiler policy.
-;;
-;; Num deliberately promises operations, not exact algebraic laws: IEEE
-;; floating-point addition and multiplication are not associative. Ring is the
-;; stronger, law-bearing abstraction for exact additive commutative groups and
-;; multiplicative monoids with distributivity. Keeping this distinction in the
-;; typeclass graph prevents generic algorithms from silently assuming invalid
-;; Float equations.
+ Numeric classes are separate from Class.mon so the non-numeric abstraction
+ vocabulary stays dependency-light. These typeclasses and their instances are
+ the canonical home of generic arithmetic; concrete primitive modules must
+ not publish parallel implementations of the same operations.
+
+ Num is a typeclass, not a refinement: it describes an algebra of operations.
+ Refinements belong on values inside an instance, e.g. a non-zero divisor or a
+ positive exponent. Keep the algebra in Num/Integral/Fractional and use
+ refinement types for domain restrictions when the type checker can enforce
+ them.
+
+ Instances state their primitive arithmetic only. Convenience operations and
+ algorithms are defaults expressed through the preceding abstractions, so a
+ new numeric type receives the shared behavior without copying implementation
+ code. Specialization may erase the dictionary boundary, but must not move
+ these public definitions back into compiler policy.
+
+ Num deliberately promises operations, not exact algebraic laws: IEEE
+ floating-point addition and multiplication are not associative. Ring is the
+ stronger, law-bearing abstraction for exact additive commutative groups and
+ multiplicative monoids with distributivity. Keeping this distinction in the
+ typeclass graph prevents generic algorithms from silently assuming invalid
+ Float equations.
 
 ;;; Code:
 

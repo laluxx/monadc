@@ -1,0 +1,34 @@
+:TEST-ID tests.modules.imported-type-abi
+:TEST-CONTEXT monadc.context.configuration.typed-language-owned
+:TEST-PURPOSE Imported layouts and generic ADTs preserve one pointer ABI in standalone clients.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+:TEST-MENU-PATH modules/imported-type-abi
+:TEST-CLI-TARGET imported type ABI
+
+import Test.ImportedTypes
+
+module Main
+
+
+define direct-total :: Int
+  pair-total (Pair 19 23)
+
+
+define stored-pair :: Pair
+  (Pair 20 22)
+
+
+define accepted? :: Outcome Pair -> Bool
+  [Accepted _] -> True
+  _            -> False
+
+
+define validate-pair :: Pair -> Outcome Pair
+  pair -> Accepted pair
+
+
+show direct-total
+show pair-total stored-pair
+show accepted? (validate-pair PairValue)
+show accepted? (Rejected "no")

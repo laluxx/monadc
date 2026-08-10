@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dirent.h>
+#endif
 #include "arena.h"
 #include "runtime.h"
 
@@ -10,6 +16,83 @@ static inline RuntimeValue *heap_value(void)        { return malloc(sizeof(Runti
 
 
 volatile int rt_interrupted = 0;
+
+char *__rt_join_path(const char *parent, const char *child) {
+    if (!parent) parent = "";
+    if (!child) child = "";
+    size_t parent_length = strlen(parent);
+    size_t child_offset = 0;
+    while (child[child_offset] == '/' || child[child_offset] == '\\')
+        child_offset++;
+    size_t child_length = strlen(child + child_offset);
+    if (parent_length == 0) return strdup(child + child_offset);
+    if (child_length == 0) return strdup(parent);
+    bool has_separator = parent[parent_length - 1] == '/' ||
+                         parent[parent_length - 1] == '\\';
+#ifdef _WIN32
+    const char separator = '\\';
+#else
+    const char separator = '/';
+#endif
+    char *joined = malloc(parent_length + (has_separator ? 0 : 1) +
+                          child_length + 1);
+    if (!joined) return NULL;
+    memcpy(joined, parent, parent_length);
+    size_t offset = parent_length;
+    if (!has_separator) joined[offset++] = separator;
+    memcpy(joined + offset, child + child_offset, child_length + 1);
+    return joined;
+}
+
+RuntimeValue *__rt_directory_names(const char *path, int64_t *status) {
+    RuntimeList *names = rt_list_new();
+    if (status) *status = 0;
+#ifdef _WIN32
+    size_t n = strlen(path);
+    char *pattern = malloc(n + 3);
+    if (!pattern) {
+        if (status) *status = -8;
+        return rt_value_list(names);
+    }
+    memcpy(pattern, path, n);
+    if (n > 0 && path[n - 1] != '/' && path[n - 1] != '\\')
+        pattern[n++] = '\\';
+    pattern[n++] = '*';
+    pattern[n] = '\0';
+    WIN32_FIND_DATAA entry;
+    HANDLE handle = FindFirstFileA(pattern, &entry);
+    free(pattern);
+    if (handle == INVALID_HANDLE_VALUE) {
+        if (status) *status = -(int64_t)GetLastError();
+        return rt_value_list(names);
+    }
+    do {
+        const char *name = entry.cFileName;
+        if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0)
+            rt_list_append(names, rt_value_string(name));
+    } while (FindNextFileA(handle, &entry));
+    DWORD error = GetLastError();
+    FindClose(handle);
+    if (error != ERROR_NO_MORE_FILES && status) *status = -(int64_t)error;
+#else
+    DIR *directory = opendir(path);
+    if (!directory) {
+        if (status) *status = -(int64_t)errno;
+        return rt_value_list(names);
+    }
+    errno = 0;
+    struct dirent *entry;
+    while ((entry = readdir(directory)) != NULL) {
+        const char *name = entry->d_name;
+        if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0)
+            rt_list_append(names, rt_value_string(name));
+    }
+    int read_error = errno;
+    if (closedir(directory) != 0 && read_error == 0) read_error = errno;
+    if (read_error != 0 && status) *status = -(int64_t)read_error;
+#endif
+    return rt_value_list(names);
+}
 
 // Layout pointer registry — used by FFI color/struct constants at runtime
 static void  *g_layout_ptrs[256];
@@ -151,6 +234,28 @@ void *rt_closure_get_env(RuntimeValue *closure) {
 void *rt_closure_get_fn_ptr(RuntimeValue *closure) {
     if (!closure || closure->type != RT_CLOSURE) return NULL;
     return closure->data.closure_val->fn_ptr;
+}
+
+void rt_closure_destroy_unique(RuntimeValue *closure,
+                               uint64_t moved_fields) {
+    if (!closure || closure->type != RT_CLOSURE ||
+        !closure->data.closure_val)
+        return;
+    RuntimeClosure *runtime_closure = closure->data.closure_val;
+    for (int i = 0; i < runtime_closure->env_size; i++) {
+        RuntimeValue *field = runtime_closure->env[i];
+        if (!field) continue;
+        bool moved = i < 64 && (moved_fields & (UINT64_C(1) << i));
+        if (!moved)
+            rt_value_free(field);
+        /* This certified entry point currently accepts only heap-boxed owned
+         * fields.  A moved field evacuates its payload but not its box. */
+        free(field);
+    }
+    free(runtime_closure->env);
+    free(runtime_closure->name);
+    free(runtime_closure);
+    free(closure);
 }
 
 ///  Thunk forcing
@@ -656,6 +761,19 @@ char *rt_string_take(const char *s, int64_t n) {
     memcpy(result, s, n);
     result[n] = '\0';
     return result;
+}
+
+char *rt_string_drop(const char *s, int64_t n) {
+    if (!s) return strdup("");
+    int64_t len = (int64_t)strlen(s);
+    if (n < 0) n = 0;
+    if (n > len) n = len;
+    return strdup(s + n);
+}
+
+int64_t rt_string_byte(const char *s, int64_t index) {
+    if (!s || index < 0 || index >= (int64_t)strlen(s)) return -1;
+    return (unsigned char)s[index];
 }
 
 char *rt_string_concat(const char *a, const char *b) {
@@ -1798,14 +1916,6 @@ RuntimeValue *rt_value_opaque(void *p) {
     return v;
 }
 
-int64_t rt_utf8_width(const char *text) {
-    int64_t width = 0;
-    if (!text) return 0;
-    for (const unsigned char *p = (const unsigned char *)text; *p; p++)
-        if ((*p & 0xc0u) != 0x80u) width++;
-    return width;
-}
-
 void *rt_unbox_opaque(RuntimeValue *v) {
     if (!v || (uintptr_t)v < 0x10000) return NULL;
     if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
@@ -1831,6 +1941,12 @@ RuntimeValue *rt_value_thunk(RuntimeThunk *thunk) {
 RuntimeValue *rt_value_string(const char *val) {
     RuntimeValue *v = malloc(sizeof(RuntimeValue));
     v->type = RT_STRING; v->data.string_val = strdup(val); return v;
+}
+RuntimeValue *rt_value_string_take(char *val) {
+    RuntimeValue *v = malloc(sizeof(RuntimeValue));
+    v->type = RT_STRING;
+    v->data.string_val = val;
+    return v;
 }
 RuntimeValue *rt_value_symbol(const char *val) {
     RuntimeValue *v = malloc(sizeof(RuntimeValue));
@@ -2650,11 +2766,14 @@ void declare_runtime_functions(CodegenContext *ctx) {
     LLVMAddFunction(ctx->module, name, LLVMFunctionType(ret, NULL, 0, 0))
 
     DECL("rt_ast_to_runtime_value", ptr, ptr);
+    DECL("__rt_directory_names", ptr, ptr, ptr);
+    DECL("__rt_join_path", ptr, ptr, ptr);
 
     // --- Closure ---
     DECL("rt_value_closure", ptr, ptr, ptr, i32, i32);  // fn_ptr, env, env_size, arity
     DECL("rt_value_closure_named", ptr, ptr, ptr, i32, i32, ptr);  // fn_ptr, env, env_size, arity, name
     DECL("rt_closure_calln", ptr, ptr, i32, ptr);       // closure, n, args_array
+    DECL("rt_closure_destroy_unique", void_t, ptr, i64);
     DECL("rt_closure_get_env", ptr, ptr);               // closure -> env ptr
     DECL("rt_closure_get_fn_ptr", ptr, ptr);            // closure -> function ptr
 
@@ -2718,6 +2837,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_value_float",   ptr, dbl);
     DECL("rt_value_char",    ptr, i8);
     DECL("rt_value_string",  ptr, ptr);
+    DECL("rt_value_string_take", ptr, ptr);
     DECL("rt_value_symbol",  ptr, ptr);
     DECL("rt_value_keyword", ptr, ptr);
     DECL("rt_value_list",    ptr, ptr);
@@ -2817,6 +2937,30 @@ LLVMValueRef get_rt_string_take(CodegenContext *ctx) {
     return fn;
 }
 
+LLVMValueRef get_rt_string_drop(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_string_drop");
+    if (!fn) {
+        LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        LLVMTypeRef args[] = {ptr, i64};
+        LLVMTypeRef ft = LLVMFunctionType(ptr, args, 2, 0);
+        fn = LLVMAddFunction(ctx->module, "rt_string_drop", ft);
+    }
+    return fn;
+}
+
+LLVMValueRef get_rt_string_byte(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_string_byte");
+    if (!fn) {
+        LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        LLVMTypeRef args[] = {ptr, i64};
+        LLVMTypeRef ft = LLVMFunctionType(i64, args, 2, 0);
+        fn = LLVMAddFunction(ctx->module, "rt_string_byte", ft);
+    }
+    return fn;
+}
+
 ///  GET_RUNTIME_FUNCTION macro + definitions
 
 #define GET_RUNTIME_FUNCTION(name) \
@@ -2879,6 +3023,7 @@ GET_RUNTIME_FUNCTION(rt_value_int)
 GET_RUNTIME_FUNCTION(rt_value_float)
 GET_RUNTIME_FUNCTION(rt_value_char)
 GET_RUNTIME_FUNCTION(rt_value_string)
+GET_RUNTIME_FUNCTION(rt_value_string_take)
 GET_RUNTIME_FUNCTION(rt_value_symbol)
 GET_RUNTIME_FUNCTION(rt_value_keyword)
 GET_RUNTIME_FUNCTION(rt_value_list)

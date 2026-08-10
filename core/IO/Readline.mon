@@ -1,0 +1,72 @@
+;;; Readline.mon --- effectful terminal line acquisition
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "io readline terminal effects emacs"
+
+;;; Commentary:
+
+ IO.Readline owns terminal interaction. Text.LineEditor owns only pure editing
+ transitions. Keeping this seam explicit means editors can replay key streams
+ without IO, while terminal programs expose their world interaction in their
+ arrow types.
+
+ The `Fd` operations perform byte input without changing terminal mode. The
+ top-level operations bracket acquisition with cbreak setup/restoration. The
+ qualified `io` row intentionally abstracts over both byte input and terminal
+ control effects until Core has a first-class resource-safe Terminal handle.
+
+;;; Code:
+
+import IO
+import System.Posix.Term
+import Text.LineEditor
+
+module IO.Readline
+  [read-key-fd read-line-bytes-fd read-line]
+
+
+define read-bracket-escape :: Int -> Int -io-> Int
+  second fd -> def third (read-byte fd)
+               LineEditor.decode-escape2 second third
+
+
+define read-escape-after :: Int -> Int -io-> Int
+  second fd -> (if (< second 0) LineEditor.key-escape
+                   (if (= second 0x5b)
+                       (read-bracket-escape second fd)
+                       (LineEditor.decode-escape2 second 0)))
+
+
+define read-escape-fd :: Int -io-> Int
+  fd -> def second (read-byte fd)
+        read-escape-after second fd
+
+
+define read-key-fd :: Int -io-> Int
+  fd -> def byte (read-byte fd)
+        if byte = LineEditor.key-escape then read-escape-fd fd
+        else byte
+
+
+define read-line-loop :: Int -> Int -> [Int] -io-> [Int]
+  fd cursor text -> (with [key (read-key-fd fd)]
+                      (if (LineEditor.line-complete? key)
+                          text
+                          (read-line-loop fd
+                            (LineEditor.apply-key-cursor key cursor text)
+                            (LineEditor.apply-key-text key cursor text))))
+
+
+define read-line-bytes-fd :: Int -io-> [Int]
+  fd -> read-line-loop fd 0 []
+
+
+define read-line-with-saved :: a -io-> [Int]
+  saved -> def text (read-line-bytes-fd stdin)
+           def ignored (tty-set-attr stdin saved)
+           text
+
+
+define read-line :: () -io-> [Int]
+  _ -> read-line-with-saved (tty-cbreak-mode stdin)

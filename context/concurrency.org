@@ -1,0 +1,107 @@
+#+TITLE: Monad Structured Concurrency Calculus
+#+STARTUP: showeverything
+
+* Purpose
+
+Monad concurrency is a typed tree of computations interpreted through
+algebraic effects. POSIX threads, futexes, mutexes, condition variables,
+semaphores, barriers, read-write locks, and atomics are backend mechanisms;
+none may weaken source-level lifetime, cancellation, or ownership laws.
+
+* Core judgment
+
+The effect/QTT judgment grows a task-scope identity =s=:
+
+#+begin_example
+Sigma ; Psi, s : Scope q | Gamma |- e : A ! epsilon |> Delta
+#+end_example
+
+A task handle is indexed by its owning scope and cannot escape =s=. A child
+captures resources according to QTT demand; an =omega= continuation may capture
+only resources whose inferred control-flow quantity admits duplication.
+
+* Laws
+
+Every spawn belongs to exactly one open scope. Closing a scope is a barrier:
+
+#+begin_example
+children(s) = empty
+-------------------------------- close
+close(s) : Open -> Closed
+
+child-failed(s, e)
+-------------------------------- fail-fast
+cancel(children(s) minus completed) ; join-all ; raise(e)
+#+end_example
+
+No detached spawn exists in safe Core. Cancellation is a level-triggered scoped
+capability delivered at typed checkpoints: yield, park, await, channel
+operations, timed waits, and explicit =checkpoint=. Cleanup runs masked, scope
+exit waits for cleanup, and simultaneous failures form a non-empty failure tree.
+
+* Scheduler
+
+The portable runtime uses M:N tasks over POSIX workers: per-worker Chase-Lev
+deques, a global injection queue, predicate-based parking, monotonic absolute
+deadlines, and a bounded pool for blocking foreign calls. Deterministic test
+mode replaces stealing and time with a seeded scheduler and virtual clock,
+recording every choice for replay and schedule minimization.
+
+The scheduler is an interpreter for concurrency effects. The same program can
+receive sequential, deterministic, POSIX, or future parallel interpretations.
+
+* Communication and shared state
+
+Channels own two linear, protocol-indexed endpoints with dual states =Send=,
+=Receive=, =Choose=, =Offer=, and =End=. Bounded channels provide backpressure;
+zero-capacity channels rendezvous; closing advances the protocol instead of
+leaving peers parked forever.
+
+Core also exposes atomics with explicit memory order, robust/error-checking
+mutexes, predicate condition waits, read-write locks, semaphores, barriers,
+once initialization, and host-supported priority inheritance.
+
+* Tooling and LSP
+
+Shared compiler diagnostics cover scope escape, illegal linear capture,
+unjoined raw tasks, leaked endpoints, worker-blocking calls, cancellation-unsafe
+cleanup, ignored failure trees, condition waits without predicate loops,
+provable lock cycles, and unjustified atomic order. CLI, JSON, LSP diagnostics,
+hovers, inlay hints, code actions, task-scope visualization, and deterministic
+trace replay consume the same evidence. Editor-only analysis is forbidden.
+
+* Implementation cycles
+
+** C0 — formal contracts and deterministic model
+
+Define task, scope, cancellation, and failure transitions in Core; executable
+laws; effect signatures; QTT capture obligations; and trace format.
+
+** C1 — runtime substrate
+
+Implement workers, deques, injection, parking, monotonic timers, wakeup races,
+shutdown, and deterministic scheduling in =concurrency/=. Stress under
+sanitizers and forced schedules.
+
+** C2 — structured surface
+
+Expose =with-task-scope=, =spawn=, =await=, checkpoints, cancellation scopes,
+deadlines, failure trees, and supervised restart. Detached safe tasks remain
+unrepresentable.
+
+** C3 — communication and POSIX portfolio
+
+Add bounded/rendezvous channels, select, atomics, mutexes, conditions,
+read-write locks, semaphores, barriers, once, and thread-local state.
+
+** C4 — semantic tooling
+
+Publish scope, capture, lock, and atomic evidence through common diagnostics and
+LSP. Add deterministic schedule exploration and minimized replay.
+
+* Research basis
+
+Plotkin/Pretnar algebraic handlers; Bauer/Pretnar effect programming;
+Tang/Hillerström/Lindley/Morris control-flow linearity; Xie et al. parallel
+handlers; structured nurseries; SteelCore/Steel concurrent separation logic and
+protocol-indexed channels; and POSIX.1-2024 synchronization/cancellation laws.

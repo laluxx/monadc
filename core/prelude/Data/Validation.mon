@@ -1,0 +1,74 @@
+;;; Validation.mon --- Independent checks with accumulated failures
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "validation errors accumulation applicative"
+
+;;; Commentary:
+
+ Validation represents independent checks. Unlike Either's fail-fast bind,
+ Invalid retains a structured Log so independent branches can accumulate
+ diagnostics with their severity and order intact. Sequential dependency still
+ belongs to Either or Monad.
+
+;;; Code:
+
+import Data.Log
+
+module Data.Validation
+  [Validation Invalid Valid
+   invalid valid valid? invalid?
+   validation-errors validation-value-or
+   combine-validation]
+
+
+data Validation a
+  = Invalid Log
+  | Valid a
+
+
+;;; Construction and observation
+
+define invalid :: String -> Validation a
+  error -> Invalid (error-log error)
+
+
+define valid :: a -> Validation a
+  value -> Valid value
+
+
+define valid? :: Validation a -> Bool
+  [Valid _]   -> True
+  [Invalid _] -> False
+
+
+define invalid? :: Validation a -> Bool
+  [Invalid _] -> True
+  [Valid _]   -> False
+
+
+define validation-errors :: Validation a -> [String]
+  [Invalid errors] -> log-values errors
+  [Valid _]        -> []
+
+
+define validation-value-or :: Validation a -> a -> a
+  [Valid value] _ -> value
+  [Invalid _] fallback -> fallback
+
+
+;;; Independent accumulation
+
+define combine-validation :: Validation a -> Validation b -> Validation (a, b)
+  [Invalid left] [Invalid right] -> Invalid (append-log left right)
+  [Invalid errors] [Valid _]     -> Invalid errors
+  [Valid _] [Invalid errors]     -> Invalid errors
+  [Valid left] [Valid right]     -> Valid (left, right)
+
+
+tests
+  assert-eq (valid? (valid 42)) True "Validation valid constructor"
+  assert-eq (invalid? (invalid "bad")) True "Validation invalid constructor"
+  assert-eq (validation-value-or (Valid 7) 0) 7 "Validation extracts success"
+  assert-eq (validation-value-or (invalid "bad") 0) 0 "Validation uses fallback on failure"
+  assert-eq (show (validation-errors (combine-validation (invalid "left") (invalid "right")))) "(left right)" "Validation accumulates failures left to right"

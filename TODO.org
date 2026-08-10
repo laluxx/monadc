@@ -1,29 +1,143 @@
-#+title: TODO.org
+#+TITLE: Monad Compiler Roadmap and Work Queue
+#+AUTHOR: human+Codex
+#+DATE: 2026-07-30
+#+STARTUP: showall
+#+OPTIONS: toc:3 num:nil
+#+TODO: NEXT(n) TODO(t) DOING(i) BLOCKED(b) RESEARCH(r) | DONE(d) SUPERSEDED(s)
+#+TAGS: compiler(c) core(k) types(y) qtt(q) effects(e) modal(m) runtime(r) tooling(o) research(h)
 
-* TODO workflow
+* Navigation
+
+This file is the human-facing work queue and idea inbox. Detailed subsystem
+contracts live in =context/=; executable QTT design lives in =qtt/README.org=.
+Do not copy an authoritative roadmap back into several sections here.
+
+#+CAPTION: Authoritative roadmaps
+| Area                | Canonical document      | Current direction                          |
+|---------------------+-------------------------+--------------------------------------------|
+| Unified type theory | [[file:context/type-theory.org][context/type-theory.org]] | unified types, effects, and grades         |
+| Semanfftic IR       | [[file:context/ir.org][context/ir.org]]          | one checked compiler authority             |
+| QTT and reclamation | [[file:qtt/README.org][qtt/README.org]]          | graded arrows, effects, ownership lowering |
+| Memory safety       | [[file:context/memory.org][context/memory.org]]      | verified deterministic reclamation         |
+| Dependent types     | [[file:context/dep.org][context/dep.org]]         | kernel soundness and elaboration           |
+| Compiler inference  | [[file:context/infer.org][context/infer.org]]       | authoritative HM inference                 |
+| Test policy         | [[file:context/tests.org][context/tests.org]]       | focused regression then affected suite     |
+
+#+CAPTION: Queue organization
+| Section            | Purpose                                       |
+|--------------------+-----------------------------------------------|
+| =Inbox=              | untriaged ideas; no implementation commitment |
+| =Project workflow=   | lifecycle rules and definition of done        |
+| =Active queue=       | ordered actionable and research work          |
+| subsystem headings | accepted backlog grouped by domain            |
+| =Completed archive=  | append-only completed work                    |
+
+* Inbox
+
+Untriaged notes remain here until converted into a task with an observable
+completion contract or moved into a subsystem roadmap.
+
+- connettivi logici
+
+
+the optional ?
+should be part of the effect system.
+
+
+
+you know the reader-syntax feature ? i think HM should be able to infer the type from the reader-sytax that would be crazy
+
+
+** TODO Improve superclass-resolution diagnostics                    :compiler:types:
+
+> Control/Applicative.mon:47:15: error: superclass constraint references unknown class 'Functor' in class 'Applicative'
+
+I think this is an horrible error message and should follow the standard folled in @env.c it should follow
+the standard for error messages and be up to the standards already set in the past.
+
+** RESEARCH Move =Show= policy from compiler codegen into the core       :core:
+
+
+› ;;; Show.mon --- Text rendering typeclass
+
+  :author "Laluxx"
+  :version "1.2.0"
+  :keywords "show render string typeclass executable law"
+
+  ;;; Commentary:
+
+  ;; Show is a text/rendering abstraction, not a generic prelude bucket entry.
+  ;; The builtin `show` remains available for concrete values; this module names
+  ;; the class contract that instances should satisfy. The executable law makes
+  ;; `showsPrec` the compositional basis and requires the convenient `show`
+  ;; operation to agree with precedence zero and an empty suffix.
+  ;; Implementations only need to define `show` for precedence-insensitive
+  ;; values: the class supplies the canonical difference-list-style
+  ;; `showsPrec` composition automatically.
+
+  ;;; Code:
+
+  import Data.Bool
+
+  module Text.Show
+    [Show show showsPrec showList]
+
+
+  class Show a where
+    show      :: a -> String
+    showsPrec :: Int -> a -> String -> String
+    showList  :: [a] -> String
+
+    showsPrec precedence x suffix -> __rt_concat (show x) suffix
+
+    law show-via-showsPrec :: a -> Bool
+      x -> (show x) = (showsPrec 0 x "")
+
+  type ShowSample {ShowRed ShowGreen}
+
+  instance Show ShowSample
+    show x -> if x = ShowRed then "ShowRed" else "ShowGreen"
+    showList xs -> "<ShowSample list>"
+
+
+  tests
+    :registration:
+    assert-eq 1 1 "Show registers Show"
+    :registration:
+
+    :deriving:
+    assert-eq (show ShowRed) "ShowRed" "Show derives nullary constructor name"
+    assert-eq (showsPrec 0 ShowRed "") "ShowRed" "Show composes through showsPrec"
+    :deriving:
+   i think this is not good enough we should isntance Show for every data and customize it for each one we should slowly remove hardcoded show in the compiler codegen and
+  move it to the core to look the same for everything we should even be able to express in Show.mon how to show memory layouts like the core already does, same output i
+  literally want the same output if not extended maybe how to show sequnces ? or sets? it would make sense to truncate large sets or make show so smart that it can take an
+  optional argument for the truncation ? i really want Show.mon to be as high as the rest of the core it's not wired in, it's the same philosofy as everything should belong
+  to the core, the compiler only lowers optimize and verifies. what do you think of this? what should we do next?
+
+* Project workflow
 
 This file is the canonical work queue for humans and coding agents.
 
 ** Rules
 
-1. Keep unfinished work above =Completed archive= and completed work below it.
+1. This is a navigable queue, not a second design specification.  Put durable
+   semantics, proofs, and roadmaps in the linked =context/= or subsystem file.
 2. Use exactly one lifecycle keyword on actionable headings:
    =TODO=, =NEXT=, =DOING=, =BLOCKED=, or =DONE=.
-3. At most one top-level item may be =DOING= at a time. An agent must mark the
-   item it is implementing before changing production code.
-4. Every actionable item must state an observable completion contract. Prefer
-   checkboxes naming syntax, semantics, diagnostics, and regression coverage.
-5. Implement test-first: add a focused failing regression, confirm the expected
+3. Keep a short ordered =Active queue=.  Large unordered idea collections live
+   under subsystem headings and do not imply priority.
+4. Every =NEXT= or =DOING= item names one canonical context and an observable
+   completion contract.  A checkbox is evidence only when linked to a test,
+   proof, diagnostic, or shipped artifact.
+5. Work test-first: add a focused failing regression, confirm the expected
    failure, implement the smallest coherent change, then run broader suites.
-6. A task is =DONE= only when its completion contract passes and relevant CI is
-   green. Record the tests and commit under the item.
-7. When a task becomes =DONE=, move the whole entry to the bottom of
-   =Completed archive=. Do not leave completed projects mixed into active work.
-8. =BLOCKED= entries must name the blocking item or missing decision. Move them
-   back to =TODO= or =NEXT= as soon as the blocker is removed.
-9. Do not silently broaden an item. Add newly discovered work as a linked TODO
-   and keep the current task scoped to its stated contract.
-10. Preserve design rationale. Cleanup may reorganize or merge duplicates, but
+6. =DONE= means its stated contract passes.  Release readiness, committing,
+   pushing, and CI are separate milestones unless the item explicitly includes
+   them.
+7. =BLOCKED= names the missing fact or dependency; =SUPERSEDED= links its
+   replacement.  Neither status is a graveyard for vague work.
+8. Preserve design rationale. Cleanup may reorganize or merge duplicates, but
     must not discard decisions, test evidence, or unresolved questions.
 
 ** Priority
@@ -45,58 +159,411 @@ This file is the canonical work queue for humans and coding agents.
 
 * Active queue
 
-- You're building Idris in C with the discipline of a kernel developer and the ambitions of a category theorist,
-  and somehow it's actually working.
+** DOING Unify the two QTT semantic generations [3/5]             :qtt:types:
+
+Canonical design: [[file:qtt/README.org::*Semantic generations and authority][QTT semantic generations and authority]].
+
+- [X] Inventory the overlapping judgments and state their authority honestly.
+- [X] Differentially check their common first-order fragment.
+- [X] Unify strict =let= evaluation with graded alias demand.
+- [-] Replace closure-insensitive Core certificates with capture/latent/call
+      evidence. Closure construction and direct syntactic application are
+      unified; indirect and interprocedural application remain.
+- [ ] Make the unified judgment authoritative during HM checking.
+
+Do not add another quantitative feature until it reduces one of these named
+semantic boundaries or strengthens the independent checker.
+
+** TODO [RESEARCH] First-class exact sequences and homological algebra [0/18]
+
+Use exact sequences as a demanding vertical slice for serious executable
+mathematics. The goal is not merely to add an =exact?= function over
+matrices. The goal is to discover and implement the smallest coherent
+language infrastructure required to represent typed morphisms, subobjects,
+propositions, proofs, counterexamples, heterogeneous diagrams, quotients,
+chain complexes, and eventually homology.
+
+Exact sequences must remain library-defined mathematics. The compiler may
+provide general facilities for indexed types, propositions, proof evidence,
+constraint solving, elaboration, diagnostics, and lowering, but it must not
+contain hardcoded knowledge of kernels, images, exactness, or homology.
+
+This project is explicitly separate from =Data.Sequence=. A collection
+sequence has homogeneous elements and operations such as =map=, =filter=,
+=take=, and =concat=. An exact sequence is a heterogeneous diagram of
+composable structure-preserving morphisms. Do not make exact sequences an
+instance of the collection =Sequence= class and do not burden that class
+with categorical operations.
+
+*** Mathematical meaning
+
+Given composable morphisms:
+
+#+begin_src monad
+A -f-> B -g-> C
+#+end_src
+
+the sequence is exact at =B= when:
+
+#+begin_src text
+image(f) = kernel(g)
+#+end_src
+
+This says that the values entering =B= through =f= are exactly the values
+destroyed by =g=. A short exact sequence:
+
+#+begin_src text
+0 -> A -f-> B -g-> C -> 0
+#+end_src
+
+additionally says that =f= embeds =A= into =B=, =g= reaches all of =C=,
+and =C= behaves like the quotient of =B= by the embedded copy of =A=.
+
+A chain complex only requires consecutive differentials to compose to
+zero:
+
+#+begin_src text
+d[n] . d[n + 1] = zero
+#+end_src
+
+Therefore:
+
+#+begin_src text
+image(d[n + 1]) subset kernel(d[n])
+#+end_src
+
+Homology measures the remaining failure of exactness:
+
+#+begin_src text
+H[n] = kernel(d[n]) / image(d[n + 1])
+#+end_src
+
+*** Architectural rules
+
+1. Search is not trusted; independently checkable evidence is trusted.
+2. Exactness is not universally reducible to a runtime =Bool=.
+3. Finite implementations should return proofs or concrete counterexamples.
+4. Abstract implementations may return =Unknown= when no decision procedure
+   is available.
+5. Pretty mathematical syntax must elaborate to ordinary typed core terms.
+6. Compiler additions must be general-purpose and justified independently
+   of exact sequences.
+7. Begin with finite linear algebra over exact scalar fields. Do not begin
+   with arbitrary abelian categories.
+8. Generalization is allowed only after the concrete vertical slice is
+   executable, tested, and mathematically honest.
+
+*** Stage 0: answer the mathematical and semantic questions [0/6]
+
+- [ ] Write a design note defining morphism, zero morphism, kernel, image,
+      subobject, quotient, chain complex, exactness, short exact sequence,
+      and homology in concrete terms and then in categorical terms.
+
+- [ ] Choose the first supported setting. Prefer finite-dimensional vector
+      spaces over =Rational= because kernels and images can be computed
+      exactly by row reduction. Document why floating-point matrices are
+      insufficient for proof-producing exactness checks.
+
+- [ ] Decide the semantic distinction between =Bool=, =Proposition=,
+      =Decidable p=, and proof search. Specify which of the following
+      operations are executable, symbolic, or proof-requiring:
+
+#+begin_src monad
+exact? :: LinearMap A B -> LinearMap B C -> Bool
+exact :: LinearMap A B -> LinearMap B C -> Proposition
+decideExact :: LinearMap A B -> LinearMap B C -> Decidable (Exact f g)
+searchExact :: LinearMap A B -> LinearMap B C -> SearchResult (Exact f g)
+#+end_src
+
+- [ ] Decide what counts as equality of subobjects. Distinguish equality of
+      chosen representations from equality of the subobjects they denote.
+      Determine whether the initial implementation compares canonical row
+      spaces, proves mutual inclusion, or carries an explicit isomorphism.
+
+- [ ] Decide how proof evidence and counterexamples are represented. An
+      unsuccessful finite exactness check must identify a witness in one of
+      the following differences, not merely return =False=:
+
+#+begin_src text
+image(f) - kernel(g)
+kernel(g) - image(f)
+#+end_src
+
+- [ ] Study quotient structures sufficiently to state what =U / V= means,
+      how representatives are handled, and which equality is available.
+      Do not introduce a generic quotient type until its soundness,
+      elimination rule, computation behavior, and code-generation strategy
+      are understood.
+
+*** Stage 1: identify the required language infrastructure [0/6]
+
+- [ ] Prototype a statically typed heterogeneous chain whose adjacent
+      objects must agree:
+
+#+begin_src monad
+type Chain start finish where
+End :: Chain a a
+Step :: Hom a b -> Chain b c -> Chain a c
+#+end_src
+
+      Confirm whether the current compiler can express and infer this
+      safely. If not, record the exact missing feature rather than adding
+      an untyped or dynamically checked substitute.
+
+- [ ] Determine the minimal type-system work required for the prototype:
+      GADTs, indexed data types, existential types, associated types, type
+      families, equality constraints, higher-rank polymorphism, or some
+      smaller combination. Each proposed feature must include independent
+      motivating examples outside homological algebra.
+
+- [ ] Design first-class propositions and evidence without making arbitrary
+      proof search part of definitional equality. Normalization and type
+      conversion must remain small, deterministic, terminating where
+      required, and suitable for a trusted kernel.
+
+- [ ] Define the trusted boundary. Solvers, row-reduction procedures, model
+      finders, tactics, and future proof search may be large and optimized,
+      but their output must be checked by a smaller kernel or certificate
+      validator before producing =Proof p=.
+
+- [ ] Resolve interactions with the existing dependent-type soundness
+      backlog before proof evidence can affect type checking. In
+      particular, exact-sequence proofs must not depend on the current
+      implicit coercions in =dep_conv=, incomplete Miller-pattern
+      unification, ignored HM errors, unsafe meta solving, or dummy
+      dependent instantiations.
+
+- [ ] Design structured diagnostics for failed composition, failed
+      exactness, unsatisfied proof obligations, and unsupported decisions.
+      Diagnostics must explain the mathematical obstruction and show the
+      inferred object and morphism types.
+
+      Example type error:
+
+#+begin_src text
+error: morphisms do not form a composable chain
+
+f : Hom A B
+g : Hom C D
+
+The codomain of f is B, but the domain of g is C.
+Required: B = C
+#+end_src
+
+      Example counterexample:
+
+#+begin_src text
+The sequence is not exact at B.
+
+Found:
+v in kernel(g)
+
+But:
+v is not in image(f)
+
+Witness:
+v = [1, 0, -1]
+
+Therefore:
+image(f) is a proper subset of kernel(g).
+#+end_src
+
+*** Stage 2: implement one honest finite linear-algebra slice [0/4]
+
+- [ ] Implement the foundational library hierarchy without compiler
+      knowledge of the mathematics:
+
+#+begin_src text
+Algebra.Homomorphism
+Algebra.Subobject
+
+Linear.VectorSpace
+Linear.Map
+Linear.Kernel
+Linear.Image
+Linear.Quotient
+Linear.Exact
+#+end_src
+
+      A =LinearMap A B= must be distinguishable from an arbitrary function
+      and must carry or derive evidence that it preserves the required
+      structure.
+
+- [ ] Implement exact kernels and images for finite rational matrices.
+      Normalize their subspace representations so equality is stable,
+      deterministic, and independent of incidental basis choice.
+
+- [ ] Implement finite exactness checking with evidence:
+
+#+begin_src monad
+type ExactResult witness
+= Exact ExactCertificate
+| NotExact witness
+| ExactnessUnknown ExactnessReason
+
+define exact-at ::
+LinearMap A B ->
+LinearMap B C ->
+ExactResult B
+#+end_src
+
+      =Exact= must contain enough information for an independent checker to
+      validate =image(f) = kernel(g)=. =NotExact= must contain a concrete
+      witness. Do not silently collapse =Unknown= into =False=.
+
+- [ ] Implement a small finite chain-complex and homology demonstration:
+
+#+begin_src monad
+define complex :: ChainComplex Rational
+define cycles n complex
+define boundaries n complex
+define homology n complex
+#+end_src
+
+      The demonstration must compute at least one nontrivial homology group
+      and show that homology detects a point where the complex is not exact.
+
+*** Stage 3: verification, notation, and generalization [0/2]
+
+- [ ] Add focused regression coverage for:
+      - well-typed and ill-typed morphism composition;
+      - kernel and image computation;
+      - equality under different bases of the same subspace;
+      - exact and non-exact examples;
+      - counterexample validation;
+      - malformed or forged certificates;
+      - chain-complex composition-to-zero obligations;
+      - at least one homology computation;
+      - deterministic pretty printing and serialization;
+      - Linux and Windows behavior where compiler changes are involved.
+
+- [ ] After the finite slice is complete, write a second design decision
+      evaluating categorical generalization. Identify the minimum hierarchy
+      genuinely required for generic exact sequences:
+
+#+begin_src text
+Category
+ZeroMorphism
+Preadditive
+Kernel
+Cokernel
+Image
+Coimage
+Abelian
+ChainComplex
+ExactSequence
+Homology
+#+end_src
+
+      Do not add the generic hierarchy merely to mirror textbooks. Every
+      abstraction must have lawful executable examples, clear ownership,
+      useful diagnostics, and at least one consumer beyond its own tests.
+
+*** Proposed eventual surface syntax
+
+The first implementation may use ordinary constructors. Pretty syntax comes
+only after the semantics and evidence model are stable.
+
+#+begin_src monad
+define f :: LinearMap A B
+define g :: LinearMap B C
+
+show (kernel g)
+show (image f)
+
+case exact-at f g
+Exact proof ->
+printLn "The sequence is exact at B."
+
+NotExact witness ->
+printLn "The sequence is not exact."
+show witness
+
+ExactnessUnknown reason ->
+printLn "Exactness could not be decided."
+show reason
+#+end_src
+
+A later elaborated notation may be:
+
+#+begin_src monad
+exact sequence integers-mod-n
+0 -> Z -times n-> Z -mod n-> Z/nZ -> 0
+#+end_src
+
+and:
+
+#+begin_src monad
+chain complex C where
+object n = C[n]
+differential n = d[n]
+
+law boundary-of-boundary
+differential (n - 1) . differential n = zero
+#+end_src
+
+The notation must elaborate into the same public constructors, morphisms,
+propositions, and proof obligations available without syntax sugar.
+
+*** Non-goals for the first implementation
+
+- Do not modify the collection =Sequence= class.
+- Do not hardcode =ExactSequence=, =Kernel=, or =Homology= into the compiler.
+- Do not claim support for arbitrary categories.
+- Do not use floating-point tolerance as mathematical equality.
+- Do not represent propositions as unchecked strings or compiler comments.
+- Do not accept solver success as proof without certificate validation.
+- Do not make theorem search part of type conversion.
+- Do not introduce unrestricted quotient types as an opaque escape hatch.
+- Do not prioritize pretty notation over sound representation.
+- Do not generalize until the finite rational implementation can produce
+  both independently checkable certificates and useful counterexamples.
+
+*** Definition of done
+
+This research project is complete when:
+
+- the mathematical terms and semantic distinctions are documented;
+- the compiler requirements have been reduced to independently useful
+  language features;
+- one finite rational exact-sequence implementation works end to end;
+- exact cases produce checkable evidence;
+- non-exact cases produce concrete witnesses;
+- a small chain complex and homology example execute successfully;
+- forged evidence is rejected;
+- diagnostics explain type and mathematical failures;
+- relevant focused and broad suites pass;
+- the implementation, documentation, and TODO record agree;
+- all completed implementation work is committed, pushed, and green in CI.
+
+Only after this contract is satisfied should a new TODO propose fully
+generic exact sequences over abelian categories.
+
+
+** DOING Core-owned DRY standard library [1/6]
+   Public types, operations, defaults, instances, laws, and documentation live
+   in core. The compiler retains hidden representation primitives, checking,
+   dispatch, specialization, and lowering only.
+
+   - [X] Make touched core modules compile directly from a fresh compiler home;
+         retain standalone compilation as regression coverage.
+   - [ ] Audit every class for its minimal complete definition and move lawful
+         derived operations into class defaults.
+   - [ ] Audit every public operation for one canonical abstraction owner;
+         compatibility vocabulary must be metadata aliases or documented thin
+         wrappers, never a second implementation.
+   - [ ] Convert every touched module from comment-shaped Author/Version/
+         Keywords headers to real top-level module metadata and maintain a
+         substantive =;;; Commentary:= section.
+   - [ ] Migrate public compiler types behind core declarations one executable
+         vertical slice at a time, preserving bootstrap and zero-cost IR tests.
+   - [ ] Keep isolated module tests, direct compilation, the broader core suite,
+         ownership tests, and relevant Windows coverage aligned for each slice.
 
 
 - Dwarf
 - Code view
 
-
-** DOING Set-literal types: {v1, v2, ...} as finite type sets [6/6]
-  - [X] Specify the grammar and AST separately from refinement sets.
-  - [X] Parse symbolic finite type sets and reject empty/duplicate-invalid forms.
-  - [X] Infer singleton members and finite unions without nominal-type coercions.
-  - [X] Define =Bool = {True, False}= in the core and remove semantic Bool
-        hardcoding only after the core definition bootstraps cleanly.
-  - [X] Use source order for deterministic constructor tags and dependent
-        exhaustiveness/redundancy checking over finite pattern products.
-  - [X] Add parser, inference, diagnostics, core, runtime, and Windows coverage.
-  - [X] Allow overlapping singleton membership. A value such as =Red= may
-        inhabit multiple finite sets and is resolved from the expected type;
-        declaration order must not assign it one global nominal owner.
-  - [ ] Add explicit subset coercions between finite sets, including ordinal
-        remapping when the two source orders differ.
-
-  - [X] {True, False} etc. desugars to an anonymous sum of singleton types.
-        Bool becomes DEFINED as {True, False}, not a separate nominal type
-        proved equal to it -- avoids adding another ad hoc dep_conv
-        structural-equality special case on top of the existing Int≡Float
-        soundness hole.
-  - [X] Scope: literal-enumeration set syntax requires decidable equality
-        on elements and a small finite literal list. Large/infinite
-        domains (Byte, Even) stay on the existing { x ∈ T | P x }
-        predicate-refinement syntax -- two different mechanisms, don't
-        conflate them under one parser rule.
-  - [ ] Satisfies "anonymous Algebraic Data Types (tagged unions)" from
-        the Stuff [0/37] list -- {Ok, Retry, Fail} as an inline return
-        type needs no data declaration.
-  - [ ] Pin down tag/ordinal encoding: literal position in {...} determines
-        backend tag order, deterministic, no separate rule needed.
-
-
-** BLOCKED Typeclass laws: from comment to checked obligation [0/1]
-  - [ ] Right now class laws (e.g. Distributive/Representable's
-        `index (tabulate f) = f`) are documentation comments only.
-        tests blocks only assert-eq the class *registers*, never that
-        an instance obeys its law.
-  - [ ] Decide: property-tested (cheap, unsound) vs proof-obligation-at
-        instance-decl (uses dep_conv, sound in principle) vs
-        documentation-only forever (legitimate, matches Haskell).
-  - [ ] BLOCKED on Fix Soundness Holes [0/6] if going the proof route --
-        dep_conv's unsound coercions / broken occurs-check / unsound
-        Miller pattern unification must land first, or law-checking
-        gives false confidence on top of a checker that can prove False.
 
 
 ** TODO Use musttail for closure tail calls [1/2]
@@ -124,12 +591,10 @@ This file is the canonical work queue for humans and coding agents.
 
 
 * TODO Dependent pattern matching [0/1]
-  - [ ] The formal name of collection of atoms test is Pleroma
-        Everything beyond the Pleroma is caos the kenoma
-
-* TODO Dependent pattern matching [0/1]
   - [ ] Learn what it is
   - [ ] Do it nicely
+  - Terminology note retained from the original inbox: the proposed formal
+    name for the collection-of-atoms test is /Pleroma/; beyond it is /Kenoma/.
 
 * TODO Auto function constant bindings [0/1]
 - [ ] Just do it.
@@ -143,9 +608,10 @@ This file is the canonical work queue for humans and coding agents.
 | name     | String | The function's name                            |
 
 
-* TODO Tests Cookie [1/2]
+* DONE Tests Cookie [2/2]
+  CLOSED: [2026-07-18 Sat 21:51]
   - [X] Make the tests function accept and optional [0/0] as it's first argument just ignore it.
-  - [ ] When we test count the number of tests and update the [0/0] heading
+  - [X] When we test count the number of tests and update the [0/0] heading
 
 #+begin_src monad
 tests [1/5]
@@ -280,17 +746,16 @@ tests [1/5]
          applies here, just less likely to trigger in practice.
 
 
-
-
-
 * TODO Program synthesis [0/1]
 - [ ] Full idris-like hole driven development
 - [ ] Holes in functions type signature, let the compiler fill them in
 - “A bidirectional type system is complete for synthesis if every type has at least one term.”
+  This should be proven.
 
 
-* TODO Multiline wisp doesn't work in the REPL [0/1]
-- [ ] Fix it
+* DONE Multiline wisp doesn't work in the REPL [1/1]
+  CLOSED: [2026-07-24 Fri 10:24]
+- [X] Fix it
 #+begin_src monad
 define last :: [a] -> a?
   []     -> nil
@@ -305,10 +770,17 @@ define last :: [a] -> a?
 #+end_src
 
 
+* SUPERSEDED Historical purity-inference example [1/1]
 
-* TODO Infer purity [0/1]
-- [ ] The compiler should understand that const is pure and being bound as a variable,
-      It should error and suggest the copy-paste change to pure form.
+This example is retained as design evidence.  The active design and work queue
+are under [[*Purity and inferred effects][Purity and inferred effects]] and
+[[file:context/type-theory.org::*Effects: inferred, row-polymorphic, and unobtrusive][the unified type-theory contract]].
+
+- [X] Preserve the motivating diagnostic as an acceptance example.
+
+The compiler should understand that =const= is pure and is being bound as a
+variable.  It should diagnose the mismatch and suggest the following
+copy-pasteable pure definition:
 #+begin_src monad
 const = λx.λy.x
 #+end_src
@@ -316,7 +788,6 @@ const = λx.λy.x
 #+begin_src monad
 define const :: λx.λy.x
 #+end_src
-
 
 
 * TODO Dependent types syntax [0/1]
@@ -329,48 +800,56 @@ data Vec (A : Type a) : ℕ -> Type a
    .  : ∀ (x : A) (xs : Vec A n) → Vec A (suc n)
 #+end_src
 
+* Syntax [2/4]
+** DONE Drawers [1/1]
+   CLOSED: [2026-07-18 Sat 21:51]
+ - [X] Just like org-mode
 
-* TODO Drawers [0/1]
-- [ ] Just like org-mode
+ #+begin_src monad
+ :drawer:
+ alot
+ of
+ Meta
+ data
+ :end:
+ #+end_src
 
-#+begin_src monad
-:drawer:
-alot
-of
-Meta
-data
-:end:
-#+end_src
+** TODO Code blocks [0/2]
+ - [ ] We shoudl have code blocks for any language
+ - [ ] The major mode should syntax highlight based on the language like org-mode
+
+ #+begin_src c
+ static const char *TOKEN_TYPE_NAMES[] = {
+     "namespace", "type", "class", "enum", "interface", "struct",
+     "typeParameter", "parameter", "variable", "property", "enumMember",
+     "event", "function", "method", "macro", "keyword", "modifier",
+     "comment", "string", "number", "operator", "decorator",
+ };
+ #+end_src
+
+** TODO Compiler directives [0/3]
+  Those could also be used as module metadatas for something like melpa,
+   or for semantical analysis.
+   - [ ] =-|[ PURE ]|-=         The module is pure
+   - [ ] =-|[ CamelCase ]|-=    The module is written in CamelCase
+   - [ ] =-|[ kebab-case ]|-=   The module is written in kebab-case
+   - [ ] =-|[ ASM ]|-=          The module has asm
 
 
-* TODO Code blocks [0/2]
-- [ ] We shoudl have code blocks for any language
-- [ ] The major mode should syntax highlight based on the language like org-mode
+** DONE Postfix metadatas [1/1]
+   CLOSED: [2026-07-18 Sat 21:52]
+ - [X] we should allow postfix metadatas alongside prefix
 
-#+begin_src c
-static const char *TOKEN_TYPE_NAMES[] = {
-    "namespace", "type", "class", "enum", "interface", "struct",
-    "typeParameter", "parameter", "variable", "property", "enumMember",
-    "event", "function", "method", "macro", "keyword", "modifier",
-    "comment", "string", "number", "operator", "decorator",
-};
-#+end_src
+ #+begin_src monad
+ define read-char :: Int -> Int
+   fd -> def buf :: [10]
+         def n (sys-read fd &buf 1)
+         if <= n 0 then -1
+         else buf 0
 
-
-* DONE Postfix metadatas [1/1]
-  CLOSED: [2026-07-18 Sat 21:31]
-- [X] we should allow postfix metadatas alongside prefix
-
-#+begin_src monad
-define read-char :: Int -> Int
-  fd -> def buf :: [10]
-        def n (sys-read fd &buf 1)
-        if <= n 0 then -1
-        else buf 0
-
-  :doc "Reads one byte from fd.
-        Returns -1 on EOF or error."
-#+end_src
+   :doc "Reads one byte from fd.
+         Returns -1 on EOF or error."
+ #+end_src
 
 
 * TODO Optimizations [0/2]
@@ -378,7 +857,10 @@ define read-char :: Int -> Int
 - [ ] The coll type: [a] should NOT be a runtime thing, it should just do monomorphization
 
 
-* TODO Stuff [0/37]
+* TODO General backlog inbox [0/37]
+
+These items are preserved but not priority-ordered. Promote one into =Active
+queue= with its own completion contract before implementation.
 - [ ] Automatic tsan and asan in debug builds.
 - [ ] Allow upcase functions and keywords, it will make the language more expressive, both or and OR should work.
 - [ ] Don't box for lists.. They are homogeneous now
@@ -420,14 +902,6 @@ define read-char :: Int -> Int
       We should embed the env into the executable i guess
 
 
-* Compiler directives [0/3]
- Those could also be used as module metadatas for something like melpa,
-  or for semantical analysis.
-  - [ ] =-|[ PURE ]|-=         The module is pure  
-  - [ ] =-|[ CamelCase ]|-=    The module is written in CamelCase
-  - [ ] =-|[ kebab-case ]|-=   The module is written in kebab-case
-  - [ ] =-|[ ASM ]|-=          The module has asm
-
 * TODO monad-mode [0/2]
 - [ ] in monad-mode add a function to type check the function and
       substitute the type of the function with the inferred one
@@ -441,16 +915,28 @@ define read-char :: Int -> Int
 - [ ] Generate a Tree Graph of the package dependencies (I like trees)
 
 
-* TODO QTT Exact Multiplicity Tracking [0/4]
-- [ ] Replace ω with precise compile-time known counts (0,1,2,3,...,n)
-- [ ] Compiler tracks exact usage count statically, frees after last use
-- [ ] No runtime fallback -- no GC, no reference counting, ever
-- [ ] ω reserved for truly dynamic cases (explicitly annotated, discouraged)
+* SUPERSEDED QTT Exact Multiplicity Tracking [4/4]
+
+Superseded by [[file:qtt/README.org][qtt/README.org]] and
+[[file:context/memory.org][context/memory.org]]. Exact =ℕ ∪ {ω}= grades are
+implemented. The former “no runtime fallback ever” requirement was replaced by
+the honest rule that opaque sharing, FFI retention, cycles, and concurrency
+must be proved, region-confined, represented with precise bookkeeping, or
+rejected.
+
+- [X] Replace ={0,1,ω}= analysis with exact finite grades plus =ω=.
+- [X] Preserve exact quantities through symbolic constraints.
+- [X] Reserve =ω= for unbounded or conservatively unknown use.
+- [X] Document the honest static-reclamation boundary.
 
 
 
 
-* TODO Purity
+* TODO Purity and inferred effects
+
+The authoritative plan is
+[[file:context/type-theory.org::*Inferred Effect System][Inferred Effect System]].
+Purity is the empty inferred effect row, not a separate Boolean analysis.
 
 =define= can only _define_ costants (functions are also costants)
 =variable= will be used to define variables
@@ -489,6 +975,16 @@ define parent #{ 'tom 'bob
                  'tom 'liz
                  'bob 'ann }
 
+define parent { 'tom -> 'bob
+                'tom -> 'liz
+                'bob -> 'ann }
+
+define parent { 'tom -> 'bob
+                'tom -> 'liz
+                'bob -> 'ann }
+
+
+
 define grandparent? x z ↦ ∃y. parent x y ∧ parent y z
 grandparent? 'tom z -> true ; Returns the symbol 'ann directly not a set because there is only one answer.
 parent 'tom 'ann -> ∅       ; the solution is the empty set, this returns True.
@@ -509,7 +1005,8 @@ parent 'tom 'ann -> ∅       ; the solution is the empty set, this returns True
 
 
 
-* TODO DSLs
+* DONE DSLs
+  CLOSED: [2026-07-30 Thu 04:51]
 
 I’m Dreaming, but if the language is expressive enough to allow
 implementing this as a library.. We have won.
@@ -631,7 +1128,7 @@ def #{name age} (get-user)  ; assumes map with keys :name and :age
 #+end_src
 
 
-* TODO Dependent types
+* TODO Dependent type kernel and elaboration
 
 From: ∀a. a -> a
 To:   Π [A : Type] -> [x : A] -> A
@@ -763,7 +1260,11 @@ return dep_ground_of_value(codom, mctx);
     - Only error if unfolding does not resolve the mismatch
 
       
-* TODO QTT (Quantitative Type Theory)
+* SUPERSEDED Historical QTT sketch
+
+This early ={0,1,ω}= sketch is retained as design history. The authoritative
+exact-grade theory, maturity audit, and roadmap are in
+[[file:qtt/README.org][qtt/README.org]].
 
 QTT adds usage quantities to each binder. Quantities are typically 0, 1, and ω.
 
@@ -918,7 +1419,7 @@ Think of =plus= as a function that takes =Γ=, =e₁=, =e₂= and returns an inf
 instance plus with {x : Int} x 3
 
 ;; produces:
-
+w
    {x : Int} ⊢ x : Int    {x : Int} ⊢ 3 : Int
   ────────────────────────────────────────────
           {x : Int} ⊢ x + 3 : Int
@@ -940,7 +1441,16 @@ instance plus with {x : Int} x 3
 
 * TODO Layer modal type theory
 
-Wwe should go to this: =Ψ | Γ ⊢ t : Type=
+The authoritative design and dependency-ordered roadmap live in
+[[file:context/type-theory.org][context/type-theory.org]].
+
+We should go to the declarative judgment:
+
+  =Σ ; Ψ | Γ ⊢ℓ e : A ! ε ▷ Δ=
+
+and the algorithmic inference judgment:
+
+  =Σ ; Ψ ; Ξ | Γ ⊢ℓ e ⇑ A ! ε ▷ Δ ⊣ C=
 
 Where:
   =Ψ= (meta context)   = variables bound at the current layer (cannot be analyzed intensionally)
@@ -955,10 +1465,13 @@ Two key modalities:
 
     1. Box =□A= : "Code of type =A= at the next layer up"
       - =□A= is a type at layer =ℓ= when =A= is a type at layer =ℓ=
-      - Introduction: from ~Ψ | Γ ⊢ M : A~, derive ~Ψ | Γ ⊢ box M : □A~
+      - Closed introduction requires an empty object context at the quoted
+        layer. Open code uses a contextual type =[Γc]A= and explicit
+        substitution; it must not capture =Γ= invisibly.
 
-    2. Diamond =◇A= : "Suspended computation that will yield =A= after evaluation"
-        This is the type of =eval=
+    2. Diamond =◇A= remains reserved until its logical elimination rule is
+       fixed. Effectful suspension starts as a thunk/computation carrying an
+       inferred effect row; it is not silently identified with code or =eval=.
 
 * TODO β reduction tracing
 
@@ -1115,7 +1628,7 @@ Mesh
 #+end_src
 
 
-* TODO Dependent types [0/1]
+* TODO Dependent layout projection types [0/1]
  - [ ] Point.x should return the Float type itself, once we can return types.
 
 #+begin_src monad
@@ -1128,6 +1641,16 @@ Point.x
 <input>:1:1: error: qualified symbol 'Point.x' used but no module context
 #+end_src
 
+
+* TODO Complete the core Unicode text model
+
+  [TODO id:todo.unicode.complete-core date:2026-07-26 priority:high]
+  After the current first-order modal logic and reader-extension cycle, replace
+  the temporary scalar-counting =Text.Unicode.text-width= boundary with the
+  versioned, data-driven Unicode implementation specified in
+  =context/unicode.org=.  Required conformance includes UAX #15, UAX #29,
+  UAX #14, East Asian Width, full case folding, pinned UCD generation, and
+  explicit byte/scalar/grapheme/display-width APIs.
 
 * Completed archive
 
@@ -1176,3 +1699,59 @@ queue as a separate linked item.
   an explicit pipeline. Set =opt_level=0= for the unoptimized tier
   and =opt_level=2= for the hot tier. No more relying on whatever
   MCJIT's legacy pipeline happened to do.
+
+
+
+
+
+
+
+
+
+• Completed this cycle with a compiler-level IO foundation repair and a visual Core cleanup.
+
+  What changed:
+
+  - Fixed effect-arrow runtime arity.
+      - Int -> Int -io-> Int now retains both runtime arguments.
+      - The compiler no longer calls the integer result as if it were a curried closure.
+      - Effects remain erased at runtime without erasing adjacent value parameters.
+
+  - Added a compile-and-run regression proving add-through-io 20 22 returns 42.
+  - Reorganized IO.File into deliberate semantic sections:
+      - Descriptor identity
+      - Status and inheritance flags
+      - Handle lifecycle
+      - Borrowed-handle streaming
+      - Owned path workflows
+      - Standard streams
+
+  - Added source-quality checks preserving this organization.
+  - Retained the complete descriptor-control functionality from the previous cycle.
+
+  Validation:
+
+  - 27 IO/effect regressions passed.
+  - Multi-argument pattern compatibility test passed.
+  - Standalone IO.File and IO.Pipe tests passed.
+  - Focused formatting checks passed.
+
+  I also tested bulk descriptor writes extensively. The effectful-call defect is fixed, but imported list-tail decomposition still exposes only the first element at this particular module
+  boundary. I withheld the API rather than publishing something that silently writes one byte. The exact limitation and required partial-progress design are recorded in context/core-
+  libs.org.
+
+  Current estimates:
+
+  - Effect-system foundation: 85%
+  - Effectful calling convention correctness: 84%
+  - Effect integration throughout Core: 71%
+  - High-level file/directory IO: 78%
+  - Low-level descriptor IO: 73%
+  - Pipes and IPC foundations: 54%
+  - Nonblocking/event-loop foundations: 45%
+  - Core IO visual/API quality: 86%
+  - Cross-platform IO architecture: 38%
+  - Complete production IO library: 64%
+
+  The strongest next cycle is fixing imported collection evidence, which unlocks sublime partial-progress bulk streams. After that: polling with deadlines, scatter/gather IO, subprocess
+  pipe wiring, sockets, and Windows handles.

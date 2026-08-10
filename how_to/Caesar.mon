@@ -25,7 +25,6 @@ show doc Vec2
 
 
 
-
 ;; define caesar :: String -> ()
 ;;   mapM_ show zipWith (lambda (n) show n ++ ": ") ++ ⌜0..⌝ iterate (map rot 1)
 

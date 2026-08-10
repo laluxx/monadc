@@ -1,0 +1,556 @@
+#+TITLE: Monad Semantic Intermediate Representation
+#+STARTUP: showall
+
+* Purpose
+:PROPERTIES:
+:ID: monadc.context.ir
+:CONTEXT_KIND: design
+:CONTEXT_STATUS: active
+:CONTEXT_OWNER: human+codex
+:CONTEXT_UPDATED: 2026-07-30
+:END:
+
+Monad needs one semantic IR whose purpose is to make the unified typing,
+effect, quantitative, ownership, and staging judgments authoritative before
+lowering to optimization SSA or LLVM. It must replace overlapping handoffs;
+adding it as another parallel interpretation would be failure.
+
+[DEC id:dec.ir.semantic-ir-first-2026-07-30 src:user-request,qtt/README.org conf:high]
+  Design a small typed, block-structured Semantic IR before considering MLIR.
+  MLIR may later host lower dialects, but it cannot decide Monad's type theory,
+  resource semantics, closure evidence, or proof boundary.
+
+* Judgment and node contract
+
+Each accepted function carries a checked instance of:
+
+  =Σ ; Ψ ; Ξ | Γ ⊢ℓ e ⇑ A ! ε ▷ Δ ⊣ C=
+
+Every node preserves canonical =TypeId=, lexical =BinderId=, qualified closure
+and instance provenance, explicitly labelled construction/latent/domain/call
+grades, effect rows, ownership capabilities, physical representation,
+region/scope identity, and a stable evidence reference.
+
+Control flow uses explicit blocks, parameters, terminators, and joins. Branch
+joins carry both value types and resource states. Exceptional and handler exits
+are first-class cleanup edges rather than backend accidents.
+
+* Compiler layering
+
+1. Surface AST and reader expansion.
+2. HM/dependent elaboration producing canonical types, effects, and grades.
+3. *Semantic IR*: the sole authority for accepted resource semantics.
+4. Ownership/cleanup lowering, validated by simulation against Semantic IR.
+5. Optimization SSA and LLVM.
+
+Typed Core, source-grade traversal, QTT ANF, and Resource IR are migration
+inputs. Each must become a producer, verifier, or lowering of Semantic IR—or
+be deleted. None remains an independent authority afterward.
+
+* Initial instruction families
+
+- values: literal, global, parameter, constructor, projection;
+- binding: graded =let= with separate evaluation effect and alias demand;
+- closure: construction with typed environment slots and latent signature;
+- call: direct, signature-known indirect, closure-instance, and FFI contract;
+- control: branch, join, return, effect raise/handle, unreachable;
+- resources: borrow, move-out, identity-preserving rehome, duplicate, drop,
+  region enter/exit;
+- staging: quote/splice only after layered typing is established.
+
+* Migration gates
+
+1. [-] Write the C data model and a smaller independent verifier. The first
+   structural slice is =qtt/semantic_ir.[ch]=: deterministic flat nodes,
+   subtree boundaries, source identity, binder provenance, and owned symbolic
+   evidence are verified. Canonical =TypeId=s and grade-role classifications
+   are now mandatory. Per-node quantitative payloads, pure effect rows, and
+   direct closure/call identities are now checked. Physical representation and
+   resource capability are separate checked fields; heap representation is
+   conservatively =unknown= capability until ownership inference supplies a
+   proof. Inferred non-empty effects, interprocedural closure contracts, and
+   general resource-state transitions remain. The lexical first-order fragment
+   now carries a checked cleanup plan owned by the Semantic-IR function.
+2. [-] Lower the coherent pure fragment and differentially compare types,
+   grades, effects, and evaluation. Quantitative coherence now reads verified
+   Semantic-IR evidence directly; type/effect/evaluation comparison remains.
+3. [ ] Import correlated HM call evidence for indirect calls.
+4. [-] Lower closure environments and cleanup edges. Semantic IR now owns
+   canonical static closure-field records and checks physical-plan
+   correspondence. ANF now materializes a certified dense environment-slot
+   interface and verifies explicit field projections. Straight-line unique
+   closure bodies automatically produce borrow/move/release projections,
+   including nested conditional joins, mixed move/release fields, and typed
+   immediate/inline lexical lets and signature-known SSA calls;
+   capture-consuming calls, ownership-bearing lets, shared fields, and
+   aggregate-field transfers remain.
+5. [ ] Make ownership ANF consume Semantic IR rather than typed Core.
+6. [ ] Delete superseded paths only after differential coverage.
+7. [ ] Consider an MLIR dialect only after this contract is stable.
+
+The verifier rejects missing evidence, identity collisions, malformed joins,
+grade mismatches, effect erasure, and ownership-state divergence.
+
+[FIX id:fix.ir.first-verified-slice-2026-07-30 date:2026-07-30 by:codex src:qtt/semantic_ir.c,qtt/semantic_ir.h,tests/test_qtt_semantic_ir.py conf:high]
+  The coherent Core fragment now lowers to an owned Semantic-IR function.
+  Its smaller structural verifier rejects source substitution, instruction-kind
+  forgery, malformed preorder subtree sizes, trailing nodes, and altered
+  =ModuleId/BinderId= provenance. Symbolic usage is owned evidence attached to
+  the function, not recomputed by the verifier.
+
+[FIX id:fix.ir.canonical-types-grade-roles-2026-07-30 date:2026-07-30 by:codex src:qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/type_identity.c,tests/test_qtt_semantic_ir.py conf:high]
+  Every Semantic-IR node now requires a canonical structural =TypeId=. Untyped
+  Core and forged type evidence are rejected. Quantitative evidence is
+  classified as result demand, alias transfer, closure construction, or
+  invocation; changing that role invalidates verification. Domain and latent
+  grade payloads still need dedicated call/closure records.
+
+[FIX id:fix.ir.quantitative-effect-call-evidence-2026-07-30 date:2026-07-30 by:codex src:qtt/semantic_ir.c,qtt/semantic_ir.h,effects/effect.c,tests/test_qtt_semantic_ir.py conf:high]
+  Every node owns an indexed slice of per-binder grade expressions. Verification
+  checks its node identity, binder order, role, and solved quantity against the
+  canonical symbolic producer. Every node also carries a function-owned closed
+  effect row; the current accepted fragment requires the empty row and rejects
+  missing, open, or substituted evidence. Direct calls carry deterministic
+  local closure, invocation-instance, callee, and domain-arity evidence.
+
+  This does not yet infer effects or serialize globally stable closure
+  identities. It establishes the IR fields and rejection boundary needed for
+  importing that evidence from HM.
+
+[FIX id:fix.ir.representation-capability-coherence-2026-07-30 date:2026-07-30 by:codex src:qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/coherence.c,qtt/coherence.h,tests/test_qtt_semantic_ir.py,tests/test_qtt_coherence.py conf:high]
+  Semantic-IR nodes now carry independently checked physical representation
+  and resource capability. Immediate and inline values require no capability;
+  heap, foreign, and unresolved representations remain unknown rather than
+  manufacturing ownership. Quantitative evidence preserves qualified
+  =(ModuleId,BinderId)= provenance, and coherence has a migration entry point
+  that compares the independent demand certificate with already-verified
+  Semantic-IR evidence instead of rebuilding symbolic usage.
+
+  This is not automatic reclamation yet: no heap node becomes =owned= until a
+  capability derivation, alias facts, lifetime, effects, and destructor
+  obligations are represented and checked.
+
+  Verification is observationally pure with respect to accepted IR: expected
+  usage is derived in a temporary grade arena, while one read-only solver
+  checks the function-owned evidence. Repeated verification therefore cannot
+  grow or rewrite the certified function's quantitative state.
+
+[FIX id:fix.ir.lexical-cleanup-evidence-2026-07-30 date:2026-07-30 by:codex src:qtt/resource.c,qtt/resource.h,qtt/semantic_ir.c,qtt/semantic_ir.h,tests/test_qtt_resource.py,tests/test_qtt_heap.py,tests/test_qtt_semantic_ir.py conf:high]
+  Resource IR now introduces linear capabilities only for =OWNED_HEAP=
+  representation. Immediate, inline, and foreign lexical bindings generate no
+  alloc/borrow/move/drop obligations; unresolved representation is rejected
+  because the compiler cannot prove that cleanup is unnecessary.
+
+  Leak freedom is not sufficient to validate lowering: both =drop x= and
+  =move x= consume one capability, but only one matches a particular source
+  exit. =qtt_resource_verify_elaboration= therefore checks the linear state
+  machine and exact correspondence with an independent structural plan
+  checker. The checker consumes Core and Resource IR together; it does not
+  invoke the elaborator that produced the plan.
+  Semantic-IR functions own this plan and reject a forged, removed, or
+  status-substituted plan.
+
+  The correspondence checker is an independent executable semantics, not a
+  mechanized simulation theorem. Loans, aliases through data,
+  foreign retention, exceptions, closures, indirect calls, loops, and
+  structural destructors remain outside this cleanup fragment.
+
+[FIX id:fix.ir.destructor-transition-anf-bridge-2026-07-30 date:2026-07-30 by:codex src:qtt/drop.c,qtt/drop.h,qtt/type_identity.c,qtt/type_identity.h,qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/semantic_anf.c,qtt/semantic_anf.h,qtt/anf.c,tests/test_qtt_drop.py,tests/test_qtt_semantic_ir.py,tests/test_qtt_semantic_anf.py,tests/test_qtt_anf.py conf:high]
+  Owned lexical bindings now carry canonical destructor descriptors. Identity
+  combines a stable structural type fingerprint with a recursive drop-plan
+  fingerprint; backreferences are encoded by structural distance, never C
+  pointer address. Mutating either identity or plan invalidates verification.
+
+  Semantic IR also owns an ordered projection of capability transitions:
+  allocation is =none → owned=, borrow is =owned → owned=, and move/drop are
+  =owned → none=. This projection is checked against the independently
+  validated Resource IR plan.
+
+  =qtt/semantic_anf.[ch]= is the first authoritative lowering handoff. For the
+  admitted single-block fragment it accepts only verified Semantic IR, lowers
+  ANF, verifies ANF, and requires the emitted ownership instruction stream to
+  match the certified transitions exactly.
+
+  Conditional CFG edges carry their
+  transition slice, entry/exit capability cardinality, and an order-independent
+  fingerprint of the exact qualified capability set. Both Resource IR and ANF
+  independently require branch contexts to agree. ANF terminators now carry
+  lowering-assigned preorder branch identities; the correspondence checker
+  requires exactly one distinct ANF branch for every Semantic-IR branch.
+  Ownership instructions also carry an exact control path of
+  =(branch-ordinal, arm)= steps and a unique Semantic-IR transition ordinal.
+  Nested ownership-bearing conditionals are therefore admitted without treating
+  block-array order as semantic edge identity. ANF operational verification and
+  Semantic-IR correspondence remain deliberately independent checks.
+
+  Call transfer is derived from both quantitative ownership mode and physical
+  representation. A consumed immediate value remains an SSA value transfer;
+  only =OWNED_HEAP= carries a movable or borrowable capability. Canonical
+  function signatures have structural contract fingerprints, and named ANF
+  calls cite the fingerprint they were lowered against. The verifier
+  recomputes the fingerprint and independently checks all contract fields.
+
+  Environment-aware Core usage now handles named calls by multiplying each
+  argument context by the resolved callee parameter's observed grade. Module
+  verification runs this Semantic-IR stage before ANF. Semantic call evidence
+  carries callable and contract identity, argument transfer/type/representation
+  facts, source Core variables, result contract, call ordinal, and exact
+  control path. ANF operands additionally cite the concrete source capability;
+  the verifier proves it is the resource that produced the move/borrow SSA
+  value.
+
+  Semantic call evidence and ANF calls are now related by a direct
+  correspondence judgment. Explicit call ordinals pair calls independently of
+  block-array order; exact branch paths, callable/contract identity, argument
+  types and transfers, source capabilities, and result ownership must agree.
+  The module checker requires this judgment after Semantic IR and ANF validate
+  independently.
+
+  Ownership ANF no longer creates fake resources for immediate, inline, or
+  foreign lexical values. They lower as ordinary SSA aliases; unresolved
+  representation is rejected. Function parameters and direct-lambda
+  parameters obey the same rule: a consumed quantitative occurrence creates
+  a linear resource obligation only when its physical representation is
+  =OWNED_HEAP=.
+
+[FIX id:fix.ir.unique-closure-rehome-2026-07-30 date:2026-07-30 by:codex src:qtt/resource.c,qtt/resource.h,qtt/closure.c,qtt/closure.h,tests/test_qtt_resource.py,tests/test_qtt_closure.py conf:high]
+  Closure construction now distinguishes unique from shared environment
+  ownership. A unique capture uses =rehome(source, field)=: the verifier
+  consumes the source capability and introduces the field capability while the
+  heap evaluator preserves the allocation root without retain/release traffic.
+  A shared capture continues to use =dup(source, field)= and therefore retains.
+  Closure destruction drops the field capability in either policy.
+
+  Physical fields have a qualified
+  =(StorageModule, ClosureId, InstanceId, FieldOrdinal)= identity separate
+  from their temporary Resource-IR variable. This prevents equal field
+  ordinals in separate closure instances from becoming equal evidence.
+  Construction emission is certificate-gated and rejects altered policies,
+  field identities, types, representations, transfer modes, or destructor
+  descriptors.
+
+  The original policy-taking API remains explicit for independent checking.
+  The inferred API described below chooses unique only from its narrow
+  certificate; shared remains the fallback. Inline aggregates containing owned
+  children remain rejected until projected field operations can express their
+  structural retains and releases.
+
+[FIX id:fix.ir.closure-policy-certificate-2026-07-30 date:2026-07-30 by:codex src:qtt/closure_policy.c,qtt/closure_policy.h,qtt/closure.c,qtt/semantic_ir.c,qtt/semantic_ir.h,tests/test_qtt_closure_policy.py,tests/test_qtt_closure.py,tests/test_qtt_semantic_ir.py conf:high]
+  The first escape certificate recognizes one sound, intentionally narrow
+  unique-closure rule: a lambda with exactly one structural Core occurrence,
+  occurring as the immediate callee of one application. Returned, stored,
+  argument-passed, absent, and structurally aliased lambdas conservatively
+  select shared storage.
+
+  The certificate records occurrence count, direct-callee count, external
+  captured-binder use count, storage policy, and reason. Semantic IR owns this
+  evidence per lambda and
+  independently recomputes it during verification. Physical closure-plan
+  inference consumes the same producer and maps only the certified direct-call
+  result to =rehome=; every other result maps to shared =dup=.
+
+  A forward may-liveness scan now follows Core evaluation order. Earlier uses
+  do not block transfer; call arguments and later sequence/continuation uses
+  do. Conditional arms are analyzed from the same entry state and joined, so a
+  use solely in the alternative arm is not treated as occurring after
+  construction, while a use after the join remains live. Constructing a later
+  closure that captures the same BinderId also counts as a later use.
+
+  Per-capture invocation disposition is now checked for the structural tail
+  fragment. Exact tail variables, sequence tails, =let= bodies, and
+  conditionals whose arms agree produce =MOVE_OUT= or =RELEASE=. Disagreeing
+  arms, alias-producing =let= values, opaque calls, and nested-closure results
+  that mention the capture are unsupported and force shared storage.
+  Disposition participates in the field certificate; finalization moves
+  returned unique fields and drops unconsumed ones.
+
+  This did not yet make closure lowering authoritative at that point; the next
+  record below closes the static field-evidence seam.
+
+[FIX id:fix.ir.semantic-closure-fields-2026-07-30 date:2026-07-30 by:codex src:qtt/core.c,qtt/core.h,qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/semantic_closure.c,qtt/semantic_closure.h,qtt/closure.c,tests/test_qtt_semantic_ir.py conf:high]
+  Semantic IR now owns one canonical record per static closure field: closure
+  node/id, ordinal, exact source BinderId, canonical TypeId, borrowed
+  structural type, representation, storage policy, exit disposition, and
+  destructor descriptor. Its verifier independently reconstructs the capture
+  vector and rejects altered field order, provenance, policy, disposition,
+  type, representation, or destructor evidence.
+
+  =qtt/semantic_closure.[ch]= checks a physical =QttClosurePlan= against an
+  already-verified Semantic-IR function. It first validates both certificates,
+  then requires field-for-field structural correspondence; descriptor IDs are
+  compared only after their plans have independently verified. Shared capture
+  type lookup was moved into the Core API so physical and Semantic lowering no
+  longer maintain duplicate tree walkers.
+
+  Static closure evidence is now authoritative. Dynamic environment slots are
+  not yet ownership-ANF values, closure-body BinderIds are not rewritten to
+  field capabilities, and shared returned fields still require explicit result
+  retains.
+
+[FIX id:fix.ir.anf-environment-interface-2026-07-30 date:2026-07-30 by:codex src:qtt/resource.h,qtt/anf.c,qtt/anf.h,qtt/semantic_anf.c,qtt/semantic_anf.h,tests/test_qtt_semantic_anf.py conf:high]
+  Ownership ANF now carries an explicit dense environment-slot interface.
+  Slots are materialized only from an independently verified Semantic-IR
+  closure record and preserve closure identity, field ordinal, exact source
+  BinderId, canonical TypeId, representation, owned/shared capability, exit
+  disposition, and destructor identity. The correspondence checker rejects
+  altered order, provenance, capability, policy, or destructor certificates
+  and rejects a second materialization over an existing interface.
+
+  The capability vocabulary moved to the shared resource contract so Semantic
+  IR and lowerings cannot drift through parallel enums. This is the certified
+  closure-body input boundary; actual variable-to-slot projection instructions
+  and shared-result retains remain the next lowering step.
+
+[FIX id:fix.ir.anf-environment-projections-2026-07-30 date:2026-07-30 by:codex src:qtt/anf.c,qtt/anf.h,qtt/semantic_anf.c,qtt/semantic_anf.h,tests/test_qtt_semantic_anf.py conf:high]
+  Ownership ANF now represents captured-field access with an explicit
+  =ENV_PROJECT= instruction carrying closure identity, dense field ordinal,
+  exact source resource, result type, and borrow-or-move action. The ordinary
+  verifier resolves the certified slot, checks provenance and representation,
+  and rejects moves from shared capabilities before applying the ordinary
+  linear resource transition.
+
+  The independent Semantic correspondence checker derives capture occurrence
+  counts from the verified closure body, rejects missing or extraneous
+  projections, and requires the unique =MOVE_OUT= case to contain exactly one
+  consuming projection. Standalone ANF evaluation explicitly rejects programs
+  requiring a closure payload, preventing a verified projection from being
+  misinterpreted as an invented runtime value. General Core-to-ANF lowering
+  does not emit the instruction automatically yet; that is the next authority
+  handoff.
+
+[FIX id:fix.ir.automatic-unique-closure-projections-2026-07-31 date:2026-07-31 by:codex src:qtt/anf.c,qtt/anf.h,qtt/semantic_anf.c,qtt/semantic_anf.h,tests/test_qtt_semantic_anf.py conf:high]
+  The certified closure-body lowering entry point now rewrites captured
+  BinderIds to dense environment projections automatically for the
+  straight-line variable/literal/sequence fragment. Remaining quantitative
+  demand selects borrow for intermediate uses. A unique =MOVE_OUT= field has
+  exactly one final move projection; a unique =RELEASE= field has an explicit
+  zero-result release projection after its last borrow.
+
+  The returned program is accepted only after ordinary linear-resource
+  verification and independent Semantic projection correspondence both pass.
+  Shared fields, general control flow, calls, mixed formal parameters, and
+  nested closures are rejected rather than assigned unproved ownership
+  behavior.
+
+[FIX id:fix.ir.path-sensitive-closure-projections-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_anf.c,tests/test_qtt_semantic_anf.py conf:high]
+  Certified closure-body lowering now supports nested conditionals. For each
+  field, the lowering partitions remaining structural demand into then, else,
+  and continuation demand; both arms are lowered from their own state and must
+  reach the same continuation state. Results rejoin through typed ANF block
+  parameters, so ordinary verification independently rejects ownership-state
+  disagreement.
+
+  Every projected access carries its exact preorder branch path. The Semantic
+  checker independently reconstructs capture occurrences and their paths from
+  Core, matches them one-to-one with ANF projections, checks branch identity
+  completeness, and rejects altered arm markers or ordinals. Tests cover
+  move-out in both arms, a release after borrowing in both arms, nested paths,
+  and two-field environments combining branch-local moves with a post-join
+  release.
+
+[FIX id:fix.ir.lexical-closure-ssa-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_anf.c,tests/test_qtt_semantic_anf.py conf:high]
+  The certified closure-body producer now lowers immediate and inline =let=
+  bindings into typed lexical SSA values. Local BinderIds retain their exact
+  identity in the lowering environment, uses become explicit ANF aliases, and
+  branch-local bindings compose with the existing path-sensitive capability
+  split and typed joins.
+
+  Heap-valued lexical aliases remain forbidden. A captured owned field cannot
+  be projected and then hidden behind an ordinary alias because that would
+  sever closure/slot provenance from subsequent ownership operations. The
+  regression suite covers straight-line lets, independent lets in conditional
+  arms, interaction with post-body field release, and conservative rejection
+  of a captured heap alias.
+
+[FIX id:fix.ir.known-calls-in-closure-cfg-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_anf.c,qtt/semantic_anf.h,tests/test_qtt_semantic_anf.py conf:high]
+  Certified closure-body lowering now accepts signature-known calls whose
+  arguments and result use ordinary immediate/inline SSA representation. It
+  resolves the canonical callable contract, validates the call plan, and emits
+  exact callable identity, contract fingerprint, canonical types, transfers,
+  result mode, call ordinal, and control path. The same producer works in
+  straight-line code and conditional arms.
+
+  Generated calls must pass ordinary ANF contract verification and independent
+  Semantic call correspondence. Tests cover calls coexisting with capture
+  release, branch-local calls with exact paths, and contract-fingerprint
+  tampering. Heap transfers remain rejected because closure-policy disposition
+  is not signature-aware yet: an application mentioning a capture still forces
+  shared storage. The next unification step is to make that upstream judgment
+  consume the same canonical call evidence before enabling projected moves.
+
+[FIX id:fix.ir.signature-aware-capture-transfer-2026-07-31 date:2026-07-31 by:codex src:qtt/closure_policy.c,qtt/closure_policy.h,qtt/semantic_ir.c,qtt/semantic_anf.c,tests/test_qtt_closure_policy.py,tests/test_qtt_semantic_anf.py conf:high]
+  Closure invocation disposition now has an environment-aware judgment. For an
+  exact captured variable used as one argument of a canonical, fingerprint-
+  valid global signature, a consumed owned parameter proves =MOVE_OUT= and a
+  borrowed parameter proves =RELEASE=. Missing or stale contracts, aliases,
+  nested argument expressions, multiple occurrences, and opaque callees remain
+  unsupported and therefore select shared closure storage.
+
+  Semantic IR produces and independently verifies closure policy and field exit
+  evidence with this same signature environment. Closure-body ANF consumes the
+  certificate by pairing =ENV_MOVE= with =CALL_MOVE=, or =ENV_BORROW= with
+  =CALL_BORROW= and a final =ENV_RELEASE=. Both the ordinary ANF verifier and
+  Semantic call/projection correspondence check provenance, transfer, contract,
+  and one-to-one capture occurrence. Projection reconstruction now traverses
+  application callees and arguments, closing a checker omission exposed by the
+  consuming-call regression.
+
+  This does not yet extend the separate physical =QttClosurePlan= constructor
+  with a signature environment, and owned call results still lack canonical
+  compiler-generated capability identities. Those are the next authority seams.
+
+[FIX id:fix.ir.environment-aware-physical-plan-2026-07-31 date:2026-07-31 by:codex src:qtt/closure.c,qtt/closure.h,qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/semantic_closure.c,tests/test_qtt_closure.py,tests/test_qtt_semantic_ir.py conf:high]
+  Physical closure-plan inference and verification now accept the canonical
+  signature environment and module identity. They derive each unique field's
+  invocation exit with the same environment-aware judgment as Semantic IR.
+  Binding such a plan to a concrete closure environment preserves and rechecks
+  the call-sensitive certificate while qualifying its physical fields with
+  closure and instance identities.
+
+  Semantic closure correspondence obtains the signature environment and module
+  identity directly from its verified Semantic-IR owner. Callers therefore do
+  not choose which policy theorem verifies a physical plan. Regression tests
+  cover consumed and borrowed plans, contract mutation, legacy-verifier
+  rejection, concrete instance binding, Semantic agreement, and altered exits.
+
+[FIX id:fix.ir.direct-owned-call-result-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_anf.c,tests/test_qtt_semantic_anf.py conf:high]
+  A signature-known call returning an owned heap value may now be the complete
+  closure body. The producer gives the result a compiler-reserved capability
+  identity and immediately emits a typed move into the returned SSA value.
+  Ordinary ANF checks capability creation, unique consumption, and an empty
+  live set at return; Semantic call correspondence checks canonical result
+  type, representation, result mode, callable contract, and resource presence.
+
+  This is intentionally a tail-result rule, not general ownership inference.
+  An owned result ignored by a sequence is rejected because the current
+  closure-body producer has no certified evaluation-context drop placement.
+  The regression suite fixes both the successful tail rule and conservative
+  non-tail rejection.
+
+[FIX id:fix.ir.owned-result-use-judgment-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/semantic_anf.c,tests/test_qtt_semantic_anf.py conf:high]
+  Closure-body lowering now checks expressions under an explicit result-use
+  judgment =U ∈ {escape, discard}=. A sequence checks every prefix under
+  =discard= and its final item under the surrounding use. Conditional arms
+  inherit the same use, so ownership behavior agrees at the join.
+
+  A known owned call under =escape= creates one capability and moves it into
+  the outgoing SSA value. Under =discard= it creates the same capability and
+  immediately drops it. This admits returned owned values in conditional arms
+  and automatically reclaims ignored owned values in straight-line or
+  branch-local sequence positions. The ordinary verifier proves branch-local
+  resources are consumed before the join.
+
+  The owned result identity is no longer an unchecked nonzero convention.
+  Semantic IR derives it from =(ModuleId, CallOrdinal)= in the reserved
+  synthetic-binder domain, serializes it in call evidence, reconstructs it
+  during verification, and requires exact equality from Semantic ANF.
+  Regression tests alter both ANF and move consistently so ordinary ownership
+  verification still passes; Semantic correspondence nevertheless rejects the
+  noncanonical identity.
+
+  Heap-owning lexical =let= remains outside this rule. It needs a local
+  capability binding whose demand determines move, borrow, or drop rather than
+  treating owned data as an ordinary SSA alias.
+
+[FIX id:fix.ir.first-authoritative-cleanup-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,qtt/backend.h,codegen.c,CMakeLists.txt,tests/test_qtt_production_memory.py conf:high]
+  Production LLVM has its first evidence-consuming reclamation slice.
+  =qtt/backend.c= is the boundary between verified Semantic IR and codegen: it
+  accepts only a one-binding lexical =with= initialized by a String literal,
+  verifies Semantic IR and resource elaboration, and requires an exact
+  =ALLOC(OWNED_HEAP) → DROP= plan for the source's resolved qualified binder.
+  The structural destructor descriptor must verify against the initializer's
+  inferred type.
+
+  Under the explicit =MONAD_QTT_MEMORY= feature gate, a valid certificate makes
+  codegen materialize the literal with =strdup= and emit =free= from the exact
+  lexical slot after the body.  Codegen also requires nonzero resource identity
+  and destructor fingerprints.  Unsupported, escaping, or uncertified source
+  remains on the legacy path.  This establishes an authoritative production
+  consumer without pretending that the existing general LLVM lowering is
+  ownership-aware.
+
+[FIX id:fix.ir.ordered-production-cleanups-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,qtt/backend.h,codegen.c,tests/test_qtt_production_memory.py conf:high]
+  The backend certificate is now an owned cleanup plan rather than a scalar
+  special case.  It validates an arbitrary nonempty lexical group of String
+  literals against the exact Semantic IR sequence of allocations followed by
+  reverse lexical drops.  Each returned item carries its qualified resource,
+  destructor identity, representation, and source binding index, and the API
+  has an explicit plan destructor.
+
+  Production LLVM records every certified lexical slot, materializes every
+  allocation, and consumes certificate items in destruction order.  Its final
+  guard rechecks owned representation, qualified identity, destructor
+  fingerprints, binding-index bounds, and slot presence.  A group containing
+  even one escaping value has a move rather than the required drop sequence and
+  is conservatively rejected as a whole.
+
+[FIX id:fix.ir.nested-production-cleanups-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,codegen.c,tests/test_qtt_production_memory.py conf:high]
+  Lexical cleanup certification now composes across nesting.  For the scope
+  being certified, its allocations must form the exact resource-plan prefix
+  and its reverse lexical drops the exact suffix.  The independently verified
+  Semantic IR may contain nested resource operations between those boundaries.
+  Each scope therefore emits only its own cleanup while ordinary recursive
+  codegen emits inner cleanup before outer cleanup.
+
+[FIX id:fix.ir.compiler-qttps-authority-2026-07-31 date:2026-07-31 by:codex src:qtt/compiler.c,qtt/compiler.h,env.c,codegen.c,CMakeLists.txt,tests/test_qtt_compiler.py conf:high]
+  =qtt/compiler.c= is now the shared integration-policy boundary for normal
+  quantitative analysis, diagnostics, evidence-backed memory lowering, and
+  stable filename-derived ModuleIds.  Ordinary HM definition inference runs
+  supported source-grade analysis and attaches its generalized scheme by
+  default.  Shadow diagnostics are independently opt-in and no longer activate
+  analysis.  Production codegen consumes the same module identity and enables
+  its certified memory fragment by default.
+
+  Explicit =MONAD_QTT_ANALYSIS=0= and =MONAD_QTT_MEMORY=0= rollout overrides
+  remain available.  Unsupported source still falls back conservatively;
+  internal verifier evidence is never converted into a cleanup merely because
+  the normal pipeline is enabled.
+
+[DEC id:dec.ir.no-shadow-grade-fallback-2026-07-31 date:2026-07-31 by:codex src:env.c,qtt/pipeline.c,qtt/README.org conf:high]
+  Only the canonical environment-aware source-grade judgment may populate a
+  normal HM scheme.  If it reports unsupported, the scheme carries no
+  quantitative evidence.  The older Core/signature-derived shadow grade may
+  still be displayed for diagnostics, but is not an authoritative fallback.
+  This prevents two closure models from silently governing downstream
+  application inference.
+
+[FIX id:fix.ir.lexical-alias-authority-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/backend.c conf:high]
+  Resource bindings now carry a capability root independently from their
+  physical representation. A heap-shaped SSA alias is consequently
+  non-authoritative: uses address the root allocation and only genuinely fresh
+  expressions emit =ALLOC=. Production cleanup certification matches direct
+  owned binders within the full verified plan, allowing alias and nested-scope
+  operations without treating them as additional backend-owned storage.
+
+[DEC id:dec.ir.alias-is-proof-operation-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Capability provenance is now explicit in Resource IR as
+  =ALIAS(binder,root)=. The operation is verified against the live capability
+  context, preserved as Semantic IR transition evidence, and reconstructed by
+  Core/resource correspondence. Alias chains canonicalize to one root, making
+  the operation an executable precursor of the judgmental =Ω= context rather
+  than backend metadata.
+
+[FIX id:fix.ir.scoped-alias-transitions-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Resource IR now brackets alias provenance with =ALIAS=/=END_ALIAS= proof
+  transitions. The verifier's state contains the active mapping, branch joins
+  compare it extensionally, Core correspondence reconstructs lexical opening
+  and reverse-order closure, and Semantic IR preserves both transitions. This
+  is the first executable input/output fragment of =Ω → Ω′=.
+
+[FIX id:fix.ir.loan-kind-transitions-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c,qtt/semantic_ir.h,qtt/semantic_ir.c conf:high]
+  Resource and Semantic IR transitions now preserve whether an alias loan is
+  shared or exclusive. Verifier state and branch equality include that kind,
+  and open/read/close compatibility is checked against the active =Ω= map.
+
+[FIX id:fix.ir.authorized-move-write-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Resource IR now distinguishes ordinary root transfer from
+  =MOVE_ALIAS(alias,root)= and mutation from =WRITE_ALIAS(alias,root)=.
+  The former consumes a root only through verified active provenance; the
+  latter requires an exclusive loan and preserves ownership. Semantic IR
+  transitions and edge projection consume the same evidence.
+
+[DEC id:dec.ir.shared-place-vocabulary-2026-07-31 date:2026-07-31 by:codex src:qtt/place.h,qtt/place.c,effects/effect.c conf:high]
+  Effects and ownership IR must not invent separate notions of mutation
+  target. =QttPlace= supplies qualified root identity, projection identity,
+  equality, conservative overlap, and stable effect-label formatting for both
+  systems.

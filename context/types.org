@@ -1825,15 +1825,15 @@ connects-to ->
   routing target for failures and future test/context links touching this area.
 
 #+CAPTION: Types Category Contract
-| Field | Contract |
-|-------+----------|
-| Owned phase | TypeKind universe, type representation, equality/unification support, named type structures. |
-| Inputs | Type syntax, declarations, inference constraints, runtime/codegen type needs. |
-| Outputs | Canonical Type values and semantic operations used by inference/codegen/runtime. |
-| Invariants | A TypeKind addition must be represented in parser/infer/codegen/test context or explicitly marked unsupported. |
-| Test hooks | types corpus, infer diagnostics, typeclass and codegen tests involving typed values. |
-| Failure symptoms | diagnostic-mismatch, expected-fail-compiled, missing TypeKind handler, codegen fallback for unknown type. |
-| Context neighbors | infer, env, typeclass, codegen, runtime |
+| Field             | Contract                                                                                                       |
+|-------------------+----------------------------------------------------------------------------------------------------------------|
+| Owned phase       | TypeKind universe, type representation, equality/unification support, named type structures.                   |
+| Inputs            | Type syntax, declarations, inference constraints, runtime/codegen type needs.                                  |
+| Outfputs          | Canonical Type values and semantic operations used by inference/codegen/runtime.                               |
+| Invariants        | A TypeKind addition must be represented in parser/infer/codegen/test context or explicitly marked unsupported. |
+| Test hooks        | types corpus, infer diagnostics, typeclass and codegen tests involving typed values.                           |
+| Failure symptoms  | diagnostic-mismatch, expected-fail-compiled, missing TypeKind handler, codegen fallback for unknown type.      |
+| Context neighbors | infer, env, typeclass, codegen, runtime                                                                        |
 
 [DEC id:dec.types.category-contract-owner date:2026-06-16 by:llm]
   Failures matching the symptoms above should start triage in this category, then

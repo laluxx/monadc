@@ -298,7 +298,7 @@ static int levenshtein(const char *a, const char *b)
 
 static const char *SUBCOMMANDS[] = {
     "new", "build", "run", "clean", "install",
-    "test", "check", "trace", "debug", "lsp", "eval",
+    "test", "check", "lint", "trace", "debug", "lsp", "eval",
     "repl", "jit", "menu", "flags", "help", NULL
 };
 
@@ -332,6 +332,7 @@ static void trace_set_all(CompilerFlags *flags, bool enabled)
     flags->trace_ast = enabled;
     flags->trace_semantic = enabled;
     flags->trace_dep = enabled;
+    flags->trace_qtt = enabled ? 3 : 0;
     flags->trace_codegen = enabled;
 }
 
@@ -355,6 +356,20 @@ static bool trace_apply_item(const char *item, CompilerFlags *flags)
     }
     if (strcmp(item, "dep") == 0 || strcmp(item, "type") == 0) {
         flags->trace_dep = true;
+        return true;
+    }
+    if (strcmp(item, "qtt") == 0 || strcmp(item, "usage") == 0 ||
+        strcmp(item, "resource") == 0) {
+        if (flags->trace_qtt < 1) flags->trace_qtt = 1;
+        return true;
+    }
+    if (strcmp(item, "qtt-proof") == 0 ||
+        strcmp(item, "qtt-detailed") == 0) {
+        if (flags->trace_qtt < 2) flags->trace_qtt = 2;
+        return true;
+    }
+    if (strcmp(item, "qtt-all") == 0) {
+        flags->trace_qtt = 3;
         return true;
     }
     if (strcmp(item, "codegen") == 0 || strcmp(item, "ir") == 0) {
@@ -405,6 +420,11 @@ static bool parse_trace_flag(const char *arg, CompilerFlags *flags)
     }
     if (strcmp(arg, "--trace-dep") == 0 || strcmp(arg, "--trace-type") == 0) {
         flags->trace_dep = true;
+        return true;
+    }
+    if (strcmp(arg, "--trace-qtt") == 0 ||
+        strcmp(arg, "--trace-usage") == 0) {
+        if (flags->trace_qtt < 1) flags->trace_qtt = 1;
         return true;
     }
     if (strcmp(arg, "--trace-codegen") == 0 || strcmp(arg, "--trace-ir") == 0) {
@@ -810,6 +830,22 @@ CompilerFlags parse_flags(int argc, char **argv) {
             if (!parse_common_flag(argc, argv, &i, &flags)) {
                 fprintf(stderr, "Unknown check flag: %s\n", argv[i]);
                 print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
+    if (strcmp(argv[1], "lint") == 0) {
+        flags.mode = CMD_LINT;
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "--json") == 0)
+                flags.lint_json = true;
+            else if (strcmp(argv[i], "--fix") == 0)
+                flags.lint_fix = true;
+            else if (!flags.input_file)
+                flags.input_file = argv[i];
+            else {
+                fprintf(stderr, "Unknown lint argument: %s\n", argv[i]);
+                exit(1);
             }
         }
         return flags;

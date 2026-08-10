@@ -1,0 +1,58 @@
+:TEST-ID tests.wisp.receiver-relative-guards
+:TEST-CONTEXT monadc.context.style.pure-wisp-prelude, monadc.context.style.receiver-relative-guards-2026-07-28
+:TEST-PURPOSE Unary guarded definitions apply their subject to each point-free predicate.
+:TEST-ATOM `x | >= lo and <= hi` lowers to two comparisons joined by Boolean conjunction.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU wisp
+:TEST-MENU-PATH wisp/receiver-relative-guards
+:TEST-CLI-TARGET wisp receiver-relative-guards
+
+module Wisp.ReceiverRelativeGuards []
+
+
+layout GuardSample
+  xp        :: Int
+  yp        :: Int
+  luminance :: Float
+
+
+define sample-visible? :: GuardSample -> Bool
+  sample | .xp < 0          -> False
+         | .yp < 0          -> False
+         | .luminance <= 0.0 -> False
+         | otherwise         -> True
+
+
+define ascii-byte? :: Int -> Bool
+  byte | >= 0 and <= 0x7f -> True
+       | otherwise        -> False
+
+
+define selected-scalar? :: Int -> Bool
+  scalar | = 0x2329                  -> True
+         | >= 0x1f300 and <= 0x1faff -> True
+         | otherwise                 -> False
+
+
+define word-char? :: Int -> Bool
+  c | >= 0x30 and <= 0x39 -> True
+    | >= 0x41 and <= 0x5a -> True
+    | >= 0x61 and <= 0x7a -> True
+    | = 0x5f              -> True
+    | otherwise           -> False
+
+
+tests
+  assert-eq (ascii-byte? 0) True "relative lower and upper bounds include zero"
+  assert-eq (ascii-byte? 0x7f) True "relative lower and upper bounds include the upper edge"
+  assert-eq (ascii-byte? 0x80) False "relative range guard rejects values outside the range"
+  assert-eq (selected-scalar? 0x2329) True "relative equality guard applies the subject"
+  assert-eq (selected-scalar? 0x1f642) True "relative range guards work after an equality clause"
+  assert-eq (selected-scalar? 0x20000) False "continuation guards preserve their subject"
+  assert-eq (word-char? 0x30) True "compound decimal range guards apply their receiver"
+  assert-eq (word-char? 0x5f) True "a receiver-relative equality can follow ranges"
+  assert-eq (word-char? 0x2f) False "the otherwise continuation remains exhaustive"
+  assert-eq (sample-visible? (GuardSample 0 0 1.0)) True "relative field guards access the unary subject"
+  assert-eq (sample-visible? (GuardSample (0 - 1) 0 1.0)) False "relative field guards reject a negative field"
+  assert-eq (sample-visible? (GuardSample 0 0 0.0)) False "continuation field guards retain the unary subject"

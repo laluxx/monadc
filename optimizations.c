@@ -936,22 +936,31 @@ static AST *fold_numeric_call(AST *ast, OpTag tag, Optimizer *opt) {
     size_t n_literals = (ast->list.count - 1) - n_unknown;
     if (n_literals == 0 || (n_literals == 1 && !acc_is_identity)) return ast;
 
-    /* Partial fold: rewrite in-place, keeping only unknowns + folded literal.
-     * Layout of new items: [op, folded_literal?, unknown0, unknown1, ...] */
-    size_t out = 1; /* items[0] is the operator symbol, stays */
-    if (!acc_is_identity)
-        ast->list.items[out++] = number_ast(acc); /* folded literal first */
+    /* Partial fold: build a fresh operand vector. Writing the folded literal
+     * into ast->list.items before scanning the old operands aliases the input
+     * and output vectors: the scan can free its own replacement and leave a
+     * null operand. A destructive tree rewrite must never read through storage
+     * it has already compacted. */
+    size_t new_count = 1 + n_unknown + (acc_is_identity ? 0 : 1);
+    size_t new_capacity = new_count < 4 ? 4 : new_count;
+    AST **new_items = calloc(new_capacity, sizeof(*new_items));
+    if (!new_items) return ast;
 
+    size_t out = 0;
+    new_items[out++] = ast->list.items[0];
+    if (!acc_is_identity)
+        new_items[out++] = number_ast(acc);
     for (size_t i = 1; i < ast->list.count; i++) {
         AST *arg = ast->list.items[i];
-        if (arg && arg->type == AST_NUMBER) {
-            ast_free(arg);          /* consumed into acc */
-            ast->list.items[i] = NULL;
-        } else {
-            ast->list.items[out++] = arg;
-        }
+        if (arg && arg->type == AST_NUMBER)
+            ast_free(arg);
+        else
+            new_items[out++] = arg;
     }
-    ast->list.count = out;
+    free(ast->list.items);
+    ast->list.items = new_items;
+    ast->list.count = new_count;
+    ast->list.capacity = new_capacity;
     opt->changed = true;
     if (opt->stats) opt->stats->expressions_folded++;
     return ast;

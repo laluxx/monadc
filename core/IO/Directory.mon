@@ -1,0 +1,200 @@
+;;; Directory.mon --- portable structured directory IO
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "io directory path metadata listing"
+
+;;; Commentary:
+
+ The host backend supplies enumeration and raw metadata only. Core owns
+ traversal, error policy, identity, snapshots, and every derived view.
+
+ DirectoryEntry is a live identity: asking it a question performs IO.
+ DirectoryEntrySnapshot is an immutable observation: creating it performs
+ IO once, while every accessor and aggregation over it is pure.
+
+;;; Code:
+
+import IO.File
+import Data.Either
+import Data.Bool
+import Sequence
+
+module IO.Directory
+  [DirectoryEntry DirectoryEntrySnapshot
+   scan-directory snapshot-directory
+   directory-entry-names
+   directory-entry-name directory-entry-path
+   directory-entry-size directory-entry-is-directory
+   directory-snapshot-name directory-snapshot-path
+   directory-snapshot-size directory-snapshot-permissions
+   directory-snapshot-links directory-snapshot-modified-seconds
+   directory-snapshot-names directory-snapshot-contains-path?
+   directory-snapshot-total-size directory-snapshot-total-links
+   directory-snapshot-latest-modified-seconds]
+
+
+;;; Entry identity
+
+
+layout DirectoryEntry
+  [name      :: String]
+  [full-path :: String]
+
+
+define directory-entry :: Path -> String -> DirectoryEntry
+  parent name -> DirectoryEntry name (__rt_path_text (join-path parent name))
+
+
+define entries-under :: Path -> [String] -> [DirectoryEntry]
+  _ [] -> []
+  parent [name|names] ->
+    (prepend
+      (directory-entry parent name)
+      (entries-under parent names))
+
+
+define entries-from-names :: Path -> Either IOError [String] -> Either IOError [DirectoryEntry]
+  parent [Left error]  -> Left error
+  parent [Right names] -> Right (entries-under parent names)
+
+
+define scan-directory :: Path -io-> Either IOError [DirectoryEntry]
+  path -> entries-from-names path (list-directory-names path)
+
+
+define directory-entry-name :: DirectoryEntry -> String
+  entry -> entry.name
+
+
+define directory-entry-names :: [DirectoryEntry] -> [String]
+  [] -> []
+  [entry|rest] ->
+    (prepend
+      (directory-entry-name entry)
+      (directory-entry-names rest))
+
+
+define directory-entry-path :: DirectoryEntry -> Path
+  entry -> __rt_text_path entry.full-path
+
+
+define directory-entry-size :: DirectoryEntry -io-> Either IOError Int
+  entry -> metadata-size (directory-entry-path entry)
+
+
+define directory-entry-is-directory :: DirectoryEntry -io-> Either IOError Bool
+  entry -> is-directory (directory-entry-path entry)
+
+
+;;; Directory observation
+
+
+layout DirectoryEntrySnapshot
+  [name             :: String]
+  [full-path        :: String]
+  [byte-size        :: Int]
+  [permissions      :: Int]
+  [hard-links       :: Int]
+  [modified-seconds :: Int]
+
+
+define snapshot-from-metadata :: DirectoryEntry -> Either IOError FileMetadata -> Either IOError DirectoryEntrySnapshot
+  entry [Left error] -> Left error
+  entry [Right information] ->
+    Right
+      (DirectoryEntrySnapshot
+        (directory-entry-name entry)
+        (__rt_path_text (directory-entry-path entry))
+        information.size
+        information.permissions
+        information.links
+        information.modified)
+
+
+define snapshot-entry :: DirectoryEntry -io-> Either IOError DirectoryEntrySnapshot
+  entry -> snapshot-from-metadata entry (metadata (directory-entry-path entry))
+
+
+define snapshot-into :: [DirectoryEntry] -> [DirectoryEntrySnapshot] -io-> Either IOError [DirectoryEntrySnapshot]
+  [] captured -> Right captured
+  [entry|remaining] captured -> (match (snapshot-entry entry) with
+                                | (Left error) -> (Left error)
+                                | (Right snapshot) ->
+                                    (snapshot-into
+                                      remaining
+                                      (prepend snapshot captured)))
+
+
+define snapshot-scanned-directory :: Either IOError [DirectoryEntry] -io-> Either IOError [DirectoryEntrySnapshot]
+  [Left error]   -> Left error
+  [Right entries] -> snapshot-into entries (list)
+
+
+define snapshot-directory :: Path -io-> Either IOError [DirectoryEntrySnapshot]
+  path -> snapshot-scanned-directory (scan-directory path)
+
+
+;;; Pure snapshot views
+
+
+define directory-snapshot-name :: DirectoryEntrySnapshot -> String
+  snapshot -> snapshot.name
+
+
+define directory-snapshot-path :: DirectoryEntrySnapshot -> Path
+  snapshot -> __rt_text_path snapshot.full-path
+
+
+define directory-snapshot-size :: DirectoryEntrySnapshot -> Int
+  entry -> entry.byte-size
+
+
+define directory-snapshot-permissions :: DirectoryEntrySnapshot -> Int
+  entry -> entry.permissions
+
+
+define directory-snapshot-links :: DirectoryEntrySnapshot -> Int
+  entry -> entry.hard-links
+
+
+define directory-snapshot-modified-seconds :: DirectoryEntrySnapshot -> Int
+  entry -> entry.modified-seconds
+
+
+define directory-snapshot-names :: [DirectoryEntrySnapshot] -> [String]
+  [] -> []
+  [entry|remaining] ->
+    (prepend
+      (directory-snapshot-name entry)
+      (directory-snapshot-names remaining))
+
+
+define snapshots-contain-path-text? :: [DirectoryEntrySnapshot] -> String -> Bool
+  [] _ -> False
+  [entry|remaining] path
+        | (= entry.full-path path) -> True
+        | otherwise                -> snapshots-contain-path-text? remaining path
+
+
+define directory-snapshot-contains-path? :: [DirectoryEntrySnapshot] -> Path -> Bool
+  snapshots path -> snapshots-contain-path-text? snapshots (__rt_path_text path)
+
+
+define directory-snapshot-total-size :: [DirectoryEntrySnapshot] -> Int
+  [] -> 0
+  [entry|remaining] -> entry.byte-size + directory-snapshot-total-size remaining
+
+
+define directory-snapshot-total-links :: [DirectoryEntrySnapshot] -> Int
+  [] -> 0
+  [entry|remaining] -> entry.hard-links + directory-snapshot-total-links remaining
+
+
+define later-of :: Int -> Int -> Int
+  left right -> if left > right then left else right
+
+
+define directory-snapshot-latest-modified-seconds :: [DirectoryEntrySnapshot] -> Int
+  [] -> 0
+  [entry|remaining] -> later-of entry.modified-seconds (directory-snapshot-latest-modified-seconds remaining)

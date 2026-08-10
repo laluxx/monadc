@@ -1,12 +1,12 @@
-;; TEST-ID: tests.wisp.core-metadata-regressions
-;; TEST-CONTEXT: monadc.context.tests.core-prelude-module-tests, monadc.context.tests.wisp-define-sugar
-;; TEST-PURPOSE: Core Wisp metadata prose stays metadata instead of becoming value expressions.
-;; TEST-ATOM: Bare Documentation., prose after :alias, and unquoted :doc prose do not leak into define bodies.
-;; TEST-EXPECT: compile
-;; TEST-TIER: regression
-;; TEST-MENU: wisp
-;; TEST-MENU-PATH: wisp/core-metadata-regressions
-;; TEST-CLI-TARGET: wisp core-metadata-regressions
+:TEST-ID tests.wisp.core-metadata-regressions
+:TEST-CONTEXT monadc.context.tests.core-prelude-module-tests, monadc.context.tests.wisp-define-sugar
+:TEST-PURPOSE Core Wisp metadata prose stays metadata instead of becoming value expressions.
+:TEST-ATOM Bare Documentation., prose after :alias, and unquoted :doc prose do not leak into define bodies.
+:TEST-EXPECT compile
+:TEST-TIER regression
+:TEST-MENU wisp
+:TEST-MENU-PATH wisp/core-metadata-regressions
+:TEST-CLI-TARGET wisp core-metadata-regressions
 
 :Author   Regression
 :Keywords ascii char character text classification

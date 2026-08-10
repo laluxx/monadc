@@ -6,13 +6,13 @@
 
 ;;; Commentary:
 
-;; Either models computations with a typed error or alternative on the Left and
-;; a success value on the Right. It is the public Result-like building block for
-;; core code that needs more information than Maybe can carry.
-;;
-;; Its instance supplies only the primitive two-sided Bifunctor mapping.
-;; One-sided mappings are inherited from Data.Functor, keeping their laws and
-;; implementation at the abstraction that owns them.
+ Either models computations with a typed error or alternative on the Left and
+ a success value on the Right. It is the public Result-like building block for
+ core code that needs more information than Maybe can carry.
+
+ Its instance supplies only the primitive two-sided Bifunctor mapping.
+ One-sided mappings are inherited from Data.Functor, keeping their laws and
+ implementation at the abstraction that owns them.
 
 ;;; Code:
 
@@ -31,28 +31,38 @@ data Either e a
   | Right a
 
 
+define bimap-either :: (e -> f) -> (a -> b) -> Either e a -> Either f b
+  f g [Left e]  -> Left (f e)
+  f g [Right x] -> Right (g x)
+
+
 instance Bifunctor Either
-  bimap f g value -> (match value with | (Left e) -> (Left (f e)) | (Right x) -> (Right (g x)))
+  bimap f g value -> bimap-either f g value
 
 
 method either :: Either e a -> (e -> c) -> (a -> c) -> c
-  value f g -> (match value with | (Left e) -> (f e) | (Right x) -> (g x))
+  [Left e] f _  -> f e
+  [Right x] _ g -> g x
 
 
 method left? :: Either e a -> Bool
-  value -> (match value with | (Left e) -> True | (Right x) -> False)
+  [Left _]  -> True
+  [Right _] -> False
 
 
 method right? :: Either e a -> Bool
-  value -> (match value with | (Right x) -> True | (Left e) -> False)
+  [Right _] -> True
+  [Left _]  -> False
 
 
 method fromLeft :: Either e a -> e -> e
-  value default -> (match value with | (Left e) -> e | (Right x) -> default)
+  [Left e] _       -> e
+  [Right _] default -> default
 
 
 method fromRight :: Either e a -> a -> a
-  value default -> (match value with | (Right x) -> x | (Left e) -> default)
+  [Right x] _      -> x
+  [Left _] default -> default
 
 
 method mapLeft :: Either e a -> (e -> f) -> Either f a
@@ -64,7 +74,8 @@ method mapRight :: Either e a -> (a -> b) -> Either e b
 
 
 method flatMap :: Either e a -> (a -> Either e b) -> Either e b
-  value f -> (match value with | (Left e) -> (Left e) | (Right x) -> (f x))
+  [Left e] _  -> Left e
+  [Right x] f -> f x
 
 
 method mapBoth :: Either e a -> (e -> f) -> (a -> b) -> Either f b

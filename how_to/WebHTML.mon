@@ -1,0 +1,76 @@
+;;; WebHTML.mon --- Typed HTML and reader-owned document syntax
+
+;;; Commentary:
+
+;; This chapter constructs HTML without concatenating untrusted markup.
+;; `Web.HTML` owns both the typed HTML value and the indentation reader; the
+;; compiler contains no table of HTML elements or attributes.
+
+;;; Code:
+
+import Web.HTML
+
+module Main
+
+
+;;; 1. Canonical typed construction
+
+;; HTML is a distinct type, not a String alias. `text` creates a text node,
+;; attribute creates a name/value pair, and `element` combines them. Text and
+;; attribute values are contextually escaped during construction.
+
+define canonical :: HTML
+  element "p"
+          (list (attribute "class" "notice"))
+          (list (text "Safe <text> & attributes"))
+
+
+show render-html canonical
+
+
+;;; 2. The indentation-owned surface language
+
+;; Importing Web.HTML activates a scoped `html_` block reader. Indentation is
+;; syntactic structure: a line belongs to the nearest less-indented element.
+;; Keywords introduce attributes. Strings and nested elements form an ordered
+;; mixed-content sequence.
+
+define audience :: String "Monad"
+
+
+define literal :: HTML
+  html :lang "en"
+    head
+      title "Reader-owned HTML"
+    body
+      h1 "Hello, _!" audience
+      p "Read the " a :href "/me?from=how_to&safe=yes" "configuration guide" "."
+
+
+show render-html literal
+
+
+;;; 3. Interpolation and trust
+
+;; An underscore in a two-argument text fragment marks an interpolation site:
+;;
+;;   h1 "Hello, _!" audience
+;;
+;; The inserted String is still escaped as text. Likewise `&` in the href is
+;; rendered as `&amp;`. Use `raw-html` only for already-trusted markup; it is the
+;; explicit escape hatch and therefore makes a trust-boundary decision visible
+;; in source code.
+
+
+;;; 4. Reader theory
+
+;; This is an embedded domain-specific language (EDSL). The compiler kernel
+;; performs layout-sensitive region grouping and preserves Syntax. The
+;; exported Monad transformer in Web.HTML interprets tag symbols, keyword
+;; attributes, mixed content, and hierarchy, then produces ordinary typed
+;; constructor calls.
+;;
+;; Search terms: embedded domain-specific language, object language,
+;; metalanguage, layout-sensitive syntax, off-side rule, concrete syntax tree,
+;; abstract syntax tree, hygienic macro, contextual escaping, injection attack,
+;; trust boundary, mixed content, content model, and pretty printing.

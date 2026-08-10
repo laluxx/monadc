@@ -1,0 +1,102 @@
+;;; Configuration.mon --- A typed language-owned configuration file
+
+;;; Commentary:
+
+;; A configuration schema is an ordinary Monad type. The literal reader lowers
+;; configuration entries to that type's keyword constructor, so normal static
+;; checking rejects missing, duplicate, unknown, and incorrectly typed fields.
+
+;;; Code:
+
+import Configuration
+
+module Main
+
+
+;;; 1. Define the schema
+
+layout FormatterOptions
+  [line-width  :: Int]
+  [indentation :: Int]
+
+
+;; The application owns its schema. The reusable Configuration module knows
+;; nothing about formatter fields or defaults.
+
+
+;;; 2. Write a literal configuration
+
+configuration formatting :: FormatterOptions
+  line-width = 100
+
+  ;; Comments and blank lines belong to the configuration reader.
+  indentation = 2
+
+
+show formatting.line-width
+show formatting.indentation
+
+
+;;; 3. Validate semantic constraints
+
+;; Static typing establishes that both fields are Int. Application validation
+;; expresses stricter predicates that are not captured by the layout alone.
+;; `require` can turn such a predicate into structured, path-addressed
+;; diagnostics. `ConfigValidation a` is the reusable result type for APIs that
+;; also retain the successfully validated value.
+
+
+define positive? :: Int -> Bool
+  value | > 0       -> True
+        | otherwise -> False
+
+
+define validate-formatter :: FormatterOptions -> ConfigValidation FormatterOptions
+  options | positive? options.line-width -> ConfigurationValid options
+          | otherwise                    -> ConfigurationInvalid (list)
+
+
+define validation-valid? :: ConfigValidation FormatterOptions -> Bool
+  [ConfigurationValid _] -> True
+  _                      -> False
+
+
+show validation-valid? (validate-formatter formatting)
+
+
+;; A formatter library can attach a stable diagnostic location with:
+;;
+;;   require (config-path (list "format" "line-width"))
+;;           "line-width must be greater than zero"
+;;           (positive? formatting.line-width)
+
+
+;;; 4. Record provenance and precedence
+
+;; Provenance is data, not hidden evaluator state. A tool can retain where its
+;; effective value came from and define an explicit precedence policy, commonly
+;;
+;;   built-in defaults < project file < environment < command line
+;;
+;; Later sources overriding earlier sources is a policy of the application,
+;; not a special rule baked into the configuration reader.
+
+define formatting-source :: ConfigurationSource
+  ProjectFile "format.mon"
+
+
+;;; 5. What the reader does
+
+;; The literal above lowers to the same typed value as:
+;;
+;;   define formatting :: FormatterOptions
+;;     FormatterOptions :line-width 100 :indentation 2
+;;
+;; This is schema-directed elaboration rather than parsing into an untyped
+;; string-keyed map. The ordinary layout constructor checker therefore remains
+;; the single authority for field names and types.
+;;
+;; Search terms: configuration schema, schema-directed elaboration, static
+;; semantics, dynamic validation, refinement predicate, diagnostic path,
+;; provenance, precedence lattice, override policy, typed configuration,
+;; embedded domain-specific language, and conservative language extension.

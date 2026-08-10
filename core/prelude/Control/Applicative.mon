@@ -6,14 +6,14 @@
 
 ;;; Commentary:
 
-;; Applicative describes effectful application with a minimal basis of pure and
-;; applyA. Unary, binary, and ternary lifting are derived here, so an instance
-;; supplies its effect semantics once and receives the ordinary lifting
-;; vocabulary automatically.
-;;
-;; Alternative and Selective describe additional choice structure. Their
-;; methods remain primitive until their minimal lawful bases and recursive
-;; strictness behavior are established by concrete instances.
+ Applicative describes effectful application with a minimal basis of pure and
+ applyA. Unary, binary, and ternary lifting are derived here, so an instance
+ supplies its effect semantics once and receives the ordinary lifting
+ vocabulary automatically.
+
+ Alternative and Selective describe additional choice structure. Their
+ methods remain primitive until their minimal lawful bases and recursive
+ strictness behavior are established by concrete instances.
 
 ;;; Code:
 

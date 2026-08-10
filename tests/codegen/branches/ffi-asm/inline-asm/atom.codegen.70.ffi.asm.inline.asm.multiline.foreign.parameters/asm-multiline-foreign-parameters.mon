@@ -1,0 +1,24 @@
+:TEST-ID tests.codegen.asm.multiline-foreign-parameters
+:TEST-TIER regression
+:TEST-CONTEXT monadc.context.style.multiline-assembly
+:TEST-PURPOSE Detached multiline asm bodies accept foreign functions with multiple named parameters and pointers.
+:TEST-EXPECT compile, run, stdout
+:TEST-SECTION codegen
+:TEST-CATEGORY 70-ffi-asm
+
+module Main []
+
+define sys-open-shape :: *U8 -> Int -> Int -foreign-> Int
+  path flags mode ->
+    asm mov 2     %rax
+        mov path  %rdi
+        mov flags %rsi
+        mov mode  %rdx
+        ret
+
+define choose-second :: Int -> Int -> Int -foreign-> Int
+  first second third ->
+    asm mov second %rax
+        ret
+
+show (choose-second 7 42 0)

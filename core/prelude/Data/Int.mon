@@ -6,9 +6,9 @@
 
 ;;; Commentary:
 
-;; Int remains a compiler primitive for representation and lowering. Generic
-;; arithmetic is owned by Numeric (Num/Integral), and generic ordering is owned
-;; by Data.Ord. This module contains only genuinely Int-specific predicates.
+ Int remains a compiler primitive for representation and lowering. Generic
+ arithmetic is owned by Numeric (Num/Integral), and generic ordering is owned
+ by Data.Ord. This module contains only genuinely Int-specific predicates.
 
 ;;; Code:
 
@@ -19,22 +19,22 @@ module Data.Int
 
 
 method zero? :: Self -> Bool
-  x | (= x 0)   -> True
+  x | = 0       -> True
     | otherwise -> False
 
 
 method nonzero? :: Self -> Bool
-  x | (= x 0)   -> False
+  x | = 0       -> False
     | otherwise -> True
 
 
 method positive? :: Self -> Bool
-  x | (> x 0)   -> True
+  x | > 0       -> True
     | otherwise -> False
 
 
 method negative? :: Self -> Bool
-  x | (< x 0)   -> True
+  x | < 0       -> True
     | otherwise -> False
 
 

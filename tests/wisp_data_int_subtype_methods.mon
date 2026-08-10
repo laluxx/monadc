@@ -1,4 +1,4 @@
-;; TEST-CONTEXT: monadc.context.types.subtype-relation, monadc.context.core-libs.data-int-float
+:TEST-CONTEXT monadc.context.types.subtype-relation, monadc.context.core-libs.data-int-float
 
 import Data.Int
 

@@ -1,0 +1,111 @@
+#+TITLE: Typed Configuration Context
+#+AUTHOR: Codex
+#+DATE: 2026-07-28
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:configuration:dsl:types:tooling:
+
+* Language-Owned Configuration
+:PROPERTIES:
+:ID: monadc.context.configuration.typed-language-owned
+:CUSTOM_ID: typed-language-owned
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Configuration schemas and programs are ordinary typed Monad modules.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-28
+:CONTEXT_UPDATED: 2026-07-28
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.configuration.typed-language-owned-2026-07-28 date:2026-07-28 by:human src:user-request conf:high]
+  Reusable project configuration is expressed inside Monad itself. A tool
+  defines its schema with layouts and algebraic data, and a project provides an
+  ordinary typed module value. Configuration may therefore use pure Monad
+  functions without introducing YAML, an untyped universal value tree, a
+  second parser, or a second evaluator.
+
+[DEC id:dec.configuration.core-protocol-2026-07-28 date:2026-07-28 by:codex src:core/Configuration.mon conf:high]
+  =core/Configuration.mon= owns reusable paths, severities, structured
+  diagnostics, validation results, requirements, and provenance. Tool-specific
+  schemas and precedence rules remain with their tools. Loading a configuration
+  module must use ordinary compiler module resolution and static typing.
+
+[OBS id:obs.configuration.public-client src:tests/configuration_public_api.mon conf:high]
+  The external regression defines =FormatOptions= and =FormatConfiguration=,
+  validates a line width, and records command-line provenance using only the
+  public =Configuration= module.
+
+[OBS id:obs.configuration.literal-reader-2026-07-28 src:core/Configuration.mon,tests/configuration_literal_reader.mon conf:high]
+  Importing =Configuration= activates a scoped =configuration_= block reader.
+  Its exported Monad Syntax transformer lowers literal =name = expression=
+  entries to a typed keyword-constructor definition. Blank lines, comments,
+  and indentation arrive through the general reader-block protocol; no
+  configuration field name is present in compiler C code.
+
+[OBS id:obs.configuration.reader-generalization-regression-2026-07-28 src:tests/configuration_literal_reader.mon,tests/test_reader_blocks.py conf:high]
+  Expression-position and relative-baseline block-reader generalization leaves
+  the typed configuration language unchanged. Its literal client regression,
+  source-located malformed-entry diagnostic, import scoping, and ambiguity
+  checks run against the same generalized registry and grouping pass used by
+  =Web.HTML=.
+
+[OBS id:obs.configuration-executable-tutorial-2026-07-28 src:how_to/Configuration.mon,tests/test_how_to_examples.py conf:high]
+  The focused tutorial is compiled and executed as an external client. It
+  demonstrates a typed literal, semantic validation, structured paths, and
+  explicit provenance while naming the relevant configuration-language
+  theory.
+
+[TODO id:todo.configuration.imported-generic-adt-elimination date:2026-07-28 priority:high]
+  Imported generic ADTs can be constructed, passed, and rendered, but direct
+  client-side constructor pattern matching does not yet declare the nominal
+  LLVM structure in the importing compilation unit. Add serialized data-type
+  representation metadata and reconstruct opaque declarations during import;
+  do not make clients depend on that representation when a total module-owned
+  eliminator is the better interface.
+
+[FIX id:fix.configuration.imported-nominal-abi-2026-07-28 date:2026-07-28 src:main.c,codegen.c,tests/imported_type_abi.mon conf:high]
+  Imported layouts are retained exclusively as nominal type metadata; they are
+  no longer emitted a second time as value exports that overwrite their
+  =ENV_LAYOUT= identity. Application dispatch normalizes a singleton symbolic
+  head and recognizes positional nominal construction before higher-order
+  application. The standalone regression crosses both directions of the ABI:
+  imported layout construction and function arguments, plus a locally defined
+  function over an imported generic ADT instantiated with that layout and
+  client-side constructor elimination.
+
+[OBS id:obs.configuration.generic-validation-executable-2026-07-28 src:how_to/Configuration.mon,tests/test_how_to_examples.py conf:high]
+  The executable tutorial now defines and consumes
+  =ConfigValidation FormatterOptions= directly. This replaces the temporary
+  predicate-only presentation that was necessary while imported nominal type
+  identity was being overwritten.
+
+[TODO id:todo.configuration.generic-provenance-wrapper date:2026-07-28 src:core/Configuration.mon]
+  After generic ADTs containing another user-defined ADT have a stable imported
+  ABI, consider a reusable typed sourced-value wrapper. Until then applications
+  place =ConfigurationSource= directly in their own typed schema; do not erase
+  the application type merely to centralize that wrapper.
+
+* Formatter and lint policy
+:PROPERTIES:
+:ID: monadc.context.configuration.format-policy
+:CONTEXT_KIND: architecture
+:CONTEXT_STATUS: active
+:END:
+
+Formatter policy is typed tool configuration, not scattered command-line
+conditionals. Its schema includes map brace placement (=compact=, =hanging=,
+or =expanded=), indentation width, maximum docstring summary width, and blank
+line counts between top-level declarations, sections, and related definitions.
+Lint policy maps stable rule IDs to severities and may require documentation for
+selected visibility classes.
+
+The C implementation supplies deterministic defaults and consumes the evaluated
+configuration through the ordinary compiler configuration boundary. The LSP,
+=monad lint=, and the formatter share the resolved policy object for a workspace.

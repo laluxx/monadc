@@ -1,0 +1,28 @@
+:TEST-ID tests.configuration.literal-reader
+:TEST-CONTEXT monadc.context.reader.programmable-blocks, monadc.context.configuration.typed-language-owned
+:TEST-PURPOSE The core configuration language is implemented by a Monad block transformer.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+:TEST-MENU-PATH configuration/literal-reader
+:TEST-CLI-TARGET configuration literal-reader
+
+import Configuration
+
+module Configuration.Literal.Reader []
+
+
+layout FormatOptions
+  [line-width :: Int]
+  [indentation :: Int]
+
+
+configuration formatting :: FormatOptions
+  line-width = 100
+
+  ;; Configuration comments are owned by the block reader, not Wisp.
+  indentation = 2
+
+
+tests
+  assert-eq formatting.line-width 100 "literal configuration initializes a typed field"
+  assert-eq formatting.indentation 2 "multiple configuration entries preserve their values"

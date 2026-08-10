@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <ctype.h>
 
 #define DA_PUSH(array, count, capacity, item) do {                 \
     if ((count) >= (capacity)) {                                   \
@@ -207,6 +208,7 @@ static void comment_map_add(int open_pos, int close_pos, int para_end) {
 static int line_comment_marker_len_at(const char *s) {
     const unsigned char *p = (const unsigned char *)s;
     if (p[0] == ';') return 1;
+    if (p[0] == 0xE2 && p[1] == 0x80 && p[2] == 0xA2) return 3; /* • */
     if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAD) return 3;
     if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAE) return 3;
     if (p[0] == 0xE2 && p[1] == 0x95 && p[2] == 0xAF) return 3;
@@ -934,9 +936,31 @@ AST *ast_clone(AST *ast) {
                                           ? strdup(ast->lambda.params[i].name) : NULL;
             c->lambda.params[i].type_name = ast->lambda.params[i].type_name
                                           ? strdup(ast->lambda.params[i].type_name) : NULL;
+            c->lambda.params[i].effect_name = ast->lambda.has_effect_arrows &&
+                                              ast->lambda.params[i].effect_name
+                                            ? strdup(ast->lambda.params[i].effect_name) : NULL;
             c->lambda.params[i].is_rest   = ast->lambda.params[i].is_rest;
+            c->lambda.params[i].is_anon   = ast->lambda.params[i].is_anon;
+            c->lambda.params[i].binder_id = ast->lambda.params[i].binder_id;
         }
         c->lambda.return_type = ast->lambda.return_type ? strdup(ast->lambda.return_type) : NULL;
+        c->lambda.has_effect_arrows = ast->lambda.has_effect_arrows;
+        c->lambda.effect_qualifier_count =
+            ast->lambda.effect_qualifier_count;
+        c->lambda.effect_qualifier_rows =
+            ast->lambda.effect_qualifier_count
+                ? calloc(ast->lambda.effect_qualifier_count,
+                    sizeof(*c->lambda.effect_qualifier_rows)) : NULL;
+        c->lambda.effect_qualifier_traits =
+            ast->lambda.effect_qualifier_count
+                ? calloc(ast->lambda.effect_qualifier_count,
+                    sizeof(*c->lambda.effect_qualifier_traits)) : NULL;
+        for (size_t i = 0; i < ast->lambda.effect_qualifier_count; i++) {
+            c->lambda.effect_qualifier_rows[i] = strdup(
+                ast->lambda.effect_qualifier_rows[i]);
+            c->lambda.effect_qualifier_traits[i] = strdup(
+                ast->lambda.effect_qualifier_traits[i]);
+        }
         c->lambda.docstring   = ast->lambda.docstring   ? strdup(ast->lambda.docstring)   : NULL;
         c->lambda.alias_name  = ast->lambda.alias_name  ? strdup(ast->lambda.alias_name)  : NULL;
         c->lambda.body_exprs  = malloc(sizeof(AST*) * (ast->lambda.body_count ? ast->lambda.body_count : 1));
@@ -1172,10 +1196,18 @@ void ast_free(AST *ast) {
         for (int i = 0; i < ast->lambda.param_count; i++) {
             free(ast->lambda.params[i].name);
             free(ast->lambda.params[i].type_name);
+            if (ast->lambda.has_effect_arrows)
+                free(ast->lambda.params[i].effect_name);
         }
         free(ast->lambda.params);
     }
     free(ast->lambda.return_type);
+    for (size_t i = 0; i < ast->lambda.effect_qualifier_count; i++) {
+        free(ast->lambda.effect_qualifier_rows[i]);
+        free(ast->lambda.effect_qualifier_traits[i]);
+    }
+    free(ast->lambda.effect_qualifier_rows);
+    free(ast->lambda.effect_qualifier_traits);
     free(ast->lambda.docstring);
     free(ast->lambda.alias_name);
     // Free each body expression individually
@@ -1420,10 +1452,23 @@ void ast_print(AST *ast) {
             printf("[%s", ast->lambda.params[i].name);
             if (ast->lambda.params[i].type_name)
                 printf(" :: %s", ast->lambda.params[i].type_name);
+            if (ast->lambda.has_effect_arrows &&
+                ast->lambda.params[i].effect_name)
+                printf(" -%s->", ast->lambda.params[i].effect_name);
             printf("]");
         }
         if (ast->lambda.return_type)
             printf(" -> %s", ast->lambda.return_type);
+        if (ast->lambda.effect_qualifier_count) {
+            printf(" where ");
+            for (size_t i = 0;
+                 i < ast->lambda.effect_qualifier_count; i++) {
+                if (i) printf(", ");
+                printf("%s has %s",
+                    ast->lambda.effect_qualifier_rows[i],
+                    ast->lambda.effect_qualifier_traits[i]);
+            }
+        }
         printf(")");
         if (ast->lambda.docstring)
             printf(" \"%s\"", ast->lambda.docstring);
@@ -1535,11 +1580,11 @@ void ast_print(AST *ast) {
         break;
 
     case AST_MAP:
-        printf("#{");
+        printf("{");
         for (size_t i = 0; i < ast->map.count; i++) {
             if (i > 0) printf(" ");
             ast_print(ast->map.keys[i]);
-            printf(" ");
+            printf(" -> ");
             ast_print(ast->map.vals[i]);
         }
         printf("}");
@@ -1913,6 +1958,28 @@ Token lexer_next_token(Lexer *lex) {
         tok.type  = TOK_ARROW;
         tok.value = my_strdup("->");
         return tok;
+    }
+
+    // Compact effect arrow: -e->, -io.read->. The token stores only the
+    // label; the surrounding punctuation is syntax, not effect identity.
+    if (c == '-') {
+        size_t start = lex->pos + 1;
+        size_t at = start;
+        while (lex->source[at] &&
+               !(lex->source[at] == '-' && lex->source[at + 1] == '>') &&
+               (isalnum((unsigned char)lex->source[at]) ||
+                lex->source[at] == '_' || lex->source[at] == '.' ||
+                lex->source[at] == '-'))
+            at++;
+        if (at > start && lex->source[at] == '-' &&
+                lex->source[at + 1] == '>') {
+            advance(lex);
+            while (lex->pos < at) advance(lex);
+            tok.value = my_strndup(lex->source + start, at - start);
+            advance(lex); advance(lex);
+            tok.type = TOK_EFFECT_ARROW;
+            return tok;
+        }
     }
 
     // Keyword :name  (colon NOT followed by another colon)
@@ -2568,25 +2635,6 @@ static void parser_init(Parser *p, Lexer *lex) {
     p->current = lexer_next_token(lex);
 }
 
-static bool parser_current_layout_item_is_field(Parser *p) {
-    if (!p || p->current.type != TOK_LBRACKET)
-        return false;
-
-    Lexer peek = *p->lexer;
-    Token name_tok = lexer_next_token(&peek);
-    Token sep_tok  = lexer_next_token(&peek);
-
-    bool is_field =
-        name_tok.type == TOK_SYMBOL &&
-        (sep_tok.type == TOK_ARROW ||
-         (sep_tok.type == TOK_SYMBOL && sep_tok.value &&
-          strcmp(sep_tok.value, "::") == 0));
-
-    free(name_tok.value);
-    free(sep_tok.value);
-    return is_field;
-}
-
 static bool parser_current_is_line_directive(Parser *p) {
     if (!p || p->current.type != TOK_LPAREN)
         return false;
@@ -2635,8 +2683,11 @@ static bool parser_layout_current_is_boundary(Parser *p) {
         strcmp(p->current.value, "where") == 0)
         return true;
 
-    if (p->current.type == TOK_LBRACKET &&
-        parser_current_layout_item_is_field(p))
+    /* A bracket starts a field declaration even when its separator is
+     * malformed.  Treat it as a boundary so the layout parser can issue the
+     * precise field diagnostic instead of skipping the whole bracket as
+     * documentation. */
+    if (p->current.type == TOK_LBRACKET)
         return true;
 
     return false;
@@ -2816,7 +2867,13 @@ static bool law_signature_returns_bool(const char *type_str) {
 static char *parse_anonymous_finite_type(Parser *p);
 
 static ASTParam parse_one_param(Parser *p) {
-    ASTParam param = {NULL, NULL, false};
+    ASTParam param = {
+        .name = NULL,
+        .type_name = NULL,
+        .is_rest = false,
+        .is_anon = false,
+        .binder_id = 0,
+    };
 
     if (p->current.type == TOK_SYMBOL) {
         param.name = my_strdup(p->current.value);
@@ -2943,11 +3000,16 @@ static char *parse_anonymous_finite_type(Parser *p) {
 }
 
 static void parse_fn_signature(Parser *p, ASTParam **out_params,
-                               int *out_count, char **out_return_type) {
-    ASTParam *params   = NULL;
+                               int *out_count, char **out_return_type,
+                               bool *out_has_effect_arrows,
+                               char ***out_qualifier_rows,
+                               char ***out_qualifier_traits,
+                               size_t *out_qualifier_count) {
+    ASTParam *params   = calloc(64, sizeof(*params));
     int       count    = 0;
-    int       capacity = 0;
+    int       capacity = params ? 64 : 0;
     char     *ret_type = NULL;
+    bool      has_effect_arrows = false;
     /* Reset type variable counter per function so each function's
      * unannotated params get fresh 'a', 'b', 'c' from the start. */
     g_typevar_counter = 0;
@@ -2968,7 +3030,8 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     break;
                 }
             }
-            if (depth == 0 && peek_tok.type == TOK_ARROW) {
+            if (depth == 0 && (peek_tok.type == TOK_ARROW ||
+                    peek_tok.type == TOK_EFFECT_ARROW)) {
                 is_arrow_sig = true;
                 free(peek_tok.value);
                 break;
@@ -2998,7 +3061,8 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 	                free(peek_tok.value);
 	                break;
 	            }
-	            if (depth == 0 && peek_tok.type == TOK_ARROW) {
+	            if (depth == 0 && (peek_tok.type == TOK_ARROW ||
+	                    peek_tok.type == TOK_EFFECT_ARROW)) {
 	                free(peek_tok.value);
 	                break;
 	            }
@@ -3019,6 +3083,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 
 	    while (p->current.type != TOK_RPAREN &&
 	           p->current.type != TOK_EOF) {
+        if (p->current.type == TOK_SYMBOL && p->current.value &&
+            strcmp(p->current.value, "where") == 0)
+            break;
         // Rest parameter: . args  or  . [args :: Type]
         if (p->current.type == TOK_SYMBOL &&
             strcmp(p->current.value, ".") == 0) {
@@ -3322,14 +3389,21 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 
                     params[count++] = param;
                 }
-        } else if (p->current.type == TOK_ARROW) {
+        } else if (p->current.type == TOK_ARROW ||
+                   p->current.type == TOK_EFFECT_ARROW) {
+            if (p->current.type == TOK_EFFECT_ARROW && count > 0) {
+                has_effect_arrows = true;
+                free(params[count - 1].effect_name);
+                params[count - 1].effect_name = my_strdup(p->current.value);
+            }
             p->current = lexer_next_token(p->lexer);
 
             if (p->current.type == TOK_SYMBOL) {
                 /* Peek ahead to see if another '->' follows before ')' */
                 Lexer peek_lex = *p->lexer;
                 Token peek_tok = lexer_next_token(&peek_lex);
-                bool has_more_arrow = (peek_tok.type == TOK_ARROW);
+                bool has_more_arrow = (peek_tok.type == TOK_ARROW ||
+                                       peek_tok.type == TOK_EFFECT_ARROW);
                 bool is_explicit_param = (peek_tok.type == TOK_SYMBOL && peek_tok.value && strcmp(peek_tok.value, "::") == 0);
                 free(peek_tok.value);
 
@@ -3374,7 +3448,11 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     while (p->current.type != TOK_EOF) {
                         if (paren_depth == 0 && bracket_depth == 0 &&
                             (p->current.type == TOK_RPAREN ||
-                             p->current.type == TOK_ARROW)) {
+                             p->current.type == TOK_ARROW ||
+                             p->current.type == TOK_EFFECT_ARROW ||
+                             (p->current.type == TOK_SYMBOL &&
+                              p->current.value &&
+                              strcmp(p->current.value, "where") == 0))) {
                             break;
                         }
 
@@ -3435,7 +3513,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     Token tmp_tok = lexer_next_token(&tmp_lex);
                     if ((tmp_tok.type == TOK_SYMBOL && tmp_tok.value && strcmp(tmp_tok.value, "::") == 0) ||
                         tmp_tok.type == TOK_COLON) is_explicit_param = true;
-                    if (tmp_tok.type == TOK_ARROW) is_explicit_param = true;
+                    if (tmp_tok.type == TOK_ARROW ||
+                        tmp_tok.type == TOK_EFFECT_ARROW)
+                        is_explicit_param = true;
                     free(tmp_tok.value);
                 }
 
@@ -3452,7 +3532,8 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 }
                 free(peek_tok.value); /* consume ']' */
                 peek_tok = lexer_next_token(&peek_lex); /* token after ']' */
-                bool has_more_arrow = (peek_tok.type == TOK_ARROW);
+                bool has_more_arrow = (peek_tok.type == TOK_ARROW ||
+                                       peek_tok.type == TOK_EFFECT_ARROW);
                 free(peek_tok.value);
 
                 if (has_more_arrow && is_explicit_param) {
@@ -3513,14 +3594,18 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 while (peek_tok.type != TOK_EOF) {
                     if (peek_tok.type == TOK_LPAREN) peek_depth++;
                     if (peek_tok.type == TOK_RPAREN) peek_depth--;
-                    if (peek_tok.type == TOK_ARROW && peek_depth == 1) has_arrow_inside = true;
+                    if ((peek_tok.type == TOK_ARROW ||
+                         peek_tok.type == TOK_EFFECT_ARROW) &&
+                        peek_depth == 1)
+                        has_arrow_inside = true;
                     if (peek_depth == 0 && peek_tok.type != TOK_LPAREN) break;
                     free(peek_tok.value);
                     peek_tok = lexer_next_token(&peek_lex);
                 }
                 free(peek_tok.value); /* consume ')' */
                 peek_tok = lexer_next_token(&peek_lex); /* token after ')' */
-                bool has_more_arrow = (peek_tok.type == TOK_ARROW);
+                bool has_more_arrow = (peek_tok.type == TOK_ARROW ||
+                                       peek_tok.type == TOK_EFFECT_ARROW);
                 free(peek_tok.value);
 
                 bool is_explicit_param = false;
@@ -3530,7 +3615,9 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                     Token tmp_tok2 = lexer_next_token(&tmp_lex);
                     if ((tmp_tok2.type == TOK_SYMBOL && tmp_tok2.value && strcmp(tmp_tok2.value, "::") == 0) ||
                         tmp_tok2.type == TOK_COLON) is_explicit_param = true;
-                    if (tmp_tok2.type == TOK_ARROW) is_explicit_param = true;
+                    if (tmp_tok2.type == TOK_ARROW ||
+                        tmp_tok2.type == TOK_EFFECT_ARROW)
+                        is_explicit_param = true;
                     free(tmp_tok2.value);
                 }
                 free(tmp_tok.value);
@@ -3633,7 +3720,13 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
 
     // Consume optional `-> ReturnType` that follows the last parameter
     // (common when the last param is a rest param and the loop broke early)
-    if (p->current.type == TOK_ARROW) {
+    if (p->current.type == TOK_ARROW ||
+        p->current.type == TOK_EFFECT_ARROW) {
+        if (p->current.type == TOK_EFFECT_ARROW && count > 0) {
+            has_effect_arrows = true;
+            free(params[count - 1].effect_name);
+            params[count - 1].effect_name = my_strdup(p->current.value);
+        }
         p->current = lexer_next_token(p->lexer);
 
         bool has_arrow_inside = false;
@@ -3694,7 +3787,10 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
                 if (p->current.type == TOK_LPAREN || p->current.type == TOK_LBRACKET || p->current.type == TOK_LBRACE || p->current.type == TOK_HASH_LBRACE) depth++;
                 if ((p->current.type == TOK_RPAREN || p->current.type == TOK_RBRACKET || p->current.type == TOK_RBRACE) && depth > 0) depth--;
 
-                if (depth == 0 && (p->current.type == TOK_RPAREN || p->current.type == TOK_ARROW)) break;
+                if (depth == 0 && (p->current.type == TOK_RPAREN ||
+                    p->current.type == TOK_ARROW ||
+                    (p->current.type == TOK_SYMBOL && p->current.value &&
+                     strcmp(p->current.value, "where") == 0))) break;
 
                 const char *tok_str = p->current.value ? p->current.value
                                     : (p->current.type == TOK_ARROW ? "->" : NULL);
@@ -3713,6 +3809,55 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
         }
     }
 
+    char **qualifier_rows = NULL;
+    char **qualifier_traits = NULL;
+    size_t qualifier_count = 0;
+    if (p->current.type == TOK_SYMBOL && p->current.value &&
+            strcmp(p->current.value, "where") == 0) {
+        p->current = lexer_next_token(p->lexer);
+        while (p->current.type != TOK_RPAREN &&
+               p->current.type != TOK_EOF) {
+            if (p->current.type != TOK_SYMBOL || !p->current.value ||
+                    strcmp(p->current.value, ",") == 0 ||
+                    strcmp(p->current.value, "and") == 0)
+                READER_ERROR(p->current.line, p->current.column,
+                    "expected effect row name after 'where'");
+            char *row = my_strdup(p->current.value);
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type != TOK_SYMBOL || !p->current.value ||
+                    strcmp(p->current.value, "has") != 0)
+                READER_ERROR(p->current.line, p->current.column,
+                    "expected 'has' after effect row '%s'", row);
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type != TOK_SYMBOL || !p->current.value)
+                READER_ERROR(p->current.line, p->current.column,
+                    "expected trait name after '%s has'", row);
+            char *trait = my_strdup(p->current.value);
+            char **grown_rows = realloc(
+                qualifier_rows,
+                (qualifier_count + 1) * sizeof(*qualifier_rows));
+            char **grown_traits = realloc(
+                qualifier_traits,
+                (qualifier_count + 1) * sizeof(*qualifier_traits));
+            if (!row || !trait || !grown_rows || !grown_traits)
+                READER_ERROR(p->current.line, p->current.column,
+                    "out of memory while parsing effect qualification");
+            qualifier_rows = grown_rows;
+            qualifier_traits = grown_traits;
+            qualifier_rows[qualifier_count] = row;
+            qualifier_traits[qualifier_count] = trait;
+            qualifier_count++;
+            p->current = lexer_next_token(p->lexer);
+            if (p->current.type == TOK_SYMBOL && p->current.value &&
+                    (strcmp(p->current.value, ",") == 0 ||
+                     strcmp(p->current.value, "and") == 0)) {
+                p->current = lexer_next_token(p->lexer);
+                continue;
+            }
+            break;
+        }
+    }
+
     if (p->current.type != TOK_RPAREN)
         compiler_error(p->current.line, p->current.column,
                        "Expected ')' to close function signature");
@@ -3721,6 +3866,11 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
     *out_params      = params;
     *out_count       = count;
     *out_return_type = ret_type;
+    if (out_has_effect_arrows)
+        *out_has_effect_arrows = has_effect_arrows;
+    *out_qualifier_rows = qualifier_rows;
+    *out_qualifier_traits = qualifier_traits;
+    *out_qualifier_count = qualifier_count;
 }
 
 static AST *parse_lambda(Parser *p) {
@@ -3733,7 +3883,13 @@ static AST *parse_lambda(Parser *p) {
     ASTParam *params   = NULL;
     int       count    = 0;
     char     *ret_type = NULL;
-    parse_fn_signature(p, &params, &count, &ret_type);
+    bool      has_effect_arrows = false;
+    char    **qualifier_rows = NULL;
+    char    **qualifier_traits = NULL;
+    size_t    qualifier_count = 0;
+    parse_fn_signature(
+        p, &params, &count, &ret_type, &has_effect_arrows,
+        &qualifier_rows, &qualifier_traits, &qualifier_count);
 
     char *docstring = NULL;
     if (p->current.type == TOK_STRING) {
@@ -3865,6 +4021,10 @@ static AST *parse_lambda(Parser *p) {
 
     AST *result = ast_new_lambda(params, count, ret_type, docstring, NULL, false,
                                   body, body_exprs, body_count);
+    result->lambda.has_effect_arrows = has_effect_arrows;
+    result->lambda.effect_qualifier_rows = qualifier_rows;
+    result->lambda.effect_qualifier_traits = qualifier_traits;
+    result->lambda.effect_qualifier_count = qualifier_count;
     result->lambda.pattern_match = pattern_match;
     if (body && body->end_column > 0)
         result->end_column = body->end_column;
@@ -4785,7 +4945,13 @@ static AST *parse_list(Parser *p) {
                 compiler_error(p->current.line, p->current.column,
                                "Expected ']' after let binding value");
             p->current = lexer_next_token(p->lexer);
-            ASTParam p_item = {bname, NULL, false, false};
+            ASTParam p_item = {
+                .name = bname,
+                .type_name = NULL,
+                .is_rest = false,
+                .is_anon = false,
+                .binder_id = 0,
+            };
             DA_PUSH(params, param_count, param_cap, p_item);
             DA_PUSH(inits, init_count, init_cap, init_expr);
         } else {
@@ -4805,7 +4971,13 @@ static AST *parse_list(Parser *p) {
                     compiler_error(p->current.line, p->current.column,
                                    "Expected ']' after let binding value");
                 p->current = lexer_next_token(p->lexer);
-                ASTParam p_item = {bname, NULL, false, false};
+                ASTParam p_item = {
+                    .name = bname,
+                    .type_name = NULL,
+                    .is_rest = false,
+                    .is_anon = false,
+                    .binder_id = 0,
+                };
                 DA_PUSH(params, param_count, param_cap, p_item);
                 DA_PUSH(inits, init_count, init_cap, init_expr);
             }
@@ -5079,7 +5251,13 @@ static AST *parse_list(Parser *p) {
             ASTParam *params = NULL;
             int       count  = 0;
             char     *ret_type = NULL;
-            parse_fn_signature(p, &params, &count, &ret_type);
+            bool      has_effect_arrows = false;
+            char    **qualifier_rows = NULL;
+            char    **qualifier_traits = NULL;
+            size_t    qualifier_count = 0;
+            parse_fn_signature(
+                p, &params, &count, &ret_type, &has_effect_arrows,
+                &qualifier_rows, &qualifier_traits, &qualifier_count);
             register_local_func_arity(fname->symbol, count);
 
             // Parse optional metadata BEFORE body
@@ -5268,6 +5446,10 @@ static AST *parse_list(Parser *p) {
             AST *lambda = ast_new_lambda(params, count, ret_type,
                                          meta.docstring, meta.alias_name, meta.naked,
                                          body, body_exprs, body_count);
+            lambda->lambda.has_effect_arrows = has_effect_arrows;
+            lambda->lambda.effect_qualifier_rows = qualifier_rows;
+            lambda->lambda.effect_qualifier_traits = qualifier_traits;
+            lambda->lambda.effect_qualifier_count = qualifier_count;
             lambda->lambda.pattern_match = pattern_match;
 
             free(meta.docstring);
@@ -6801,6 +6983,9 @@ static AST *parse_list(Parser *p) {
                            dat_name,
                            (char)(dat_name[0] - 32), dat_name + 1,
                            dat_name);
+        if (!type_nominal_register(dat_name))
+            compiler_error(p->current.line, p->current.column,
+                           "Could not register data type name '%s'", dat_name);
         p->current = lexer_next_token(p->lexer);
 
         /* Collect type parameters: lowercase symbols before '=' or '|' or ')' */
@@ -6964,17 +7149,28 @@ static AST *parse_list(Parser *p) {
                         my_strdup(p->current.value);
                     p->current = lexer_next_token(p->lexer);
                 } else if (p->current.type == TOK_LBRACKET) {
-                    /* [name :: Type] or [name :: Arr :: T :: N] bracket field syntax */
+                    /* Either a named field `[name :: Type]` or a collection
+                     * type `[Type]`. Do not discard collection fields: the
+                     * token following the first symbol distinguishes the two
+                     * forms. */
                     p->current = lexer_next_token(p->lexer); /* consume '[' */
-                    /* skip the field name */
-                    if (p->current.type == TOK_SYMBOL)
+                    char first_token[256] = {0};
+                    if (p->current.value) {
+                        snprintf(first_token, sizeof(first_token), "%s",
+                                 p->current.value);
                         p->current = lexer_next_token(p->lexer);
-                    /* consume '::' */
-                    if (p->current.type == TOK_SYMBOL &&
-                        strcmp(p->current.value, "::") == 0)
+                    }
+                    bool named_field = p->current.type == TOK_SYMBOL &&
+                                       p->current.value &&
+                                       strcmp(p->current.value, "::") == 0;
+                    if (named_field)
                         p->current = lexer_next_token(p->lexer);
                     /* collect the type tokens until ']' */
                     char type_buf[512] = {0};
+                    if (!named_field) {
+                        snprintf(type_buf, sizeof(type_buf), "[ %s",
+                                 first_token);
+                    }
                     int depth = 0;
                     while ((p->current.type != TOK_RBRACKET || depth > 0) &&
                            p->current.type != TOK_EOF) {
@@ -6991,6 +7187,9 @@ static AST *parse_list(Parser *p) {
                     }
                     if (p->current.type == TOK_RBRACKET)
                         p->current = lexer_next_token(p->lexer); /* consume ']' */
+                    if (!named_field)
+                        strncat(type_buf, " ]",
+                                sizeof(type_buf) - strlen(type_buf) - 1);
                     if (type_buf[0]) {
                         ctor.field_types = realloc(ctor.field_types,
                             sizeof(char*) * (ctor.field_count + 1));
@@ -7350,8 +7549,7 @@ static AST *parse_list(Parser *p) {
             }
 
             /* [field :: Type] or [field :: [ElemType Size]] */
-            if (p->current.type != TOK_LBRACKET ||
-                !parser_current_layout_item_is_field(p)) {
+            if (p->current.type != TOK_LBRACKET) {
                 parser_skip_layout_item(p);
                 continue;
             }
@@ -8539,7 +8737,8 @@ static AST *parse_list(Parser *p) {
 
             /* A single parenthesized literal is grouping, not a call:
              * (-1.0) must remain a numeric value inside infix expressions. */
-            if (p->current.type == TOK_RPAREN &&
+            if (g_quote_depth == 0 &&
+                p->current.type == TOK_RPAREN &&
                 (first->type == AST_NUMBER ||
                  first->type == AST_CHAR ||
                  first->type == AST_KEYWORD)) {
@@ -9110,6 +9309,49 @@ static AST *parse_set(Parser *p) {
         }
 
         AST *elem = parse_expr(p);
+
+        /* A top-level arrow makes the brace literal a map.  The distinction
+         * is syntactic and therefore survives formatting and type inference:
+         * {key -> value} is AST_MAP, while {value ...} remains AST_SET. */
+        if (p->current.type == TOK_ARROW) {
+            free(node->set.elements);
+            node->type = AST_MAP;
+            node->map.capacity = 4;
+            node->map.count = 0;
+            node->map.keys = malloc(sizeof(AST*) * node->map.capacity);
+            node->map.vals = malloc(sizeof(AST*) * node->map.capacity);
+
+            while (true) {
+                p->current = lexer_next_token(p->lexer); /* consume '->' */
+                if (p->current.type == TOK_RBRACE ||
+                    p->current.type == TOK_EOF)
+                    compiler_error(p->current.line, p->current.column,
+                                   "map entry requires a value after '->'");
+                AST *value = parse_expr(p);
+                if (node->map.count >= node->map.capacity) {
+                    node->map.capacity *= 2;
+                    node->map.keys = realloc(node->map.keys,
+                                             sizeof(AST*) * node->map.capacity);
+                    node->map.vals = realloc(node->map.vals,
+                                             sizeof(AST*) * node->map.capacity);
+                }
+                node->map.keys[node->map.count] = elem;
+                node->map.vals[node->map.count] = value;
+                node->map.count++;
+
+                while (p->current.type == TOK_SYMBOL && p->current.value &&
+                       strcmp(p->current.value, ",") == 0)
+                    p->current = lexer_next_token(p->lexer);
+                if (p->current.type == TOK_RBRACE ||
+                    p->current.type == TOK_EOF)
+                    break;
+                elem = parse_expr(p);
+                if (p->current.type != TOK_ARROW)
+                    compiler_error(p->current.line, p->current.column,
+                                   "expected '->' between map key and value");
+            }
+            break;
+        }
         if (node->set.element_count >= node->set.element_capacity) {
             node->set.element_capacity *= 2;
             node->set.elements = realloc(node->set.elements,

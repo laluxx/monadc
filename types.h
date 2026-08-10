@@ -81,6 +81,17 @@ typedef struct Type {
     // TYPE_ARROW  (param -> ret)
     struct Type *arrow_param;
     struct Type *arrow_ret;
+    /* Canonical portable latent-effect contract for this arrow stage.
+     * Solver-owned rows stay in inference arenas; types and interfaces own
+     * this arena-independent encoding. NULL denotes legacy/absent evidence,
+     * while a serialized empty scheme denotes a proved-pure stage. */
+    char *arrow_effect_scheme;
+    bool arrow_effect_complete;
+    bool arrow_effect_scheme_owned;
+    /* Lossless source-level spelling between '-' and '->'.  Elaboration
+     * decides whether this names a concrete effect row or a quantified row
+     * variable; the type parser must not guess from capitalization. */
+    char *arrow_effect_name;
 
     // TYPE_FN
     struct FnParam *params;
@@ -286,6 +297,9 @@ int  refinement_check_literal(const char *type_name, double val,
 void  refinement_free_all(void);
 void  type_alias_register(const char *alias_name, const char *target_name);
 void  type_alias_free_all(void);
+/* Register a source-owned algebraic type name before function signatures are
+ * elaborated. The runtime layout is supplied later by code generation. */
+bool  type_nominal_register(const char *name);
 
 
 /// Annotation parsing

@@ -1,0 +1,20 @@
+:TEST-ID tests.configuration.literal-invalid-entry
+:TEST-CONTEXT monadc.context.reader.programmable-blocks
+:TEST-PURPOSE A configuration transformer diagnoses malformed entries at their source line.
+:TEST-TIER regression
+:TEST-EXPECT fail:reader
+:TEST-EXPECT-DIAGNOSTIC configuration entry must have the form NAME = VALUE
+:TEST-MENU-PATH configuration/literal-invalid-entry
+:TEST-CLI-TARGET configuration literal-invalid-entry
+
+import Configuration
+
+module Configuration.Literal.InvalidEntry []
+
+
+layout Options
+  [width :: Int]
+
+
+configuration broken :: Options
+  width 100

@@ -1,0 +1,3427 @@
+#+TITLE: Automatic Resource and Memory Semantics
+#+AUTHOR: Codex
+#+DATE: 2026-07-29
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:compiler:memory:linearity:ownership:qtt:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context
+
+* Memory Model North Star
+:PROPERTIES:
+:ID: monadc.context.memory.north-star
+:CUSTOM_ID: memory-north-star
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Automatic deterministic resource management inferred by the compiler.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: user-request,etc/pdfs/BakerLinearLisp.pdf
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.automatic-source-language-2026-07-29 src:user-request conf:high]
+  Ordinary Monad source does not expose =free=, =drop=, =copy=, ownership
+  qualifiers, lifetime syntax, or borrow annotations. The compiler infers
+  resource behavior and elaborates source into an explicitly resource-safe
+  internal language.
+
+[DEC id:dec.memory.before-embedding-abi-2026-07-29 src:user-request conf:high]
+  Stabilize memory and resource semantics before freezing the embedding ABI.
+  The C API must reflect proven ownership, escape, and lifetime rules rather
+  than becoming an accidental second memory model.
+
+[OBS id:obs.memory.baker-linear-lisp-2026-07-29 src:etc/pdfs/BakerLinearLisp.pdf conf:high]
+  Baker's strictly linear machine conserves unity accessibility: visible heap
+  structures are trees without sharing or cycles, every binding is consumed,
+  and FREE recursively returns an unused tree to the free list. Its faster
+  virtual-heap design permits hidden sharing through hash consing and reference
+  counts. Therefore compile-time placement of frees is sufficient for the
+  strictly linear fragment, while dynamic sharing requires either restriction,
+  copying, regions, or runtime ownership bookkeeping.
+
+* Formal Core
+:PROPERTIES:
+:ID: monadc.context.memory.formal-core
+:CUSTOM_ID: memory-formal-core
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Quantitative elaboration and resource calculus.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: infer.c,dep.c,types.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.quantities-2026-07-29 src:context/memory.org conf:high]
+  Use the exact usage semiring =N ∪ {ω}=, retaining symbolic quantity
+  expressions and constraints until solving:
+  - =0=: erased or not consumed at runtime;
+  - =1=: consumed exactly once;
+  - finite =n=: consumed exactly =n= times;
+  - =ω=: unbounded or conservatively unknown usage.
+  Quantities belong to internal binders and arrows, not nominal value types.
+  The familiar ={0,1,ω}= domain is a useful post-solve classification, not
+  the inference representation. This follows the compositional direction of
+  quantitative type theory and avoids duplicating every type into linear and
+  unrestricted variants.
+
+[DEC id:dec.memory.quantity-optimization-evidence-2026-07-29 src:user-request conf:high]
+  Preserve exact finite quantities as optimization evidence. Zero permits
+  erasure when effects also permit it; one enables moves and rules out useful
+  result memoization; larger finite counts inform duplication, sharing, reuse,
+  and cost-based memoization. Usage alone does not authorize memoization:
+  purity, termination/exception behavior, memory cost, and recomputation cost
+  remain separate proof obligations.
+
+[OBS id:obs.memory.static-count-boundary-2026-07-29 src:context/memory.org conf:high]
+  Exact source occurrence counts are not always exact dynamic reference
+  counts. Branches are path-sensitive, loop multiplicities may be symbolic or
+  data-dependent, closures can escape, and foreign code can retain values.
+  The solver keeps exact and symbolic quantities where provable and widens to
+  =ω= only at an honest static boundary; ownership insertion additionally
+  requires alias, escape, and effect information.
+
+[DEC id:dec.memory.elaboration-2026-07-29 src:context/memory.org conf:high]
+  Surface inference produces type, effect, escape, and usage constraints.
+  Solving elaborates typed AST into a Resource IR with explicit operations:
+  =move=, =borrow=, =dup=, =drop=, =reuse=, =alloc-region=, and
+  =end-region=. These operations are compiler artifacts and are erased or
+  lowered before LLVM emission.
+
+[DEC id:dec.memory.representation-classes-2026-07-29 src:context/memory.org conf:high]
+  Resource behavior is representation-sensitive:
+  - immediate/unboxed values are freely duplicable and require no drop;
+  - unique heap values move, borrow, destructure, reuse, or drop;
+  - immutable shared values receive compiler-inserted precise dup/drop;
+  - region values are reclaimed in bulk and cannot escape their region;
+  - foreign values follow a registered C ownership contract.
+  Linearity alone is not used as a synonym for heap allocation.
+
+[DEC id:dec.memory.control-flow-accounting-2026-07-29 src:context/memory.org conf:high]
+  Usage is path-sensitive. Every reachable branch must consume compatible
+  resources; joins reconcile ownership with explicit Resource IR operations.
+  Pattern matching consumes a scrutinee structurally, closures record captured
+  quantities, exceptions/nonlocal exits carry cleanup edges, and loops require
+  a resource invariant across the back edge.
+
+* Required Metatheory
+:PROPERTIES:
+:ID: monadc.context.memory.metatheory
+:CUSTOM_ID: memory-metatheory
+:CONTEXT_KIND: contract
+:CONTEXT_DESCRIPTION: Soundness and implementation properties required before claiming automatic memory safety.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: context/memory.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.safety-theorems-2026-07-29 src:context/memory.org conf:high]
+  The Resource IR and checker must support proofs, mechanized if practical, of:
+  1. preservation and progress for resource-typed terms;
+  2. no use-after-move or use-after-free;
+  3. no double drop;
+  4. every owned allocation is dropped exactly once or returned/escaped under
+     an explicit ownership contract;
+  5. borrows do not outlive owners or regions;
+  6. erasure/lowering preserves observable program behavior;
+  7. inserted reuse is observationally equivalent to fresh allocation.
+
+[DEC id:dec.memory.honest-boundary-2026-07-29 src:context/memory.org conf:high]
+  Do not claim universal compile-time collection. Arbitrary cycles, opaque
+  foreign retention, concurrency, and unrestricted dynamic graphs make static
+  last-use undecidable in general. Monad either proves such programs safe,
+  represents sharing with precise bookkeeping, confines it to a region, or
+  rejects it with a source-located explanation.
+
+* Compiler Placement
+:PROPERTIES:
+:ID: monadc.context.memory.compiler-placement
+:CUSTOM_ID: memory-compiler-placement
+:CONTEXT_KIND: architecture
+:CONTEXT_DESCRIPTION: Placement of ownership inference between typing and code generation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: main.c,infer.c,dep.c,codegen.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.not-hm-decoration-2026-07-29 src:infer.c,dep.c conf:high]
+  Resource checking is not a boolean field added to =Type=. It consumes typed,
+  elaborated terms after ordinary type constraints and dependent validation,
+  but before monomorphization/codegen commits to an ABI. Quantities must survive
+  polymorphic instantiation and dependent erasure without changing nominal
+  type equality.
+
+[TODO id:todo.memory.resource-ir-2026-07-29 priority:critical]
+  Specify the smallest Resource IR and an interpreter for it before LLVM
+  lowering. Start with scalars, pairs/layouts, strict lists, let, calls,
+  conditionals, and pattern destructuring.
+
+[FIX id:fix.memory.production-owned-replacement-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,codegen.c,tests/test_qtt_production_memory.py conf:high]
+  Production LLVM consumes verified Semantic-IR =REPLACE= evidence for direct
+  owned String roots with literal replacements. The backend certificate binds
+  the resource identity, canonical root place, owned representation,
+  destructor descriptor, lexical binding, and static-copy materialization.
+  Code generation emits replacement materialization before loading and
+  destroying the displaced payload, then installs the new owner. Repeated
+  writes consume distinct ordered certificates. Certificate discovery now
+  descends through Resource-IR branches in structural order, matching codegen:
+  symmetric, asymmetric, and nested source branches emit one path-local free
+  per replacing arm and have runtime coverage for every arm. Typed immediate
+  and inline outer variables may serve as branch conditions without being
+  mistaken for owned resources. Returned final generations move out, dead
+  final generations are reclaimed at scope exit, and disabled or
+  borrowed-alias replacements emit no ownership operations. Canonical fresh
+  owned call results may replace a root without copying: the call precedes the
+  displaced-value free, the result is then stored, and a raw String-byte
+  observation verifies that the transferred allocation survives return.
+  Direct =show= is intentionally not the oracle for this regression because
+  the separate nominal =String= versus =[Char]= refinement presentation seam
+  can discard raw-String rendering metadata. Regression command:
+  =python3 tests/test_qtt_production_memory.py=.
+
+[TODO id:todo.memory.usage-constraints-2026-07-29 priority:critical]
+  Implement binder identity and path-sensitive usage constraint generation
+  independently of allocation. Golden tests must expose inferred quantities
+  and reject inconsistent branch usage before any free insertion exists.
+
+[FIX id:fix.memory.exact-quantity-foundation-2026-07-29 date:2026-07-29 by:codex src:qtt_quantity.c,qtt_quantity.h,qtt_usage.c,qtt_usage.h,tests/test_qtt_quantity.py conf:high]
+  The first executable QTT foundation implements overflow-safe solved
+  quantities in =N ∪ {ω}= and a non-mutating lambda usage analysis. Sequential
+  demands add exactly; mutually exclusive =if= arms remain explicit
+  =choice(left,right)= expressions instead of being summed or prematurely
+  widened to =ω=. Quoted data is not treated as variable demand, and a nested
+  binder shadows the outer binder. Run with:
+  =python3 -m unittest tests.test_qtt_quantity=.
+
+[TODO id:todo.memory.symbolic-usage-production-2026-07-29 priority:critical]
+  Replace the diagnostic expression tree's formatted storage with interned
+  symbolic quantity nodes carrying binder IDs and source locations. Cover
+  lexical =let=/=with= bindings, pattern binders, closure capture versus
+  invocation demand, loop recurrence variables, nonlocal exits, and effects.
+  Expose deterministic golden output after typing and before code generation.
+
+* Cycle 2: Symbolic Demand Analysis
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-2
+:CUSTOM_ID: memory-cycle-2
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Verified path-sensitive usage reporting before ownership elaboration.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt_quantity.c,qtt_usage.c,main.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.two-calculi-2026-07-29 src:qtt_usage.h conf:high]
+  Keep quantitative demand and operational ownership distinct. Graded/QTT
+  judgments describe how a term depends on binders. A later linear resource
+  calculus elaborates typed, explicit control flow into =dup=, =drop=, and
+  =reuse=. Neither layer is allowed to silently substitute for the other.
+
+[DEC id:dec.memory.symbolic-control-operators-2026-07-29 src:qtt_usage.c conf:high]
+  Demand expressions retain control structure:
+  - =add(p,q)= is sequential demand;
+  - =choice(p,q)= is mutually exclusive path demand;
+  - =capture(p)= records closure-environment retention separately from calls;
+  - =repeat(p)= records data-dependent repeated demand.
+  Only solved finite quantities participate directly in the
+  =N ∪ {ω}= semiring. Control operators remain symbolic until control-flow,
+  escape, and invocation constraints are solved.
+
+[FIX id:fix.memory.qtt-trace-2026-07-29 date:2026-07-29 by:codex src:cli.c,cli.h,main.c,qtt_usage.c,qtt_usage.h,tests/qtt_usage_report.mon,tests/test_qtt_report.py conf:high]
+  =--trace=qtt= exposes deterministic main-module lambda parameter demands
+  after dependent checking and before code generation. The analysis is
+  diagnostic and non-mutating. This phase boundary prevents early resource
+  work from changing runtime behavior before Resource IR is checked.
+
+[OBS id:obs.memory.cycle-2-honesty-2026-07-29 src:qtt_usage.c,main.c conf:high]
+  Current =function/name#index= output is a stable report label, not yet a
+  binder identity stored in the typed AST. Analysis covers lambda parameters,
+  sequential expressions, conditionals, =with=/array-form =let= shadowing,
+  nested closure capture, and =while= repetition. It does not yet construct
+  constraints for local binders, pattern variables, exceptions/nonlocal
+  exits, recursion SCCs, effects, foreign retention, concurrency, or aliases.
+  It is therefore not yet an ownership proof and must not insert frees.
+
+[TEST id:test.memory.cycle-2-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_quantity.py,tests/test_qtt_report.py,tests/qtt_usage_report.mon conf:high]
+  Verification completed:
+  - =python3 -m unittest tests.test_qtt_quantity tests.test_qtt_report=
+    passes 4/4 tests;
+  - =PYTHONPATH=tests python3 -m unittest tests.test_run= passes 5/5;
+  - =make -j2= succeeds;
+  - the uninterrupted regression tier executes all 1,341 selected tests,
+    passing 1,321 and failing 20 existing compiler cases; its automatically
+    discovered QTT section passes 1/1;
+  - scoped =git diff --check= for the cycle files is clean.
+  This is strong regression evidence for a diagnostic phase, but the remaining
+  suite failures mean the repository as a whole is not release-green.
+
+[TODO id:todo.memory.drop-elaboration-2026-07-29 priority:critical]
+  Elaborate solved usage into explicit drops and moves, execute it in the
+  Resource IR interpreter, and compare results with the existing evaluator.
+
+[TODO id:todo.memory.ffi-contract-2026-07-29 priority:high]
+  Define C descriptors for borrowed, consumed, retained, returned-owned, and
+  callback-captured values. No pointer may cross the embedding boundary without
+  one of these machine-checkable contracts.
+
+* Validation Ladder
+:PROPERTIES:
+:ID: monadc.context.memory.validation
+:CUSTOM_ID: memory-validation
+:CONTEXT_KIND: test-policy
+:CONTEXT_DESCRIPTION: Test progression for automatic memory management.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: tests
+:CONFIDENCE: high
+:END:
+
+#+CAPTION: Resource semantics validation ladder
+| Stage        | Required evidence                                                 |
+|--------------+-------------------------------------------------------------------|
+| Static       | Quantity and escape golden tests for every core term              |
+| Dynamic      | Instrumented allocator reports zero live owned allocations        |
+| Negative     | Use-after-move, escape, branch, closure, loop, and FFI violations |
+| Equivalence  | Resource IR interpreter agrees with existing semantics            |
+| Optimization | Reuse on/off produces identical results                           |
+| ABI          | C host tests borrowed/owned/retained calls and callbacks          |
+| Stress       | Deep structures, recursion, cancellation, threads, and hot reload |
+
+[DEC id:dec.memory.no-optimizer-trust-2026-07-29 src:context/memory.org conf:high]
+  Correct reclamation is established by elaboration and Resource IR checking.
+  LLVM lifetime markers, stack promotion, reuse, reference-count elimination,
+  and arena fusion are optimizations; disabling them must not change safety.
+
+* Cycle 3: Lexical Binder Identity
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-3
+:CUSTOM_ID: memory-cycle-3
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Persistent lexical identities for quantitative usage analysis.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt_bindings.c,qtt_bindings.h,qtt_usage.c,reader.h,main.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.binder-identity-2026-07-29 src:qtt_bindings.c,reader.h conf:high]
+  Quantitative judgments are indexed by lexical binder identity, never by
+  source spelling. A deterministic preorder resolver assigns a nonzero
+  =BinderId= to lambda parameters, sequential =with=/array-form =let=
+  bindings, and pattern variables. Symbol occurrences retain the identity of
+  the binding they resolve to, so shadowed names cannot merge quantities.
+  AST cloning preserves both binding and occurrence identities.
+
+[DEC id:dec.memory.sequential-let-scope-2026-07-29 src:qtt_bindings.c conf:high]
+  Local binding arrays currently use sequential scope: each initializer is
+  resolved before its own binder is introduced, while later initializers and
+  the body see that binder. This records the compiler's existing operational
+  behavior explicitly and makes outer-versus-inner demand testable.
+
+[FIX id:fix.memory.identity-usage-report-2026-07-29 date:2026-07-29 by:codex src:qtt_bindings.c,qtt_usage.c,main.c,tests/test_qtt_bindings.py,tests/test_qtt_report.py conf:high]
+  The QTT phase now resolves lexical identities after dependent checking and
+  before analysis/code generation. Parameter and local reports expose the
+  real =BinderId=, nested closures retain outer identities, and local demand
+  is computed against the binding site rather than its name.
+
+[TEST id:test.memory.cycle-3-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_bindings.py,tests/test_qtt_quantity.py,tests/test_qtt_report.py conf:high]
+  Focused unit and end-to-end tests pass 5/5. They cover same-name nested
+  lambdas, sequential local shadowing, pattern-variable scope, exact and
+  infinite quantities, branch-sensitive demand, and local usage reporting.
+  =make -j2= succeeds. A targeted 41-test lexical/closure/pattern slice passes
+  40 tests; the remaining pre-existing zero-argument closure test produces a
+  garbage floating-point value instead of =0= and is outside the diagnostic
+  QTT path. Scoped =git diff --check= is clean. Per the cycle's validation
+  policy, no full-suite run was performed.
+
+[OBS id:obs.memory.cycle-3-honesty-2026-07-29 src:qtt_bindings.c,qtt_usage.c conf:high]
+  Binder identity is presently module-local and assigned after earlier type
+  phases; globals and imported definitions still have identity zero. Pattern
+  metadata is resolved, but pattern binders are not yet emitted as independent
+  QTT report entries. The analyzer still walks surface AST, retains a textual
+  fallback for isolated legacy harnesses, and has no typed Core/ANF,
+  recursion-SCC constraints, effect rows, escape solution, or checked
+  =dup/drop/reuse= elaboration. It therefore proves neither liveness nor safe
+  reclamation and still inserts no frees.
+
+[TODO id:todo.memory.typed-core-2026-07-29 priority:critical]
+  Lower the checked AST to a small, typed, scope-resolved Core/ANF whose
+  variables carry =(ModuleId, BinderId)= and whose control flow makes every
+  value-producing operation and exit explicit. Define demand generation over
+  that IR rather than over reader syntax.
+
+* Cycle 4: QTT Subsystem and Typed Core
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-4
+:CUSTOM_ID: memory-cycle-4
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Cohesive QTT source boundary and first checked typed Core.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/core.c,qtt/core.h,qtt/bindings.c,qtt/quantity.c,qtt/usage.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.layered-ir-2026-07-29 src:qtt/core.h conf:high]
+  Monad uses several small IRs with distinct proof obligations, not one
+  universal IR:
+  =reader AST → typed Core/ANF → quantitative constraints → Resource IR → LLVM=.
+  Typed Core fixes lexical identity, types, evaluation order, and control
+  joins. Resource IR alone introduces =move/borrow/dup/drop/reuse=. Erasing
+  resource operations must recover an observationally equivalent Core term.
+  LLVM remains an untrusted lowering target for memory-safety reasoning.
+
+[DEC id:dec.memory.defer-mlir-2026-07-29 src:context/memory.org conf:high]
+  Do not adopt MLIR while the semantic and resource calculi are still moving.
+  MLIR can later host stable Monad dialects or optimization lowerings, but it
+  does not supply the ownership calculus, inference rules, or reclamation
+  proof. Re-evaluate it after Core and Resource IR interpreters, checkers, and
+  erasure-equivalence tests are established.
+
+[FIX id:fix.memory.qtt-subsystem-2026-07-29 date:2026-07-29 by:codex src:qtt,Makefile,CMakeLists.txt,tests/test_qtt_layout.py conf:high]
+  QTT implementation files now live under =qtt/= with explicit Make and CMake
+  integration. A layout regression prevents compiler QTT sources from drifting
+  back into the repository root.
+
+[FIX id:fix.memory.typed-core-slice-2026-07-29 date:2026-07-29 by:codex src:qtt/core.c,qtt/core.h,tests/test_qtt_core.py conf:high]
+  The first typed Core slice represents literals, qualified local variables,
+  globals, lambdas, applications, sequential lets, conditionals, sequences,
+  and quoted values. Lowering preserves zonked AST type pointers and source
+  locations. Its scope checker verifies module qualification, lexical closure,
+  and binder uniqueness.
+
+[TEST id:test.memory.cycle-4-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_core.py,tests/test_qtt_layout.py conf:high]
+  =python3 -m unittest tests.test_qtt_core tests.test_qtt_layout
+  tests.test_qtt_bindings tests.test_qtt_quantity tests.test_qtt_report=
+  passes 7/7. =make -j2= succeeds. A fresh CMake configure and build succeeds,
+  including the QTT sources. Scoped =git diff --check= is clean. No full suite
+  was run.
+
+[OBS id:obs.memory.cycle-4-honesty-2026-07-29 src:qtt/core.c conf:high]
+  This is a checked semantic skeleton, not yet complete Core/ANF and not
+  automatic reclamation. Collection constructors, layouts, pattern matching,
+  mutation, loops, exceptions, foreign calls, concurrency, closure conversion,
+  explicit join parameters, and effects are not lowered. Type objects are
+  borrowed from the AST rather than owned by an immutable Core type arena.
+  The production compiler does not yet consume Core for usage or codegen.
+
+[TODO id:todo.memory.core-semantics-2026-07-29 priority:critical]
+  Give Core a small-step operational semantics and executable interpreter;
+  complete A-normalization, closure conversion, explicit joins, patterns,
+  effects, loops, and foreign calls; then differential-test AST evaluation
+  against Core evaluation before generating Resource IR.
+
+* Cycle 5: Executable Linear Resource Calculus
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-5
+:CUSTOM_ID: memory-cycle-5
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Checked capability transitions and automatic lexical reclamation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/resource.h,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.resource-transition-system-2026-07-29 src:qtt/resource.c conf:high]
+  Let =Γ= be a finite set of live owned capabilities qualified by
+  =(ModuleId,BinderId)=. Resource instructions implement these partial
+  transitions:
+  - =alloc x=: =x ∉ Γ= and =Γ' = Γ ∪ {x}=;
+  - =borrow x=: =x ∈ Γ= and =Γ' = Γ=;
+  - =move x=: =x ∈ Γ= and =Γ' = Γ ∖ {x}=;
+  - =drop x=: =x ∈ Γ= and =Γ' = Γ ∖ {x}=;
+  - =branch(p,q)=: =Γ ⟶p Γ₁= and =Γ ⟶q Γ₂= require =Γ₁ = Γ₂=.
+  A closed resource block is accepted only when its final context is empty.
+
+[OBS id:obs.memory.resource-safety-induction-2026-07-29 src:qtt/resource.c conf:high]
+  Induction over the verified instruction sequence establishes, for the
+  abstract capability machine: a borrow never observes a consumed capability;
+  every move/drop consumes one currently live capability; allocation cannot
+  overwrite a live or previously consumed identity; and both conditional paths
+  expose the same continuation context. The conservation equation is
+  =inputs + allocs = moves + drops + live=. Acceptance sets =live = 0=, hence
+  every abstract owned capability is consumed exactly once on every accepted
+  path.
+
+[FIX id:fix.memory.resource-verifier-2026-07-29 date:2026-07-29 by:codex src:qtt/resource.c,qtt/resource.h,tests/test_qtt_resource.py conf:high]
+  Resource IR and its checker diagnose unknown resources, duplicate
+  allocation, use after consume, double consume, branch-context mismatch, and
+  leaks. The first closed lexical elaborator emits =alloc= at Core lets,
+  =move= for returned variables, =drop= for non-escaping bindings, and explicit
+  branch blocks. Elaboration returns a block only after the checker accepts it.
+
+[TEST id:test.memory.cycle-5-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_resource.py conf:high]
+  Focused QTT/Core/Resource tests pass 8/8. The Resource test includes positive
+  conservation cases plus negative double-drop, use-after-move, leak,
+  unbalanced-branch, automatic-drop, automatic-move, and conditional cases.
+  Both =make -j2= and the CMake build succeed. No full suite was run.
+
+[OBS id:obs.memory.cycle-5-honesty-2026-07-29 src:qtt/resource.c conf:high]
+  The theorem above concerns abstract capabilities in the implemented lexical
+  fragment, not Monad heap objects. Each Core let is presently modeled as an
+  abstract allocation even when its runtime representation is immediate.
+  There is no interpreter/lowering equivalence, heap identity, structural
+  destructor, sharing/duplication, reuse, closure environment, loop invariant,
+  pattern ownership, exception cleanup, FFI contract, or LLVM lowering.
+  Production code generation is therefore unchanged and universal automatic
+  reclamation has not yet been established.
+
+[TODO id:todo.memory.resource-representation-2026-07-29 priority:critical]
+  Add representation classes and typed allocation/destructor operations,
+  interpret Core and Resource IR over the same instrumented heap, and prove by
+  differential testing that resource erasure preserves values while accepted
+  execution finishes with zero live owned heap objects.
+
+* Cycle 6: Representation-Aware Ownership Heap
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-6
+:CUSTOM_ID: memory-cycle-6
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Typed representation classes and instrumented ownership execution.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/resource.h,tests/test_qtt_heap.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.representation-function-2026-07-29 src:qtt/resource.c conf:high]
+  Resource operations carry a representation class independent of usage:
+  =immediate=, =inline=, =owned-heap=, =foreign=, or =unknown=. Only an
+  =owned-heap= allocation changes the instrumented heap measure. This prevents
+  QTT occurrence counts from incorrectly treating unboxed integers or inline
+  layouts as heap objects.
+
+[FIX id:fix.memory.instrumented-heap-2026-07-29 date:2026-07-29 by:codex src:qtt/resource.c,qtt/resource.h,tests/test_qtt_heap.py conf:high]
+  Verified Resource IR can now execute against an ownership heap. Allocation
+  increments live and peak ownership, borrow preserves it, drop decrements it
+  as local reclamation, and move decrements it as ownership transfer. Lexical
+  elaboration derives its allocation class from the Core value's checked type.
+
+[OBS id:obs.memory.heap-measure-2026-07-29 src:qtt/resource.c conf:high]
+  For each executed verified path, the owned-heap measure satisfies
+  =live' = live + alloc - drop - move=. The regression executes both arms of a
+  verified conditional and observes zero local live ownership on both.
+  Immediate and inline capabilities remain subject to linear checking but
+  produce no heap allocation or destructor event.
+
+[TEST id:test.memory.cycle-6-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_heap.py conf:high]
+  Focused QTT/Core/Resource/heap tests pass 9/9. Strict standalone compilation
+  of =qtt/resource.c= passes with warnings as errors. Make and CMake builds
+  succeed, and scoped =git diff --check= is clean. No full suite was run.
+
+[OBS id:obs.memory.cycle-6-honesty-2026-07-29 src:qtt/resource.c conf:high]
+  Heap execution records ownership events but does not allocate actual Monad
+  runtime objects or recursively destroy their fields. Representation
+  classification is an initial closed mapping over =TypeKind=, not yet an ABI
+  descriptor generated from layouts. Moves are counted as ownership escaping
+  the local block, so zero local live objects does not prove the receiver later
+  disposes of them. Core and Resource IR still lack value interpreters and an
+  erasure-equivalence oracle; production LLVM output remains unchanged.
+
+[TODO id:todo.memory.structural-destruction-2026-07-29 priority:critical]
+  Generate recursive drop descriptors for layouts, arrays, lists, maps, sets,
+  closures, and algebraic constructors. Add real instrumented heap identities
+  and compare Core evaluation with Resource evaluation for both result equality
+  and exact transitive reclamation.
+
+* Cycle 7: Structural Destruction of Unique Trees
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-7
+:CUSTOM_ID: memory-cycle-7
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Type-directed transitive reclamation for finite unique heaps.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/drop.c,qtt/drop.h,tests/test_qtt_drop.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.drop-plan-2026-07-29 src:qtt/drop.c conf:high]
+  A drop descriptor is derived structurally from the checked type:
+  immediates, inline values, and foreign handles are no-ops; owned leaves
+  reclaim one identity; layouts recursively compose field descriptors.
+  Descriptor generation rejects unknown and directly recursive type graphs
+  rather than inventing an unsafe destructor.
+
+[OBS id:obs.memory.unique-tree-theorem-2026-07-29 src:qtt/drop.c conf:high]
+  For a finite heap tree whose owned edges are unique and whose runtime shape
+  matches its drop descriptor, structural execution visits and marks every
+  reachable owned identity exactly once. Induction on the descriptor gives
+  transitive reclamation and zero remaining reachable owned nodes. Encountering
+  an already dropped identity rejects sharing and prevents double destruction.
+
+[TEST id:test.memory.cycle-7-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_drop.py conf:high]
+  Focused QTT/Core/Resource/heap/drop tests pass 10/10. Coverage includes a
+  layout containing an owned string and an immediate integer, transitive
+  reclamation, repeat-drop rejection, and illegal shared-child rejection.
+  Make and CMake builds succeed; scoped =git diff --check= is clean.
+
+[OBS id:obs.memory.cycle-7-honesty-2026-07-29 src:qtt/drop.c conf:high]
+  Instrumented identities are concrete but remain test-model objects, not
+  runtime allocations. Storage is intentionally freed separately so tests can
+  inspect tombstones. Sequences, recursive algebraic types, cycles, legitimate
+  immutable sharing, closure environments, and production destructor lowering
+  are not yet implemented. No full suite was run.
+
+* Major Cycle 8: Recursive and Shared Ownership
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-8
+:CUSTOM_ID: memory-cycle-8
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: End-to-end recursive, shared, and closure ownership pipeline.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt,types.h,runtime.c,codegen.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.mu-drop-descriptors-2026-07-29 src:qtt/drop.c conf:high]
+  Recursive types use finite cyclic descriptors represented by explicit
+  =μ=/back-reference nodes; descriptor construction is memoized by canonical
+  type identity. Runtime destruction follows value edges, not descriptor
+  recursion alone. Unique acyclic values retain structural destruction.
+
+[DEC id:dec.memory.shared-separation-2026-07-29 src:context/memory.org conf:high]
+  Legitimate sharing is never accepted by weakening the unique-tree checker.
+  Quantitative elaboration inserts explicit =dup= when one owned value gains
+  multiple live aliases. Shared objects carry precise reference obligations;
+  =drop= decrements, and structural destruction occurs exactly at zero.
+  Unique values retain zero-cost move/drop semantics.
+
+[DEC id:dec.memory.cycle-policy-2026-07-29 src:user-request conf:high]
+  Cycle 8 is complete only after recursive collections and ADTs, shared
+  references, closure captures, Core/Resource differential semantics, runtime
+  descriptor generation, guarded compiler integration, and allocator leak
+  evidence are implemented. Passing isolated model tests is not sufficient.
+
+[FIX id:fix.memory.cycle-8-mu-sharing-checkpoint-2026-07-29 date:2026-07-29 by:codex src:qtt/drop.c,qtt/drop.h,qtt/resource.c,qtt/resource.h,qtt/core.c,qtt/core.h conf:high]
+  Cycle 8 checkpoint one implements memoized finite =μ= descriptors with
+  explicit non-owning back-references, optional termination edges, homogeneous
+  sequence destruction, precise retain/release heap identities, Resource IR
+  =dup(source,target)=, and deterministic closure capture discovery.
+
+[OBS id:obs.memory.shared-conservation-2026-07-29 src:qtt/resource.c,qtt/drop.c conf:high]
+  =dup= preserves object count while adding one reference obligation. A
+  non-final drop releases one obligation without structural destruction; the
+  final drop performs the descriptor exactly once. Thus, for each shared
+  identity, =references' = references + dups - drops - moved-references= and
+  structural reclamation is permitted only when the result reaches zero.
+  Sharing without a matching retain remains a checked double-destruction error.
+
+[TEST id:test.memory.cycle-8-checkpoint-1-2026-07-29 date:2026-07-29 src:tests/test_qtt_drop.py,tests/test_qtt_resource.py,tests/test_qtt_heap.py,tests/test_qtt_core.py conf:high]
+  The focused QTT ladder passes 10/10. New regressions cover a three-node
+  recursive optional list, homogeneous list elements, illegal undeclared
+  sharing, legal retained sharing, Resource =dup=, heap retain/release counts,
+  and deduplicated closure captures. Make and CMake builds succeed and scoped
+  =git diff --check= is clean. This is an intermediate checkpoint; Cycle 8 is
+  not complete and no full suite was run.
+
+[OBS id:obs.memory.cycle-8-checkpoint-1-honesty-2026-07-29 src:qtt conf:high]
+  Back-references are keyed by in-memory canonical =Type*= identity; a durable
+  type arena is still required. Optional and sequence runtime shapes remain
+  model conventions. Reference counting does not collect cycles. Closure
+  captures are discovered but not yet closure-converted or elaborated into
+  retain/drop operations. Core/Resource value equivalence, runtime descriptors,
+  compiler gating, and allocator evidence remain outstanding.
+
+* Cycle 9: Closure Environment Ownership
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-9
+:CUSTOM_ID: memory-cycle-9
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Explicit ownership obligations for escaping closure captures.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/closure.c,qtt/closure.h,qtt/core.c,qtt/resource.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.conservative-closure-capture-2026-07-29 src:qtt/closure.c conf:high]
+  A potentially escaping closure receives a fresh environment slot for each
+  distinct free =CoreVar=. Capturing emits =dup(source,slot)=, preserving the
+  caller's obligation and creating an independent environment obligation.
+  Moving a capture is permitted only after a later escape/invocation analysis
+  proves the source obligation dead.
+
+[FIX id:fix.memory.closure-retain-plan-2026-07-29 date:2026-07-29 by:codex src:qtt/closure.c,qtt/closure.h,tests/test_qtt_closure.py conf:high]
+  Closure plans deduplicate free variables, assign deterministic qualified
+  slots, reject slot-ID overflow, and emit explicit Resource IR retain
+  operations. Releasing caller and environment obligations verifies to an
+  empty final resource context.
+
+[TEST id:test.memory.cycle-9-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_closure.py conf:high]
+  The focused QTT ladder passes 11/11. Make and CMake builds succeed and scoped
+  =git diff --check= is clean. No full suite was run.
+
+[OBS id:obs.memory.cycle-9-honesty-2026-07-29 src:qtt/closure.c conf:high]
+  Plans are not yet attached to closure-converted Core nodes or runtime closure
+  layouts. Every capture is conservatively retained; invocation multiplicity,
+  non-escaping stack closures, recursive closures, and callback/FFI lifetime
+  contracts remain unsolved.
+
+* Cycle 10: Executable Core and Resource Certificates
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-10
+:CUSTOM_ID: memory-cycle-10
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Path-matched Core evaluation with verified ownership execution.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/eval.c,qtt/eval.h,tests/test_qtt_eval.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.path-certificate-2026-07-29 src:qtt/eval.c conf:high]
+  Evaluation of supported Core produces both a value and a branch trace =β=.
+  Resource elaboration produces a statically verified block, and ownership
+  execution follows the identical trace. The certificate succeeds only when
+  Core evaluation, Resource verification, and traced heap execution all
+  succeed.
+
+[FIX id:fix.memory.executable-core-certificate-2026-07-29 date:2026-07-29 by:codex src:qtt/eval.c,qtt/eval.h,tests/test_qtt_eval.py conf:high]
+  The executable Core fragment includes numeric/string literals, booleans,
+  qualified lexical variables, sequential lets, sequences, and conditionals.
+  Certified evaluation demonstrates immediate return and owned-string transfer
+  with the same source value, exact branch trace, and zero local live ownership.
+  Unbound variables and malformed conditions are explicit evaluator errors.
+
+[OBS id:obs.memory.cycle-10-theorem-boundary-2026-07-29 src:qtt/eval.c conf:high]
+  For a closed supported Core term =e=, if certified evaluation succeeds with
+  =e ⇓β v= and resource elaboration =E(e)=r=, then =r= is statically valid and
+  executing =r= along =β= ends with zero local live owned objects while the
+  reported result is =v=. This is a path-matched resource certificate.
+
+  It is not yet a full compiler-correctness theorem: Resource IR currently
+  carries ownership operations but not an independent copy of computational
+  operations, so result preservation is by shared Core evaluation rather than
+  a differential interpreter over two complete calculi.
+
+[TEST id:test.memory.cycle-10-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_eval.py conf:high]
+  The complete focused QTT ladder passes 12/12. The evaluator regression is
+  compiled and executed with AddressSanitizer and UBSan; leak detection alone
+  is disabled because LeakSanitizer cannot operate under the harness ptrace
+  environment. Make and CMake builds succeed. No full suite was run.
+
+[TODO id:todo.memory.computational-resource-ir-2026-07-29 priority:critical]
+  Extend Resource IR with value-producing operations and an independent
+  evaluator, define erasure =|r|=, and differential-test
+  =eval_Core(|r|) = eval_Resource(r)= for every supported term and failure path.
+
+* Cycle 11: Independent Computational Resource IR
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-11
+:CUSTOM_ID: memory-cycle-11
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Independent computational Resource IR, erasure, and differential evaluator.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/rir.c,qtt/rir.h,tests/test_qtt_rir.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.rir-erasure-2026-07-29 src:qtt/rir.c conf:high]
+  Computational Resource IR owns a separate tree of literals, globals,
+  qualified variables, lets, sequences, and conditionals. Its erasure relation
+  checks node-for-node correspondence with typed Core while ignoring ownership
+  instrumentation. Values are copied during lowering rather than read through
+  Core nodes during Resource evaluation.
+
+[FIX id:fix.memory.independent-rir-evaluator-2026-07-29 date:2026-07-29 by:codex src:qtt/rir.c,qtt/rir.h,tests/test_qtt_rir.py conf:high]
+  RIR lowering, structural erasure, lexical evaluation, branch tracing, and
+  ownership execution are independently executable. The differential
+  regression lowers a conditional owned-string program, checks erasure,
+  compares independently produced Core/RIR values, and verifies one allocation,
+  one ownership transfer, and zero local live ownership. RIR independently
+  reports an unbound-variable error.
+
+[OBS id:obs.memory.rir-fragment-induction-2026-07-29 src:qtt/rir.c conf:high]
+  The implementation mirrors the expected structural-induction argument:
+  literals/globals preserve their values; variables preserve qualified lookup;
+  let extends corresponding environments with corresponding values; sequence
+  preserves left-to-right order; and conditionals preserve the boolean guard,
+  selected branch, and trace. The executable erasure checker validates the
+  syntactic premise before differential evaluation.
+
+[TEST id:test.memory.cycle-11-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_rir.py conf:high]
+  The complete focused QTT ladder passes 13/13. The RIR differential test runs
+  under AddressSanitizer and UBSan, with LeakSanitizer disabled only because of
+  the harness ptrace environment. Make and CMake builds succeed and scoped
+  =git diff --check= is clean. No full suite was run.
+
+[OBS id:obs.memory.cycle-11-honesty-2026-07-29 src:qtt/rir.c conf:high]
+  Computational RIR and ownership instructions are two components of one
+  program rather than a single interleaved SSA/ANF graph. Applications,
+  primitive operations, layouts, collections, closures, mutation, exceptions,
+  loops, and foreign calls are unsupported. The induction argument is
+  documented and executable but not mechanized, and production code generation
+  does not yet consume RIR.
+
+* Cycle 12: Unified SSA/ANF Ownership Graph
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-12
+:CUSTOM_ID: memory-cycle-12
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Interleaved computation and ownership in explicit control-flow ANF.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/anf.c,qtt/anf.h,tests/test_qtt_anf.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.anf-block-semantics-2026-07-29 src:qtt/anf.c conf:high]
+  Resource effects and value-producing operations inhabit one ordered block.
+  A control edge =b(v_1,...,v_n) -> c(x_1,...,x_n)= simultaneously transfers
+  computed values by substitution =[v_i/x_i]= and transports the live
+  ownership context. A join is accepted exactly when all incoming ownership
+  sets are extensionally equal, while every incoming edge supplies exactly one
+  defined value per block parameter. Phi-like value flow therefore cannot hide
+  a disappearing ownership obligation.
+
+[FIX id:fix.memory.unified-anf-verifier-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/anf.h,tests/test_qtt_anf.py conf:high]
+  Unified ANF represents constants, allocation, borrow, and drop in the same
+  blocks, with return, jump, and branch terminators. Verification rejects
+  invalid targets, undefined and duplicate local SSA names, duplicate block
+  parameters, argument-arity errors, invalid resource transitions, ownership
+  disagreement at joins, and live resources at return.
+
+[FIX id:fix.memory.executable-anf-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/anf.h conf:high]
+  The independent evaluator executes value substitution across block arguments
+  and resource effects in instruction order. Instrumentation reports
+  allocation, borrow, drop, peak-live, and final-live counts. Both arms of a
+  diamond return the expected value while an owned allocation is reclaimed
+  exactly once and final live ownership is zero.
+
+[FIX id:fix.memory.core-to-anf-control-lowering-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/anf.h conf:high]
+  The first typed-Core lowering fragment covers numeric literals, boolean
+  globals, sequences, and conditionals. A conditional becomes a branch, two
+  independently lowered arms, and a one-parameter join block. Nested
+  conditionals compose because each lowering continuation is the current join
+  block. Differential evaluation checks independently produced Core and ANF
+  results.
+
+[TEST id:test.memory.cycle-12-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_anf.py conf:high]
+  The complete focused QTT ladder passes 14/14. The ANF regression is compiled
+  with AddressSanitizer and UBSan; LeakSanitizer alone remains disabled because
+  the test environment runs under ptrace. Make and CMake builds succeed. No
+  full language suite was run.
+
+[OBS id:obs.memory.cycle-12-honesty-2026-07-29 src:qtt/anf.c conf:high]
+  This is not verified automatic reclamation yet. SSA names are block-local,
+  value types are not carried on block parameters, branch-condition typing is
+  dynamically checked, and the verifier does not compute a fixed point for
+  loops. Core variables, lets, strings, applications, closures, layouts,
+  collections, mutation, exceptions, foreign calls, move/dup, and descriptor
+  drops are not yet lowered into unified ANF. Resource effects for Core
+  lowering are therefore vacuous; ownership is presently exercised by
+  hand-built ANF. LLVM generation does not consume this IR, and no mechanized
+  preservation/progress proof exists.
+
+[TODO id:todo.memory.typed-anf-dataflow-2026-07-29 priority:critical]
+  Give every result and block parameter an explicit zonked value type and
+  representation; verify edge type equality, boolean branch conditions, and
+  representation-correct resource operations statically.
+
+[TODO id:todo.memory.anf-lexical-ownership-lowering-2026-07-29 priority:critical]
+  Lower Core lets and variables with quantitative use information into
+  explicit borrow, move, dup, and descriptor-drop operations inside ANF, then
+  differential-test Core, tree RIR, and ANF values and heap certificates.
+
+* Cycle 13: Compile-Time Lexical Reclamation
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-13
+:CUSTOM_ID: memory-cycle-13
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Quantitative last-use and escape-directed ownership insertion.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/anf.c,qtt/anf.h,tests/test_qtt_anf.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.capability-carries-payload-2026-07-29 src:qtt/anf.c conf:high]
+  An owned lexical binding is represented by a capability paired with its
+  runtime payload. A borrow or move produces a fresh block-local SSA result
+  from that capability. Raw SSA names never cross control-flow edges except as
+  explicit block arguments. This removes a previously hidden cross-block alias
+  and keeps computational value flow synchronized with ownership flow.
+
+[DEC id:dec.memory.last-use-vs-escape-2026-07-29 src:qtt/anf.c conf:high]
+  Syntactic last use alone does not imply ownership escape. For a binding =x=:
+
+  - a non-final path use emits =borrow x=;
+  - a final use whose result escapes emits =move x=;
+  - a final use whose result is discarded emits =borrow x; drop x=;
+  - zero uses emit =drop x= immediately after the body value is produced.
+
+  Thus automatic reclamation is selected from the product of remaining demand
+  and continuation escape demand, rather than occurrence count alone.
+
+[FIX id:fix.memory.branch-sensitive-anf-reclamation-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/anf.h conf:high]
+  Core strings, lexical lets, qualified variables, payload-bearing binds,
+  value-producing borrows, moves, and explicit drops now lower into unified
+  ANF. At a conditional, each active binding receives branch-local remaining
+  demand plus demand after the join. When the value is needed later, both arms
+  preserve the capability and the post-join use consumes it. When each arm is
+  final, both consume it and the join receives equal empty ownership contexts.
+
+[OBS id:obs.memory.branch-demand-equation-2026-07-29 src:qtt/anf.c conf:high]
+  After evaluating a condition, let =r= be unresolved demand, =t= and =e= the
+  syntactic demand of the two arms, and =k = r - t - e= continuation demand.
+  The then and else environments are initialized with =t+k= and =e+k=
+  respectively, and both must finish with =k=. The ownership verifier
+  independently checks that their live capability sets agree at the join.
+
+[TEST id:test.memory.cycle-13-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_anf.py conf:high]
+  Regressions cover unused owned values, repeated straight-line use, discarded
+  final use, branch-local final use, and branch use followed by post-join use.
+  Core and ANF evaluators agree on returned numbers and strings. Instrumented
+  execution observes exactly one allocation and exactly one drop or move-out,
+  with zero locally live owned objects on every tested path. The complete
+  focused QTT ladder passes 14/14 under the existing sanitizer strategy.
+
+[OBS id:obs.memory.cycle-13-honesty-2026-07-29 src:qtt/anf.c conf:high]
+  Automatic insertion is real but only proved by executable checks over the
+  supported acyclic lexical fragment. It is not yet production reclamation:
+  ANF values and block parameters lack static types, loops lack a dataflow
+  fixed point, applications and primitives lack ownership signatures, closure
+  escape is not connected, and drops do not yet invoke generated structural
+  descriptors in LLVM. Exact finite demand is recomputed structurally rather
+  than consumed from one canonical typed QTT derivation. Production codegen
+  still bypasses ANF.
+
+[TODO id:todo.memory.canonical-qtt-derivation-2026-07-29 priority:critical]
+  Replace local structural remaining-use counts with a typed quantitative
+  derivation whose grades are attached to BinderIds and whose branch,
+  sequencing, capture, and repetition rules produce a checkable certificate
+  consumed by ANF lowering.
+
+[TODO id:todo.memory.production-drop-lowering-2026-07-29 priority:critical]
+  Connect ANF =drop= to representation-specific destructor descriptors and
+  LLVM emission behind a verification gate; compare allocator counters and
+  returned values against the existing backend before enabling it by default.
+
+* Cycle 14: Canonical Quantitative Demand Certificate
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-14
+:CUSTOM_ID: memory-cycle-14
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Checkable typed-Core demand derivation consumed by ANF ownership insertion.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/demand.c,qtt/demand.h,qtt/anf.c,tests/test_qtt_demand.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.canonical-demand-algebra-2026-07-29 src:qtt/demand.h conf:high]
+  Typed-Core demand is derived in a graded algebra that distinguishes
+  sequential addition from exclusive control-flow choice:
+
+  =use_x(x) = 1=
+
+  =use_x(e_1 ; e_2) = use_x(e_1) + use_x(e_2)=
+
+  =use_x(if c t e) = use_x(c) + choice(use_x(t), use_x(e))=
+
+  Choice is not collapsed into addition: doing so would count mutually
+  exclusive paths together and obscure branch-local last use. Exact subtree
+  occurrences remain available to the ownership elaborator for each arm and
+  continuation.
+
+[FIX id:fix.memory.demand-certificate-gate-2026-07-29 date:2026-07-29 by:codex src:qtt/demand.c,qtt/demand.h,qtt/anf.c conf:high]
+  A demand certificate is bound to an immutable typed-Core root by structural
+  fingerprint. Validation rejects a missing, stale, or source-mismatched
+  certificate. Unified ANF lowering now consumes certificate queries instead
+  of maintaining a second private occurrence counter. The convenience lowering
+  API derives, validates, consumes, and releases a certificate internally;
+  the certified API permits explicit compiler-pipeline gating.
+
+[TEST id:test.memory.cycle-14-demand-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_demand.py,tests/test_qtt_anf.py conf:high]
+  A typed-Core diamond derives =choice(1,2)=, with exact arm counts one and
+  two. A certificate validates against its source and is rejected against a
+  changed tree. ANF accepts the matching certificate, rejects the stale one,
+  and retains all automatic drop/move/borrow regressions. Demand and ANF
+  harnesses run with AddressSanitizer and UBSan.
+
+[OBS id:obs.memory.cycle-14-honesty-2026-07-29 src:qtt/demand.c conf:high]
+  The certificate establishes source identity and deterministic recomputation,
+  but it is not a proof object with one stored inference-rule node per Core
+  node. Symbolic formatting currently exposes top-level choice while nested
+  algebra is recomputed rather than serialized. Lambdas and applications can
+  be counted structurally but remain unsupported by ANF ownership lowering;
+  repetition, effects, mutation, exception edges, concurrency, and foreign
+  lifetime contracts have no quantitative rules yet. The certificate is a
+  necessary compiler gate, not a mechanized QTT metatheory.
+
+[TODO id:todo.memory.demand-proof-tree-2026-07-29 priority:high]
+  Materialize the complete graded derivation tree, including premises,
+  BinderIds, zonked types, grades, and a bottom-up checker independent of the
+  producer. Serialize it for compiler diagnostics and property-based testing.
+
+* Cycle 15: Typed Ownership ANF
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-15
+:CUSTOM_ID: memory-cycle-15
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Static value, edge, guard, payload, and representation checks in ownership ANF.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/anf.c,qtt/anf.h,tests/test_qtt_anf.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.typed-anf-judgment-2026-07-29 src:qtt/anf.c conf:high]
+  ANF verification now tracks a value typing context =Δ= alongside the live
+  ownership context =Γ=. A control edge is admitted only under:
+
+  =Δ ⊢ v_i : τ_i= for every destination parameter =x_i : τ_i=
+
+  and all predecessors must still agree extensionally on =Γ=. Branch
+  terminators additionally require =Δ ⊢ condition : Bool=. Therefore neither
+  a phi-like join nor a branch can reinterpret a value while transporting its
+  ownership capability.
+
+[DEC id:dec.memory.payload-capability-type-coherence-2026-07-29 src:qtt/anf.c conf:high]
+  Binding an SSA payload to a capability records its ANF value type and
+  representation. A value-producing borrow or move must reproduce that exact
+  payload type. Known primitive types require immediate representation and
+  strings require owned-heap representation. Unknown representations remain
+  explicit rather than guessed.
+
+[FIX id:fix.memory.typed-core-anf-lowering-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/anf.h conf:high]
+  Core lowering assigns types to constants, lexical borrow/move results, and
+  conditional join parameters. It uses zonked Core types when supported and
+  derives the primitive type from literals or boolean globals when older test
+  Core nodes omit type pointers. Parameter type storage is owned and released
+  with the ANF program.
+
+[TEST id:test.memory.cycle-15-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_anf.py conf:high]
+  Negative regressions reject a numeric branch guard, number-to-boolean edge,
+  number/string branch join, string payload marked immediate, and borrow result
+  that lies about its capability payload type. Existing automatic reclamation,
+  demand-certificate, differential-value, and zero-live-ownership regressions
+  remain intact.
+
+[OBS id:obs.memory.cycle-15-honesty-2026-07-29 src:qtt/anf.h conf:high]
+  The current ANF type vocabulary covers unit, number, boolean, and string; it
+  is not yet a lossless reference to every zonked compiler =Type=. Aggregate
+  layouts, type applications, functions, foreign pointers, effects, region
+  parameters, and recursive types require canonical type identities rather
+  than this compact tag. Block arguments are typed, but loop headers still lack
+  a fixed-point verifier and function calls still lack ownership signatures.
+
+[TODO id:todo.memory.anf-canonical-types-2026-07-29 priority:critical]
+  Replace primitive ANF tags with stable canonical zonked type IDs plus
+  representation and destructor descriptors. Use structural equality only at
+  type interning time; all subsequent edge and ownership checks should compare
+  canonical identities.
+
+* Cycle 16: Real Compiler Shadow Pipeline
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-16
+:CUSTOM_ID: memory-cycle-16
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Post-inference QTT verification on real compiler definitions without changing authoritative codegen.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/pipeline.c,qtt/pipeline.h,env.c,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.shadow-rollout-boundary-2026-07-29 src:qtt/pipeline.h conf:high]
+  QTT is first integrated after HM inference and zonking, where source AST
+  nodes carry concrete inferred types and persistent BinderIds have already
+  been resolved. The legacy LLVM backend remains authoritative. Shadow
+  verification has three outcomes: =verified=, =unsupported=, and
+  =internal-error=. Unsupported language coverage never changes compilation
+  semantics; verifier inconsistencies remain separately observable.
+
+[FIX id:fix.memory.post-inference-shadow-pipeline-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,qtt/pipeline.h,env.c conf:high]
+  With =MONAD_QTT_SHADOW=1=, every inferred function definition is offered to
+  the QTT shadow pipeline. The initial accepted surface is a closed
+  zero-parameter, single-body lambda. Its body is lowered to typed Core,
+  validated, demand-certified, lowered to typed ownership ANF, and verified.
+  Diagnostics include status plus block and instruction counts or structured
+  stage error codes. Parameterized functions and unsupported bodies are
+  measured without blocking legacy code generation.
+
+[TEST id:test.memory.cycle-16-real-compiler-2026-07-29 date:2026-07-29 src:tests/test_qtt_pipeline.py conf:high]
+  The regression compiles a real Monad source file through the ordinary
+  compiler. A closed numeric function reports =verified=, a parameterized
+  identity reports =unsupported=, linking succeeds, and the legacy-generated
+  executable runs and prints =42=. This proves the shadow pass observes the
+  same post-inference source used by production compilation without taking
+  over code generation.
+
+[OBS id:obs.memory.cycle-16-coverage-signal-2026-07-29 src:env.c conf:high]
+  Running the shadow pass while core modules load immediately exposes the real
+  coverage frontier: some closed constant definitions verify, while functions
+  with parameters, calls, collections, closures, and typeclass operations are
+  explicitly unsupported. This is useful evidence for prioritizing function
+  ownership signatures rather than extending isolated model syntax.
+
+[OBS id:obs.memory.cycle-16-honesty-2026-07-29 src:qtt/pipeline.c conf:high]
+  The integration is opt-in and diagnostic. It does not emit drops, alter
+  LLVM, or fail compilation on internal QTT errors. Some functions are inferred
+  more than once by the existing compiler phases, so detailed shadow output can
+  contain duplicate observations; module-level aggregation and stable
+  definition identities are still needed before coverage percentages are
+  trustworthy. Zero-argument bracket-signature syntax is represented as a
+  legacy parameter slot, while ordinary empty parameter syntax is the currently
+  verified form.
+
+[TODO id:todo.memory.shadow-module-summary-2026-07-29 priority:high]
+  Assign stable definition IDs and aggregate one shadow result per definition,
+  module, construct, and failure stage. Emit machine-readable coverage JSON for
+  CI and make internal-error fatal under an explicit strict verification flag.
+
+[TODO id:todo.memory.function-ownership-signatures-2026-07-29 priority:critical]
+  Define typed interprocedural signatures whose parameter and result modes are
+  borrowed, consumed, retained/shared, or foreign. Lower parameters as initial
+  capabilities, verify calls against signatures, and expand the shadow pipeline
+  from closed constants to ordinary functions.
+
+* Cycle 17: Function Ownership Contracts and Entry Capabilities
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-17
+:CUSTOM_ID: memory-cycle-17
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Quantitative function signatures and verified consumed-parameter capabilities in the real compiler shadow pipeline.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/signature.c,qtt/signature.h,qtt/anf.c,qtt/anf.h,qtt/pipeline.c,tests/test_qtt_signature.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.function-contract-form-2026-07-29 src:qtt/signature.h conf:high]
+  A typed Core lambda now derives a contract
+
+  =Σ(f) = (x_i : τ_i @ ρ_i [q_i, m_i]) -> τ=
+
+  where =q_i= is its exact quantitative demand, =m_i= is erased, borrowed,
+  consumed, or shared, and =ρ_i= is its runtime representation. Zero demand
+  erases the entry parameter. A parameter returned in tail position is
+  consumed; non-escaping one-use and many-use parameters are classified as
+  borrowed and shared respectively. The contract is tied to its immutable Core
+  source and demand certificate, so a stale signature cannot be lowered.
+
+[DEC id:dec.memory.function-entry-capability-2026-07-29 src:qtt/anf.c conf:high]
+  For every currently admitted consumed parameter, function ANF creates a
+  typed entry SSA value and an initial ownership capability in =Γ_entry=.
+  Verification starts from this non-empty context and accepts a return only
+  after lowering has removed every consumed capability through a move or drop.
+  Erased parameters create neither an SSA value nor a capability. Thus, for the
+  accepted fragment, successful verification establishes that all
+  callee-owned input obligations are discharged on every reachable return.
+
+[FIX id:fix.memory.real-parameter-shadow-verification-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,qtt/anf.c conf:high]
+  The post-inference shadow pipeline now lowers parameterized lambdas through
+  ownership signature derivation and function-entry ANF. A real typed identity
+  function is no longer rejected merely for having a parameter: its parameter
+  becomes an initial capability, its tail use becomes a move, and its ownership
+  ANF verifies. Closed functions retain the existing direct-body route.
+
+[FIX id:fix.memory.nonowning-parameter-safety-gate-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c conf:high]
+  Borrowed and shared contracts are derived for coverage diagnostics but are
+  deliberately rejected by function ANF. Treating them as ordinary initial
+  owned capabilities would authorize the callee to move or drop caller-owned
+  storage. They remain unsupported until ANF represents non-owning entry
+  obligations and call sites check the corresponding lifetime contract.
+
+[TEST id:test.memory.cycle-17-function-contracts-2026-07-29 date:2026-07-29 src:tests/test_qtt_signature.py,tests/test_qtt_pipeline.py conf:high]
+  A sanitizer-backed C harness checks that an owned string identity derives
+  quantity one and consumed mode, an unused parameter derives quantity zero and
+  erased mode, function ANF contains one active entry capability and one move,
+  and verification succeeds. A non-tail string use derives borrowed mode and
+  lowering rejects it rather than consuming caller ownership. The real compiler
+  regression verifies both a closed constant and a typed integer identity,
+  links the legacy executable, and observes result =42=. The complete focused
+  QTT suite passes 17/17; Make and CMake builds also pass.
+
+[OBS id:obs.memory.cycle-17-honesty-2026-07-29 src:qtt/signature.c conf:high]
+  This is the first verified interprocedural boundary, not yet interprocedural
+  reclamation. Applications do not consume signatures, result ownership is not
+  represented, and borrowed/shared/foreign modes have no operational call
+  rule. Parameter types are recovered from body occurrences because typed Core
+  lacks an explicit parameter type vector; an erased parameter can therefore
+  have no recovered type. Tail escape is syntactic, branch-dependent ownership
+  is rejected later by join verification rather than expressed by a dependent
+  contract, and effects, exceptions, recursion, loops, mutation, and FFI
+  lifetimes still lack rules. The shadow pass remains opt-in and does not emit
+  production LLVM frees.
+
+[TODO id:todo.memory.call-ownership-elaboration-2026-07-29 priority:critical]
+  Give every callable a stable signature identity, add borrowed and consumed
+  argument forms plus result ownership to ANF, and verify application by
+  transferring exactly the capabilities required by the callee contract.
+  Borrowed capabilities must remain with the caller across the call; consumed
+  capabilities must not. Only after this check should calls participate in
+  automatic reclamation.
+
+[TODO id:todo.memory.typed-core-parameter-types-2026-07-29 priority:high]
+  Store the complete zonked parameter type vector directly on Core lambdas.
+  Remove occurrence-based type recovery and make erased parameter contracts
+  independently type-checkable.
+
+* Cycle 18: Checked Direct-Call Ownership Transfer
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-18
+:CUSTOM_ID: memory-cycle-18
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Checked call plans and ownership-preserving beta-lowering for statically known lambdas.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/call.c,qtt/call.h,qtt/anf.c,qtt/signature.c,tests/test_qtt_call.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.call-transfer-judgment-2026-07-29 src:qtt/call.c conf:high]
+  Calls now have an independently checkable transfer judgment. For every
+  source argument =a_i= and parameter contract =p_i=:
+
+  =Σ(p_i).mode = consumed  =>  transfer(a_i) = move=
+
+  =Σ(p_i).mode ∈ {borrowed, shared}  =>  transfer(a_i) = borrow=
+
+  =Σ(p_i).mode = erased  =>  transfer(a_i) = value=
+
+  Arity, zonked type identity, and runtime representation must also agree.
+  Successful planning copies the checked argument evidence and result type;
+  no lowering phase may silently repair a mismatched contract.
+
+[FIX id:fix.memory.direct-call-beta-lowering-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c conf:high]
+  Ownership ANF accepts application when the callee is a syntactically known
+  Core lambda with an erased/consumed signature. Arguments are evaluated in
+  source order. A consumed lexical argument is moved out of the caller
+  capability, rebound as a fresh callee capability, and the inlined callee body
+  must move or drop it before returning. This is verified beta-lowering, so it
+  establishes the ownership transfer without inventing unresolved dynamic-call
+  semantics.
+
+[FIX id:fix.memory.call-sensitive-tail-escape-2026-07-29 date:2026-07-29 by:codex src:qtt/signature.c conf:high]
+  Signature inference now propagates tail escape through a direct known call:
+  when a callee parameter escapes from the callee and the corresponding
+  argument is an outer variable, the outer variable is classified consumed.
+  Consequently a forwarding wrapper receives an owned entry capability rather
+  than being incorrectly gated as borrowed.
+
+[TEST id:test.memory.cycle-18-call-transfer-2026-07-29 date:2026-07-29 src:tests/test_qtt_call.py,tests/test_qtt_pipeline.py conf:high]
+  The sanitizer harness accepts a type- and representation-correct move into a
+  consumed contract, rejects borrow-as-consume, rejects wrong arity and type,
+  and verifies direct calls from both a fresh string literal and caller-owned
+  lexical string. The lexical trace is allocation, caller move, callee binding,
+  and callee move-out, ending with valid ownership ANF. The ordinary compiler
+  shadow regression verifies a typed forwarding function containing a direct
+  lambda call and the legacy executable still returns =42=. The focused QTT
+  suite passes 18/18; Make and CMake builds pass.
+
+[OBS id:obs.memory.cycle-18-honesty-2026-07-29 src:qtt/anf.c conf:high]
+  This cycle proves only statically known direct calls. Named functions,
+  closures, higher-order values, recursion, mutually recursive definitions,
+  virtual/typeclass dispatch, and FFI calls still need stable signature lookup
+  and explicit ANF call instructions. Borrowed/shared calls remain rejected by
+  ANF even though the standalone checker defines their required transfer.
+  Composite call types require identical zonked Type pointers because canonical
+  type IDs do not yet exist. The beta-lowered call is not separately observable
+  by backends, and authoritative LLVM still bypasses ownership ANF.
+
+[TODO id:todo.memory.signature-environment-2026-07-29 priority:critical]
+  Build a module-level environment from stable definition IDs to validated
+  ownership signatures. Resolve named and closure calls through it, preserve
+  recursive strongly connected components, and emit an explicit typed ANF call
+  whose verifier checks the same transfer evidence as direct beta-lowering.
+
+[TODO id:todo.memory.borrow-obligations-2026-07-29 priority:critical]
+  Split ownership capabilities from non-owning loan obligations. A borrow call
+  must prove that caller ownership remains live across the call, the callee
+  cannot move or drop it, and no returned reference outlives the loan region.
+  Shared calls additionally need an aliasing and mutation discipline rather
+  than being treated as repeated borrows by convention.
+
+* Cycle 19: Explicit Quantitative Proof Objects
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-19
+:CUSTOM_ID: memory-cycle-19
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Independently checked quantitative derivations, path-sensitive runtime grades, explicit Core parameter types, and result ownership contracts.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/README.org,qtt/demand.c,qtt/demand.h,qtt/core.c,qtt/core.h,qtt/signature.c,qtt/signature.h,qtt/call.c,qtt/call.h,qtt/anf.c,tests/test_qtt_demand.py,tests/test_qtt_core.py,tests/test_qtt_signature.py,tests/test_qtt_call.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.two-demand-grades-2026-07-29 src:qtt/README.org,qtt/demand.c conf:high]
+  Demand judgments now prove two distinct grades:
+
+  =e ⊢ x ⇝ (s,r)=
+
+  where =s= counts syntactic occurrences materialized by structural lowering
+  and =r= is the maximum demand along one execution path in the supported pure,
+  acyclic fragment. Sequential premises add in both components. For exclusive
+  conditionals:
+
+  =(s,r) = (s_c+s_t+s_f, r_c+max(r_t,r_f))=
+
+  Function contracts use =r=; ANF emission cursors use =s=. This removes the
+  earlier inconsistency where a formatted =choice(1,2)= nevertheless supplied
+  quantity three to a function signature.
+
+[FIX id:fix.memory.explicit-demand-derivation-2026-07-29 date:2026-07-29 by:codex src:qtt/demand.c,qtt/demand.h conf:high]
+  Each demand proof is an explicit tree containing its inference rule, Core
+  source, subject BinderId, syntactic and runtime grades, and premise proofs.
+  The checker independently reconstructs the expected rule and premise
+  structure from Core and recomputes both grades bottom-up. Source, subject,
+  rule, premise, or grade tampering is rejected. Certificate queries consumed
+  by signature and ANF lowering now construct and check this evidence rather
+  than returning an unchecked structural recomputation.
+
+[FIX id:fix.memory.explicit-core-parameter-types-2026-07-29 date:2026-07-29 by:codex src:qtt/core.c,qtt/core.h,qtt/signature.c conf:high]
+  Real post-inference Core lambdas store an explicit borrowed vector of zonked
+  parameter Type pointers obtained by decomposing the inferred arrow type.
+  Signature derivation consumes this vector. Occurrence-based type recovery is
+  retained solely for older manually assembled Core test fixtures and is no
+  longer the real compiler path.
+
+[FIX id:fix.memory.result-ownership-contract-2026-07-29 date:2026-07-29 by:codex src:qtt/signature.c,qtt/signature.h,qtt/call.c,qtt/call.h conf:high]
+  Function signatures and checked call plans now carry result type,
+  representation, and ownership mode. Immediate and owned-heap results are
+  classified explicitly; borrowed, shared, and unknown remain distinct
+  vocabulary for subsequent lifetime rules rather than being collapsed into a
+  raw return Type pointer.
+
+[TEST id:test.memory.cycle-19-proof-verification-2026-07-29 date:2026-07-29 src:tests/test_qtt_demand.py,tests/test_qtt_core.py,tests/test_qtt_signature.py,tests/test_qtt_call.py conf:high]
+  The demand regression checks the complete conditional proof root, three
+  premises, syntactic grade three, runtime grade two, and rejection after grade
+  tampering. The Core regression checks explicit parameter type preservation.
+  The signature regression proves quantity two for a =choice(1,2)= function and
+  verifies its branch ownership ANF. Signature and call regressions check an
+  owned string result contract. The focused QTT suite passes 18/18; Make and
+  CMake builds pass.
+
+[OBS id:obs.memory.cycle-19-honesty-2026-07-29 src:qtt/README.org conf:high]
+  Explicit proof checking is materially stronger than the former fingerprint
+  gate, but it is not yet a mechanized metatheory. Runtime =max= is justified
+  only for exclusive, pure, terminating conditionals; recursion, loops,
+  exceptions, concurrency, and effects need different rules. The proof tree is
+  generated per query rather than stored once for every BinderId, which is
+  correct but inefficient. Core types are explicit but not canonically
+  interned. Result ownership is representation-derived and cannot yet express
+  a loan relating a returned borrow to a particular input. LLVM codegen still
+  does not consume the verified ownership result.
+
+[TODO id:todo.memory.mechanized-qtt-core-2026-07-29 priority:critical]
+  Encode the restricted Core, grade algebra, operational semantics, and
+  ownership ANF in Lean, Rocq, or Agda. Prove demand derivation determinism,
+  type/ownership preservation for lowering, and capability conservation for
+  evaluation. Keep the executable C checker as the compiler's small trusted
+  checker and differential-test it against extracted or generated proof cases.
+
+[TODO id:todo.memory.canonical-type-identities-2026-07-29 priority:critical]
+  Intern zonked structural types and assign collision-safe canonical IDs.
+  Replace raw Type pointer comparison in Core, calls, ANF edges, representation
+  descriptors, and signatures. Include result ownership and destructor
+  identity in canonical callable signatures.
+
+* Cycle 20: Proof-Carrying Canonical Type Evidence
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-20
+:CUSTOM_ID: memory-cycle-20
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Collision-safe compilation-local type identities carried by signatures, calls, and real shadow verification.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/README.org,qtt/type_identity.c,qtt/type_identity.h,qtt/signature.c,qtt/signature.h,qtt/call.c,qtt/call.h,qtt/pipeline.c,qtt/pipeline.h,env.c,tests/test_qtt_type_identity.py,tests/test_qtt_signature.py,tests/test_qtt_call.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.proof-carrying-policy-2026-07-29 src:qtt/README.org conf:high]
+  Full derivation trees belong in elaboration, checking, diagnostics, and audit
+  output. Compiler IR and separately compiled interfaces should carry compact
+  checked certificates: canonical identities, grades, ownership modes,
+  representation/destructor identities, and source-binding digests. Release
+  executables should erase this evidence by default only after a mechanized
+  erasure/lowering theorem exists; optional proof-carrying deployment may
+  retain it.
+
+[DEC id:dec.memory.type-fingerprint-not-identity-2026-07-29 src:qtt/type_identity.c conf:high]
+  Structural fingerprints are lookup hints, never equality witnesses. A
+  compilation-local TypeId is assigned only after recursive structural
+  comparison within the fingerprint bucket. Therefore distinct types remain
+  distinct even under an intentionally forced fingerprint collision, while
+  separately allocated equal structures intern to the same ID.
+
+[FIX id:fix.memory.canonical-signature-types-2026-07-29 date:2026-07-29 by:codex src:qtt/signature.c,qtt/signature.h,qtt/call.c,qtt/call.h conf:high]
+  Parameter and result contracts carry canonical TypeIds after signature
+  canonicalization. Call checking prefers canonical identity evidence and also
+  checks the borrowed Type structure for coherence, rejecting either an ID
+  mismatch or tampered pointer metadata. The legacy raw Type pointers no longer
+  define checked call identity.
+
+[FIX id:fix.memory.shadow-type-arena-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,qtt/pipeline.h,env.c conf:high]
+  Each real shadow verification owns a type arena, canonicalizes every
+  parameterized signature before ANF lowering, interns the result of a closed
+  body, and reports the number of canonical types referenced by the verified
+  definition.
+
+[TEST id:test.memory.cycle-20-canonical-identities-2026-07-29 date:2026-07-29 src:tests/test_qtt_type_identity.py,tests/test_qtt_signature.py,tests/test_qtt_call.py,tests/test_qtt_pipeline.py conf:high]
+  The sanitizer regression interns two separately allocated equal arrow types
+  to one ID, forces Int and String into the same fingerprint bucket and obtains
+  different IDs, and re-interns an equal Int to the original ID. Signature
+  tests prove equal parameter/result IDs, call tests reject a mismatched
+  canonical argument, and the real compiler shadow path remains verified. The
+  focused QTT suite passes 19/19; Make and CMake builds pass.
+
+[OBS id:obs.memory.cycle-20-honesty-2026-07-29 src:qtt/type_identity.c conf:high]
+  IDs are canonical only inside one arena and are not stable serialized module
+  identities. Recursive structural types are depth-bounded rather than handled
+  by a coinductive or strongly connected graph algorithm. ANF primitive tags,
+  representation plans, destructor descriptors, and callable signatures do not
+  yet all carry canonical IDs. Proof erasure is a design policy, not yet a
+  proved semantics-preserving transformation.
+
+[TODO id:todo.memory.serialized-canonical-types-2026-07-29 priority:critical]
+  Canonicalize recursive type graphs by strongly connected components, emit a
+  deterministic structural encoding for module interfaces, and re-intern that
+  encoding with collision-safe equality during import. Extend the same identity
+  discipline to representations, destructor descriptors, and complete callable
+  signatures.
+
+* Cycle 21: Compositional Ownership Calls
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-21
+:CUSTOM_ID: memory-cycle-21
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Collision-safe callable identities, module signature collection, explicit typed ownership calls, and interprocedural transfer solving.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/signature_env.c,qtt/signature_env.h,qtt/module.c,qtt/module.h,qtt/anf.c,qtt/anf.h,qtt/README.org,tests/test_qtt_signature_env.py,tests/test_qtt_anf_call.py,tests/test_qtt_named_call_lowering.py,tests/test_qtt_module.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.callable-identity-2026-07-29 src:qtt/signature_env.c conf:high]
+  Callable identity is module-local and collision safe. A name fingerprint is
+  only an index hint; module ID, fingerprint, and full name all participate in
+  equality. The signature environment borrows proof-carrying contracts and
+  rejects duplicate names, stale source certificates, and non-canonical type
+  evidence.
+
+[FIX id:fix.memory.explicit-ownership-call-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/anf.h conf:high]
+  Ownership ANF has an explicit typed =CALL=. Its verifier resolves the stable
+  callable, checks arity, canonical TypeIds, ANF types, representations,
+  transfer modes, move/borrow SSA provenance, and the complete result contract.
+  Owned call results introduce a fresh capability that must be moved or dropped
+  before return. The interpreter reports calls as unsupported instead of
+  silently assigning them accidental semantics.
+
+[FIX id:fix.memory.named-call-lowering-2026-07-29 date:2026-07-29 by:codex src:qtt/anf.c,qtt/signature_env.c conf:high]
+  Named Core applications lower through the module signature environment.
+  Consumed arguments acquire explicit bind/move provenance; owned results are
+  represented by a fresh capability and explicitly transferred or dropped.
+  Lowering-owned operand arrays have explicit destruction ownership.
+
+[FIX id:fix.memory.module-two-phase-checking-2026-07-29 date:2026-07-29 by:codex src:qtt/module.c,qtt/module.h conf:high]
+  Module checking separates declaration from verification. All signatures are
+  derived, canonicalized, and registered before bodies are checked. A monotone
+  finite least-fixed-point pass propagates supported tail-consumption facts
+  through named calls, removing declaration-order dependence for forward
+  references and establishing the boundary needed for recursive groups.
+
+[TEST id:test.memory.cycle-21-compositional-calls-2026-07-29 date:2026-07-29 src:tests/test_qtt_signature_env.py,tests/test_qtt_anf_call.py,tests/test_qtt_named_call_lowering.py,tests/test_qtt_module.py conf:high]
+  Sanitizer regressions force callable hash collisions, reject stale and
+  duplicate signatures, reject fabricated transfer provenance and mismatched
+  argument/result types, verify named owned-result calls, and verify a forward
+  reference declared before its callee. The focused QTT suite passes 23/23.
+  Make and CMake builds pass, and the real compiler shadow regression passes.
+
+[OBS id:obs.memory.cycle-21-honesty-2026-07-29 src:qtt/module.c,qtt/anf.c conf:high]
+  The real compiler still invokes the shadow checker one definition at a time;
+  module collection is exercised by the QTT API but is not yet the
+  authoritative source-module pipeline. Borrowed/shared calls are rejected by
+  lowering because loan regions are absent. The fixed point propagates only
+  tail consumption and is not a general recursive resource invariant solver.
+  CALL evaluation and LLVM lowering are intentionally unsupported. Destructor
+  identity, effects, closures, polymorphic instantiation, foreign retention,
+  exceptional exits, and concurrency remain outside the checked call theorem.
+
+[TODO id:todo.memory.module-shadow-session-2026-07-29 priority:critical]
+  Stage real post-inference source compilation into signature collection,
+  interprocedural constraint solving, and body verification using =QttModule=.
+  Do not implement this as an unbounded process-global registry; give the
+  compilation unit an explicit lifetime and source locations for diagnostics.
+
+[TODO id:todo.memory.loan-calculus-2026-07-29 priority:critical]
+  Add owner-indexed loan capabilities and lexical/control-flow loan regions.
+  Borrow calls must prove owner liveness across the call, prohibit callee
+  consumption, and relate borrowed results to a particular input lifetime.
+
+* Cycle 22: Graded Typing Kernel
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-22
+:CUSTOM_ID: memory-cycle-22
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Subusage and independently checked graded typing evidence attached to canonical function signatures.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/README.org,qtt/graded.c,qtt/graded.h,qtt/quantity.c,qtt/quantity.h,qtt/signature.c,qtt/signature.h,qtt/signature_env.c,qtt/pipeline.c,qtt/pipeline.h,env.c,tests/test_qtt_graded.py,tests/test_qtt_signature.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.exact-subusage-2026-07-29 src:qtt/quantity.c,qtt/README.org conf:high]
+  Subusage is the natural preorder on =ℕ ∪ {ω}=: finite =m ≤ n= follows
+  ordinary natural ordering, every finite grade is below =ω=, and =ω= is below
+  only itself. Monad does not replace exact finite grades with a three-point
+  ={0,1,ω}= lattice.
+
+[FIX id:fix.memory.graded-typing-judgment-2026-07-29 date:2026-07-29 by:codex src:qtt/graded.c,qtt/graded.h conf:high]
+  The supported typed-Core fragment now has an executable judgment
+  =Γ ⊢ e : A ▷ Δ=. The context assigns canonical TypeIds and usage allowances
+  to free BinderIds. Checking proves the canonical result type and every
+  path-sensitive observed demand =Δ(x) ≤ Γ(x)=. A certificate retains copied
+  context evidence and independently checkable demand derivations.
+
+[FIX id:fix.memory.graded-signatures-2026-07-29 date:2026-07-29 by:codex src:qtt/signature.c,qtt/signature.h,qtt/signature_env.c conf:high]
+  Canonical source-derived signatures carry a graded typing certificate.
+  Signature environments recheck it and reject a signature whose quantity
+  contract was mutated after canonicalization. Manually assembled foreign/test
+  signatures without source remain explicitly outside this source-proof
+  requirement.
+
+[FIX id:fix.memory.real-shadow-grades-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,qtt/pipeline.h,env.c conf:high]
+  Real post-inference shadow verification checks graded signature evidence
+  before ownership lowering and reports the number of graded and proven-erased
+  parameters.
+
+[TEST id:test.memory.cycle-22-graded-kernel-2026-07-29 date:2026-07-29 src:tests/test_qtt_graded.py,tests/test_qtt_signature.py,tests/test_qtt_pipeline.py conf:high]
+  Sanitizer tests prove finite and omega subusage, reject using a quantity-one
+  binder twice, accept allowance two, validate a zero-grade unused binder,
+  reject canonical result mismatch, and reject a mutated signature allowance.
+  The focused QTT suite passes 24/24; Make and CMake builds pass; scoped
+  whitespace validation passes.
+
+[OBS id:obs.memory.cycle-22-honesty-2026-07-29 src:qtt/README.org,qtt/graded.c conf:high]
+  This is a real graded validity check, but it begins from already typed Core.
+  Allowances on ordinary source signatures are still inferred from the same
+  demand evidence rather than declared or solved during elaboration. It does
+  not grade variables used inside types, alter HM generalization/instantiation,
+  represent graded Π domains, or prove type-directed erasure. Therefore it
+  raises the literature-QTT maturity only modestly, to roughly 18–22%.
+
+[TODO id:todo.memory.grade-constraints-in-inference-2026-07-29 priority:critical]
+  Introduce grade expressions, fresh grade variables, constraints, and
+  solutions that survive type substitution, generalization, instantiation,
+  cloning, and module serialization. Only after that semantic layer is tested
+  should surface multiplicity annotations be finalized.
+
+* Cycle 23: Symbolic Grade Constraints and Schemes
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-23
+:CUSTOM_ID: memory-cycle-23
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Immutable symbolic grades, subusage constraints, occurs checks, and fresh polymorphic grade schemes.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/README.org,qtt/constraints.c,qtt/constraints.h,qtt/signature.c,qtt/signature.h,tests/test_qtt_grade_constraints.py,tests/test_qtt_signature.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.symbolic-grade-expressions-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h conf:high]
+  A dedicated arena now owns immutable grade constants, fresh variables,
+  additions, and multiplications. A constraint set expresses subusage and
+  equality separately from solved =QttQuantity= values.
+
+[FIX id:fix.memory.grade-constraint-solver-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c conf:high]
+  The initial solver computes minimal lower-bound solutions for its supported
+  constraint shape, enforces constant upper bounds, rejects inconsistent
+  inequalities, and rejects direct occurs cycles such as =α = α + 1=. Its
+  unsupported nonlinear and recursive boundary is documented explicitly.
+
+[FIX id:fix.memory.grade-schemes-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h conf:high]
+  Grade generalization quantifies variables not marked rigid by the outer
+  environment. Every instantiation replaces quantified variables with fresh
+  identities while preserving rigid variables, preventing two polymorphic call
+  sites from accidentally sharing one mutable grade variable.
+
+[FIX id:fix.memory.allowance-observation-split-2026-07-29 date:2026-07-29 by:codex src:qtt/signature.c,qtt/signature.h conf:high]
+  Parameter contracts distinguish the permitted allowance from body demand
+  observed by the proof. An omega allowance can validate observed demand one;
+  a zero allowance rejects it. Ownership mode remains based on observed
+  operational behavior rather than the upper allowance.
+
+[TEST id:test.memory.cycle-23-grade-constraints-2026-07-29 date:2026-07-29 src:tests/test_qtt_grade_constraints.py,tests/test_qtt_signature.py conf:high]
+  Sanitizer regressions check minimal solutions, inconsistent constraints,
+  occurs-cycle rejection, fresh quantified instantiation, preservation of
+  rigid environment variables, and allowance/observation separation. The
+  focused QTT suite passes 25/25 and the CMake build passes.
+
+[OBS id:obs.memory.cycle-23-honesty-2026-07-29 src:qtt/README.org,qtt/constraints.c conf:high]
+  The scheme implementation is a QTT-kernel substrate, not yet part of HM
+  =TypeScheme=. It borrows its source grade arena, so an authoritative
+  integration needs an explicit compilation-lifetime or refcounted arena before
+  schemes can outlive inference contexts. General nonlinear inequalities,
+  variable upper-bound propagation, recursive SCC solving, principal-solution
+  proofs, serialization, and source diagnostics are not complete. Adding an
+  inert grade pointer to =TypeScheme= before solving these lifetime and cloning
+  rules would create the appearance of integration without soundness.
+
+* Cycle 24: Long-Lived Grade Evidence
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-24
+:CUSTOM_ID: memory-cycle-24
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Reference-counted immutable arenas and schemes suitable for compiler-environment lifetimes.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/constraints.c,qtt/constraints.h,qtt/README.org,tests/test_qtt_grade_constraints.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.grade-evidence-lifetime-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h conf:high]
+  Immutable grade arenas are reference counted. A generalized scheme retains
+  its source arena, and a scheme can itself be retained by multiple environment
+  entries. Releasing the constructing scope no longer invalidates template
+  expressions required by later polymorphic instantiation.
+
+[TEST id:test.memory.cycle-24-grade-lifetime-2026-07-29 date:2026-07-29 src:tests/test_qtt_grade_constraints.py conf:high]
+  The sanitizer regression releases the construction arena before
+  instantiation, then releases one shared scheme owner and instantiates through
+  the remaining owner. Both operations remain valid without leaks or dangling
+  reads.
+
+[OBS id:obs.memory.cycle-24-honesty-2026-07-29 src:infer.h,infer.c conf:high]
+  Lifetime safety removes one blocker to HM integration but does not itself put
+  grades in =TypeScheme=. The remaining integration must instantiate type and
+  grade variables coherently, identify outer rigid grade variables during
+  generalization, and preserve evidence through module/environment cloning.
+
+* Cycle 25: HM Quantitative Scheme Carriage
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-25
+:CUSTOM_ID: memory-cycle-25
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Grade schemes have real HM TypeScheme ownership, clone/free behavior, inference-context instantiation arenas, and shadow compiler carriage.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: infer.c,infer.h,env.c,qtt/pipeline.c,qtt/pipeline.h,qtt/constraints.c,qtt/constraints.h,qtt/README.org,tests/test_qtt_hm_scheme.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.hm-grade-scheme-lifecycle-2026-07-29 date:2026-07-29 by:codex src:infer.c,infer.h conf:high]
+  HM =TypeScheme= owns an optional retained =QttGradeScheme=. Scheme cloning
+  retains quantitative evidence and scheme destruction releases it. The same
+  audit fixed zero-quantifier cloning so it no longer passes null pointers to
+  =memcpy= under UBSan.
+
+[FIX id:fix.memory.infer-grade-arena-2026-07-29 date:2026-07-29 by:codex src:infer.c,infer.h conf:high]
+  Every =InferCtx= owns a grade arena. Quantified grade instantiation into this
+  arena produces fresh variables on every request and shares their lifetime
+  with the corresponding inference run.
+
+[FIX id:fix.memory.shadow-hm-grade-carriage-2026-07-29 date:2026-07-29 by:codex src:env.c,qtt/pipeline.c,qtt/pipeline.h conf:high]
+  In shadow mode, real inferred definitions derive their solved parameter-grade
+  vector and attach it to the HM scheme before insertion and environment
+  cloning. Shadow diagnostics report the carried HM grade-domain count.
+
+[TEST id:test.memory.cycle-25-hm-grade-schemes-2026-07-29 date:2026-07-29 src:tests/test_qtt_hm_scheme.py,tests/test_qtt_pipeline.py conf:high]
+  A sanitizer harness clones and frees HM schemes while retaining grade
+  evidence, then independently instantiates the same quantified scheme twice in
+  an inference context and proves distinct variable identities. The real
+  compiler regression requires =hm-scheme=1= for parameterized shadow
+  definitions.
+
+[OBS id:obs.memory.cycle-25-honesty-2026-07-29 src:infer.c,env.c conf:high]
+  HM can now carry and freshen grade schemes, but ordinary =infer_instantiate=
+  does not yet associate the fresh grade vector with the instantiated arrow or
+  application constraint. Real shadow definitions currently carry solved
+  constant parameter grades, not inferred higher-order grade variables.
+  Joint type/grade generalization, call-site constraints, imported
+  serialization, and source annotations remain incomplete.
+
+* Cycle 26: Quantitative HM Application Instances
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-26
+:CUSTOM_ID: memory-cycle-26
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: HM arrow types and grade vectors are instantiated, advanced, and retained as one call-site object.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: infer.c,infer.h,env.c,qtt/README.org,tests/test_qtt_quantitative_instantiation.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.paired-quantitative-instantiation-2026-07-29 date:2026-07-29 by:codex src:infer.c,infer.h conf:high]
+  =infer_instantiate_quantitative= produces one coherent HM type/grade
+  instance. Its grade count must equal the number of leading arrow domains,
+  and =infer_quantitative_take_domain= advances the type and grade positions
+  atomically. Malformed scheme arity is an explicit inference result.
+
+[FIX id:fix.memory.quantitative-application-evidence-2026-07-29 date:2026-07-29 by:codex src:infer.c,infer.h,env.c conf:high]
+  Ordinary direct symbol application uses the paired instance when its
+  =TypeScheme= carries grades. The inference context retains the applied grade
+  prefix keyed by source AST identity for later constraint generation and
+  ownership lowering. Shadow reports expose the retained application count.
+
+[TEST id:test.memory.cycle-26-quantitative-applications-2026-07-29 date:2026-07-29 src:tests/test_qtt_quantitative_instantiation.py,tests/test_qtt_pipeline.py conf:high]
+  A sanitizer harness checks two-domain ordering, atomic prefix advancement,
+  fresh polymorphic grade identities, cleanup, and malformed arity rejection.
+  A real compiler regression calls a previously inferred graded definition and
+  requires one retained quantitative application in the shadow report.
+
+[OBS id:obs.memory.cycle-26-honesty-2026-07-29 src:infer.c,qtt/README.org conf:high]
+  Call-site evidence is now produced during HM elaboration, but argument
+  demands are not yet constrained against instantiated domain grades.
+  Higher-order callee expressions do not yet carry a quantitative instance,
+  imported grade schemes are not serialized, and the ownership lowerer does
+  not yet consume =InferGradeApplication=. This is genuine Phase-B integration,
+  not yet a full quantitative typing judgment for source programs.
+
+* Cycle 27: Symbolic Quantitative Elaboration Algebra
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-27
+:CUSTOM_ID: memory-cycle-27
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Binder-indexed symbolic usage contexts implement sequencing, exclusive choice, grade scaling, application, and allowance constraints.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/elaboration.c,qtt/elaboration.h,qtt/constraints.c,qtt/constraints.h,qtt/README.org,tests/test_qtt_elaboration.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.grade-path-join-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h conf:high]
+  Symbolic grades include an explicit maximum node for exclusive control-flow
+  join. Evaluation, occurs traversal, generalization, and instantiation all
+  preserve it instead of prematurely collapsing path information.
+
+[FIX id:fix.memory.symbolic-usage-semimodule-2026-07-29 date:2026-07-29 by:codex src:qtt/elaboration.c,qtt/elaboration.h conf:high]
+  BinderId-indexed usage contexts compose pointwise: sequencing adds,
+  exclusive alternatives take maximum, and a domain grade scales an argument
+  context. Missing binders denote grade zero and disjoint binders are retained.
+
+[FIX id:fix.memory.quantitative-application-equation-2026-07-29 date:2026-07-29 by:codex src:qtt/elaboration.c conf:high]
+  Application demand is executable as
+  =U(f a₁...aₙ) = U(f) + Σ ρᵢ·U(aᵢ)=. Observed binder demand emits a real
+  subusage constraint against its declared or inferred allowance.
+
+[TEST id:test.memory.cycle-27-elaboration-algebra-2026-07-29 date:2026-07-29 src:tests/test_qtt_elaboration.py conf:high]
+  Sanitizer coverage distinguishes sequential demand two from exclusive demand
+  one, checks grade-two call scaling, rejects allowance one for demand two,
+  solves a symbolic domain grade, preserves disjoint BinderIds, checks the
+  multi-argument application sum, and freshens maximum expressions through a
+  grade scheme.
+
+[OBS id:obs.memory.cycle-27-honesty-2026-07-29 src:qtt/README.org,qtt/elaboration.c,infer.c conf:high]
+  The correct symbolic application rule now exists, but the production AST
+  traversal does not yet construct =QttUsageContext= for lambda bodies.
+  Therefore ordinary inference retains domain grades without yet solving the
+  caller binder equations. This cycle advances the executable theory and the
+  integration boundary, not the Phase-B exit criterion.
+
+* Cycle 28: Authoritative Source Usage Elaboration
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-28
+:CUSTOM_ID: memory-cycle-28
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Real HM definition inference derives symbolic binder demand from source ASTs and propagates retained direct-call grades.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/pipeline.c,qtt/pipeline.h,qtt/elaboration.c,qtt/elaboration.h,infer.c,infer.h,env.c,qtt/README.org,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.source-binder-usage-elaboration-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,qtt/pipeline.h conf:high]
+  A real source traversal derives =QttUsageContext= during HM definition
+  inference. It keys occurrences by resolved BinderId, combines body
+  expressions sequentially, joins =if= arms by maximum, and generalizes the
+  resulting parameter expressions into a long-lived grade scheme.
+
+[FIX id:fix.memory.source-call-grade-propagation-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,infer.c conf:high]
+  The traversal locates the exact =InferGradeApplication= by source AST
+  identity and applies =ρᵢ·U(aᵢ)=. A caller forwarding its parameter to a
+  grade-two callee therefore receives observed grade two despite one syntactic
+  occurrence.
+
+[FIX id:fix.memory.no-implicit-linear-callee-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c conf:high]
+  Calls without quantitative evidence are not assumed linear. Only an explicit
+  strict-linear primitive table receives grade one; other unknown or
+  higher-order calls make source elaboration unsupported.
+
+[FIX id:fix.memory.source-grades-enter-hm-scheme-2026-07-29 date:2026-07-29 by:codex src:env.c conf:high]
+  In shadow mode, a complete source derivation is installed directly on the
+  definition's real HM =TypeScheme=. The older Core-derived grade scheme is now
+  only a fallback for constructs outside the new fragment.
+
+[TEST id:test.memory.cycle-28-real-source-grades-2026-07-29 date:2026-07-29 src:tests/test_qtt_pipeline.py conf:high]
+  The real compiler reports source grades zero for an unused parameter, two for
+  sequential uses, one for exclusive branch uses, and two for a parameter
+  passed once to a previously inferred grade-two callee. The executable still
+  runs successfully.
+
+[OBS id:obs.memory.cycle-28-honesty-2026-07-29 src:qtt/README.org,qtt/pipeline.c,env.c conf:high]
+  Source elaboration remains opt-in shadow behavior. Nested lambdas, local
+  bindings, patterns, effects, recursive equations, higher-order calls,
+  imported schemes, and annotations are not supported. Ownership ANF and LLVM
+  do not consume these source grades, so they cannot yet justify emitted frees.
+
+* Cycle 29: Quantitative Local Bindings
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-29
+:CUSTOM_ID: memory-cycle-29
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Quantitative let substitution and sequential local-binding elimination enter real source grade inference.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/elaboration.c,qtt/elaboration.h,qtt/pipeline.c,qtt/README.org,tests/test_qtt_elaboration.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.quantitative-let-rule-2026-07-29 date:2026-07-29 by:codex src:qtt/elaboration.c,qtt/elaboration.h conf:high]
+  The executable rule
+  =U(let x=v in b)=(U(b)∖x)+U(b)(x)·U(v)= removes the local capability from
+  the outward context and scales the initializer's free demand by the local's
+  observed usage. A zero-use local produces no initializer demand in the
+  intended pure graded fragment.
+
+[FIX id:fix.memory.sequential-local-elaboration-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c conf:high]
+  Source =with=/=let= bindings extend the target BinderId context, analyze
+  initializers and body, then eliminate locals in reverse order. This preserves
+  dependencies between sequential bindings and distinguishes a shadowing local
+  from the same-named outer parameter.
+
+[TEST id:test.memory.cycle-29-local-bindings-2026-07-29 date:2026-07-29 src:tests/test_qtt_elaboration.py,tests/test_qtt_pipeline.py conf:high]
+  Sanitizer coverage checks used-twice and unused abstract locals. The real
+  compiler checks unused, doubled, chained, and same-name-shadowing local
+  bindings, requiring source grades =0=, =2=, =2=, and =1= respectively.
+
+[OBS id:obs.memory.cycle-29-honesty-2026-07-29 src:qtt/README.org,qtt/pipeline.c conf:high]
+  Erasing an unused initializer is semantics-preserving only in the pure,
+  total fragment. Monad does not yet carry effect/partiality evidence into this
+  rule, shadow mode does not change runtime evaluation, and production
+  reclamation must not consume this zero grade until an effect gate exists.
+
+* Cycle 30: Conservative Effect Gate for Quantitative Let
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-30
+:CUSTOM_ID: memory-cycle-30
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Quantitative local elimination is restricted to syntactically pure-total initializers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/pipeline.c,qtt/README.org,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.quantitative-let-effect-gate-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c conf:high]
+  Source grade derivation classifies local initializers as pure-total,
+  partial, effectful, or unknown. Only the pure-total class enters
+  quantitative let substitution. Known effects such as =show=, known partial
+  division/remainder, and unclassified calls remain unsupported, preventing a
+  future grade-zero consumer from erasing observable or failing evaluation.
+
+[TEST id:test.memory.cycle-30-effect-gate-2026-07-29 date:2026-07-29 src:tests/test_qtt_pipeline.py conf:high]
+  Real compiler fixtures place =show x= and =1 / x= in otherwise unused local
+  initializers and require the source-grade derivation to decline both.
+
+[OBS id:obs.memory.cycle-30-honesty-2026-07-29 src:qtt/README.org,qtt/pipeline.c conf:high]
+  This is a conservative syntactic admission check, not an effect system or a
+  proof of totality. It deliberately rejects effectful initializers even when
+  their values are used and cannot summarize arbitrary callees. Production
+  erasure remains disabled.
+
+* Cycle 31: Closure Construction and Latent Demand
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-31
+:CUSTOM_ID: memory-cycle-31
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Closure construction demand is separated from per-invocation latent demand.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/elaboration.c,qtt/elaboration.h,qtt/pipeline.c,qtt/README.org,tests/test_qtt_elaboration.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.closure-demand-factorization-2026-07-29 date:2026-07-29 by:codex src:qtt/elaboration.c,qtt/elaboration.h conf:high]
+  =QttUsageClosure= factors a lambda body's outward demand into construction
+  captures =C=support(U(body)∖parameters)=, with every stored free variable at
+  grade one, and latent per-invocation demand
+  =L=U(body)∖parameters=. Invocation at grade =κ= computes =κ·L=.
+
+[FIX id:fix.memory.nested-source-capture-grades-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c conf:high]
+  The real source traversal extends its BinderId target set with nested lambda
+  parameters, derives the nested body, removes those parameters, and exports
+  closure-construction capture demand. An outer parameter used twice in the
+  nested body is captured once; an outer parameter absent from the body is not
+  captured.
+
+[TEST id:test.memory.cycle-31-closure-demand-2026-07-29 date:2026-07-29 src:tests/test_qtt_elaboration.py,tests/test_qtt_pipeline.py conf:high]
+  Sanitizer coverage proves capture grade one, latent grade two, removal of the
+  lambda parameter, and grade-three invocation producing demand six. The real
+  compiler reports outer source grades one and zero for capturing and
+  non-capturing nested lambdas.
+
+[OBS id:obs.memory.cycle-31-honesty-2026-07-29 src:qtt/README.org,qtt/pipeline.c conf:high]
+  Source schemes do not yet retain a closure's latent environment, so the
+  compiler cannot propagate captures through higher-order invocation. Unknown
+  higher-order calls remain unsupported. This cycle establishes the necessary
+  algebra and construction-side integration, not complete higher-order QTT.
+
+* Cycle 32: Correlated Higher-Order Grade Signatures
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-32
+:CUSTOM_ID: memory-cycle-32
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: HM quantitative schemes jointly generalize arrow-domain and closure-latent grade partitions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/constraints.c,qtt/constraints.h,infer.c,infer.h,qtt/README.org,tests/test_qtt_quantitative_instantiation.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.joint-quantitative-signature-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h conf:high]
+  =QttGradeScheme= now partitions one jointly generalized expression vector
+  into arrow-domain grades and BinderId-indexed closure-latent grades. Shared
+  variables are quantified once across both partitions, preserving equations
+  such as domain =α= and latent demand =α+1=.
+
+[FIX id:fix.memory.quantitative-instance-closure-evidence-2026-07-29 date:2026-07-29 by:codex src:infer.c,infer.h conf:high]
+  =InferQuantitativeType= owns the correlated instantiated domain and closure
+  evidence. Arrow arity checks count only domain expressions, legacy
+  domain-only APIs remain compatible, and scheme cloning retains the complete
+  immutable signature.
+
+[TEST id:test.memory.cycle-32-correlated-instantiation-2026-07-29 date:2026-07-29 src:tests/test_qtt_quantitative_instantiation.py conf:high]
+  Sanitizer coverage jointly generalizes domain =α= with latent =α+1=,
+  constrains the instantiated domain to three, and requires the same instance's
+  latent grade to solve to four. It also checks BinderId retention, cloning,
+  independent fresh instances, domain consumption, and malformed arrow arity.
+
+[OBS id:obs.memory.cycle-32-honesty-2026-07-29 src:qtt/README.org,qtt/pipeline.c conf:high]
+  The scheme representation can carry one closure summary, but real source
+  inference does not yet attach it. Programs may contain multiple nested
+  closures, so production integration first needs stable closure identities
+  and a hierarchical signature; flattening all latent binders would be
+  ambiguous and unsound. Higher-order application therefore remains
+  unsupported.
+
+* Cycle 33: Stable Source Closure Identities and Latent Schemes
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-33
+:CUSTOM_ID: memory-cycle-33
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Real source inference retains multiple closure-latent summaries under deterministic lexical identities.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: reader.h,qtt/bindings.c,qtt/bindings.h,qtt/constraints.c,qtt/constraints.h,qtt/elaboration.c,qtt/elaboration.h,qtt/pipeline.c,qtt/pipeline.h,infer.c,infer.h,env.c,qtt/README.org,tests/test_qtt_bindings.py,tests/test_qtt_quantitative_instantiation.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.stable-closure-identities-2026-07-29 date:2026-07-29 by:codex src:reader.h,qtt/bindings.c,qtt/bindings.h conf:high]
+  Lexical resolution assigns every lambda a nonzero deterministic preorder
+  =ClosureId= alongside BinderIds. Re-resolving an unchanged tree reproduces
+  both identity sequences, and distinct nested lambdas never share an ID.
+
+[FIX id:fix.memory.hierarchical-latent-signature-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h,infer.c,infer.h conf:high]
+  Latent scheme entries are keyed by the pair =(ClosureId,BinderId)=. The
+  constructor rejects zero identities and duplicate pairs, instances preserve
+  both keys, and exact lookup cannot confuse two closures capturing the same
+  lexical binder.
+
+[FIX id:fix.memory.source-latent-scheme-integration-2026-07-29 date:2026-07-29 by:codex src:qtt/pipeline.c,qtt/pipeline.h,env.c conf:high]
+  Real source traversal collects each nested closure's latent context,
+  jointly generalizes it with the outer domain vector, and installs the
+  complete signature on the real HM scheme in shadow mode. Diagnostic evidence
+  reports both entry count and solved latent quantities.
+
+[TEST id:test.memory.cycle-33-source-closures-2026-07-29 date:2026-07-29 src:tests/test_qtt_bindings.py,tests/test_qtt_quantitative_instantiation.py,tests/test_qtt_pipeline.py conf:high]
+  Tests prove stable distinct ClosureIds, distinguish two closure summaries
+  capturing BinderId 77, reject duplicate key pairs, retain shared grade
+  variables through instantiation, and make the real compiler report two
+  closures with latent grades one and two while construction consumes the
+  outer parameter twice.
+
+[OBS id:obs.memory.cycle-33-honesty-2026-07-29 src:qtt/README.org,infer.c,qtt/pipeline.c conf:high]
+  ClosureIds are stable only inside one resolved module and are not yet
+  qualified or serialized. Function-valued parameter/result types do not
+  identify the closure summary they carry, so higher-order calls still cannot
+  consume latent evidence. Source schemes retain the evidence; production
+  ownership ANF and LLVM still do not.
+
+* Cycle 34: Qualified Closure Provenance Across Calls
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-34
+:CUSTOM_ID: memory-cycle-34
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Module-qualified closure keys and result-closure alternatives survive quantitative schemes and full direct applications.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: qtt/constraints.c,qtt/constraints.h,qtt/pipeline.c,qtt/pipeline.h,infer.c,infer.h,env.c,qtt/README.org,tests/test_qtt_quantitative_instantiation.py,tests/test_qtt_pipeline.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.qualified-closure-key-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h,infer.c,infer.h conf:high]
+  The canonical latent key is now =(ModuleId,ClosureId,BinderId)=. Zero
+  components and duplicate triples are rejected, while equal local
+  ClosureId/BinderId pairs from different modules remain distinct through
+  cloning and instantiation.
+
+[FIX id:fix.memory.result-closure-provenance-2026-07-29 date:2026-07-29 by:codex src:qtt/constraints.c,qtt/constraints.h,qtt/pipeline.c conf:high]
+  =QttGradeSignature= is a structured immutable-construction input carrying
+  domains, latent entries, and a canonical set of qualified result closures.
+  Source analysis derives result alternatives from lambdas, conditional arms,
+  sequence tails, and local-body tails.
+
+[FIX id:fix.memory.full-call-provenance-forwarding-2026-07-29 date:2026-07-29 by:codex src:infer.c,infer.h,qtt/pipeline.c conf:high]
+  Quantitative application records retain closure evidence and forward
+  result-closure identities only after full application. A caller returning
+  the result of a known closure factory consequently retains its qualified
+  provenance; partial application does not claim the factory's final result.
+
+[TEST id:test.memory.cycle-34-qualified-results-2026-07-29 date:2026-07-29 src:tests/test_qtt_quantitative_instantiation.py,tests/test_qtt_pipeline.py conf:high]
+  Sanitizer coverage distinguishes module 100 closure 9 from module 200
+  closure 9 despite a shared BinderId, checks result provenance through
+  cloning/instantiation, and rejects a duplicate qualified triple. The real
+  compiler proves one result closure for direct factories, sequence-tail
+  factories, and a forwarding caller.
+
+[OBS id:obs.memory.cycle-34-honesty-2026-07-29 src:qtt/README.org,infer.c,qtt/pipeline.c conf:high]
+  Provenance now crosses a full direct call, but latent entries still name the
+  callee's lexical BinderIds. They cannot be copied into the caller until
+  captured parameters are substituted with stable environment slots.
+  Qualified evidence is not serialized in module interfaces, and production
+  ownership lowering does not consume it.
+
+* Cycle 35: First Authoritative LLVM Reclamation
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-35
+:CUSTOM_ID: memory-cycle-35
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Verified Semantic IR authorizes the first real production allocation and cleanup pair.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/backend.c,qtt/backend.h,codegen.c,CMakeLists.txt,qtt/README.org,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.first-production-free-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,qtt/backend.h,codegen.c conf:high]
+  The compiler now has one opt-in path where QTT evidence changes production
+  memory behavior.  A dead lexical String literal is copied into genuinely
+  owned heap storage and freed after its body, but only after the backend
+  boundary independently verifies Semantic IR, resource status, exact source
+  BinderId correspondence, owned representation, =ALLOC → DROP= sequencing,
+  and the canonical structural destructor descriptor.
+
+[TEST id:test.memory.first-production-free-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py conf:high]
+  The regression compiles emitted LLVM and checks =strdup= precedes =free=,
+  then executes the linked program and checks its observable result.  Negative
+  cases prove the feature-disabled program and a binding moved out of its scope
+  emit neither operation and still execute successfully.
+
+[OBS id:obs.memory.first-production-free-boundary-2026-07-31 date:2026-07-31 src:qtt/README.org,qtt/backend.c conf:high]
+  This is the beginning of authoritative reclamation, not completion of the
+  memory model.  It supports exactly one lexical String literal binding and is
+  off by default.  Multiple bindings, owned call results in ordinary source
+  functions, aggregate and closure destruction, early exits, exceptions,
+  loops, sharing, loans, and FFI retention remain outside production cleanup.
+  The next safe expansion is to return a general ordered cleanup certificate
+  from Semantic IR and consume structural destructor operations, rather than
+  adding source-shape special cases to codegen.
+
+[FIX id:fix.memory.ordered-multiple-frees-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,qtt/backend.h,codegen.c conf:high]
+  The production certificate now carries a sequence of cleanups.  For multiple
+  dead lexical String literals, allocation evidence must occur in source order
+  and drop evidence in reverse lexical order.  Each drop is paired back to its
+  exact allocation, resolved BinderId, source slot, representation, and
+  verified destructor.  LLVM consequently emits LIFO reclamation rather than
+  relying on a backend convention.
+
+[TEST id:test.memory.ordered-multiple-frees-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py conf:high]
+  The executable regression requires two =strdup= calls, two =free= calls,
+  proves the second lexical slot is loaded for destruction before the first,
+  and checks the linked program's result.  A mixed scope with one dead and one
+  escaping String must emit no QTT allocation or cleanup, fixing conservative
+  all-or-nothing behavior until partial-plan correspondence is specified.
+
+* Cycle 36: Normal Compiler Authority and Nested Reclamation
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-36
+:CUSTOM_ID: memory-cycle-36
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Quantitative schemes and certified lexical cleanup become normal compiler stages with one shared policy and identity boundary.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/compiler.c,qtt/compiler.h,qtt/backend.c,env.c,codegen.c,CMakeLists.txt,qtt/README.org,tests/test_qtt_compiler.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.normal-qttps-pipeline-2026-07-31 date:2026-07-31 by:codex src:qtt/compiler.h,env.c conf:high]
+  Supported quantitative source analysis is a normal post-inference stage, not
+  a diagnostic feature.  It attaches generalized grade schemes to real HM
+  schemes by default.  =MONAD_QTT_SHADOW= controls comparison output only.
+  Unsupported coverage remains a conservative absence of evidence, while the
+  explicit =MONAD_QTT_ANALYSIS=0= override exists for rollout isolation.
+
+[DEC id:dec.memory.canonical-grades-only-2026-07-31 date:2026-07-31 by:codex src:env.c,qtt/pipeline.c conf:high]
+  An unsupported canonical source-grade derivation leaves the real HM scheme
+  ungraded.  The older closure-insensitive shadow grade is diagnostics-only and
+  cannot fill that absence.  Conservative missing evidence is preferable to a
+  precise-looking quantity derived under a different closure judgment.
+
+[FIX id:fix.memory.shared-compiler-policy-2026-07-31 date:2026-07-31 by:codex src:qtt/compiler.c,qtt/compiler.h,env.c,codegen.c conf:high]
+  Analysis enablement, certified-memory enablement, diagnostic enablement, and
+  filename-derived ModuleId construction now have one implementation.
+  Production cleanup is enabled by default for the certified fragment and may
+  be isolated with =MONAD_QTT_MEMORY=0=.  Removing duplicated FNV hashing also
+  prevents inference and codegen from silently disagreeing about resource
+  provenance.
+
+[FIX id:fix.memory.nested-lexical-reclamation-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,codegen.c conf:high]
+  A lexical scope certificate accepts verified nested resource traffic between
+  its exact allocation prefix and reverse-drop suffix.  Inner and outer scopes
+  consequently allocate and reclaim their own String values in lexical LIFO
+  order under ordinary compilation.
+
+[TEST id:test.memory.normal-pipeline-and-nesting-2026-07-31 date:2026-07-31 src:tests/test_qtt_compiler.py,tests/test_qtt_production_memory.py conf:high]
+  A standalone policy harness checks default analysis/memory enablement,
+  independent diagnostics, explicit disable controls, and stable distinct
+  ModuleIds.  A real compiler comparison proves ordinary HM schemes carry a
+  grade when analysis is enabled and not when explicitly disabled.  Emitted
+  LLVM and execution tests prove default-on nested cleanup and inner-before-
+  outer destruction.
+
+* Cycle 37: Canonical Call Results Reach Production Cleanup
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-37
+:CUSTOM_ID: memory-cycle-37
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Same-module result ownership contracts now authorize direct LLVM reclamation of fresh call results.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/compiler_module.c,qtt/signature.c,qtt/resource.c,qtt/semantic_ir.c,qtt/backend.c,codegen.c,tests/test_qtt_signature.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.result-origin-contract-2026-07-31 date:2026-07-31 by:codex src:qtt/signature.h,qtt/signature.c conf:high]
+  Heap representation alone does not imply ownership. Canonical function
+  signatures distinguish immediate, static, transferred, fresh, and unknown
+  result origins. Only a result proven =OWNED/FRESH/OWNED_HEAP= may authorize
+  the current call-result cleanup fragment; static and unknown pointers remain
+  outside it.
+
+[FIX id:fix.memory.call-aware-resource-proof-2026-07-31 date:2026-07-31 by:codex src:qtt/compiler_module.c,qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Ordinary inference registers typed same-module definitions in one canonical
+  module environment. Environment-aware resource elaboration resolves calls
+  through those contracts, elaborates consumed parameters as moves and other
+  parameters as borrows, and its independent correspondence checker repeats
+  the same judgment. Semantic IR now owns and rechecks that call-aware plan.
+
+[FIX id:fix.memory.direct-owned-call-materialization-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,qtt/backend.h,codegen.c conf:high]
+  Cleanup certificates carry an explicit materialization mode. Static String
+  literals are copied with =strdup=; fresh owned call results transfer directly
+  into the certified local capability. LLVM emits =free= only when the
+  destructor, BinderId, representation, binding index, materialization, and
+  resource plan all agree.
+
+[TEST id:test.memory.call-result-transfer-2026-07-31 date:2026-07-31 src:tests/test_qtt_signature.py,tests/test_qtt_production_memory.py conf:high]
+  Unit tests distinguish transferred identity results, borrowed static
+  results, and fresh constructor results. Production tests compile and execute
+  a same-module String constructor, require direct call-to-free lowering
+  without =strdup= when the result is dead, and require neither local copy nor
+  local free when the same capability moves to the caller.
+
+[OBS id:obs.memory.call-result-boundary-2026-07-31 date:2026-07-31 src:qtt/README.org,qtt/backend.c conf:high]
+  Imported, indirect, recursive, polymorphically returned, shared, and
+  borrowed-result calls remain conservative. The trusted primitive freshness
+  list is an explicit runtime-ABI axiom and must eventually be replaced or
+  checked by serialized FFI/module ownership contracts.
+
+* Cycle 38: Observable Production QTT Pipeline
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-38
+:CUSTOM_ID: memory-cycle-38
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Normal compiler verbosity exposes authoritative QTT contracts and reclamation decisions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: main.c,codegen.c,qtt/compiler.c,qtt/compiler_module.c,qtt/README.org,tests/test_qtt_report.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.qtt-verbosity-levels-2026-07-31 date:2026-07-31 by:codex src:main.c,qtt/compiler.c conf:high]
+  QTT follows the compiler's existing verbosity model. Normal compilation is
+  silent but authoritative, =-v= prints phase and coverage summaries, and
+  =-vv= or =--trace=qtt= prints binder grades, canonical contracts, and
+  backend reclamation decisions. Diagnostics must observe the production
+  evidence rather than rerun a competing shadow semantics.
+
+[FIX id:fix.memory.post-codegen-contract-report-2026-07-31 date:2026-07-31 by:codex src:main.c,qtt/compiler_module.c conf:high]
+  Module contract summaries are emitted after top-level inference and codegen,
+  because that is where ordinary compilation installs canonical definitions.
+  Reporting earlier produced a misleading zero-contract snapshot even though
+  backend cleanup later consumed those contracts.
+
+[TEST id:test.memory.verbose-production-qttps-2026-07-31 date:2026-07-31 src:tests/test_qtt_report.py conf:high]
+  A real Monad program is compiled with =-v= and =-vv=. The regression checks
+  concise phase/coverage reporting at level one and, at level two, exact
+  binder demand, fresh-owned result contract, direct owned-result
+  materialization, and the certified =free= decision.
+
+[DEC id:dec.memory.qtt-progressive-disclosure-2026-08-01 date:2026-08-01 by:codex src:cli.c,qtt/compiler.c,qtt/compiler_module.c,main.c conf:high]
+  QTT observability uses progressive disclosure rather than one maximum-noise
+  switch. =--trace=qtt= is a compact, user-module-only verdict;
+  =--trace=qtt-proof= exposes its complete derivation and backend decisions;
+  =--trace=qtt-all= additionally includes dependency and interface internals.
+  Phase banners and module counts must describe the user module once, and
+  imported aliases must not inflate its definition or contract totals.
+
+[TEST id:test.memory.qtt-progressive-disclosure-2026-08-01 date:2026-08-01 src:tests/test_qtt_report.py conf:high]
+  End-to-end compilation proves that summary tracing omits proof/import noise,
+  emits one phase banner, and reports local counts, while proof tracing retains
+  the Unicode judgment tree and path-sensitive binder evidence.
+  Removing dependency trees also exposed and corrected a false-positive test:
+  recursive transfer inference is proven, but its source module remains
+  =PARTIAL= until application lowering is supported; a dependency's unrelated
+  =VERIFIED= verdict had previously satisfied the assertion.
+
+[DEC id:dec.memory.qtt-semantic-color-and-summary-2026-08-01 date:2026-08-01 by:codex src:qtt/compiler_module.c,main.c conf:high]
+  QTT color carries restrained semantic roles: cyan field labels, green
+  discharged obligations/checkmarks, yellow conservative states, and red
+  failures. Values remain visually separate from labels. The summary is a
+  decision view—module verdict, verified/total coverage, conservative count,
+  error count, and a proof command for partial results—not a miniature debug
+  dump. Explicit summary tracing omits the redundant phase banner and the
+  post-codegen contract inventory.
+
+* Cycle 39: Imported Ownership Contracts Reach LLVM
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-39
+:CUSTOM_ID: memory-cycle-39
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Source-compiled module ownership contracts authorize conservative cross-module reclamation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: main.c,qtt/compiler.h,qtt/compiler_module.c,qtt/resource.c,qtt/semantic_ir.c,qtt/backend.c,tests/test_qtt_production_memory.py,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.imported-contract-authority-2026-07-31 date:2026-07-31 by:codex src:main.c,qtt/compiler_module.c conf:high]
+  A source-compiled provider's inferred canonical signature may be registered
+  under each consumer-visible qualified or unqualified name. Ambiguous aliases
+  withhold evidence instead of poisoning qualified contracts. A later local
+  definition is authoritative and transactionally rebuilds the contract
+  environment, preserving the language's normal shadowing rule.
+
+[FIX id:fix.memory.imported-result-evidence-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/semantic_ir.c,qtt/backend.c conf:high]
+  Imported calls whose AST result type is not locally attached recover their
+  canonical result representation and type from the signature environment.
+  Resource elaboration, its correspondence checker, Semantic IR destructor
+  construction, and final backend verification consume the same result
+  evidence. Detailed tracing explains every conservative cleanup fallback.
+
+[TEST id:test.memory.imported-call-reclamation-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py,tests/test_qtt_resource.py conf:high]
+  Two real modules compile, link, and execute while unqualified and qualified
+  fresh String results lower directly from provider calls to consumer frees.
+  A borrowed/static imported result is not freed, and a fresh local definition
+  shadowing a borrowed provider contract is reclaimed. The standalone resource
+  harness now supplies explicit type evidence rather than relying on an
+  untyped literal default.
+
+[OBS id:obs.memory.persistent-interface-gap-2026-07-31 date:2026-07-31 src:qtt/README.org,module_export.c conf:high]
+  This cycle crosses a real module boundary while both sources are available.
+  It does not serialize QTT contracts into object/module interfaces. Persistent
+  separate compilation still requires a versioned structural type encoding,
+  contract fingerprint validation, and conservative missing/stale behavior.
+
+* Cycle 40: Persistent Quantitative Module Interfaces
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-40
+:CUSTOM_ID: memory-cycle-40
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Versioned ownership contracts are serialized, rechecked, and consumed across the production module boundary.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/interface.c,qtt/interface.h,qtt/module.c,qtt/compiler_module.c,main.c,tests/test_qtt_interface.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.stable-interface-fingerprint-2026-07-31 date:2026-07-31 by:codex src:qtt/interface.c,qtt/type_identity.c conf:high]
+  Persistent contract identity must not contain compilation-local =TypeId=
+  indices. The =.mqti= digest mixes deterministic structural type
+  fingerprints with parameter quantities, observed demand, ownership modes,
+  representations, and result mode/origin. Re-interning assigns fresh local
+  IDs only after the serialized evidence has been validated.
+
+[FIX id:fix.memory.active-mqti-import-2026-07-31 date:2026-07-31 by:codex src:qtt/interface.c,qtt/module.c,qtt/compiler_module.c,main.c conf:high]
+  Providers emit and reload a versioned sidecar beside their object. Consumer
+  signature environments register those source-free external contracts and
+  production resource/semantic/backend checks consume them. External
+  declarations participate in interprocedural lookup but are not falsely
+  re-verified as locally available function bodies. Local definitions may
+  transactionally replace them.
+
+[TEST id:test.memory.mqti-persistence-2026-07-31 date:2026-07-31 src:tests/test_qtt_interface.py,tests/test_qtt_production_memory.py conf:high]
+  Strict round-trip coverage checks complete flat-type signatures and rejects
+  a tampered result mode. Real two-module compilation requires the emitted
+  Fresh sidecar, observes deserialized contract registration, emits the
+  consumer free, links, and executes. Qualified, static-result, and local
+  shadow cases remain green; the complete QTT suite passes 50 tests.
+
+[OBS id:obs.memory.mqti-v1-boundary-2026-07-31 date:2026-07-31 src:qtt/interface.c,qtt/README.org conf:high]
+  Version 1 deliberately excludes composite, polymorphic, nominal-layout, and
+  recursive type graphs. The current dependency path recompiles source before
+  loading its sidecar, and no source/object content digest binds the interface
+  to the linked object. Missing or structurally tampered evidence fails closed,
+  but cached object-only loading and cryptographic provenance remain future
+  work.
+
+* Cycle 41: Cached Interface Authority Is Object-Bound
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-41
+:CUSTOM_ID: memory-cycle-41
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Cold and cached module paths consume object-bound quantitative interfaces with conservative stale fallback.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: main.c,qtt/interface.c,qtt/interface.h,qtt/compiler_module.c,tests/test_qtt_interface.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.interface-object-binding-2026-07-31 date:2026-07-31 by:codex src:main.c,qtt/interface.c conf:high]
+  Quantitative interface authority is paired with the linked artifact, not
+  merely a module name or timestamp. Fresh emission fingerprints the completed
+  object bytes before writing the sidecar. Every load recomputes the object
+  fingerprint and requires equality before registering any contract.
+
+[FIX id:fix.memory.cached-mqti-wiring-2026-07-31 date:2026-07-31 by:codex src:main.c conf:high]
+  The up-to-date-object path now loads and validates =.mqti= even though object
+  emission is skipped. If validation fails, the cached module is marked as
+  object-reused and retained AST metadata cannot restore QTT authority.
+  Unsupported evidence therefore follows the conservative legacy backend
+  without inserting a free.
+
+[TEST id:test.memory.cached-mqti-three-paths-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py conf:high]
+  The imported-fresh regression compiles and executes cold, cached-valid, and
+  cached-mismatched variants. The first two require interface registration and
+  LLVM =free=; the third requires neither and still produces the expected
+  result. The production memory suite passes 10 tests and the complete QTT
+  suite passes 50.
+
+[OBS id:obs.memory.source-free-export-gap-2026-07-31 date:2026-07-31 src:main.c,module_export.c conf:high]
+  QTT ownership metadata is now fully wired through the existing cache path
+  for its flat-type fragment. The compiler still reruns provider source codegen
+  to reconstruct general exported values, layouts, typeclasses, reader
+  transformers, and ABI declarations because the older =.mexp= machinery is
+  not authoritative. True source-free module loading requires unifying those
+  export manifests; it is no longer a QTT ownership-interface wiring defect.
+
+[FIX id:fix.memory.source-free-certified-callable-fragment-2026-08-03 date:2026-08-03 by:codex src:main.c,tests/test_effect_arrow_syntax.py conf:high]
+  The callable subset of the earlier source-free export gap is closed. A
+  missing provider source may be replaced by its retained =.module.o= and
+  fingerprint-bound =.module.mqti=. Complete QTT signatures reconstruct extern
+  parameters/results and ownership/effect authority; the compiled program is
+  linked and executed in the regression. Unsupported export categories remain
+  unavailable instead of receiving legacy guessed metadata.
+
+* Cycle 42: Heap Representation Is Not Ownership Authority
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-42
+:CUSTOM_ID: memory-cycle-42
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Lexical heap aliases preserve the originating capability instead of fabricating duplicate ownership.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/backend.c,qtt/README.org,tests/test_qtt_resource.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.separate-representation-authority-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c conf:high]
+  A heap physical representation does not imply that evaluating an expression
+  creates a fresh ownership capability. Resource environments therefore map a
+  lexical alias to the qualified root capability it denotes. Borrowing or
+  returning the alias emits =BORROW= or =MOVE= for that root; only heap
+  literals and signature-certified fresh results introduce new capabilities.
+
+[FIX id:fix.memory.alias-capability-provenance-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/backend.c conf:high]
+  Alias initializers no longer produce a duplicate =ALLOC=/=DROP= pair. The
+  correspondence checker independently reconstructs the same root mapping.
+  Backend cleanup certification accepts such non-authoritative lexical
+  bindings between a direct allocation and its reverse-scope drop, while
+  rejecting any direct allocation that lacks a materialization contract.
+  Nested scopes remain independently certified.
+
+[TEST id:test.memory.alias-capability-production-2026-07-31 date:2026-07-31 src:tests/test_qtt_resource.py,tests/test_qtt_production_memory.py conf:high]
+  Resource tests require =ALLOC owner → BORROW owner → DROP owner= for an
+  unused alias and =ALLOC owner → BORROW owner → MOVE owner= when the alias
+  escapes. A compiled Monad program with an owned String and borrowed alias
+  requires one =strdup=, one =free=, and successful execution. The complete
+  production-memory suite passes 11 tests and the complete QTT suite passes
+  51 tests.
+
+[OBS id:obs.memory.alias-analysis-boundary-2026-07-31 date:2026-07-31 src:qtt/resource.c conf:high]
+  Provenance is currently exact for direct lexical variable aliases. Joins,
+  aggregate projections, mutable aliases, closure capture, and foreign
+  retention still require a general loan/provenance analysis before this rule
+  can support the language-wide memory-model claim.
+
+* Cycle 43: Capability Aliases Become Explicit Proof Operations
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-43
+:CUSTOM_ID: memory-cycle-43
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: The resource IR explicitly records lexical alias-to-root provenance as a verified proof operation.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/resource.h,qtt/semantic_ir.c,qtt/README.org,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.explicit-omega-alias-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c conf:high]
+  Alias provenance belongs in the authoritative resource derivation, not in a
+  parallel backend side table. =ALIAS(x,κ)= is therefore a proof-only resource
+  operation asserting that lexical binder =x= denotes already-live capability
+  =κ=. It neither allocates nor retains storage. Verification rejects a
+  missing, consumed, or self-referential root.
+
+[FIX id:fix.memory.transitive-alias-root-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Lexical elaboration canonicalizes alias chains to their original qualified
+  capability. The independent correspondence checker reconstructs and checks
+  the same target. Semantic IR projects the operation as a borrowed lexical
+  name while preserving owned authority at the target.
+
+[TEST id:test.memory.explicit-alias-proof-2026-07-31 date:2026-07-31 src:tests/test_qtt_resource.py conf:high]
+  Executable tests cover unused aliases, escaping aliases, transitive alias
+  chains, and aliasing a nonexistent capability. The complete QTT suite passes
+  51 tests and production memory remains 11/11.
+
+[OBS id:obs.memory.omega-scope-gap-2026-07-31 date:2026-07-31 src:qtt/resource.c conf:high]
+  =ALIAS= makes provenance visible but is not yet a complete scoped loan
+  calculus. A later =Ω= implementation must represent alias lifetime/end-loan,
+  mutability and exclusivity, branch joins, aggregate paths, and foreign
+  retention rather than treating alias evidence only as an assertion in the
+  linear operation stream.
+
+* Cycle 44: Scoped Loan State Enters Omega
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-44
+:CUSTOM_ID: memory-cycle-44
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Alias proofs now have lexical lifetime, verified closure, and branch-consistent state.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/resource.h,qtt/semantic_ir.c,qtt/README.org,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.alias-open-close-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c conf:high]
+  =ALIAS(x,κ)= opens a lexical shared loan and =END_ALIAS(x,κ)= discharges
+  exactly that mapping. The verifier carries the alias map as a distinct
+  component of resource state, alongside live and consumed capabilities.
+  Duplicate names, missing closes, and mismatched roots are rejected.
+
+[FIX id:fix.memory.branch-consistent-loans-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Resource-state cloning and equality now include outstanding alias mappings,
+  so conditional arms cannot silently disagree about the loan context.
+  Lexical elaboration closes loans in reverse nesting order, including after a
+  root is moved through an escaping alias. Semantic IR retains both open and
+  close transitions without confusing them with physical heap operations.
+
+[TEST id:test.memory.scoped-loan-state-2026-07-31 date:2026-07-31 src:tests/test_qtt_resource.py conf:high]
+  Tests reject duplicate opens, incorrect roots, missing closes, aliases of
+  nonexistent capabilities, and branch-inconsistent loan states. Generated
+  plans cover unused, escaping, and transitive aliases with reverse-order
+  closure.
+
+[OBS id:obs.memory.shared-loan-only-2026-07-31 date:2026-07-31 src:qtt/resource.c conf:high]
+  This is a scoped shared-loan kernel, not yet a Rust-like borrow checker.
+  There are no mutable/exclusive loans, place paths, reborrows, nonlexical
+  lifetime inference, closure/async suspension rules, or FFI retention
+  regions. Moving a root through its escaping alias is represented, but general
+  moves while loans remain open require a later access-compatibility judgment.
+
+* Cycle 45: Shared and Exclusive Access Become Distinct
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-45
+:CUSTOM_ID: memory-cycle-45
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Omega distinguishes shared and exclusive loans and rejects incompatible reads and loan openings.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/resource.h,qtt/semantic_ir.c,qtt/semantic_ir.h,qtt/README.org,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.loan-access-lattice-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c conf:high]
+  Active loans carry =SHARED= or =EXCLUSIVE=. Multiple shared loans may target
+  one capability. An exclusive loan requires no other active loan, and no new
+  shared or exclusive loan may overlap it. An ordinary =BORROW= read is
+  rejected while an exclusive loan is active.
+
+[FIX id:fix.memory.loan-kind-authority-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Loan kind is part of resource operations, verifier state, branch equality,
+  and Semantic IR transition correspondence. Closing evidence must match both
+  lexical alias, qualified capability root, and loan kind; a forged shared
+  close cannot discharge an exclusive loan.
+
+[TEST id:test.memory.shared-exclusive-conflicts-2026-07-31 date:2026-07-31 src:tests/test_qtt_resource.py conf:high]
+  Tests accept multiple shared loans and a complete exclusive lifecycle, while
+  rejecting shared/exclusive overlap in either order, reads during exclusive
+  access, and mismatched close kinds.
+
+[OBS id:obs.memory.move-access-gap-2026-07-31 date:2026-07-31 src:qtt/resource.c conf:high]
+  Destruction, rehome, duplication, and general move compatibility are not yet
+  uniformly checked against active loans. Returned lexical aliases currently
+  lower to a root move, so enforcing the prohibition first would break valid
+  escape without proving which alias authorizes it. The next step is an
+  explicit =MOVE_ALIAS(alias,root)= rule followed by strict rejection of
+  ordinary root moves or destruction under any outstanding loan.
+
+* Cycle 46: Authorized Escape and Exclusive Writes
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-46
+:CUSTOM_ID: memory-cycle-46
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Explicit alias-authorized transfer closes the move exception and exclusive loans now authorize mutation proofs.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/resource.c,qtt/resource.h,qtt/semantic_ir.c,qtt/README.org,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.move-through-alias-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c conf:high]
+  Escaping a lexical alias is represented by =MOVE_ALIAS(alias,root)=, not an
+  unexplained move of the root. Verification requires the named active mapping
+  to target the live qualified capability, consumes that capability once, and
+  leaves outstanding lexical loans in discharge-only state. Core
+  correspondence reconstructs the same alias and root.
+
+[FIX id:fix.memory.strict-loan-access-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.c,qtt/semantic_ir.c conf:high]
+  Ordinary =MOVE=, =DROP=, =DUP=, and =REHOME= now reject any outstanding loan
+  of their capability. The heap evaluator and Semantic IR edge projection both
+  understand alias-authorized transfer, so it is not a verifier-only fiction.
+
+[DEC id:dec.memory.write-needs-exclusive-proof-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c conf:high]
+  =WRITE_ALIAS(alias,root)= is accepted only when =alias= is an active
+  exclusive loan of the live root. It preserves resource state while recording
+  the permission proof that a later place-indexed =Write(place)= effect must
+  consume. A shared alias cannot authorize it.
+
+[TEST id:test.memory.move-write-access-2026-07-31 date:2026-07-31 src:tests/test_qtt_resource.py conf:high]
+  Tests reject ordinary destruction under a loan and forged move aliases,
+  accept verified alias escape, accept an exclusive write lifecycle, and
+  reject the same write through a shared loan. Transitive generated aliases
+  name the final lexical alias and original root exactly.
+
+[OBS id:obs.memory.place-effect-wiring-gap-2026-07-31 date:2026-07-31 src:effects/effect.c,qtt/resource.c conf:high]
+  Mutation authority is executable in Resource IR but source =set!= and
+  aggregate mutation do not yet emit =WRITE_ALIAS= or a correlated
+  =Write(place)= effect. Place identity, disjoint projections, effect-row
+  summaries, and public interface serialization remain the next integration
+  boundary.
+
+* Cycle 47: One Place Identity for Effects and Authority
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-47
+:CUSTOM_ID: memory-cycle-47
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Effects and future loan projections now share a canonical qualified place algebra.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/place.c,qtt/place.h,effects/effect.c,effects/effect.h,CMakeLists.txt,tests/test_qtt_effect.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.memory.canonical-place-identity-2026-07-31 date:2026-07-31 by:codex src:qtt/place.h,qtt/place.c conf:high]
+  A place is a qualified root plus canonical projection identity. Projection
+  zero denotes the entire root and overlaps all children; equal nonzero
+  projections overlap; distinct certified sibling projections are disjoint.
+  Invalid zero module/binder identities cannot become effect labels.
+
+[FIX id:fix.memory.place-indexed-effects-2026-07-31 date:2026-07-31 by:codex src:effects/effect.c,effects/effect.h,qtt/place.c conf:high]
+  Effect rows construct read/write labels from the shared place value rather
+  than independently formatting variable names. Canonical labels include
+  module, binder, and projection, so local binder-number collisions across
+  modules cannot conflate mutation summaries.
+
+[TEST id:test.memory.place-effect-algebra-2026-07-31 date:2026-07-31 src:tests/test_qtt_effect.py conf:high]
+  Sanitized tests prove root/child overlap, identical projection overlap,
+  sibling disjointness, and exact read/write row membership for qualified
+  places.
+
+[OBS id:obs.memory.flat-place-boundary-2026-07-31 date:2026-07-31 src:qtt/place.h conf:high]
+  One-level layout projection IDs can now be derived from checked field
+  ordinals, and Resource loan/move/write operations carry =QttPlace=. Nested
+  field/index paths, prefix overlap, dynamic-index conservatism, unions, and
+  production source lowering of those paths are not implemented.
+
+* Cycle 53: Partial Aggregate Capabilities
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-53
+:CUSTOM_ID: memory-cycle-53
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Projected moves transform checked partial-initialization masks.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/place.h,qtt/resource.h,qtt/resource.c,tests/test_qtt_effect.py,tests/test_qtt_resource.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.typed-layout-field-place-2026-07-31 date:2026-07-31 by:codex src:qtt/place.h,tests/test_qtt_effect.py conf:high]
+  Layout fields derive canonical paths only from checked layout metadata. Each
+  field appends its one-based ordinal to a bounded prefix path. Missing or
+  duplicate fields, legacy opaque-path extension, and excessive depth fail
+  closed rather than flattening provenance into a lossy integer.
+
+[FIX id:fix.memory.partial-capability-state-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c,tests/test_qtt_resource.py conf:high]
+  A projected move requires an exact exclusive alias and records the evacuated
+  place while retaining the aggregate root capability. The same or overlapping
+  place cannot be accessed again, disjoint siblings remain usable, whole-root
+  read/move/dup/rehome/replace operations reject partial aggregates, and final
+  root drop discharges the mask. Branch state equality includes evacuated
+  places, rejecting path-dependent initialization. The abstract heap evaluator
+  counts projected moves separately, and effect extraction emits the exact
+  =Write(place)= label. Production codegen remains unauthorized until a
+  structural destructor certificate explicitly skips every evacuated field.
+
+* Cycle 54: Prefix Places and Certified Partial Destruction
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-54
+:CUSTOM_ID: memory-cycle-54
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Nested place prefixes become destructor-bound evacuation certificates carried by Semantic IR.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/core.h,qtt/place.h,qtt/drop.h,qtt/drop.c,qtt/semantic_ir.h,qtt/semantic_ir.c,qtt/backend.c,tests/test_qtt_effect.py,tests/test_qtt_drop.py,tests/test_qtt_semantic_ir.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.prefix-place-overlap-2026-07-31 date:2026-07-31 by:codex src:qtt/core.h,qtt/place.h,tests/test_qtt_effect.py conf:high]
+  =QttPlace= retains a bounded structural ordinal path. Equality compares the
+  whole path; overlap is prefix overlap, so a parent conflicts with every
+  descendant while distinct nested siblings remain disjoint. Effect labels
+  render the same path with dot-separated Unicode-friendly notation.
+
+[FIX id:fix.memory.masked-destructor-certificate-2026-07-31 date:2026-07-31 by:codex src:qtt/drop.h,qtt/drop.c,tests/test_qtt_drop.py conf:high]
+  A partial-destruction certificate binds a qualified aggregate root, canonical
+  pairwise-disjoint evacuated paths, and the exact type/plan fingerprints of a
+  destructor. Independent verification checks every ordinal against the
+  structural plan. Masked execution reclaims all non-evacuated descendants and
+  aggregate shells without touching moved subobjects.
+
+[TEST id:test.memory.nested-masked-drop-2026-07-31 date:2026-07-31 src:tests/test_qtt_drop.py conf:high]
+  Tests cover nested evacuation, surviving moved storage, reclaimed siblings
+  and shells, canonical sorting, parent/descendant overlap rejection, invalid
+  roots, invalid ordinals, and forged destructor identity.
+
+[FIX id:fix.memory.semantic-mask-authority-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_ir.h,qtt/semantic_ir.c,qtt/backend.c,tests/test_qtt_semantic_ir.py conf:high]
+  Semantic IR owns and independently verifies a destructor mask for each owned
+  binding. The production backend accepts cleanup evidence only when both the
+  destructor and its mask verify; it deliberately rejects non-empty masks
+  until projected structural LLVM destruction is implemented.
+
+[OBS id:obs.memory.projected-codegen-boundary-2026-07-31 date:2026-07-31 src:qtt/backend.c conf:high]
+  Certified partial destruction is executable in the abstract ownership model
+  and represented in authoritative Semantic IR, but source lowering does not
+  yet produce structural field moves and production LLVM does not yet consume
+  non-empty masks. This is the next honest integration boundary.
+
+* Cycle 55: Resource-Derived Destructor Authority
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-55
+:CUSTOM_ID: memory-cycle-55
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Destructor evacuation masks are reconstructed from verified Resource IR rather than synthesized independently.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/drop.h,qtt/drop.c,qtt/semantic_ir.c,qtt/backend.c,tests/test_qtt_drop.py,tests/test_qtt_semantic_ir.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.resource-derived-mask-2026-07-31 date:2026-07-31 by:codex src:qtt/drop.h,qtt/drop.c conf:high]
+  =qtt_drop_mask_build_for_resource= first verifies the Resource block, then
+  traces typed projected moves to the consuming root drop. Conditional arms
+  must yield extensionally equal evacuation states before tracing continues.
+  The resulting canonical paths are bound to the supplied destructor plan.
+
+[FIX id:fix.memory.semantic-reconstructs-mask-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_ir.c,tests/test_qtt_semantic_ir.py conf:high]
+  Semantic IR no longer manufactures an empty certificate for every owned
+  binding. Dropped bindings receive the exact Resource-derived certificate;
+  moved-out bindings carry no drop mask. Verification independently rebuilds
+  the expected certificate and compares its root, destructor identity,
+  canonical paths, and fingerprint.
+
+[TEST id:test.memory.resource-mask-joins-2026-07-31 date:2026-07-31 src:tests/test_qtt_drop.py conf:high]
+  Regression coverage derives a non-empty mask from a flat projected-move
+  lifecycle and from two balanced conditional arms, then verifies that the
+  exact evacuated field survives masked destruction.
+
+[FIX id:fix.memory.drop-replace-evidence-separation-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.c,tests/test_qtt_production_memory.py conf:high]
+  Final root destruction and in-place root replacement consume different
+  evidence. Cleanup requires a Resource-derived final-drop mask. Replacement
+  requires the destructor descriptor plus the verified Resource invariant that
+  =REPLACE= cannot target a partial root; a binding later moved to its caller
+  correctly has no final-drop mask. Keeping these judgments distinct preserves
+  all twenty production replacement and cleanup regressions.
+
+* Cycle 56: Typed Source Projection to Semantic Ownership
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-56
+:CUSTOM_ID: memory-cycle-56
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Dotted source fields become typed Core places and direct Resource evacuations.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/core.h,qtt/core.c,qtt/demand.c,qtt/core_usage.c,qtt/signature.c,qtt/closure_policy.c,qtt/resource.h,qtt/resource.c,qtt/drop.c,qtt/semantic_ir.c,tests/test_qtt_core.py,tests/test_qtt_resource.py,tests/test_qtt_semantic_ir.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.typed-source-place-2026-07-31 date:2026-07-31 by:codex src:qtt/core.h,qtt/core.c,tests/test_qtt_core.py conf:high]
+  Core lowering maintains a typed lexical binder environment. A resolved dotted
+  symbol is accepted only when every component is a unique field in the
+  preceding layout type; successful components append their checked ordinal to
+  one canonical =QTT_CORE_PLACE=. Missing fields and untyped roots fail closed.
+
+[FIX id:fix.memory.direct-owned-place-move-2026-07-31 date:2026-07-31 by:codex src:qtt/resource.h,qtt/resource.c,tests/test_qtt_resource.py conf:high]
+  Tail use of an owned Core place emits =MOVE_PLACE=. The unique live root is
+  direct authority for evacuation, so no synthetic lexical alias is invented.
+  Verification rejects opaque/root paths, dead roots, repeated or overlapping
+  evacuation, and overlapping loans while retaining the partial aggregate.
+
+[TEST id:test.memory.source-to-semantic-projection-2026-07-31 date:2026-07-31 src:tests/test_qtt_semantic_ir.py conf:high]
+  An ordinary typed =source_owner.name= AST now passes through Core, demand and
+  usage inference, Resource elaboration, Semantic IR, and independent
+  verification. Its Resource plan contains =MOVE_PLACE= and its destructor
+  evidence contains the exact non-empty field mask.
+
+[OBS id:obs.memory.place-anf-boundary-2026-07-31 date:2026-07-31 src:qtt/anf.c,qtt/backend.c conf:high]
+  =QTT_CORE_PLACE= now reaches ownership ANF, where =MOVE_PLACE= returns the
+  evacuated field while preserving a masked partial root. Production LLVM
+  still rejects non-empty masks; structural extraction plus mask-aware
+  destructor dispatch is the remaining backend boundary.
+
+* Cycle 57: Partial Aggregate Ownership ANF
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-57
+:CUSTOM_ID: memory-cycle-57
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Ownership ANF represents projected evacuation and verifies partial-root state.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/anf.h,qtt/anf.c,qtt/semantic_anf.c,tests/test_qtt_anf.py,tests/test_qtt_semantic_anf.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.partial-aggregate-anf-2026-07-31 date:2026-07-31 by:codex src:qtt/anf.h,qtt/anf.c,tests/test_qtt_anf.py conf:high]
+  Ownership ANF has a first-class =MOVE_PLACE= instruction and an aggregate
+  physical type. Its live-resource state records evacuated typed paths per
+  root. Repeated or overlapping evacuation, whole-root moves/borrows/replaces
+  from a partial root, and branch joins with unequal masks fail closed. A final
+  =DROP= consumes the partial root and its destructor mask.
+
+[FIX id:fix.memory.semantic-anf-projection-correspondence-2026-07-31 date:2026-07-31 by:codex src:qtt/semantic_anf.c,tests/test_qtt_semantic_anf.py conf:high]
+  Semantic-to-ANF correspondence maps Resource =MOVE_PLACE= to the ownership
+  ANF transition and checks exact root identity and projection ordinals. The
+  regression tampers with a field ordinal and proves that verification rejects
+  the certificate instead of accepting operation-count agreement.
+
+[TEST id:test.memory.partial-aggregate-anf-eval-2026-07-31 date:2026-07-31 src:tests/test_qtt_semantic_anf.py conf:high]
+  A typed source layout projection lowers through Semantic IR to =MOVE_PLACE=,
+  verifies, evaluates one projected evacuation, and subsequently drops the
+  retained partial root. This is abstract-machine evidence, not yet LLVM
+  execution evidence.
+
+[OBS id:obs.memory.partial-aggregate-backend-gap-2026-07-31 date:2026-07-31 src:qtt/backend.c conf:high]
+  Production LLVM now handles the flat closed-layout-literal fragment. Nested
+  structural destruction and passing projected results through general call
+  transfer are not modeled. These boundaries prevent a language-wide
+  automatic-reclamation claim despite the coherent Resource/Semantic/ANF
+  judgments.
+
+* Cycle 58: Certified Projected Reclamation Reaches LLVM
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-58
+:CUSTOM_ID: memory-cycle-58
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Ordinary layout syntax produces verified projected moves and mask-aware LLVM cleanup.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/bindings.c,qtt/core.c,qtt/anf.c,qtt/backend.c,codegen.c,tests/test_qtt_bindings.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.source-layout-sigma-2026-07-31 date:2026-07-31 by:codex src:qtt/bindings.c,qtt/core.c,tests/test_qtt_bindings.py conf:high]
+  Binder resolution records dotted uses against the lexical root BinderId and
+  builds the current source unit's finite layout environment. Closed saturated
+  constructors with literal fields lower as pure aggregate allocations; field
+  names become checked one-based place ordinals. Effectful or open constructor
+  arguments remain unsupported instead of being silently classified as pure.
+
+[FIX id:fix.memory.aggregate-anf-literal-2026-07-31 date:2026-07-31 by:codex src:qtt/anf.h,qtt/anf.c,qtt/compiler_module.c conf:high]
+  Ownership ANF represents a closed aggregate literal explicitly. An ordinary
+  Monad function now prints and verifies the sequence =const-aggregate=,
+  =alloc=, =move-place=, masked =drop= rather than relying on a synthetic Core
+  fixture.
+
+[FIX id:fix.memory.masked-layout-llvm-2026-07-31 date:2026-07-31 by:codex src:qtt/backend.h,qtt/backend.c,codegen.c conf:high]
+  The backend accepts a non-empty destructor mask only for the verified flat
+  structural fragment whose children are owned leaves or no-ops. String fields
+  of a certified literal are copied into owned storage. LLVM skips the
+  evacuated field, frees every remaining owned String leaf, then frees the
+  aggregate allocation. Unsupported nested plans continue to fail closed.
+
+[TEST id:test.memory.projected-layout-production-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py conf:high]
+  A public Monad source program constructs =Owner {name, spare}=, returns
+  =owner.name=, and is required to show verified =move-place= evidence. Its
+  LLVM contains two ownership materializations and exactly two frees: the
+  non-evacuated sibling followed by the aggregate root. The executable returns
+  =Ada= without invalid reclamation.
+
+* Cycle 59: Interprocedural Projected-Result Reclamation
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-59
+:CUSTOM_ID: memory-cycle-59
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: Fresh ownership evacuated from a layout crosses verified calls and is reclaimed by callers.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/signature.c,qtt/anf.c,qtt/pipeline.c,qtt/compiler_module.c,tests/test_qtt_signature.py,tests/test_qtt_production_memory.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.projected-result-contract-2026-07-31 date:2026-07-31 by:codex src:qtt/signature.c,tests/test_qtt_signature.py conf:high]
+  A closed layout literal has fresh allocation provenance. When a lexical let
+  returns a checked place rooted in that allocation, signature derivation
+  propagates the initializer provenance and exposes the evacuated owned field
+  as an =owned/fresh= result contract.
+
+[FIX id:fix.memory.same-module-call-proof-2026-07-31 date:2026-07-31 by:codex src:qtt/compiler_module.c,qtt/pipeline.c,qtt/anf.c conf:high]
+  Source checking now establishes =Σ= before verifying bodies and passes it
+  into environment-aware ownership-ANF lowering. Canonical call contracts
+  supply post-elaboration primitive type witnesses, owned call-result moves
+  retain their physical representation, and lexical binding snapshots that
+  SSA evidence before emitting further instructions. The latter is required
+  because instruction emission may reallocate block storage.
+
+[TEST id:test.memory.projected-result-interprocedural-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py conf:high]
+  One public source regression requires the same-module caller's proof tree to
+  contain a verified named =call= and =drop=; its LLVM calls the projected
+  producer and frees the unused returned String exactly once. A second compiles
+  provider and consumer modules separately, reloads the serialized
+  =owned/fresh= contract, checks the consumer free, and executes both programs.
+  The complete QTT suite passes 65 tests and the production-memory suite passes
+  all 23 tests, including sanitizer-backed ANF coverage.
+
+[OBS id:obs.memory.remaining-interprocedural-boundary-2026-07-31 date:2026-07-31 src:qtt/README.org conf:high]
+  This closes direct named transfer for the flat owned-result fragment, not
+  general escape analysis. Indirect higher-order calls, recursive SCC resource
+  invariants, nested structural result descriptors, exceptions, and FFI
+  ownership contracts remain outside the production-wide claim.
+
+* Cycle 60: Coinductive Tail-Recursive Ownership Transfer
+:PROPERTIES:
+:ID: monadc.context.memory.cycle-60
+:CUSTOM_ID: memory-cycle-60
+:CONTEXT_KIND: implementation
+:CONTEXT_DESCRIPTION: A greatest fixed point certifies unique ownership transfer through mutually tail-recursive calls.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-31
+:CONTEXT_UPDATED: 2026-07-31
+:CONTEXT_STATUS: active
+:SOURCE: qtt/module.h,qtt/module.c,qtt/compiler_module.c,tests/test_qtt_module.py,tests/test_qtt_compiler.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.memory.must-transfer-greatest-fixed-point-2026-07-31 date:2026-07-31 by:codex src:qtt/module.c,tests/test_qtt_module.py conf:high]
+  Unique must-transfer is solved as =νF=, not as a demand-style least fixed
+  point. The solver starts with every eligible owned parameter, then removes a
+  candidate unless every tail path directly returns it or transfers it to a
+  still-proven consumed parameter. Conditional evidence is conjunctive. This
+  admits a closed mutually recursive transfer cycle while rejecting a cycle
+  with one retaining alternative.
+
+[FIX id:fix.memory.transfer-fixed-point-certificate-2026-07-31 date:2026-07-31 by:codex src:qtt/module.h,qtt/module.c,qtt/compiler_module.c conf:high]
+  Module verification and the real source pipeline expose candidate, proven,
+  rejected, and iteration counts. The trace includes the module identity
+  because the frontend environment contains visible imported contracts as well
+  as local definitions. Allocation failure produces explicit incomplete
+  evidence and fails closed rather than looking like an empty candidate set.
+
+[TEST id:test.memory.recursive-transfer-positive-negative-2026-07-31 date:2026-07-31 src:tests/test_qtt_module.py,tests/test_qtt_compiler.py conf:high]
+  Sanitizer-backed module tests prove a two-function mutual tail cycle and
+  reject a structurally similar cycle whose alternate branch does not transfer
+  its parameter. A public Monad compilation checks that the certificate reaches
+  =--trace=qtt= and both recursive definitions receive verified proof trees.
+  The complete QTT suite passes 66 tests; all 23 production-memory tests pass.
+
+[OBS id:obs.memory.recursion-claim-boundary-2026-07-31 date:2026-07-31 src:qtt/README.org conf:high]
+  The certificate proves linear capability conservation across accepted tail
+  edges. It does not prove termination, bounded stack or allocation during
+  divergence, non-tail local-resource invariants, recursive heap destruction,
+  or effectful/exceptional recursion.
+
+[FIX id:fix.memory.named-immediate-borrow-call-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.c,env.c conf:high]
+  Named calls now apply the shared representation-sensitive transfer rule:
+  quantitatively borrowed/shared immediate parameters cross as SSA =VALUE=s,
+  while borrowed/shared owned-heap parameters remain unsupported pending real
+  loan endpoints. The HM diagnostic consumes the canonical module signature
+  environment instead of recomputing a closure-insensitive judgment, preventing
+  contradictory =unsupported= and =VERIFIED= reports for the same named call.
+
+[TEST id:test.memory.named-immediate-borrow-call-2026-08-01 date:2026-08-01 src:tests/test_qtt_compiler.py conf:high]
+  A same-module =Int -> Int= invocation must produce a verified named-call ANF
+  instruction, agree with the HM diagnostic, raise production coverage from
+  three to four verified definitions in the fixture, compile, link, execute,
+  and print the transferred immediate value.
+
+[FIX id:fix.memory.call-scoped-heap-loan-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c conf:high]
+  Ownership ANF distinguishes owned and non-owning initial heap capabilities.
+  Named borrowed calls emit a loan value, require its owner live at =CALL=, and
+  reclaim a final caller-owned or temporary resource after the call. Borrowed
+  capabilities cannot move, drop, mutate, or be promoted into owners.
+
+[TEST id:test.memory.call-scoped-heap-loan-2026-08-01 date:2026-08-01 src:tests/test_qtt_anf_call.py,tests/test_qtt_signature.py,tests/test_qtt_module.py,tests/test_qtt_compiler.py conf:high]
+  Sanitizer-backed tests cover valid lowering, =borrow/call/drop= order,
+  owner-death rejection, non-owning function entry, illegal borrowed movement,
+  safe retaining recursion, and conservative rejection of a consuming edge
+  supplied only by a borrowed entry capability.
+
+[OBS id:obs.memory.loan-boundary-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  The loan endpoint is a synchronous named =CALL=. General reborrowing,
+  exclusive loans, region inference, escaping references, lexical heap aliases,
+  and effect-sensitive mutation remain outside the certified fragment.
+
+[FIX id:fix.memory.first-class-anf-loans-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c,qtt/pipeline.h,qtt/pipeline.c,qtt/compiler_module.c conf:high]
+  Ownership ANF now carries stable loan IDs, shared/exclusive loan kinds, and
+  explicit =END_BORROW=. The verifier tracks =Λ= through control flow, checks
+  compatibility and call provenance, rejects owner mutation or destruction
+  under a loan, and rejects borrowed SSA use after its endpoint.
+
+[TEST id:test.memory.first-class-anf-loans-2026-08-01 date:2026-08-01 src:tests/test_qtt_anf_call.py conf:high]
+  The sanitizer harness checks compatible shared loans, exclusive conflicts,
+  exact endpoints, dangling values, branch-context equality, named-call
+  provenance, and generated =borrow/call/end/drop= order. The complete QTT
+  suite passes 73 tests.
+
+[OBS id:obs.memory.anf-loans-root-indexed-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  ANF loans are currently root-indexed. Projection overlap, write-through
+  exclusive authority, region variables, reborrowing, and escaping loans are
+  not yet part of this proof boundary.
+
+[FIX id:fix.memory.place-indexed-anf-loans-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c,qtt/place.h conf:high]
+  Ownership ANF loans now carry canonical places and use prefix overlap.
+  Disjoint sibling loans coexist; overlapping shared/exclusive combinations,
+  owner destruction, replacement, projected movement, and reads during an
+  exclusive loan are rejected according to the same relation as Resource IR.
+
+[FIX id:fix.memory.exclusive-write-authority-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c conf:high]
+  Owned-heap =WRITE_PLACE= requires a live exclusive loan naming the identical
+  place. Typed-Core projected writes synthesize =borrow-exclusive / write /
+  end-borrow= while root replacement remains a distinct ownership transition.
+
+[TEST id:test.memory.place-indexed-anf-loans-2026-08-01 date:2026-08-01 src:tests/test_qtt_anf_call.py,tests/test_qtt_anf.py conf:high]
+  Sanitizer-backed tests cover disjoint and overlapping projections, wrong
+  authority, exclusivity against legacy reads, and automatic projected-write
+  lowering. The complete QTT suite passes 73 tests.
+
+[OBS id:obs.memory.effect-loan-correspondence-gap-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Semantic IR effects and ANF loan authority now share =QttPlace=, but a direct
+  theorem pairing every =Write(p)= effect with its exclusive physical loan is
+  still missing, as are reborrowing, lifetime variance, and dynamic indices.
+
+[FIX id:fix.memory.effect-exclusive-authority-correspondence-2026-08-01 date:2026-08-01 by:codex src:qtt/resource.c,qtt/anf.c,qtt/semantic_anf.c conf:high]
+  Projected Core writes now elaborate an exact Resource
+  =alias-exclusive/write-alias/end-alias= proof. Semantic-to-ANF
+  correspondence requires the canonical =Write(place)= effect and an ANF
+  =WRITE_PLACE= bracketed by a live exclusive borrow and its exact endpoint,
+  all naming the identical canonical place and loan identity.
+
+[TEST id:test.memory.effect-exclusive-authority-correspondence-2026-08-01 date:2026-08-01 src:tests/test_qtt_semantic_anf.py conf:high]
+  A sanitizer-backed projected heap-write regression checks the canonical
+  Semantic effect, successful production lowering, and nonzero exclusive
+  authority. Tampering only the write's loan identity must produce
+  =QTT_SEMANTIC_ANF_EFFECT_MISMATCH=. The complete QTT suite passes 73 tests.
+
+[OBS id:obs.memory.effect-exclusive-authority-block-local-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  The correspondence theorem is currently lexical and same-block. Cross-block
+  loan regions, reborrowing, escaping references, exceptional exits, dynamic
+  indices, and effect handlers remain outside the certified fragment.
+
+[FIX id:fix.memory.cfg-loan-parameter-provenance-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c conf:high]
+  ANF block parameters carry optional loan identities. Edge verification
+  requires exact agreement with the source SSA value and membership in the
+  incoming active-loan context. Destination SSA provenance is reconstructed,
+  preventing jumps from erasing, forging, or resurrecting borrowed authority.
+
+[FIX id:fix.memory.cfg-effect-authority-correspondence-2026-08-01 date:2026-08-01 by:codex src:qtt/semantic_anf.c conf:high]
+  Semantic write correspondence accepts an exact exclusive borrow in a
+  preceding reachable block and an exact endpoint in a following reachable
+  block. In conjunction with ANF's all-edge loan-state propagation, join
+  equality, and no-live-loan return rule, this verifies a function-wide CFG
+  region rather than instruction adjacency.
+
+[TEST id:test.memory.cfg-loan-regions-2026-08-01 date:2026-08-01 src:tests/test_qtt_anf_call.py,tests/test_qtt_semantic_anf.py conf:high]
+  Regressions cover valid borrowed block parameters, erased and forged
+  parameter evidence, destination use-after-end, and projected exclusive
+  mutation whose borrow, write, and endpoint occupy three blocks. The focused
+  call harness is sanitizer-backed; the complete QTT suite passes 73 tests.
+
+[OBS id:obs.memory.cfg-region-inference-boundary-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  CFG regions are explicitly certified but not inferred from liveness.
+  Symbolic lifetimes, outlives constraints, reborrowing, escaping loans,
+  exceptional edges, and a standalone dominance/postdominance certificate
+  remain future work.
+
+[FIX id:fix.memory.loan-region-inference-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c conf:high]
+  Ownership ANF infers φ-parameter loan provenance by edge-equation fixed point,
+  rejecting inconsistent incoming identities. Missing endpoints are placed
+  immediately after the last use in the nearest common postdominator computed
+  by the standard greatest-fixed-point equation, then replayed by the ordinary
+  ownership verifier.
+
+[FIX id:fix.memory.production-region-inference-wiring-2026-08-01 date:2026-08-01 by:codex src:qtt/pipeline.c,qtt/semantic_anf.c conf:high]
+  The ordinary compiler shadow pipeline and Semantic-IR-to-ANF bridge run loan
+  region inference before verification and correspondence. Inferred regions
+  are therefore part of the production checked artifact rather than a test-only
+  transformation.
+
+[TEST id:test.memory.inferred-linear-diamond-regions-2026-08-01 date:2026-08-01 src:tests/test_qtt_anf_call.py conf:high]
+  The sanitizer harness covers a linear cross-block borrowed value whose
+  endpoint is inserted before owner destruction and a diamond whose arm
+  provenance is inferred and whose endpoint is placed in the common join.
+  Existing erased, forged, and use-after-end evidence remains rejected.
+
+[OBS id:obs.memory.inferred-region-boundary-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Inference handles normal jump/branch/return CFGs and is independently replayed
+  by ANF verification. Exceptions, escaping loans, higher-ranked lifetimes,
+  reborrowing, transactional mutation, and serialized postdominance evidence
+  remain outside the certified claim.
+
+[FIX id:fix.memory.constrained-anf-reborrowing-2026-08-01 date:2026-08-01 by:codex src:qtt/place.h,qtt/anf.h,qtt/anf.c conf:high]
+  Ownership ANF loans carry an optional parent identity. Reborrows must preserve
+  or narrow the parent's canonical place and cannot escalate shared authority
+  to exclusive. Exclusive parents are suspended while a child is active and
+  restored only by the exact child endpoint; parent use or termination during
+  suspension is rejected.
+
+[FIX id:fix.memory.reborrow-proof-output-2026-08-01 date:2026-08-01 by:codex src:qtt/pipeline.h,qtt/pipeline.c,qtt/compiler_module.c conf:high]
+  Reborrow parent identities survive the compiler evidence snapshot and appear
+  in the detailed ownership-ANF proof tree instead of disappearing at the
+  reporting boundary.
+
+[TEST id:test.memory.constrained-anf-reborrowing-2026-08-01 date:2026-08-01 src:tests/test_qtt_anf_call.py conf:high]
+  The sanitizer harness covers exclusive projected mutation, parent suspension
+  and restoration, premature parent termination, sibling widening,
+  shared-to-exclusive escalation, and valid shared-to-shared reborrowing.
+
+[OBS id:obs.memory.reborrow-unification-boundary-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Reborrows are checked first-class ANF evidence but are not yet synthesized
+  from source Core or mirrored by a parent relation in Resource IR. Nested
+  endpoint inference, escaping references, and higher-ranked reborrows remain
+  outside the certified claim.
+
+[FIX id:fix.memory.resource-reborrow-unification-2026-08-01 date:2026-08-01 by:codex src:qtt/resource.h,qtt/resource.c conf:high]
+  Resource aliases carry parent identity, suspension, and restoration evidence.
+  Their narrowing, authority non-escalation, child-before-parent termination,
+  shared delegation, and CFG join rules now match ownership ANF's reborrow
+  transition system.
+
+[FIX id:fix.memory.dependency-ordered-region-endpoints-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.c conf:high]
+  Region inference treats loan parents as a dependency DAG. Unended parents are
+  deferred until every child is closed; child creation and closure count as
+  parent uses, so inferred parent endpoints occur after child restoration.
+  Cyclic or otherwise non-progressing dependencies fail closed.
+
+[TEST id:test.memory.resource-and-inferred-reborrow-2026-08-01 date:2026-08-01 src:tests/test_qtt_resource.py,tests/test_qtt_anf_call.py conf:high]
+  Resource tests cover exclusive and shared delegation, narrowing, suspension,
+  restoration, widening and escalation failures. The sanitizer ANF harness
+  removes both nested endpoints and requires inference to insert child then
+  parent before owner destruction.
+
+[OBS id:obs.memory.reborrow-source-correspondence-gap-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Resource and ANF enforce one reborrow calculus, but Core has no borrowed
+  reference expression and Semantic IR has no parent-edge certificate.
+  Source synthesis, portable acyclicity evidence, lifetime variables, escaping
+  references, and higher-ranked reborrows remain future work.
+
+[FIX id:fix.memory.typed-core-lexical-loans-2026-08-01 date:2026-08-01 by:codex src:qtt/core.h,qtt/core.c,qtt/resource.c,qtt/semantic_ir.h,qtt/semantic_ir.c conf:high]
+  Typed Core represents scoped root borrows and reborrows with exact binder,
+  parent, place, and polarity evidence. Resource mutation consumes the nearest
+  covering exclusive loan, and Semantic IR preserves the same proof fields.
+
+[TEST id:test.memory.typed-core-nested-reborrow-2026-08-01 date:2026-08-01 src:tests/test_qtt_core_borrow.py conf:high]
+  The focused harness checks place narrowing, child-backed mutation, exact
+  Resource parent/endpoint order, Resource replay, and Semantic correspondence.
+
+[OBS id:obs.memory.typed-core-loan-anf-boundary-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Core-to-Resource and Core-to-Semantic evidence is first-class, but ANF
+  lowering and Semantic-ANF parent-edge correspondence remain to be connected.
+
+[FIX id:fix.memory.core-loan-anf-synthesis-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c conf:high]
+  Typed-Core lexical loans lower to identified ANF borrow/reborrow and endpoint
+  instructions. Parent binders resolve to operational parent loan IDs, and
+  writes use the nearest covering exclusive loan as their authority witness.
+
+[FIX id:fix.memory.semantic-anf-loan-correspondence-2026-08-01 date:2026-08-01 by:codex src:qtt/semantic_anf.h,qtt/semantic_anf.c conf:high]
+  Semantic-ANF verification requires a bijection between Semantic loan nodes
+  and identified ANF loans with exact preorder, place, polarity, and parent
+  edges. Forgery receives a dedicated loan-mismatch diagnostic.
+
+[TEST id:test.memory.core-loan-end-to-end-2026-08-01 date:2026-08-01 src:tests/test_qtt_core_borrow.py conf:high]
+  A sanitizer-backed harness checks exact quantitative demand, nested Resource
+  aliases, Semantic evidence, ANF synthesis and replay, plus erased identity,
+  reparenting, widening, polarity forgery, shared mutation, and false parents.
+
+[OBS id:obs.memory.loan-surface-elaboration-boundary-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Explicit typed-Core loans are now compiled end-to-end. Surface syntax and
+  inference of general reborrows, escaping loans, named/higher-ranked
+  lifetimes, exceptional exits, and portable loan-tree certificates remain.
+
+[FIX id:fix.memory.surface-projected-loan-elaboration-2026-08-01 date:2026-08-01 by:codex src:qtt/core.c conf:high]
+  A type-certified dotted set! target elaborates to a canonical projected
+  exclusive Core loan around the write. Root replacement remains distinct.
+  Untyped let/with wrappers inherit their lowered body's result type.
+
+[FIX id:fix.memory.loan-proof-operation-labels-2026-08-01 date:2026-08-01 by:codex src:qtt/compiler_module.c conf:high]
+  Detailed ANF output names borrow polarity in the operation and prints either
+  parent=root or the exact parent loan for every identified loan.
+
+[TEST id:test.memory.surface-projected-loan-public-command-2026-08-01 date:2026-08-01 src:tests/test_qtt_core.py,tests/test_qtt_report.py,tests/qtt_projected_mutation.mon conf:high]
+  Tests cover Core synthesis and type fallback, then compile a normal source
+  program with --trace=qtt-proof, require visible exclusive-loan evidence and
+  VERIFIED status, execute the binary, and require result 99.
+
+[OBS id:obs.memory.certified-anf-backend-authority-gap-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Projected source mutation is certified through ownership ANF during normal
+  compilation, but authoritative LLVM and cleanup selection still use legacy
+  codegen with a conservative production-cleanup fallback for this shape.
+
+[FIX id:fix.memory.ownership-anf-backend-cleanup-authority-2026-08-01 date:2026-08-01 by:codex src:qtt/backend.h,qtt/backend.c,codegen.c conf:high]
+  Production cleanup plans record a stronger authority level when every item
+  matches a valid ownership-ANF allocation and final drop. Codegen consumes
+  and reports that certificate while emitting the existing physical cleanup.
+
+[FIX id:fix.memory.backend-certifier-applicability-2026-08-01 date:2026-08-01 by:codex src:qtt/backend.c conf:high]
+  Cross-scope lifetime and String-root replacement certifiers return silently
+  when their source fragment is absent. Inapplicability is no longer presented
+  as failed cleanup evidence for projected layout mutation.
+
+[TEST id:test.memory.backend-ownership-authority-public-2026-08-01 date:2026-08-01 src:tests/test_qtt_report.py,tests/qtt_projected_mutation.mon,tests/test_qtt_production_memory.py conf:high]
+  The public compile/run regression requires ownership cleanup authority,
+  visible reclamation, no fallback, and result 99. All 23 production-memory
+  regressions protect established Semantic-only cleanup fragments.
+
+[OBS id:obs.memory.semantic-only-backend-fragments-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Some interprocedural call and alias cleanup shapes remain Semantic/Resource
+  certified because ANF cannot yet lower or exactly match them. Universal ANF
+  backend authority and direct ANF instruction selection remain future work.
+
+[FIX id:fix.memory.backend-expression-anf-signature-env-2026-08-01 date:2026-08-01 by:codex src:qtt/anf.h,qtt/anf.c,qtt/backend.c conf:high]
+  Arbitrary typed-Core expressions lower to ownership ANF with the module's
+  checked signature environment. Backend cleanup certification uses this path,
+  preserving named-call transfer, result, representation, and fingerprint
+  evidence at the cleanup boundary.
+
+[TEST id:test.memory.named-call-backend-ownership-authority-2026-08-01 date:2026-08-01 src:tests/test_qtt_named_call_lowering.py,tests/test_qtt_report.py,tests/test_qtt_production_memory.py conf:high]
+  A sanitizer harness verifies expression-level named-call ANF. Public compile
+  tests require ownership cleanup authority, call-before-free ordering, no
+  compensating copy, successful linking, and the expected runtime result.
+
+[OBS id:obs.memory.alias-backend-anf-authority-gap-2026-08-01 date:2026-08-01 src:qtt/README.org conf:high]
+  Literal owner plus borrowed alias scopes reclaim exactly one physical
+  capability, but select Semantic rather than ownership-ANF authority. Alias
+  identity/resource provenance must be unified before the stronger certificate
+  can honestly cover this family.

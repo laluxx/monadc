@@ -1,10 +1,10 @@
-;; TEST-ID: tests.codegen.optimizations.switch-lowering.if-chain
-;; TEST-CONTEXT: context/codegen.org
-;; TEST-PURPOSE: Nested integer equality if-chains are eligible for LLVM switch lowering.
-;; TEST-EXPECT: parse-json
-;; TEST-TIER: regression
-;; TEST-COMPILE-FLAGS: --trace=ast
-;; TEST-MENU-PATH: codegen/branches/optimizations/switch-lowering
+:TEST-ID tests.codegen.optimizations.switch-lowering.if-chain
+:TEST-CONTEXT context/codegen.org
+:TEST-PURPOSE Nested integer equality if-chains are eligible for LLVM switch lowering.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-COMPILE-FLAGS --trace=ast
+:TEST-MENU-PATH codegen/branches/optimizations/switch-lowering
 
 (module Main)
 

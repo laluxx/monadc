@@ -26,7 +26,9 @@ class CoreStandaloneCompileTests(unittest.TestCase):
             "core/prelude/Data/Profunctor.mon",
             "core/prelude/Numeric.mon",
             "core/prelude/Data/Semigroup.mon",
-            "core/prelude/Text/Readline.mon",
+            "core/prelude/Text/LineEditor.mon",
+            "core/IO.mon",
+            "core/IO/Readline.mon",
             "core/prelude/Test/QuickCheck.mon",
         )
 

@@ -32,6 +32,18 @@ static size_t g_reader_count;
 static size_t g_reader_capacity;
 static int g_cleanup_registered;
 
+typedef struct {
+    char *keyword;
+    char *target;
+    char *owner_file;
+    int source_line;
+} RSBlockReader;
+
+static RSBlockReader *g_block_readers;
+static size_t g_block_reader_count;
+static size_t g_block_reader_capacity;
+static int g_block_reader_error;
+
 typedef struct RSScope {
     char *owner_file;
     char **allowed_files;
@@ -41,6 +53,8 @@ typedef struct RSScope {
 } RSScope;
 
 static RSScope *g_scope;
+
+static int reader_debug(void);
 
 static char *reader_syntax_absolute_path(const char *path) {
 #if defined(_WIN32)
@@ -102,6 +116,87 @@ static int owner_is_active(const char *owner_file) {
     for (size_t i = 0; i < g_scope->allowed_count; i++)
         if (strcmp(g_scope->allowed_files[i], owner_file) == 0) return 1;
     return 0;
+}
+
+static RSBlockReader *find_block_reader(const char *keyword) {
+    RSBlockReader *found = NULL;
+    for (size_t i = 0; i < g_block_reader_count; i++) {
+        RSBlockReader *candidate = &g_block_readers[i];
+        if (strcmp(candidate->keyword, keyword) != 0 ||
+            !owner_is_active(candidate->owner_file))
+            continue;
+        if (found && strcmp(found->owner_file, candidate->owner_file) != 0) {
+            fprintf(stderr,
+                    "%s:1:1: error: ambiguous reader-block '%s' imported from %s and %s\n",
+                    g_scope ? g_scope->owner_file : "<input>", keyword,
+                    found->owner_file, candidate->owner_file);
+            g_block_reader_error = 1;
+            return NULL;
+        }
+        found = candidate;
+    }
+    return found;
+}
+
+static int register_block_reader(const char *pattern, const char *target,
+                                 const char *filename, int source_line) {
+    size_t pattern_length = strlen(pattern);
+    if (pattern_length < 2 || pattern[pattern_length - 1] != '_' ||
+        strchr(pattern, '_') != pattern + pattern_length - 1) {
+        fprintf(stderr,
+                "%s:%d:1: error: invalid reader-block pattern '%s'\n"
+                "  expected: KEYWORD_ TARGET\n",
+                filename ? filename : "<input>", source_line, pattern);
+        return -1;
+    }
+    char *keyword = strndup(pattern, pattern_length - 1);
+    char *owner = owner_key(filename);
+    for (size_t i = 0; i < g_block_reader_count; i++) {
+        RSBlockReader *prior = &g_block_readers[i];
+        if (strcmp(prior->keyword, keyword) != 0 ||
+            strcmp(prior->owner_file, owner) != 0)
+            continue;
+        if (strcmp(prior->target, target) == 0) {
+            free(keyword);
+            free(owner);
+            return 1;
+        }
+        fprintf(stderr,
+                "%s:%d:1: error: conflicting reader-block '%s'\n"
+                "  previous declaration: %s:%d\n",
+                filename ? filename : "<input>", source_line, keyword,
+                prior->owner_file, prior->source_line);
+        free(keyword);
+        free(owner);
+        return -1;
+    }
+    if (g_block_reader_count == g_block_reader_capacity) {
+        size_t next_capacity = g_block_reader_capacity
+                             ? g_block_reader_capacity * 2 : 8;
+        RSBlockReader *next = realloc(
+            g_block_readers, next_capacity * sizeof(*next));
+        if (!next) {
+            free(keyword);
+            free(owner);
+            return 0;
+        }
+        g_block_readers = next;
+        g_block_reader_capacity = next_capacity;
+    }
+    char *target_copy = strdup(target);
+    if (!target_copy) {
+        free(keyword);
+        free(owner);
+        return 0;
+    }
+    RSBlockReader *reader = &g_block_readers[g_block_reader_count++];
+    reader->keyword = keyword;
+    reader->target = target_copy;
+    reader->owner_file = owner;
+    reader->source_line = source_line;
+    if (reader_debug())
+        fprintf(stderr, "[reader-block] %s -> %s\n", keyword, target);
+    return 1;
 }
 
 static int reader_debug(void) {
@@ -523,6 +618,22 @@ static char *scan_declarations(const char *source, const char *filename) {
         char *end = strchr(line, '\n');
         if (!end) end = line + strlen(line);
         char type[64];
+        char block_pattern[128];
+        char block_target[128];
+        char block_extra[2];
+        char *block_declaration = slice_dup(line, end);
+        int block_fields = sscanf(block_declaration, "reader-block %127s %127s %1s",
+                                  block_pattern, block_target, block_extra);
+        free(block_declaration);
+        if (block_fields == 2 && line_indent(line, end) == 0) {
+            int registered = register_block_reader(block_pattern, block_target,
+                                                   filename, line_number);
+            if (registered <= 0) { free(out); return NULL; }
+            memset(line, ' ', (size_t)(end - line));
+            line = *end ? end + 1 : end;
+            line_number++;
+            continue;
+        }
         if (sscanf(line, "reader-syntax %63s", type) == 1 && line_indent(line, end) == 0) {
             RSReader *reader = ensure_reader(type, filename);
             if (reader_debug()) fprintf(stderr, "[reader-syntax] register %s\n", type);
@@ -548,6 +659,188 @@ static char *scan_declarations(const char *source, const char *filename) {
         line_number++;
     }
     return out;
+}
+
+typedef struct {
+    char *data;
+    size_t length;
+    size_t capacity;
+} RSBuffer;
+
+static int rs_buffer_reserve(RSBuffer *buffer, size_t extra) {
+    size_t required = buffer->length + extra + 1;
+    if (required <= buffer->capacity) return 1;
+    size_t capacity = buffer->capacity ? buffer->capacity : 256;
+    while (capacity < required) capacity *= 2;
+    char *next = realloc(buffer->data, capacity);
+    if (!next) return 0;
+    buffer->data = next;
+    buffer->capacity = capacity;
+    return 1;
+}
+
+static int rs_buffer_append(RSBuffer *buffer, const char *text, size_t length) {
+    if (!rs_buffer_reserve(buffer, length)) return 0;
+    memcpy(buffer->data + buffer->length, text, length);
+    buffer->length += length;
+    buffer->data[buffer->length] = '\0';
+    return 1;
+}
+
+static int rs_buffer_text(RSBuffer *buffer, const char *text) {
+    return rs_buffer_append(buffer, text, strlen(text));
+}
+
+static int rs_buffer_string_literal(RSBuffer *buffer,
+                                    const char *text, size_t length) {
+    if (!rs_buffer_text(buffer, "\"")) return 0;
+    for (size_t i = 0; i < length; i++) {
+        char c = text[i];
+        if (c == '\\' || c == '"') {
+            if (!rs_buffer_text(buffer, "\\")) return 0;
+        }
+        if (c == '\n') {
+            if (!rs_buffer_text(buffer, "\\n")) return 0;
+        } else if (c == '\r') {
+            if (!rs_buffer_text(buffer, "\\r")) return 0;
+        } else if (!rs_buffer_append(buffer, &c, 1)) {
+            return 0;
+        }
+    }
+    return rs_buffer_text(buffer, "\"");
+}
+
+static int blank_line(const char *start, const char *end) {
+    while (start < end && (*start == ' ' || *start == '\t' || *start == '\r'))
+        start++;
+    return start == end;
+}
+
+static RSBlockReader *block_reader_at_line(const char *start, const char *end,
+                                           const char **header) {
+    int indent = line_indent(start, end);
+    const char *content = start + indent;
+    const char *word_end = content;
+    while (word_end < end && !isspace((unsigned char)*word_end)) word_end++;
+    if (word_end == content) return NULL;
+    char *keyword = slice_dup(content, word_end);
+    RSBlockReader *reader = find_block_reader(keyword);
+    free(keyword);
+    if (!reader) return NULL;
+    const char *rest = word_end;
+    while (rest < end && (*rest == ' ' || *rest == '\t')) rest++;
+    if (rest == end) return NULL;
+    *header = rest;
+    return reader;
+}
+
+/* Lower a claimed indentation block to a neutral Syntax-shaped call. The
+ * compiler groups lines and records their relative indentation; the target
+ * transformer, written in Monad, owns every domain-specific interpretation.
+ *
+ *   decree answer              (expand-decree answer
+ *     42              =>         (reader-block (reader-line 2 42)))
+ */
+static char *expand_block_readers(const char *source, const char *filename) {
+    RSBuffer output = {0};
+    const char *line = source;
+    int line_number = 1;
+    while (*line) {
+        const char *end = strchr(line, '\n');
+        if (!end) end = line + strlen(line);
+        const char *header = NULL;
+        RSBlockReader *reader = block_reader_at_line(line, end, &header);
+        if (g_block_reader_error) {
+            free(output.data);
+            return NULL;
+        }
+        if (!reader) {
+            if (!rs_buffer_append(&output, line, (size_t)(end - line)) ||
+                (*end && !rs_buffer_text(&output, "\n")))
+                goto allocation_failure;
+            line = *end ? end + 1 : end;
+            line_number++;
+            continue;
+        }
+
+        int base_indent = line_indent(line, end);
+        const char *scan = *end ? end + 1 : end;
+        const char *block_end = scan;
+        size_t body_lines = 0;
+        while (*scan) {
+            const char *scan_end = strchr(scan, '\n');
+            if (!scan_end) scan_end = scan + strlen(scan);
+            if (!blank_line(scan, scan_end) &&
+                line_indent(scan, scan_end) <= base_indent)
+                break;
+            block_end = *scan_end ? scan_end + 1 : scan_end;
+            body_lines++;
+            scan = block_end;
+        }
+        if (!body_lines) {
+            fprintf(stderr,
+                    "%s:%d:1: error: reader-block '%s' requires an indented body\n",
+                    filename ? filename : "<input>", line_number,
+                    reader->keyword);
+            free(output.data);
+            return NULL;
+        }
+
+        if (!rs_buffer_append(&output, line, (size_t)base_indent) ||
+            !rs_buffer_text(&output, "(") ||
+            !rs_buffer_text(&output, reader->target) ||
+            !rs_buffer_text(&output, " ") ||
+            !rs_buffer_append(&output, header, (size_t)(end - header)) ||
+            !rs_buffer_text(&output, " (reader-block"))
+            goto allocation_failure;
+
+        const char *body = *end ? end + 1 : end;
+        while (body < block_end) {
+            const char *body_end = strchr(body, '\n');
+            if (!body_end || body_end > block_end) body_end = block_end;
+            if (!rs_buffer_text(&output, "\n")) goto allocation_failure;
+            int indent = line_indent(body, body_end);
+            int relative_indent = indent > base_indent
+                                ? indent - base_indent : 0;
+            const char *content = body + indent;
+            char indentation[32];
+            snprintf(indentation, sizeof(indentation), "%d", relative_indent);
+            for (int i = 0; i < relative_indent; i++)
+                if (!rs_buffer_text(&output, " ")) goto allocation_failure;
+            if (blank_line(body, body_end)) {
+                if (!rs_buffer_text(&output, "(reader-blank ") ||
+                    !rs_buffer_text(&output, indentation) ||
+                    !rs_buffer_text(&output, ")"))
+                    goto allocation_failure;
+            } else if ((size_t)(body_end - content) >= 2 &&
+                       content[0] == ';' && content[1] == ';') {
+                if (!rs_buffer_text(&output, "(reader-comment ") ||
+                    !rs_buffer_text(&output, indentation) ||
+                    !rs_buffer_text(&output, " ") ||
+                    !rs_buffer_string_literal(&output, content,
+                                              (size_t)(body_end - content)) ||
+                    !rs_buffer_text(&output, ")"))
+                    goto allocation_failure;
+            } else if (!rs_buffer_text(&output, "(reader-line ") ||
+                       !rs_buffer_text(&output, indentation) ||
+                       !rs_buffer_text(&output, " ") ||
+                       !rs_buffer_append(&output, content,
+                                         (size_t)(body_end - content)) ||
+                       !rs_buffer_text(&output, ")")) {
+                goto allocation_failure;
+            }
+            body = body_end < block_end && *body_end ? body_end + 1 : body_end;
+        }
+        if (!rs_buffer_text(&output, "))\n")) goto allocation_failure;
+        line = block_end;
+        line_number += (int)body_lines + 1;
+    }
+    if (!output.data) return strdup("");
+    return output.data;
+
+allocation_failure:
+    free(output.data);
+    return NULL;
 }
 
 static char *normalize_source_newlines(const char *source) {
@@ -577,6 +870,10 @@ char *reader_syntax_expand(const char *source, const char *filename) {
     if (!normalized) return NULL;
     char *out = scan_declarations(normalized, filename);
     free(normalized);
+    if (!out) return NULL;
+    char *block_expanded = expand_block_readers(out, filename);
+    free(out);
+    out = block_expanded;
     if (!out) return NULL;
     char *line = out;
     int line_number = 1;
@@ -697,5 +994,15 @@ void reader_syntax_clear(void) {
     g_readers = NULL;
     g_reader_count = 0;
     g_reader_capacity = 0;
+    for (size_t i = 0; i < g_block_reader_count; i++) {
+        free(g_block_readers[i].keyword);
+        free(g_block_readers[i].target);
+        free(g_block_readers[i].owner_file);
+    }
+    free(g_block_readers);
+    g_block_readers = NULL;
+    g_block_reader_count = 0;
+    g_block_reader_capacity = 0;
+    g_block_reader_error = 0;
     while (g_scope) reader_syntax_scope_pop();
 }

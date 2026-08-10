@@ -6,12 +6,12 @@
 
 ;;; Commentary:
 
-;; Equality belongs with data comparison, not in a monolithic class registry.
-;; An instance supplies equality only; inequality is its Boolean negation and
-;; is derived once by this class through Data.Bool.
-;;
-;; Primitive representations may optimize equality, but the public relation,
-;; its complement, and their law belong to this core abstraction.
+ Equality belongs with data comparison, not in a monolithic class registry.
+ An instance supplies equality only; inequality is its Boolean negation and
+ is derived once by this class through Data.Bool.
+
+ Primitive representations may optimize equality, but the public relation,
+ its complement, and their law belong to this core abstraction.
 
 ;;; Code:
 

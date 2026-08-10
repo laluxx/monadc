@@ -1,0 +1,31 @@
+:TEST-ID tests.core.data-structures.batch
+:TEST-CONTEXT monadc.context.core-libs.data-structures-batch
+:TEST-PURPOSE New foundational data modules remain usable through imports.
+:TEST-ATOM Exercise NonEmpty, Queue, and Validation across module boundaries.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU core
+:TEST-MENU-PATH core/data/structures
+
+import Data.NonEmpty
+import Data.Queue
+import Data.Log
+import Data.Validation
+
+module Core.DataStructuresBatch []
+
+
+define sample-queue :: () -> Queue Int
+  _ -> enqueue (singleton-queue 10) 20
+
+
+tests
+  assert-eq (show (to-list (non-empty 1 (list 2 3)))) "(1 2 3)" "NonEmpty preserves its required head"
+
+  assert-eq (show (queue-to-list (sample-queue ()))) "(10 20)" "Queue preserves FIFO order across imports"
+  assert-eq (show (queue-to-list (dequeue (sample-queue ())))) "(20)" "Queue removes its oldest value"
+
+  assert-eq (valid? (Valid 42)) True "Validation recognizes success across imports"
+  assert-eq (show (log-values (warning-log "left"))) "(left)" "Log singleton crosses module boundaries"
+  assert-eq (show (log-values (append-log (warning-log "left") (error-log "right")))) "(left right)" "Log preserves structured message order"
+  assert-eq (show (validation-errors (Invalid (append-log (warning-log "left") (error-log "right"))))) "(left right)" "Validation consumes structured logs"

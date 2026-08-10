@@ -27,108 +27,253 @@
          .-~~:;:;;===!!!!==;;:~,
             ..,--~~~~~~~~--,.
 
+;; This module owns only torus projection and rasterization. Mathematical
+;; constants come from Math, while unit-aware normalization and trigonometry
+;; come from Math.Angle. The frame and depth buffers remain ordinary immutable
+;; lists indexed by small specialized replacement helpers.
+;;
+;; The rendering math is the classic torus-rotation-and-project formulation:
+;; each (theta, phi) pair on the torus surface is rotated by two frame angles
+;; A and B, projected with a simple perspective divide, and shaded by the
+;; dot product of its surface normal with a fixed light direction. Nearer
+;; points win ties in the z-buffer via 1/z (ooz): larger ooz means closer.
 
 ;;; Code:
 
-define [shades :: (Char)]
-  ⌜'.' ',' '-' '~' ':' ';' '=' '!' '*' '#' '$' '@'⌝
+import IO
+import IO.Console
+import Sequence
+import Data.Char
+import Data.Bool
+import Data.List
+import Math
+import Math.Angle
+
+module Donut
+  [shades
+   screen-width screen-height theta-steps phi-steps
+   tube-radius donut-radius viewer-distance projection-scale
+   float->int
+   Angles Sample Buffers
+   compute-sample visible? pixel-index shade-for
+   repeat-char repeat-float blank-chars far-depths
+   update-buffers scan-phi scan-theta render-frame
+   render draw-frame
+   spin-frames]
 
 
-define clamp :: Int -> Int -> Int -> Int
-  lo hi x | x < lo    -> lo
-          | x > hi    -> hi
-          | otherwise -> x
+;;; The shade ramp, darkest to brightest.
+
+define shades :: [Char]
+  list '.' ',' '-' '~' ':' ';' '=' '!' '*' '#' '$' '@'
 
 
-define shade-index :: Float -> Int
-  light -> clamp 0 11 (Int (light * 8.0))
+;;; Screen and torus geometry
+
+define screen-width    :: Int    80
+define screen-height   :: Int    22
+define theta-steps     :: Int    90
+define phi-steps       :: Int    314
+define tube-radius     :: Float  1.0
+define donut-radius    :: Float  2.0
+define viewer-distance :: Float  5.0
+
+define projection-scale :: Float
+  ((Float screen-width) * viewer-distance * 3.0) / (8.0 * (tube-radius + donut-radius))
 
 
-define shade :: Float -> Char
-  light -> shades[(shade-index light)]
+;;; Float/Int plumbing
+
+define increment-int :: Int -> Int
+  value -> value + 1
 
 
-define sweep :: Float -> ((Float, Float))
-  s -> map (sin && cos) ⌜0.0, s .. τ⌝
-
-sweep :: Float -> ((Float, Float))
-sweep s -> map (sin && cos) ⌜0.0, s .. τ⌝
+define int-zero :: Int 0
 
 
-define inside? :: Int -> Int -> Int -> Int -> Bool
-  w h x y -> and x > 0 and x < w
-                 y > 0 and y < h
+define float->int :: Float -> Int
+  value -> Int value
 
 
-define visible? :: Int -> Int -> Int -> Int -> Float -> Bool
-  w h x y light -> and inside? w h x y
-                       light > 0.0
+;;; Types
+
+;; The four sines/cosines that only change once per frame.
+layout Angles
+  [cos-a :: Float]
+  [sin-a :: Float]
+  [cos-b :: Float]
+  [sin-b :: Float]
 
 
-define clear-depth :: ?
-  depth ->
-    for i -> [0 .. (count depth - 1)]
-      depth[i] <- 0.0
-
-define draw :: ?
-  c depth tube ring w h rx ry ->
-
-    clear-depth depth
-    canvas-clear c
-
-    def ⌜sx⌝ = sin(rx)  def ⌜cx⌝ = cos(rx)
-    def ⌜sy⌝ = sin(ry)  def ⌜cy⌝ = cos(ry)
-
-          w          h
-    ox = ───   oy = ───                 ; Even if we use = hinting at a variable,
-          2          2                  ; the compiler should be smart enough to constant fold it into a pure value.
-
-    def kx 0.38w   def ky 0.72h
-
-    for t -> tube
-      def ⌜st⌝ = t[0]
-      def ⌜ct⌝ = t[1]
-      def ⌜r⌝  = (ct + 2.0)
-
-      for p -> ring
-        def sp p[0]   def cp p[1]
-
-                             1.0
-        def z = ───────────────────────────────
-                 (5.0 + cx * r * sp + st * sx)
-
-        def x ox + kx * z *
-                (r * (cy * cp + sx * sy * sp) - st * cx * sy)
-
-        def y Oy - ky * z *
-                (r * (sy * cp - sx * cy * sp) + st * cx * cy)
-
-        def light
-          cp * ct * sy
-          - cx * ct * sp
-          - sx * st
-          + cy * (cx * st - ct * sx * sp)
-
-        if visible? w h x y light
-          def o (x + y * w)
-
-          if z > depth[o]
-            depth[o] <- z
-            canvas-set c x y (shade light) 6 0
-
-    canvas-refresh c
+;; One surface sample: its screen cell, its inverse depth, and its raw
+;; luminance (before clamping into a shade index).
+layout Sample
+  [xp        :: Int]
+  [yp        :: Int]
+  [depth     :: Float]
+  [luminance :: Float]
 
 
-define tube (sweep 0.07)
-define ring (sweep 0.02)
-
-rx = 0.0
-ry = 0.0
+layout Buffers
+  [depths :: [Float]]
+  [chars  :: [Char]]
 
 
+;;; Per-point math
 
-Define tui-canvas-loop :: ?
-   c depth w h -> draw c depth tube ring w h rx ry
-                 rx ⥆ 0.04
-                 ry ⥆ 0.02
+define compute-sample :: Angles -> Float -> Float -> Sample
+  angles theta phi ->
+    def costheta (cos-radians theta)
+    def sintheta (sin-radians theta)
+    def cosphi   (cos-radians phi)
+    def sinphi   (sin-radians phi)
+    def circle-x (donut-radius + (tube-radius * costheta))
+    def circle-y (tube-radius * sintheta)
+    def rotated-x (angles.cos-b * cosphi) + (angles.sin-a * angles.sin-b * sinphi)
+    def tilted-x  circle-y * angles.cos-a * angles.sin-b
+    def x         (circle-x * rotated-x) - tilted-x
+    def rotated-y (angles.sin-b * cosphi) - (angles.sin-a * angles.cos-b * sinphi)
+    def tilted-y  circle-y * angles.cos-a * angles.cos-b
+    def y         (circle-x * rotated-y) + tilted-y
+    def z (viewer-distance + (angles.cos-a * circle-x * sinphi) + (circle-y * angles.sin-a))
+    def ooz (1.0 / z)
+    def xp (float->int (((Float screen-width) / 2.0) + (projection-scale * ooz * x)))
+    ;; Terminal cells are taller than wide; the extra 0.5 keeps the torus
+    ;; round instead of egg-shaped.
+    def yp (float->int (((Float screen-height) / 2.0) - (projection-scale * ooz * y * 0.5)))
+    def light-a cosphi * costheta * angles.sin-b
+    def light-b angles.cos-a * costheta * sinphi
+    def light-c angles.sin-a * sintheta
+    def light-d angles.cos-b * ((angles.cos-a * sintheta) - (costheta * angles.sin-a * sinphi))
+    def luminance light-a - light-b - light-c + light-d
+    Sample xp yp ooz luminance
 
+
+define visible? :: Sample -> Bool
+  sample | .xp <  0             -> False
+         | .xp >= screen-width  -> False
+         | .yp <  0             -> False
+         | .yp >= screen-height -> False
+         | .luminance <= 0.0    -> False
+         | otherwise            -> True
+
+
+define pixel-index :: Sample -> Int
+  sample -> (sample.yp * screen-width) + sample.xp
+
+
+define shade-for :: Float -> Char
+  luminance ->
+    def raw (float->int (luminance * 8.0))
+    nth shades (clamp-shade-index raw)
+
+
+define clamp-shade-index :: Int -> Int
+  index | index > 11 -> 11
+        | otherwise  -> index
+
+
+;;; The z-buffer and frame-buffer, hand-built as flat lists
+
+define repeat-char :: Char -> Int -> [Char]
+  c 0 -> []
+  c n -> prepend c (repeat-char c (n - 1))
+
+
+define repeat-float :: Float -> Int -> [Float]
+  x 0 -> []
+  x n -> prepend x (repeat-float x (n - 1))
+
+
+define blank-chars :: [Char]
+  repeat-char ' ' (screen-width * screen-height)
+
+
+define far-depths :: [Float]
+  repeat-float (0.0 - 1000000.0) (screen-width * screen-height)
+
+
+define update-buffers :: [Float] -> [Char] -> Sample -> Buffers
+  depths chars sample | not (visible? sample) -> Buffers depths chars
+  depths chars sample | sample.depth <= (nth depths (pixel-index sample)) -> Buffers depths chars
+  depths chars sample ->
+    def index (pixel-index sample)
+    Buffers (replace-at index sample.depth depths) (replace-at index (shade-for sample.luminance) chars)
+
+
+;;; Scanning the torus
+
+define scan-phi :: Angles -> Float -> Int -> Buffers -> Buffers
+  angles theta j buffers | j >= phi-steps -> buffers
+  angles theta j buffers ->
+    def phi ((Float j) * (τ / (Float phi-steps)))
+    def sample (compute-sample angles theta phi)
+    def next (update-buffers buffers.depths buffers.chars sample)
+    scan-phi angles theta (increment-int j) next
+
+
+define scan-theta :: Angles -> Int -> Buffers -> Buffers
+  angles i buffers | i >= theta-steps -> buffers
+  angles i buffers ->
+    def theta ((Float i) * (τ / (Float theta-steps)))
+    def next (scan-phi angles theta int-zero buffers)
+    scan-theta angles (increment-int i) next
+
+
+define render-frame :: Float -> Float -> [Char]
+  a b ->
+    def angles (Angles (cos-radians a) (sin-radians a) (cos-radians b) (sin-radians b))
+    def result (scan-theta angles int-zero (Buffers far-depths blank-chars))
+    result.chars
+
+
+;;; Turning the frame buffer into terminal cells
+
+;; The renderer targets an 80-column terminal. Writing exactly screen-width
+;; cells per row lets the terminal perform the row wrapping without allocating
+;; a second list containing explicit newline separators.
+
+
+define render :: Float -> Float -> [Char]
+  a b -> render-frame a b
+
+
+;;; The animation driver
+
+define draw-frame :: Float -> Float -io-> Int
+  a b ->
+    def output (prepend 27 (prepend 0x5b (prepend 0x48 (render a b))))
+    write-text stdout output
+
+
+;; There is not yet a Core clock sleep operation, so frames are emitted as fast
+;; as the terminal accepts them. That missing pacing primitive is the next
+;; reusable concept this example asks Core to grow.
+define spin-frames :: Float -> Float -> Int -io-> Int
+  a b 0     -> 0
+  a b count ->
+    def status (draw-frame a b)
+    def next (spin-frames (a + 0.04) (b + 0.02) (count - 1))
+    next + (status - status)
+
+
+tests
+  :trigonometry:
+  assert-eq (sin-radians 0.0) 0.0 "sin of zero is exact"
+  :trigonometry:
+
+  :truncation:
+  assert-eq (float->int 4.7) 4 "float->int truncates toward zero, positive"
+  assert-eq (float->int (0.0 - 4.7)) (0 - 4) "float->int truncates toward zero, negative"
+  :truncation:
+
+  :buffers:
+  assert-eq (nth (replace-at 1 'x' (list 'a' 'b' 'c')) 1) 'x' "replace-at writes the target index"
+  assert-eq (nth (replace-at 1 'x' (list 'a' 'b' 'c')) 0) 'a' "replace-at leaves other indices alone"
+  :buffers:
+
+  :visibility:
+  assert-eq (visible? (Sample (0 - 1) 0 1.0 1.0)) False "off-screen left is not visible"
+  assert-eq (visible? (Sample 0 0 1.0 0.0))        False "zero luminance is not visible"
+  assert-eq (visible? (Sample 0 0 1.0 0.5))        True  "an on-screen lit point is visible"
+  :visibility:

@@ -74,7 +74,7 @@ define possibly-Fx :: Formula (◇ Fx)
 
 ;; The formula studied in this chapter is
 ;;
-;;   ∀x. □Fx -> □∀x. Fx
+;;   `∀x. □Fx -> □∀x. Fx`
 ;;
 ;; This direction is commonly called the Barcan formula.  Its reverse,
 ;; □∀x. Fx -> ∀x. □Fx, is commonly called the converse Barcan formula.

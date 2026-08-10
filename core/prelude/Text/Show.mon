@@ -6,29 +6,30 @@
 
 ;;; Commentary:
 
-;; Show is a text/rendering abstraction, not a generic prelude bucket entry.
-;; The builtin `show` remains available for concrete values; this module names
-;; the class contract that instances should satisfy. The executable law makes
-;; `showsPrec` the compositional basis and requires the pure `render`
-;; operation to agree with precedence zero and an empty suffix.
-;; Implementations only need to define `render` for precedence-insensitive
-;; values: the class supplies the canonical difference-list-style
-;; `showsPrec` composition automatically.
+ Show is a text/rendering abstraction, not a generic prelude bucket entry.
+ The builtin `show` remains available for concrete values; this module names
+ the class contract that instances should satisfy. The executable law makes
+ `showsPrec` the compositional basis and requires the pure `render`
+ operation to agree with precedence zero and an empty suffix.
+ Implementations only need to define `render` for precedence-insensitive
+ values: the class supplies the canonical difference-list-style
+ `showsPrec` composition automatically.
 
 ;;; Code:
 
 import Data.Bool
+import Sequence
 
 module Text.Show
   [Show render showsPrec renderList]
 
 
 class Show a where
-  render    :: a -> String
-  showsPrec :: Int -> a -> String -> String
+  render     :: a -> String
+  showsPrec  :: Int -> a -> String -> String
   renderList :: [a] -> String
 
-  showsPrec precedence x suffix -> (render x) ++ suffix
+  showsPrec precedence x suffix -> concat (render x) suffix
 
   law show-via-showsPrec :: a -> Bool
     x -> (render x) = (showsPrec 0 x "")

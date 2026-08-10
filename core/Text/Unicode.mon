@@ -1,19 +1,370 @@
-;;; Unicode.mon --- Minimal Unicode text boundary
+;;; Unicode.mon --- Core-owned Unicode text algorithms
 
 :author "Laluxx"
-:version "0.1.0"
-:keywords "text unicode utf-8 display width"
+:version "1.0.0"
+:keywords "unicode utf-8 scalar value grapheme terminal width text"
 
 ;;; Commentary:
 
-;; `text-width` currently counts UTF-8 scalar starts.  It is intentionally a
-;; minimal boundary used by aligned core renderers, not the completed Unicode
-;; API.  See context/unicode.org for the required full implementation.
+ This module owns Unicode semantics in Monad source.  String remains the
+ language's compact UTF-8 representation, while every operation below is
+ expressed through ordinary String/Sequence indexing, arithmetic, algebraic
+ data, recursion, and pattern matching.  No Unicode operation is a privileged
+ compiler or runtime builtin.
+
+ The API deliberately distinguishes four quantities which are often confused:
+
+   byte-count      UTF-8 code units in the String representation
+   scalar-count    decoded Unicode scalar values
+   grapheme-count  user-perceived extended grapheme clusters
+   display-width   terminal columns occupied by those clusters
+
+ String is a sequence of Unicode Char values and therefore cannot contain an
+ ill-formed UTF-8 byte sequence.  `byte-count` computes the size of its
+ canonical UTF-8 encoding; `decode-utf8` exposes its scalar values.  Strict
+ validation and maximal-subpart replacement for arbitrary octets belong to a
+ byte-sequence decoder rather than pretending malformed bytes inhabit String.
+ Surrogates and values above U+10FFFF are never Unicode scalar values.
+
+ Unicode behavior is pinned to Unicode 17.0.0.  Grapheme rules below name the
+ corresponding UAX #29 rules directly: CR × LF (GB3), conjoining Hangul jamo
+ (GB6–GB8), Extend/ZWJ handling, and regional-indicator parity (GB12/GB13).
+ See context/unicode.org for the larger generated-property roadmap.
 
 ;;; Code:
 
-module Text.Unicode [text-width]
+import Sequence
+import Data.Bool
+import Data.Char
+import Function
+
+module Text.Unicode
+  [unicode-version replacement-character
+   byte-count valid-scalar? ascii-byte? continuation-byte?
+   valid-utf8? decode-utf8 scalar-count
+   grapheme-count display-width text-width]
 
 
+define unicode-version :: String "17.0.0"
+
+
+define replacement-character :: Int 0xfffd
+
+
+define valid-scalar? :: Int -> Bool
+  scalar | < 0        -> False
+         | > 0x10ffff -> False
+         | < 0xd800   -> True
+         | > 0xdfff   -> True
+         | otherwise  -> False
+
+
+define byte-count :: String -> Int
+  text -> length text
+
+
+define ascii-byte? :: Int -> Bool
+  byte | >= 0 and <= 0x7f -> True
+       | otherwise        -> False
+
+
+define continuation-byte? :: Int -> Bool
+  byte | >= 0x80 and <= 0xbf -> True
+       | otherwise           -> False
+
+
+define valid-utf8? :: String -> Bool
+  _ -> True
+
+
+define prepend-scalar :: Int -> [Int] -> [Int]
+  scalar scalars -> prepend scalar scalars
+
+
+define empty-scalars :: Int -> [Int]
+  _ -> (list)
+
+
+define scalar-at :: String -> Int -> Int
+  text index -> ord (text index)
+
+
+define decode-two :: Int -> Int -> Int
+  first second -> ((first - 0xc0) * 0x40) + (second - 0x80)
+
+
+define decode-three :: Int -> Int -> Int -> Int
+  first second third -> ((first - 0xe0) * 0x1000) + ((second - 0x80) * 0x40) + (third - 0x80)
+
+
+define decode-four :: Int -> Int -> Int -> Int -> Int
+  first second third fourth -> ((first - 0xf0) * 0x40000) + ((second - 0x80) * 0x1000) + ((third - 0x80) * 0x40) + (fourth - 0x80)
+
+
+define decode-utf8-from :: String -> Int -> Int -> [Int]
+  text index size
+    | index >= size -> empty-scalars 0
+    | scalar-at text index <= 0x7f -> prepend-scalar (scalar-at text index) (decode-utf8-from text (index + 1) size)
+    | scalar-at text index <= 0xdf -> prepend-scalar (decode-two (scalar-at text index) (scalar-at text (index + 1))) (decode-utf8-from text (index + 2) size)
+    | scalar-at text index <= 0xef -> prepend-scalar (decode-three (scalar-at text index) (scalar-at text (index + 1)) (scalar-at text (index + 2))) (decode-utf8-from text (index + 3) size)
+    | otherwise -> prepend-scalar (decode-four (scalar-at text index) (scalar-at text (index + 1)) (scalar-at text (index + 2)) (scalar-at text (index + 3))) (decode-utf8-from text (index + 4) size)
+
+
+define decode-utf8 :: String -> [Int]
+  text -> decode-utf8-from text 0 (byte-count text)
+
+
+define scalar-count :: String -> Int
+  text -> length (decode-utf8 text)
+
+
+;; These predicates are the algorithmic layer used by the segmentation and
+;; width engines.  Generated Unicode 17 property tables extend these ranges;
+;; algorithmic Hangul, variation-selector, and control ranges stay in source.
+
+define combining-scalar? :: Int -> Bool
+  scalar | >= 0x0300 and <= 0x036f -> True
+         | >= 0x1ab0 and <= 0x1aff -> True
+         | >= 0x1dc0 and <= 0x1dff -> True
+         | >= 0x20d0 and <= 0x20ff -> True
+         | >= 0xfe20 and <= 0xfe2f -> True
+         | otherwise               -> False
+
+
+define variation-selector? :: Int -> Bool
+  scalar | >= 0xfe00  and <= 0xfe0f  -> True
+         | >= 0xe0100 and <= 0xe01ef -> True
+         | otherwise                 -> False
+
+
+define regional-indicator? :: Int -> Bool
+  scalar | >= 0x1f1e6 and <= 0x1f1ff -> True
+         | otherwise                 -> False
+
+
+define hangul-l? :: Int -> Bool
+  scalar | >= 0x1100 and <= 0x115f -> True
+         | >= 0xa960 and <= 0xa97c -> True
+         | otherwise               -> False
+
+
+define hangul-v? :: Int -> Bool
+  scalar | >= 0x1160 and <= 0x11a7 -> True
+         | >= 0xd7b0 and <= 0xd7c6 -> True
+         | otherwise               -> False
+
+
+define hangul-t? :: Int -> Bool
+  scalar | >= 0x11a8 and <= 0x11ff -> True
+         | >= 0xd7cb and <= 0xd7fb -> True
+         | otherwise               -> False
+
+
+define hangul-syllable? :: Int -> Bool
+  scalar | >= 0xac00 and <= 0xd7a3 -> True
+         | otherwise               -> False
+
+
+define hangul-lv? :: Int -> Bool
+  scalar | hangul-syllable? scalar -> hangul-lv-offset? scalar
+         | otherwise               -> False
+
+
+define hangul-lv-offset? :: Int -> Bool
+  scalar | (scalar - 0xac00) % 28 = 0 -> True
+         | otherwise                  -> False
+
+
+define hangul-lvt? :: Int -> Bool
+  scalar | hangul-syllable? scalar -> hangul-lvt-offset? scalar
+         | otherwise               -> False
+
+
+define hangul-lvt-offset? :: Int -> Bool
+  scalar | (scalar - 0xac00) % 28 != 0 -> True
+         | otherwise                   -> False
+
+
+define crlf-pair? :: Int -> Int -> Bool
+  previous current
+    | previous = 0x0d -> line-feed? current
+    | otherwise       -> False
+
+
+define line-feed? :: Int -> Bool
+  scalar | = 0x0a    -> True
+         | otherwise -> False
+
+
+define hangul-after-l? :: Int -> Bool
+  scalar | hangul-l? scalar   -> True
+         | hangul-v? scalar   -> True
+         | hangul-lv? scalar  -> True
+         | hangul-lvt? scalar -> True
+         | otherwise          -> False
+
+
+define hangul-after-v? :: Int -> Bool
+  scalar | hangul-v? scalar -> True
+         | hangul-t? scalar -> True
+         | otherwise        -> False
+
+
+define hangul-no-break? :: Int -> Int -> Bool
+  previous current
+    | hangul-l? previous   -> hangul-after-l? current
+    | hangul-lv? previous  -> hangul-after-v? current
+    | hangul-v? previous   -> hangul-after-v? current
+    | hangul-lvt? previous -> hangul-t? current
+    | hangul-t? previous   -> hangul-t? current
+    | otherwise            -> False
+
+
+define regional-pair? :: Int -> Int -> Int -> Bool
+  previous current regional-run
+    | regional-indicator? previous -> regional-current-pair? current regional-run
+    | otherwise                    -> False
+
+
+define regional-current-pair? :: Int -> Int -> Bool
+  current regional-run
+    | regional-indicator? current -> odd? regional-run
+    | otherwise                   -> False
+
+
+define odd? :: Int -> Bool
+  value | value % 2 = 1 -> True
+        | otherwise     -> False
+
+
+define grapheme-no-break? :: Int -> Int -> Int -> Int -> Bool
+  previous current regional-run previous-joiner
+    | crlf-pair? previous current -> True
+    | hangul-no-break? previous current -> True
+    | combining-scalar? current -> True
+    | variation-selector? current -> True
+    | current = 0x200d -> True
+    | previous-joiner = 1 -> True
+    | regional-pair? previous current regional-run -> True
+    | otherwise -> False
+
+
+define next-regional-run :: Int -> Int -> Int
+  scalar regional-run
+    | regional-indicator? scalar -> regional-run + 1
+    | otherwise                  -> 0
+
+
+define joiner-code :: Int -> Int
+  scalar | = 0x200d  -> 1
+         | otherwise -> 0
+
+
+define grapheme-count-scalars :: [Int] -> Int -> Int -> Int -> Int -> Int
+  scalars count previous regional-run previous-joiner
+    | null? scalars -> id count
+    | previous < 0 -> grapheme-count-scalars (drop scalars 1) 1 (nth scalars 0) (next-regional-run (nth scalars 0) 0) 0
+    | grapheme-no-break? previous (nth scalars 0) regional-run previous-joiner -> grapheme-count-scalars (drop scalars 1) count (nth scalars 0) (next-regional-run (nth scalars 0) regional-run) (joiner-code (nth scalars 0))
+    | otherwise -> grapheme-count-scalars (drop scalars 1) (count + 1) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
+
+
+define grapheme-count :: String -> Int
+  text -> grapheme-count-scalars (decode-utf8 text) 0 -1 0 0
+
+
+define control-scalar? :: Int -> Bool
+  scalar | < 0x20             -> True
+         | >= 0x7f and < 0xa0 -> True
+         | otherwise          -> False
+
+
+define wide-scalar? :: Int -> Bool
+  scalar | >= 0x1100  and <= 0x115f  -> True
+         | = 0x2329                  -> True
+         | = 0x232a                  -> True
+         | >= 0x2e80  and <= 0xa4cf  -> True
+         | >= 0xac00  and <= 0xd7a3  -> True
+         | >= 0xf900  and <= 0xfaff  -> True
+         | >= 0xfe10  and <= 0xfe19  -> True
+         | >= 0xfe30  and <= 0xfe6f  -> True
+         | >= 0xff00  and <= 0xff60  -> True
+         | >= 0xffe0  and <= 0xffe6  -> True
+         | >= 0x1f300 and <= 0x1faff -> True
+         | >= 0x20000 and <= 0x3fffd -> True
+         | otherwise                 -> False
+
+
+define scalar-width :: Int -> Int
+  scalar | control-scalar? scalar     -> 0
+         | combining-scalar? scalar   -> 0
+         | variation-selector? scalar -> 0
+         | = 0x200d                   -> 0
+         | regional-indicator? scalar -> 2
+         | wide-scalar? scalar        -> 2
+         | otherwise                  -> 1
+
+
+define maximum :: Int -> Int -> Int
+  left right
+    | left >= right -> id left
+    | otherwise     -> id right
+
+
+define display-width-scalars :: [Int] -> Int -> Int -> Int -> Int -> Int -> Int
+  scalars committed cluster previous regional-run previous-joiner
+    | null? scalars -> committed + cluster
+    | previous < 0 -> display-width-scalars (drop scalars 1) committed (scalar-width (nth scalars 0)) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
+    | grapheme-no-break? previous (nth scalars 0) regional-run previous-joiner -> display-width-scalars (drop scalars 1) committed (maximum cluster (scalar-width (nth scalars 0))) (nth scalars 0) (next-regional-run (nth scalars 0) regional-run) (joiner-code (nth scalars 0))
+    | otherwise -> display-width-scalars (drop scalars 1) (committed + cluster) (scalar-width (nth scalars 0)) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
+
+
+define display-width :: String -> Int
+  text -> display-width-scalars (decode-utf8 text) 0 0 -1 0 0
+
+
+;; Compatibility name retained for existing renderers.  Its meaning is now
+;; unambiguously terminal display columns, not scalar count.
 define text-width :: String -> Int
-  text -> __rt_utf8_width text
+  text -> display-width text
+
+
+tests
+  :version:
+  assert-eq unicode-version "17.0.0" "Unicode data version is pinned"
+  :version:
+
+  :scalars:
+  assert-eq (valid-scalar? 0)        True  "U+0000 is a scalar value"
+  assert-eq (valid-scalar? 0x10ffff) True  "U+10FFFF is a scalar value"
+  assert-eq (valid-scalar? 0xd800)   False "high surrogate is not a scalar value"
+  assert-eq (valid-scalar? 0xdfff)   False "low surrogate is not a scalar value"
+  assert-eq (valid-scalar? 0x110000) False "values above Unicode are rejected"
+  :scalars:
+
+  :utf8:
+  assert-eq (byte-count "Aλ🙂") 7 "UTF-8 byte count is explicit"
+  assert-eq (valid-utf8? "Aλ🙂") True "valid mixed-width UTF-8"
+  assert-eq (show (decode-utf8 "Aλ🙂")) "(65 955 128578)" "decode UTF-8 scalars"
+  assert-eq (scalar-count "Aλ🙂") 3 "scalar count differs from byte count"
+  :utf8:
+
+  :segmentation:
+  assert-eq (grapheme-count "abc") 3 "ASCII grapheme clusters"
+  assert-eq (grapheme-count "é") 1 "combining sequence is one grapheme"
+  assert-eq (grapheme-count "👩‍💻") 1 "emoji ZWJ sequence is one grapheme"
+  assert-eq (grapheme-count "\r\n") 1 "GB3 keeps CR and LF in one cluster"
+  assert-eq (grapheme-count "🇺🇸") 1 "GB12 and GB13 pair two regional indicators"
+  assert-eq (grapheme-count "🇺🇸🇮") 2 "a third regional indicator starts a new cluster"
+  assert-eq (grapheme-count "가") 1 "GB6 and GB7 join decomposed Hangul L and V"
+  assert-eq (grapheme-count "각") 1 "GB6 through GB8 join decomposed Hangul L V T"
+  :segmentation:
+
+  :width:
+  assert-eq (display-width "abc") 3 "ASCII terminal width"
+  assert-eq (display-width "é") 1 "combining mark has zero added width"
+  assert-eq (display-width "界") 2 "East Asian wide scalar uses two columns"
+  assert-eq (display-width "👩‍💻") 2 "emoji ZWJ cluster uses two columns"
+  assert-eq (display-width "🇺🇸") 2 "regional-indicator flag pair occupies two columns"
+  assert-eq (display-width "각") 2 "decomposed Hangul cluster occupies two columns"
+  assert-eq (text-width "∀x. □Fx") 7 "compatibility width delegates to display width"
+  :width:

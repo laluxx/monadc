@@ -1,0 +1,5 @@
+[
+  {"line":28,"col":2,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"module"},{"line":0,"col":0,"type":"symbol","name":"Main"},{"line":0,"col":0,"type":"array","is_heap":false,"elements":[]}]},
+  {"line":29,"col":1,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"define"},{"line":29,"col":9,"type":"symbol","name":"zero-fn"},{"line":29,"col":17,"type":"lambda","params":[{"name":"__p_0","type":"[(null)]","anon":true}],"return_type":"Int","body":[{"line":29,"col":37,"type":"number","value":"0"}]}]},
+  {"line":30,"col":1,"type":"list","items":[{"line":30,"col":2,"type":"symbol","name":"show"},{"line":30,"col":7,"type":"list","items":[{"line":30,"col":8,"type":"symbol","name":"zero-fn"}]}]}
+]

@@ -67,8 +67,10 @@ typedef enum {
 typedef struct ASTParam {
     char *name;       // parameter name (generated if is_anon)
     char *type_name;  // type annotation string, NULL if absent
+    char *effect_name; // effect label on the arrow following this parameter
     bool is_rest;     // Variadic . args
     bool is_anon;     // Name was generated, user wrote type only e.g. Int
+    uint64_t binder_id; // persistent lexical identity, 0 before resolution
 } ASTParam;
 
 
@@ -125,6 +127,7 @@ typedef struct ASTPattern {
     /* For PAT_CONSTRUCTOR: field sub-patterns */
     struct ASTPattern *ctor_fields;
     int         ctor_field_count;
+    uint64_t    binder_id; // PAT_VAR declaration identity
 } ASTPattern;
 
 // One clause: patterns (one per param) + body
@@ -194,6 +197,10 @@ typedef struct AST {
             char *docstring;   // NULL if absent
             char *alias_name;  // NULL if absent
             bool naked;
+            bool has_effect_arrows;
+            char **effect_qualifier_rows;
+            char **effect_qualifier_traits;
+            size_t effect_qualifier_count;
             struct AST *body;  // last expression (return value) - kept for compatibility
             struct AST **body_exprs; // all body expressions
             int body_count;
@@ -337,6 +344,12 @@ typedef struct AST {
     // HM type inference result — set by infer_zonk_ast, NULL before inference
     struct Type *inferred_type;
 
+    /* For AST_SYMBOL occurrences and symbol-shaped local binding sites.
+     * Zero means global, special-form, quoted, or not yet scope-resolved. */
+    uint64_t resolved_binder_id;
+    /* Deterministic preorder identity for QTT lambda/closure evidence. */
+    uint64_t qtt_closure_id;
+
 
     // Location tracking
     int line;
@@ -415,6 +428,7 @@ typedef enum {
     TOK_KEYWORD,
     TOK_QUOTE,          // '
     TOK_ARROW,          // ->
+    TOK_EFFECT_ARROW,   // -e-> / -io.read->
     TOK_FEATURE_BEGIN,  // #+
     TOK_FEATURE_END,    // #---
     TOK_DOTDOT,         // ..

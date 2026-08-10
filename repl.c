@@ -311,6 +311,8 @@ static void rt_sym_table_init(void) {
     ADD(rt_list_from);    ADD(rt_list_from_step);    ADD(rt_list_take);
     ADD(rt_list_drop);    ADD(rt_value_thunk);
     ADD(rt_string_take);
+    ADD(rt_string_drop);
+    ADD(rt_string_byte);
 
     // Map
     ADD(rt_map_new);      ADD(rt_map_assoc);      ADD(rt_map_assoc_mut);
@@ -645,6 +647,13 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                 LLVMValueRef gv = LLVMAddGlobal(ctx->cg.module, lt, name);
                 LLVMSetLinkage(gv, LLVMExternalLinkage);
                 e->value = gv;
+
+                /* Imported globals live in the dlopen'd module and are
+                 * resolved directly by ORC's process generator. Getters are
+                 * only needed for values defined by earlier REPL snippets,
+                 * whose storage is owned by this process. */
+                if (e->module_name)
+                    continue;
 
                 char getter_name[512];
                 monad_repl_global_getter_name(name, getter_name, sizeof(getter_name));
@@ -2220,6 +2229,7 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
     const char *mod_name = imp->module_name;
 
     if (module_already_loaded(ctx, mod_name)) {
+        module_context_add_import(ctx->cg.module_ctx, imp);
         if (announce)
             printf("Module '%s' already loaded.\n", mod_name);
         return true;
@@ -2492,6 +2502,7 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
 
     if (announce)
         printf("Imported %d symbol(s) from '%s'.\n", count, mod_name);
+    module_context_add_import(ctx->cg.module_ctx, imp);
     return true;
 }
 
@@ -2540,7 +2551,7 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.builder    = NULL;
     ctx->cg.env        = env_create();
     env_init_infer(ctx->cg.env);
-    ctx->cg.module_ctx = NULL;
+    ctx->cg.module_ctx = module_context_create();
     ctx->cg.init_fn    = NULL;
     ctx->cg.test_mode  = false;
     ctx->cg.fmt_str = ctx->cg.fmt_char = ctx->cg.fmt_int =
@@ -2672,6 +2683,8 @@ void repl_dispose(REPLContext *ctx) {
         tc_registry_free(ctx->cg.tc_registry);
         ctx->cg.tc_registry = NULL;
     }
+    module_context_free(ctx->cg.module_ctx);
+    ctx->cg.module_ctx = NULL;
     env_free(ctx->cg.env);
 }
 

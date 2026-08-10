@@ -332,24 +332,24 @@ method brace-close? :: Self -> Bool
 
 
 method upcase :: Self -> Char
-  c | c < 0x61  -> c
-    | c > 0x7a  -> c
+  c | < 0x61    -> c
+    | > 0x7a    -> c
     | otherwise -> c - delta
   :doc "Convert C to uppercase if it is ASCII lowercase."
 
 
 method downcase :: Self -> Char
-  c | c < 0x41  -> c
-    | c > 0x5a  -> c
+  c | < 0x41    -> c
+    | > 0x5a    -> c
     | otherwise -> c + delta
   :doc "Convert C to lowercase if it is ASCII uppercase."
 
 
 method toggle-case :: Self -> Char
-  c | c < 0x41  -> c
-    | c <= 0x5a -> downcase c
-    | c < 0x61  -> c
-    | c <= 0x7a -> upcase c
+  c | < 0x41    -> c
+    | <= 0x5a   -> downcase c
+    | < 0x61    -> c
+    | <= 0x7a   -> upcase c
     | otherwise -> c
   :doc "Toggle ASCII letter case; leave non-letters unchanged."
 

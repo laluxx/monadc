@@ -1,23 +1,23 @@
-;; TEST-ID: tests.codegen.rt-quote-list-length
-;; TEST-TIER: known-fail
-;; TEST-STATUS: quarantined-baseline-2026-06-15
-;; TEST-KNOWN-FAILURE: desugar-mismatch
-;; TEST-CODEGEN-ATOM: atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
-;; TEST-QUALITY: branch-regression
-;; TEST-SUBSET: quote-symbols
-;; TEST-CATEGORY: 60-reflection-quote
-;; TEST-SECTION: codegen
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: Data.List length over quoted list input works through core.
-;; TEST-ATOM: Data.List owns length; count remains the compiler primitive.
-;; TEST-EXPECT: compile, run
+:TEST-ID tests.codegen.rt-quote-list-length
+:TEST-TIER known-fail
+:TEST-STATUS quarantined-baseline-2026-06-15
+:TEST-KNOWN-FAILURE desugar-mismatch
+:TEST-CODEGEN-ATOM atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
+:TEST-QUALITY branch-regression
+:TEST-SUBSET quote-symbols
+:TEST-CATEGORY 60-reflection-quote
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
+:TEST-PURPOSE Data.List length over quoted list input works through core.
+:TEST-ATOM Data.List owns length; count remains the compiler primitive.
+:TEST-EXPECT compile, run
 
-;; TEST-COVERAGE: codegen.c:60-reflection-quote/quote-symbols branch family
-;; TEST-USES-ATOM: atom.codegen.category.60.reflection.quote
-;; TEST-MENU: branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
-;; TEST-MENU-PATH: codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
-;; TEST-ATOM-LEAF: atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
-;; TEST-CLI-TARGET: codegen branches reflection-quote quote-symbols
+:TEST-COVERAGE codegen.c:60-reflection-quote/quote-symbols branch family
+:TEST-USES-ATOM atom.codegen.category.60.reflection.quote
+:TEST-MENU branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
+:TEST-MENU-PATH codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
+:TEST-ATOM-LEAF atom.codegen.60.reflection.quote.quote.symbols.rt.quote.list.length
+:TEST-CLI-TARGET codegen branches reflection-quote quote-symbols
 (module Main)
 (import Data.List)
 (show (length '(1 2 3 4 5)))

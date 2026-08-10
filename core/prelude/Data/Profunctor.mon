@@ -6,9 +6,9 @@
 
 ;;; Commentary:
 
-;; Profunctor maps its input contravariantly and its output covariantly.
-;; Instances supply the combined dimap operation; mapping either side alone is
-;; derived with an identity function so the directional laws have one owner.
+ Profunctor maps its input contravariantly and its output covariantly.
+ Instances supply the combined dimap operation; mapping either side alone is
+ derived with an identity function so the directional laws have one owner.
 
 ;;; Code:
 

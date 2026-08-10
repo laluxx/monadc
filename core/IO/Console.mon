@@ -1,0 +1,48 @@
+;;; Console.mon --- structured standard-stream IO
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "io console stdin stdout stderr lines effects"
+
+;;; Commentary:
+
+ Console convenience remains descriptor-explicit underneath and never wraps
+ an ordinary value in an IO container. Each operation exposes the io effect
+ and preserves structured syscall failure through Either.
+
+;;; Code:
+
+import IO
+import Data.Either
+import Data.Bool
+import Numeric
+import Sequence
+
+module IO.Console
+  [read-stdin-byte write-stdout write-stderr write-line write-error-line]
+
+
+define read-stdin-byte :: () -io-> Either IOError Int
+  _ -> read-byte-result stdin
+
+
+define write-stdout :: String -io-> Either IOError Int
+  text -> write-text-result stdout text
+
+
+define write-stderr :: String -io-> Either IOError Int
+  text -> write-text-result stderr text
+
+
+define write-line-to :: Int -> String -io-> Either IOError Int
+  descriptor text -> def count (write-text descriptor text)
+                     def status (write-byte descriptor 10)
+                     (if (< count 0) (Left (IOStatus count)) (if (< status 0) (Left (IOStatus status)) (Right (+ count status))))
+
+
+define write-line :: String -io-> Either IOError Int
+  text -> write-line-to stdout text
+
+
+define write-error-line :: String -io-> Either IOError Int
+  text -> write-line-to stderr text

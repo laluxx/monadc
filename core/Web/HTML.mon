@@ -1,0 +1,287 @@
+;;; HTML.mon --- Safe HTML trees and an indentation-owned HTML reader
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "web html dsl escaping reader syntax"
+
+;;; Commentary:
+
+ HTML values are immutable, safely rendered values. Text and attribute values
+ are escaped during construction; callers must opt into RawHTML explicitly
+ for trusted markup. The current representation deliberately stays opaque
+ until recursive cross-module ADT projection is reliable; see the linked
+ Web HTML context TODO rather than assuming this is already an inspectable
+ DOM.
+ Importing this module activates an indentation reader. The compiler knows
+ only how to preserve block lines and indentation: this module owns tags,
+ attributes, mixed content, interpolation, and the resulting Syntax.
+
+;;; Code:
+
+reader-block html_ expand-html
+
+import Sequence
+
+module Web.HTML
+  [HTML Element Text RawHTML
+   Attribute attribute element text raw-html interpolate render-html
+   expand-html]
+
+
+layout Attribute
+  [name :: String]
+  [value :: String]
+
+
+layout HTML
+  [rendered :: String]
+  [element-node? :: Bool]
+
+
+define Element :: String -> [Attribute] -> [HTML] -> HTML
+  name attributes children -> HTML (render-element-value name attributes children) (not (inline-element-name? name))
+
+
+define inline-element-name? :: String -> Bool
+  name | = "a"      -> True
+       | = "span"   -> True
+       | = "em"     -> True
+       | = "strong" -> True
+       | = "code"   -> True
+       | otherwise  -> False
+
+
+define Text :: String -> HTML
+  value -> HTML (escape-html value) False
+
+
+define RawHTML :: String -> HTML
+  value -> HTML value False
+
+
+define attribute :: String -> String -> Attribute
+  name value -> Attribute name value
+
+
+define element :: String -> [Attribute] -> [HTML] -> HTML
+  name attributes children -> Element name attributes children
+
+
+define text :: String -> HTML
+  value -> Text value
+
+
+define raw-html :: String -> HTML
+  value -> RawHTML value
+
+
+define join-html :: String -> String -> String
+  left right -> __rt_concat left right
+
+
+define escape-html :: String -> String
+  value | = "" -> ""
+        | (__rt_string_byte value 0) = 38 -> join-html "&amp;"  (escape-html (__rt_string_drop value 1))
+        | (__rt_string_byte value 0) = 60 -> join-html "&lt;"   (escape-html (__rt_string_drop value 1))
+        | (__rt_string_byte value 0) = 62 -> join-html "&gt;"   (escape-html (__rt_string_drop value 1))
+        | (__rt_string_byte value 0) = 34 -> join-html "&quot;" (escape-html (__rt_string_drop value 1))
+        | (__rt_string_byte value 0) = 39 -> join-html "&#39;"  (escape-html (__rt_string_drop value 1))
+        | otherwise -> join-html (__rt_string_take value 1) (escape-html (__rt_string_drop value 1))
+
+
+define render-attributes :: [Attribute] -> String
+  attributes
+    | null? attributes -> ""
+    | otherwise -> join-html (render-attribute (rt_coll_head attributes)) (render-attributes (drop attributes 1))
+
+
+define render-attribute :: Attribute -> String
+  entry -> join-html " " (join-html entry.name (join-html "=\"" (join-html (escape-html entry.value) "\"")))
+
+
+define render-inline :: [HTML] -> String
+  nodes | null? nodes -> ""
+        | otherwise   -> join-html (html-rendered (rt_coll_head nodes)) (render-inline (drop nodes 1))
+
+
+define html-rendered :: HTML -> String
+  node -> node.rendered
+
+
+define html-element? :: HTML -> Bool
+  node -> node.element-node?
+
+
+define element-children-inline? :: [HTML] -> Bool
+  children | null? children -> True
+           | not (html-element? (rt_coll_head children)) -> element-children-inline? (drop children 1)
+           | otherwise -> False
+
+
+define indent-html-lines :: String -> Bool -> String
+  value line-start
+    | value = "" -> ""
+    | line-start -> join-html "  " (indent-html-lines value False)
+    | (__rt_string_byte value 0) = 0x0a -> join-html "\n" (indent-html-lines (__rt_string_drop value 1) True)
+    | otherwise -> join-html (__rt_string_take value 1) (indent-html-lines (__rt_string_drop value 1) False)
+
+
+define render-indented-children :: [HTML] -> String
+  children | null? children -> ""
+           | otherwise -> join-html "\n" (join-html (indent-html-lines (html-rendered (rt_coll_head children)) True) (render-indented-children (drop children 1)))
+
+
+define render-element-value :: String -> [Attribute] -> [HTML] -> String
+  name attributes children
+    | null? children -> join-html "<" (join-html name (join-html (render-attributes attributes) (join-html "></" (join-html name ">"))))
+    | element-children-inline? children -> join-html "<" (join-html name (join-html (render-attributes attributes) (join-html ">" (join-html (render-inline children) (join-html "</" (join-html name ">"))))))
+    | otherwise -> join-html "<" (join-html name (join-html (render-attributes attributes) (join-html ">" (join-html (render-indented-children children) (join-html "\n</" (join-html name ">"))))))
+
+
+define render-html :: HTML -> String
+  node -> node.rendered
+
+
+define replace-first-placeholder :: String -> String -> String
+  template replacement
+    | template = ""            -> ""
+    | (__rt_string_byte template 0) = 95 -> join-html replacement (__rt_string_drop template 1)
+    | otherwise -> join-html (__rt_string_take template 1) (replace-first-placeholder (__rt_string_drop template 1) replacement)
+
+
+define interpolate :: String -> String -> HTML
+  template value -> text (replace-first-placeholder template value)
+
+
+;; Compile-time reader implementation. reader-line has the neutral shape
+;; (reader-line INDENT TAG ITEM ...). Blank and comment lines are ignored.
+
+define html-line-indent :: Syntax -> Syntax
+  line -> (syntax-list-ref line 1)
+
+
+define html-line-tag :: Syntax -> Syntax
+  line -> (syntax-list-ref line 2)
+
+
+define html-ignorable? :: Syntax -> Syntax
+  line -> (if (= (syntax-symbol-text (syntax-list-ref line 0)) "reader-blank")
+              True
+              (= (syntax-symbol-text (syntax-list-ref line 0)) "reader-comment"))
+
+
+define html-strip-ignorable :: Syntax -> Syntax
+  lines -> (if (= (syntax-list-length lines) 0)
+               lines
+               (if (html-ignorable? (syntax-list-ref lines 0))
+                   (html-strip-ignorable (syntax-list-tail lines))
+                   lines))
+
+
+define html-span-length-after :: Syntax -> Syntax -> Syntax -> Syntax
+  lines indent count -> (if (= (syntax-list-length lines) 0)
+                            count
+                            (if (html-ignorable? (syntax-list-ref lines 0))
+                                (html-span-length-after (syntax-list-tail lines) indent (+ count 1))
+                                (if (> (html-line-indent (syntax-list-ref lines 0)) indent)
+                                    (html-span-length-after (syntax-list-tail lines) indent (+ count 1))
+                                    count)))
+
+
+define html-syntax-take :: Syntax -> Syntax -> Syntax
+  lines count -> (if (= count 0)
+                     (syntax-list)
+                     (syntax-list-cons (syntax-list-ref lines 0) (html-syntax-take (syntax-list-tail lines) (- count 1))))
+
+
+define html-syntax-drop :: Syntax -> Syntax -> Syntax
+  lines count -> (if (= count 0) lines (html-syntax-drop (syntax-list-tail lines) (- count 1)))
+
+
+define html-attribute-items :: Syntax -> Syntax
+  items -> (if (= (syntax-list-length items) 0)
+               (syntax-list)
+               (if (= (syntax-kind (syntax-list-ref items 0)) "keyword")
+                   (syntax-list-cons
+                    (syntax-list (syntax-symbol "attribute")
+                                 (syntax-keyword-text (syntax-list-ref items 0))
+                                 (syntax-list-ref items 1))
+                    (html-attribute-items (html-syntax-drop items 2)))
+                   (syntax-list)))
+
+
+define html-attributes :: Syntax -> Syntax
+  items -> (let [attributes (html-attribute-items items)]
+             (if (= (syntax-list-length attributes) 0)
+                 (syntax-list (syntax-symbol "drop")
+                              (syntax-list (syntax-symbol "list")
+                                           (syntax-list (syntax-symbol "attribute")
+                                                        (syntax-string "")
+                                                        (syntax-string "")))
+                              (syntax-number 1))
+                 (syntax-list-cons (syntax-symbol "list") attributes)))
+
+
+define html-drop-attributes :: Syntax -> Syntax
+  items -> (if (= (syntax-list-length items) 0)
+               items
+               (if (= (syntax-kind (syntax-list-ref items 0)) "keyword")
+                   (html-drop-attributes (html-syntax-drop items 2))
+                   items))
+
+
+define html-inline-items :: Syntax -> Syntax
+  items -> (if (= (syntax-list-length items) 0)
+               (syntax-list (syntax-symbol "list"))
+               (if (= (syntax-kind (syntax-list-ref items 0)) "string")
+                   (if (= (syntax-list-length items) 2)
+                       (syntax-list (syntax-symbol "list")
+                                    (syntax-list (syntax-symbol "interpolate") (syntax-list-ref items 0) (syntax-list-ref items 1)))
+                       (syntax-list-cons (syntax-symbol "list")
+                                         (syntax-list-cons (syntax-list (syntax-symbol "text") (syntax-list-ref items 0))
+                                                           (syntax-list-tail (html-inline-items (syntax-list-tail items))))))
+                   (html-inline-element items)))
+
+
+define html-inline-element :: Syntax -> Syntax
+  items -> (syntax-list-cons
+            (syntax-symbol "list")
+            (syntax-list-cons
+             (syntax-list (syntax-symbol "element")
+                          (syntax-symbol-text (syntax-list-ref items 0))
+                          (html-attributes (syntax-list-tail items))
+                          (syntax-list (syntax-symbol "list")
+                                       (syntax-list (syntax-symbol "text") (syntax-list-ref (html-drop-attributes (syntax-list-tail items)) 0))))
+             (syntax-list-tail (html-inline-items (syntax-list-tail (html-drop-attributes (syntax-list-tail items)))))))
+
+
+define html-node :: Syntax -> Syntax -> Syntax
+  line nested -> (syntax-list (syntax-symbol "element")
+                              (syntax-symbol-text (html-line-tag line))
+                              (html-attributes (syntax-list-tail (syntax-list-tail (syntax-list-tail line))))
+                              (if (= (syntax-list-length (html-strip-ignorable nested)) 0)
+                                  (html-inline-items (html-drop-attributes (syntax-list-tail (syntax-list-tail (syntax-list-tail line)))))
+                                  (html-nodes nested)))
+
+
+define html-nodes :: Syntax -> Syntax
+  raw-lines -> (let [lines (html-strip-ignorable raw-lines)]
+                 (if (= (syntax-list-length lines) 0)
+                     (syntax-list (syntax-symbol "list"))
+                     (let [line (syntax-list-ref lines 0)]
+                       (let [span (html-span-length-after (syntax-list-tail lines) (html-line-indent line) 0)]
+                         (syntax-list-cons
+                          (syntax-symbol "list")
+                          (syntax-list-cons
+                           (html-node line (html-syntax-take (syntax-list-tail lines) span))
+                           (syntax-list-tail (html-nodes (html-syntax-drop (syntax-list-tail lines) span)))))))))
+
+
+define expand-html :: Syntax -> Syntax -> Syntax -> Syntax
+  language-keyword language body -> (if (= (syntax-keyword-text language-keyword) "lang")
+                                        (syntax-list (syntax-symbol "element")
+                                (syntax-string "html")
+                                (syntax-list (syntax-symbol "list")
+                                             (syntax-list (syntax-symbol "attribute") (syntax-string "lang") language))
+                                (html-nodes (syntax-list-tail body)))
+                                        (syntax-error language-keyword "html expects the :lang attribute"))

@@ -1,0 +1,32 @@
+#+TITLE: Web HTML Context
+
+* Core-Owned HTML Language
+:PROPERTIES:
+:ID: monadc.context.web-html.core-language
+:CONTEXT_KIND: component
+:CONTEXT_STATUS: active
+:SOURCE: core/Web/HTML.mon
+:END:
+
+[DEC id:dec.web-html.safe-values-2026-07-28 by:human src:user-request conf:high]
+  HTML is an ordinary typed core value and an indentation-owned embedded
+  language. Text and attribute values escape HTML syntax by default; trusted
+  raw markup requires the explicit =raw-html= constructor.
+
+[OBS id:obs.web-html.executable-reader-2026-07-28 src:tests/web_html_reader.mon,tests/web_html_escaping.mon conf:high]
+  The exact nested tutorial surface compiles and renders. Tests cover nesting,
+  attributes, mixed inline content, interpolation, pretty indentation, and
+  text/attribute escaping.
+
+[OBS id:obs.web-html-executable-tutorial-2026-07-28 src:how_to/WebHTML.mon,tests/test_how_to_examples.py conf:high]
+  The focused tutorial compiles and executes both the canonical constructor
+  API and the indentation-sensitive HTML notation. Its exact-output regression
+  exercises nested blocks, mixed inline content, interpolation, and distinct
+  text and attribute escaping contexts.
+
+[TODO id:todo.web-html-structural-tree-2026-07-28 priority:high]
+  Replace the current opaque rendered-value representation with an inspectable
+  recursive HTML tree after cross-module recursive ADT collection-field
+  projection is reliable. Add HTML void elements, boolean attributes,
+  namespaces, doctypes, streaming rendering, and a complete inline/block
+  element classification generated from the HTML standard.

@@ -1,0 +1,24 @@
+:TEST-ID tests.codegen.pattern.constructor.pipe.local
+:TEST-CONTEXT monadc.context.style.direct-case-style
+:TEST-PURPOSE Unary constructor pipes perform nominal pattern matching rather than value equality.
+:TEST-EXPECT compile, run, stdout
+:TEST-TIER regression
+
+module Main []
+
+data PathKind
+  = RegularFile
+  | Directory
+  | SymbolicLink
+  | Other
+
+define classify :: PathKind -> Int
+  kind | RegularFile  -> 1
+       | Directory    -> 2
+       | SymbolicLink -> 3
+       | Other        -> 4
+
+show (classify RegularFile)
+show (classify Directory)
+show (classify SymbolicLink)
+show (classify Other)

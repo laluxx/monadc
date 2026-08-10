@@ -521,20 +521,34 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
         return LLVMConstInt(llvm_ret_type, 0, 0);
     }
 
-    // Normal (non-naked) path — unchanged
+    bool contains_syscall = false;
+    for (int i = 0; i < instruction_count; i++)
+        if (strcmp(instructions[i].mnemonic, "syscall") == 0) {
+            contains_syscall = true;
+            break;
+        }
+
+    /* Ordinary arithmetic historically ties parameter zero to the result.
+     * A syscall is different: its result is specifically %rax, while every
+     * source operand must retain its pre-assembly value even after the body
+     * writes the syscall number to %rax. */
     char constraints[256];
-    if (return_type->kind == TYPE_FLOAT) strcpy(constraints, "=x");
+    if (contains_syscall)                strcpy(constraints, "={rax}");
+    else if (return_type->kind == TYPE_FLOAT) strcpy(constraints, "=x");
     else                                 strcpy(constraints, "=r");
 
-    if (param_count >= 1) strcat(constraints, ",0");
-    for (int i = 1; i < param_count; i++) {
+    for (int i = 0; i < param_count; i++) {
         LLVMTypeRef param_type = LLVMTypeOf(params[i]);
         LLVMTypeKind param_kind = LLVMGetTypeKind(param_type);
-        if (param_kind == LLVMDoubleTypeKind || param_kind == LLVMFloatTypeKind)
+        if (!contains_syscall && i == 0)
+            strcat(constraints, ",0");
+        else if (param_kind == LLVMDoubleTypeKind || param_kind == LLVMFloatTypeKind)
             strcat(constraints, ",x");
         else
             strcat(constraints, ",r");
     }
+    if (contains_syscall)
+        strcat(constraints, ",~{rcx},~{r11},~{memory}");
 
     LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * param_count);
     for (int i = 0; i < param_count; i++)

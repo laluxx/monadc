@@ -1,23 +1,23 @@
-;; TEST-ID: tests.codegen.stateful.adt.enum.user.instance.defaults
-;; TEST-TIER: regression
-;; TEST-STATUS: active
-;; TEST-SECTION: codegen
-;; TEST-CATEGORY: 50-data-layout
-;; TEST-SUBSET: adts
-;; TEST-QUALITY: branch-state-regression
-;; TEST-CODEGEN-ATOM: atom.codegen.stateful.adt.enum.user.instance.defaults
-;; TEST-CONTEXT: monadc.context.language.runtime-codegen-corpus
-;; TEST-PURPOSE: User Enum instances inherit lawful stepping and finite-range defaults.
-;; TEST-ATOM: Integer conversion is the minimal complete Enum definition.
-;; TEST-EXPECT: compile, run
-;; TEST-CODEGEN-PATH: codegen.adt
-;; TEST-COVERAGE: core/prelude/Data/Enum.mon default methods and user instance dispatch
-;; TEST-USES-ATOM: atom.codegen.category.50.data.layout
-;; TEST-USES-ATOM: atom.codegen.subset.50.data.layout.adts
-;; TEST-MENU: branches/data-layout/adts/atom.codegen.stateful.adt.enum.user.instance.defaults
-;; TEST-MENU-PATH: codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.user.instance.defaults
-;; TEST-ATOM-LEAF: atom.codegen.stateful.adt.enum.user.instance.defaults
-;; TEST-CLI-TARGET: codegen branches data-layout adts
+:TEST-ID tests.codegen.stateful.adt.enum.user.instance.defaults
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY 50-data-layout
+:TEST-SUBSET adts
+:TEST-QUALITY branch-state-regression
+:TEST-CODEGEN-ATOM atom.codegen.stateful.adt.enum.user.instance.defaults
+:TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
+:TEST-PURPOSE User Enum instances inherit lawful stepping and finite-range defaults.
+:TEST-ATOM Integer conversion is the minimal complete Enum definition.
+:TEST-EXPECT compile, run
+:TEST-CODEGEN-PATH codegen.adt
+:TEST-COVERAGE core/prelude/Data/Enum.mon default methods and user instance dispatch
+:TEST-USES-ATOM atom.codegen.category.50.data.layout
+:TEST-USES-ATOM atom.codegen.subset.50.data.layout.adts
+:TEST-MENU branches/data-layout/adts/atom.codegen.stateful.adt.enum.user.instance.defaults
+:TEST-MENU-PATH codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.user.instance.defaults
+:TEST-ATOM-LEAF atom.codegen.stateful.adt.enum.user.instance.defaults
+:TEST-CLI-TARGET codegen branches data-layout adts
 
 (import Data.Enum)
 (data Dial D0 | D1 | D2)

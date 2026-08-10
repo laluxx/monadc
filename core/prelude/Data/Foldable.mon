@@ -6,10 +6,10 @@
 
 ;;; Commentary:
 
-;; Foldable owns structure-independent reduction. Consumers express their
-;; identity and combining operation once; concrete containers supply only
-;; foldl/foldr. Numeric aggregation therefore works for every Foldable instance
-;; instead of maintaining list-specific recursion beside the abstraction.
+ Foldable owns structure-independent reduction. Consumers express their
+ identity and combining operation once; concrete containers supply only
+ foldl/foldr. Numeric aggregation therefore works for every Foldable instance
+ instead of maintaining list-specific recursion beside the abstraction.
 
 ;;; Code:
 

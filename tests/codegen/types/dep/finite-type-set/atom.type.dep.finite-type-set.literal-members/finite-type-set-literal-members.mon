@@ -1,19 +1,19 @@
-;; TEST-ID: tests.codegen.type.dep.finite-type-set.literal-members
-;; TEST-TIER: regression
-;; TEST-STATUS: active
-;; TEST-SECTION: codegen
-;; TEST-CATEGORY: dependent-types
-;; TEST-SUBSET: finite-type-sets
-;; TEST-QUALITY: language-contract-regression
-;; TEST-CONTEXT: TODO.org Set-literal types
-;; TEST-PURPOSE: Finite sets contain arbitrary decidable singleton literals, not only symbols.
-;; TEST-EXPECT: compile, run
-;; TEST-STDOUT-FILE: finite-type-set-literal-members.stdout
-;; TEST-CODEGEN-PATH: types.dep.finite-type-set.literal-members
-;; TEST-MENU: types/dep/finite-type-set/atom.type.dep.finite-type-set.literal-members
-;; TEST-MENU-PATH: codegen/types/dep/finite-type-set/atom.type.dep.finite-type-set.literal-members
-;; TEST-ATOM-LEAF: atom.type.dep.finite-type-set.literal-members
-;; TEST-CLI-TARGET: codegen types dep finite-type-sets
+:TEST-ID tests.codegen.type.dep.finite-type-set.literal-members
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET finite-type-sets
+:TEST-QUALITY language-contract-regression
+:TEST-CONTEXT TODO.org Set-literal types
+:TEST-PURPOSE Finite sets contain arbitrary decidable singleton literals, not only symbols.
+:TEST-EXPECT compile, run
+:TEST-STDOUT-FILE finite-type-set-literal-members.stdout
+:TEST-CODEGEN-PATH types.dep.finite-type-set.literal-members
+:TEST-MENU types/dep/finite-type-set/atom.type.dep.finite-type-set.literal-members
+:TEST-MENU-PATH codegen/types/dep/finite-type-set/atom.type.dep.finite-type-set.literal-members
+:TEST-ATOM-LEAF atom.type.dep.finite-type-set.literal-members
+:TEST-CLI-TARGET codegen types dep finite-type-sets
 
 (module Main)
 (type Die {1 2 3 4 5 6})

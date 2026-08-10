@@ -1,0 +1,69 @@
+;;; Effect.mon --- the standard effect basis
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "effects operations resumptions capabilities"
+
+;;; Commentary:
+
+ This module names effects; the compiler only elaborates their calculus.
+ A declaration reads:
+
+   (effect Name Trait Operation Resumes Scoped [Input Output])
+
+ `Resumes` is a quantity: 0 means abortive, 1 means one-shot, and omega
+ means unrestricted. `Scoped` says whether the operation introduces a
+ capability whose identity must not escape. Input and Output describe the
+ operation itself, not the type of a handled computation.
+
+ The typing judgment used by the elaborator is
+
+   Sigma ; Psi | Gamma |- e : A ! epsilon |> Delta
+
+ Read it as: under global signatures Sigma, modal context Psi, and
+ quantitative resources Gamma, expression e returns A, performs epsilon,
+ and leaves resource demand Delta. A function arrow `A -e-> B` stores
+ epsilon latently until application.
+
+ Effect rows obey join and handling:
+
+   effects(e1 ; e2)       = effects(e1) join effects(e2)
+   handle <op | epsilon>  = epsilon
+   continuation demand    = Resumes * continuation use
+
+ Traits form a Core-declared preorder below. For example, allocation implies
+ state, and state implies io. No effect names are built into the compiler.
+
+;;; Code:
+
+module Effect []
+
+;; Runtime interaction
+(effect Core.IO.read io read 1 False Unit String)
+(effect Core.IO.write io write 1 False String Unit)
+(effect Core.Trace.emit telemetry emit 1 False String Unit)
+
+;; Memory and foreign execution
+(effect Core.Foreign.asm foreign asm 1 False)
+(effect Core.Alloc.heap allocate heap 1 False)
+(effect Core.State.write state write 1 False)
+
+;; Control effects
+(effect Core.Exception.raise exception raise 0 False String a)
+(effect Core.Control.diverge diverge diverge 0 False)
+(effect Core.Control.yield control yield omega False)
+
+;; Scoped capabilities
+(effect Core.Scope.local state local 1 True)
+
+;; Named handler policies. These select continuation usage; lowering remains a
+;; generic compiler decision justified by the resulting proof.
+effect-handler Core.Exception.abort Core.Exception.raise 0 True
+effect-handler Core.IO.read-once Core.IO.read 1 True
+effect-handler Core.Control.yield-once Core.Control.yield 1 True
+effect-handler Core.Scope.local-once Core.Scope.local 1 True
+
+;; Trait preorder
+(effect-trait allocate state)
+(effect-trait state io)
+(effect-trait foreign io)

@@ -1,0 +1,1273 @@
+#+TITLE: Unified Quantitative, Effect, and Layered Type Theory
+#+AUTHOR: human+Codex
+#+DATE: 2026-07-30
+#+LANGUAGE: en
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:type-theory:qtt:effects:modal:staging:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.type-theory
+
+* North Star Judgment
+:PROPERTIES:
+:ID: monadc.context.type-theory.judgment
+:CUSTOM_ID: north-star-judgment
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: A single judgment integrating layers, types, effects, and quantitative usage.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-30
+:CONTEXT_UPDATED: 2026-07-30
+:CONTEXT_STATUS: active
+:SOURCE: user-request,qtt/README.org,context/memory.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.type-theory.declarative-judgment-2026-07-30 src:user-request,context/type-theory.org conf:high]
+  Use the declarative judgment:
+
+  =Σ ; Ψ | Γ ⊢ℓ e : A ! ε ▷ Δ=
+
+  =Σ= is the global signature, =Ψ= the layered meta-context, =Γ= the graded
+  object context, =ℓ= the current layer, =A= the type, =ε= the produced effect
+  row, and =Δ= the quantitative usage/coeffect output.
+
+[DEC id:dec.type-theory.algorithmic-judgment-2026-07-30 src:context/type-theory.org conf:high]
+  Keep inference constraints on the output side:
+
+  =Σ ; Ψ ; Ξ | Γ ⊢ℓ e ⇑ A ! ε ▷ Δ ⊣ C=
+
+  =Ξ= declares type, grade, effect, region, and layer metavariables. =C=
+  contains generated equations and inequalities. The declarative calculus must
+  not depend on solver implementation details. Algorithmic soundness must show
+  that every solved inference derivation elaborates to a declarative one.
+
+#+CAPTION: Judgment components
+| Component | Role                                                        | Structural discipline                        |
+|-----------+-------------------------------------------------------------+----------------------------------------------|
+| =Σ=         | global types, constructors, modules, effects, FFI contracts | persistent signature extension               |
+| =Ψ=         | contextual metavariables and code values from outer layers  | modal/contextual substitution                |
+| =Ξ=         | inference metavariable declarations and kinds               | solver-scoped, no runtime meaning            |
+| =Γ=         | local binders =x :^q A @ ℓ=                                    | graded weakening/subusage                    |
+| =ε=         | produced effect row                                         | row extension, unification, handling         |
+| =Δ=         | required use of =Γ=                                           | semimodule sequence/addition and branch join |
+| =C=         | generated constraints                                       | solved after inference, never a term context |
+
+Effects and coeffects remain separate. Effects describe what a term does to
+its environment; quantitative usage describes what it requires from its
+environment. They interact through typing rules but are not forced into one
+algebra.
+
+* Function Types
+:PROPERTIES:
+:ID: monadc.context.type-theory.arrows
+:CUSTOM_ID: graded-effectful-arrows
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Authoritative arrow types carry binder quantities and inferred effects.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-30
+:CONTEXT_UPDATED: 2026-07-30
+:CONTEXT_STATUS: active
+:SOURCE: types.h,infer.c,qtt/README.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.type-theory.graded-arrow-2026-07-30 src:qtt/README.org,types.h conf:high]
+  The target authoritative function type is:
+
+  =(x :^q A) →{ε} B=
+
+  Quantity =q= belongs to the binder, not nominal =A=. Effect row =ε= belongs
+  to function application. Inference may omit both from source syntax, but
+  interfaces and diagnostics must be able to print them.
+
+The current =TYPE_ARROW= carries only parameter and result types. The current
+QTT scheme carries correlated grades beside it. Migration must preserve HM
+  principal inference while making grade/effect compatibility a type-checking
+  obligation. Adding fields without changing application checking does not meet
+  this milestone.
+
+[DEC id:dec.type-theory.quiet-bracket-effect-arrow-2026-08-03 src:user-request,context/type-theory.org conf:high]
+  Ordinary Monad source keeps the value type visually primary and relies on
+  inferred effects, so definitions normally remain =read :: () -> String=.
+  When an explicit contract or elaborated/tooling view is requested, the
+  preferred effect-arrow spelling is =A -[epsilon]-> B=, for example
+  =() -[io.read]-> String=. Empty effects remain quiet, and the older
+  =A -{epsilon}-> B= presentation is not the chosen surface syntax. Dense
+  higher-order effect variables belong primarily in interfaces and inspection
+  tooling; source annotations are optional checking assertions at abstraction
+  boundaries rather than mandatory decoration.
+
+[DEC id:dec.type-theory.compact-unbracketed-effect-arrow-2026-08-03 src:user-request,context/type-theory.org conf:high]
+  This decision supersedes the bracket spelling in
+  =dec.type-theory.quiet-bracket-effect-arrow-2026-08-03=. An explicit or
+  elaborated effectful arrow uses the compact form =A -epsilon-> B=, for
+  example =a -io.read-> b=. Ordinary inferred source remains =A -> B=; the
+  effect spelling is shown only for intentional contracts or inspection.
+
+[DEC id:dec.type-theory.core-owned-effect-vocabulary-2026-08-03 src:user-request,effects/README.org conf:high]
+  Core owns the declarative effect vocabulary, operation signatures, handler
+  APIs, and trusted primitive contracts as far as bootstrapping permits. The
+  compiler owns a generic row/effect-expression calculus, elaboration,
+  constraint solving, evidence verification, and lowering; it must not encode
+  an indefinitely growing closed list of language effects or recognize
+  ordinary core function names to assign semantics. Irreducible runtime/ABI
+  primitives expose typed declarations that core wraps. Core compilation is
+  the proof-of-existence test that the public effect model is expressible in
+  Monad itself.
+
+* Layered and Contextual Modal Types
+:PROPERTIES:
+:ID: monadc.context.type-theory.layers
+:CUSTOM_ID: layered-contextual-modal-types
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Stage-safe quotation uses closed or explicitly contextual code.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-30
+:CONTEXT_UPDATED: 2026-07-30
+:CONTEXT_STATUS: active
+:SOURCE: TODO.org,etc/pdfs
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.type-theory.contextual-code-2026-07-30 src:context/type-theory.org conf:high]
+  Do not admit unrestricted =box= introduction from an arbitrary object
+  context. Closed code requires an empty object context:
+
+  =Σ ; Ψ | · ⊢ℓ+1 M : A ! ∅ ▷ ·=
+  =────────────────────────────=
+  =Σ ; Ψ | Γ ⊢ℓ box M : □A ! ∅ ▷ ·=
+
+  Open code uses a contextual type =[Γc]A= and explicit substitution. Captured
+  resources, effects, and layers must remain visible in the contextual
+  environment.
+
+Quotation and splicing receive explicit adjacent-layer rules before arbitrary
+natural-number layer polymorphism. =◇A= is reserved until its logic is fixed;
+effectful suspension should initially be represented as a computation/thunk
+carrying =ε= rather than conflated with modal possibility or unrestricted
+=eval=.
+
+Research anchors:
+
+- Davies and Pfenning, /A Modal Analysis of Staged Computation/;
+- Nanevski, Pfenning, and Pientka, /Contextual Modal Type Theory/:
+  https://www.cs.cmu.edu/~fp/papers/cmtt05.pdf
+- Moon, Eades, and Orchard, /Graded Modal Dependent Type Theory/:
+  https://arxiv.org/abs/2010.13163
+
+* Inferred Effect System
+:PROPERTIES:
+:ID: monadc.context.type-theory.effects
+:CUSTOM_ID: inferred-effects
+:CONTEXT_KIND: design
+:CONTEXT_DESCRIPTION: Quiet row-polymorphic effect inference supporting resource safety.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-30
+:CONTEXT_UPDATED: 2026-07-30
+:CONTEXT_STATUS: active
+:SOURCE: context/memory.org
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.type-theory.inferred-effects-2026-07-30 src:user-request,context/memory.org conf:high]
+  Effects are inferred by default and quiet when empty. Source annotations are
+  optional documentation or checking contracts, not mandatory monadic syntax.
+  Begin with extensible rows over =state h=, =exn E=, =io=, =alloc r=, =ffi f=,
+  =div=, and =async=. Effect handlers or scoped elimination may remove labels
+  only under checked rules.
+
+Effect evidence is required for reclamation: erasure requires an empty
+observable effect; exceptions require cleanup edges; state and FFI affect
+alias/escape reasoning; async and control effects affect lifetimes.
+
+Research anchor:
+
+- Leijen, /Koka: Programming with Row-Polymorphic Effect Types/:
+  https://arxiv.org/abs/1406.2061
+
+* Ordered Roadmap
+:PROPERTIES:
+:ID: monadc.context.type-theory.roadmap
+:CUSTOM_ID: ordered-roadmap
+:CONTEXT_KIND: task
+:CONTEXT_DESCRIPTION: Dependency-ordered implementation and proof plan.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+codex
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-30
+:CONTEXT_UPDATED: 2026-07-30
+:CONTEXT_STATUS: active
+:SOURCE: context/type-theory.org
+:CONFIDENCE: high
+:END:
+
+1. [X] Specify and test a canonical inferred effect-row algebra: kinded
+   variables, deterministic normalization, unification, generalization, and
+   fresh instantiation.
+2. [X] Establish an executable coherence boundary between typed-Core
+   certificates and symbolic source usage.  The common first-order fragment is
+   differentially checked; =let=, closure, and application remain named
+   semantic boundaries rather than presumed equivalences.
+3. [X] Unify =let= by choosing and documenting one operational semantics,
+   proving its quantitative rule, and making both evaluators agree.
+4. [ ] Extend authoritative HM arrows to correlated binder-grade and effect
+   contracts; application checking consumes both.
+5. [ ] Move the current QTT source scheme from shadow verification into that
+   authoritative judgment for the supported pure fragment.
+6. [ ] Complete higher-order unification. Closure construction and fully
+   applied syntactic lambdas now agree with independently checked
+   capture/latent/domain premises. Extend the same evidence to indirect,
+   imported, returned-closure, and data-stored calls.
+7. [ ] Connect =exn/state/ffi= evidence to ownership cleanup, alias, escape,
+   and erasure gates.
+8. [ ] Define a two-layer closed quotation/splicing kernel and prove stage
+   preservation.
+9. [ ] Generalize closed =□A= to contextual code =[Γ]A= with typed explicit
+   substitutions and resource-aware environments.
+10. [ ] Add effectful suspension only after its distinction from code and modal
+   possibility is formal.
+11. [ ] Mechanize preservation, grade soundness, effect soundness, stage safety,
+   erasure, and Resource-IR lowering simulation for the accepted core.
+
+Exit criteria are executable laws plus compiler integration. Syntax, metadata
+fields, and maturity prose alone do not complete a roadmap item.
+
+[FIX id:fix.type-theory.effect-row-kernel-2026-07-30 date:2026-07-30 by:codex src:effects/effect.c,effects/effect.h,tests/test_qtt_effect.py conf:high]
+  The first inferred effect-row kernel implements deterministic multiset
+  normalization, duplicate labels, open tail variables, principal open-row
+  unification, occurs rejection, one-label handling, equality, formatting,
+  generalization, and fresh instantiation. The focused ASan/UBSan harness is
+  =python3 tests/test_qtt_effect.py=. This is algebraic infrastructure; HM
+  arrows do not yet carry or infer these rows.
+
+[DEC id:dec.type-theory.hybrid-inferred-capability-effects-2026-08-01 src:user-request,context/type-theory.org conf:high]
+  Monad uses inferred duplicate-label effect rows as its surface and interface
+  semantics, generative scoped capability identities in elaborated Core, and
+  explicit evidence passing in lower IR. Capability arguments are normally
+  synthesized rather than written. Effects are quiet when empty but remain
+  inspectable, serializable, and optionally constrainable at API boundaries.
+
+[DEC id:dec.type-theory.qtt-graded-resumptions-2026-08-01 src:user-request,context/type-theory.org conf:high]
+  Every effect operation carries an exact =N union {omega}= resumption grade:
+  zero is abortive, one is linear, finite =n= is finitely multi-shot, and
+  =omega= is unrestricted. This is the bridge between handler control flow and
+  ownership: captured unique resources may move through linear resumptions,
+  abort paths require cleanup, and multi-shot capture requires share/copy
+  evidence or rejection.
+
+[FIX id:fix.type-theory.structured-effect-atoms-2026-08-01 date:2026-08-01 by:codex src:effects/effect.h,effects/effect.c,tests/test_qtt_effect.py conf:high]
+  Effect rows now admit structural atoms carrying effect kind, constructor,
+  canonical type, generative capability, operation, scopedness, and exact QTT
+  resumption quantity. Equality, sorting, open-row unification, single-instance
+  handling, and stable fingerprints use these fields rather than display text.
+  Legacy labels remain a compatibility path during compiler migration.
+
+[DEC id:dec.type-theory.closed-effect-join-2026-08-01 src:context/type-theory.org conf:high]
+  Closed inferred effect rows form a join-semilattice. Their least upper bound
+  is multiset maximum, not concatenation: sequencing the same capability twice
+  does not claim two handler instances, while genuinely duplicated scoped
+  instances remain distinct. Thus =epsilon join epsilon = epsilon=, join is
+  commutative and associative, and branch/sequence composition has a canonical
+  order-independent summary. Open-row combination remains constraint solving,
+  not this closed operation.
+
+[FIX id:fix.type-theory.compositional-semantic-effects-2026-08-01 date:2026-08-01 by:codex src:effects/effect.c,effects/effect.h,qtt/semantic_ir.c,tests/test_qtt_effect.py,tests/test_qtt_semantic_ir.py conf:high]
+  Semantic IR now carries compositional effect judgments rather than isolated
+  intrinsic labels. Sequence, let, branches, writes, and other strict Core
+  constructs join child effects; lambda construction is pure; direct lambda
+  application includes its latent body effect. Verification independently
+  re-derives the closed-row judgment from typed Core and rejects disagreement.
+
+[FIX id:fix.type-theory.latent-effect-contracts-2026-08-01 date:2026-08-01 by:codex src:qtt/signature.c,qtt/signature.h,qtt/semantic_ir.c,qtt/module.c,tests/test_qtt_signature.py,tests/test_qtt_semantic_ir.py conf:high]
+  Derived callable signatures own canonical closed latent-effect rows and bind
+  their fingerprints into the complete contract identity. Validation derives
+  the row independently from typed Core. Named Semantic-IR calls import and
+  independently verify complete callee rows across arena boundaries. Unknown
+  named calls remain explicitly incomplete; recursive SCC inference, imported
+  scheme serialization, and indirect effect-bearing arrows are still open.
+
+[FIX id:fix.type-theory.recursive-effect-fixed-point-2026-08-01 date:2026-08-01 by:codex src:effects/effect.c,effects/effect.h,qtt/signature.c,qtt/module.c,tests/test_qtt_module.py conf:high]
+  Same-module named effects are solved by ascending Kleene iteration over the
+  finite closed-row join-semilattice. Mutually recursive SCCs propagate their
+  least latent rows independent of declaration order. Convergence is reported
+  separately from completeness, so missing or uncertified external calls
+  converge without being mislabeled pure. ANF validation consumes the same
+  environment-indexed derivation.
+
+[DEC id:dec.type-theory.effect-subsystem-boundary-2026-08-01 src:user-request,effects/README.org conf:high]
+  The effect algebra is a peer =effects/= subsystem. QTT owns integrations that
+  combine effects with grades, resumptions, ownership, callable contracts, and
+  Semantic IR. A temporary =qtt/effect.h= forwarding header preserves source
+  compatibility while new kernel clients include =effects/effect.h= directly.
+
+[FIX id:fix.type-theory.hm-effect-scheme-instance-2026-08-01 date:2026-08-01 by:codex src:infer.h,infer.c,effects/effect.h,effects/effect.c,tests/test_qtt_quantitative_instantiation.py conf:high]
+  HM type schemes retain a latent effect scheme and completeness witness beside
+  their grade scheme. Quantitative instantiation freshens type, grade, closure,
+  and effect variables in one inference context. Effect-scheme fingerprints
+  are alpha-invariant, while pure and effectful arrows remain distinct.
+
+[FIX id:fix.type-theory.canonical-arrow-effect-carrier-2026-08-02 date:2026-08-02 by:codex src:types.h,types.c,infer.c,qtt/type_identity.c,tests/test_qtt_hm_scheme.py,tests/test_qtt_type_identity.py conf:high]
+  The first core-wide effect-integration cycle gives every canonical
+  =TYPE_ARROW= stage an arena-independent serialized latent-effect scheme and
+  completeness witness. Structural equality, fingerprints, cloning, owned
+  destruction, and QTT type serialization preserve the contract. Installing
+  a complete per-stage callable contract synchronizes the solver-facing
+  compatibility vector into its corresponding arrow nodes, and HM scheme
+  deserialization reconstructs that vector from the canonical arrows.
+  Legacy saturated contracts attached to non-arrow compatibility schemes
+  remain accepted without forging structural evidence. Regression coverage is
+  =python3 tests/test_qtt_hm_scheme.py= and
+  =python3 tests/test_qtt_type_identity.py=.
+
+[FIX id:fix.type-theory.authoritative-arrow-effect-consumption-2026-08-03 date:2026-08-03 by:codex src:infer.c,tests/test_effect_source_inference.py,tests/test_qtt_hm_scheme.py,tests/test_qtt_quantitative_instantiation.py conf:high]
+  Application, higher-order callback substitution, partial application, and
+  combined quantitative instantiation now read latent stage effects from the
+  canonical =TYPE_ARROW= contract first. The legacy
+  =arrow_effect_schemes[]= vector remains a fallback oracle for unmigrated
+  producers. Polymorphic type substitution preserves arrow contracts, and
+  installing a structural contract copy-on-write clones borrowed type trees so
+  one scheme cannot overwrite another scheme's effects through shared type
+  nodes. Regression coverage proves an arrow-only effectful call, an
+  arrow-only curried partial application retaining its latent suffix, and
+  polymorphic effect-arrow instantiation.
+
+[FIX id:fix.type-theory.core-effect-declaration-kernel-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,codegen.c,core/Effect.mon,infer.c,tests/test_effect_declarations.py,tests/test_effect_source_inference.py conf:high]
+  The first core-ownership transfer introduces a generic =effect= declaration
+  form and an open declaration registry. =core/Effect.mon= now owns the public
+  names, operations, resumption quantities, scopedness, and current lowering
+  traits of the foundational effects. Source inference resolves inline
+  assembly to the structural =Core.Foreign.asm= declaration, with the legacy
+  =ffi= label retained only for bootstrap compatibility. Declaration identity
+  is stable, identical redeclaration is idempotent, and conflicting
+  redeclaration fails closed. The registry is still compiler-session state and
+  is not yet transported by module interfaces; allocation and mutation are
+  the next intrinsic migrations, and the closed lowering-kind enum remains a
+  deliberate frontier rather than a public effect vocabulary.
+
+[FIX id:fix.type-theory.portable-effect-declarations-2026-08-03 date:2026-08-03 by:codex src:qtt/interface.h,qtt/interface.c,qtt/compiler.h,qtt/compiler_module.c,codegen.c,main.c,infer.c,tests/test_qtt_interface.py,tests/test_effect_source_inference.py conf:high]
+  =.mqti= version 5 transports module-level effect declarations independently
+  of value contracts. Its declaration-section fingerprint covers ordered
+  names, lowering traits, stable constructor identities, operations, exact
+  resumption quantities, and scopedness; tampering fails closed. Compilation
+  records source declarations in their defining compiler module, and imports
+  reconstruct the declaration registry before value contracts are installed.
+  Interfaces from versions 1 through 4 remain readable with no declaration
+  evidence. Heap allocation and mutation now join structural
+  =Core.Alloc.heap= and =Core.State.write= atoms, completing the initial
+  intrinsic migration alongside =Core.Foreign.asm=; legacy labels remain only
+  bootstrap fallbacks. The remaining architectural frontier is replacing the
+  closed lowering-kind enum with open core-owned effect traits.
+
+[FIX id:fix.type-theory.open-effect-declaration-traits-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,codegen.c,core/Effect.mon,qtt/interface.c,qtt/compiler_module.c,tests/test_effect_declarations.py,tests/test_qtt_interface.py conf:high]
+  Effect declarations carry open core-owned trait names and expose exact
+  name-based membership. Unknown traits no longer make source declarations
+  malformed: =Core.Trace.emit= declares =telemetry= without a compiler enum
+  case. Version-6 interfaces fingerprint and transport traits; version-5
+  declarations remain readable through a legacy projection. Known trait names
+  still derive =QttEffectKind= solely for atom and version-2 scheme
+  compatibility. Moving canonical trait sets onto structural atoms is the
+  explicit remaining step before deleting that closed enum.
+
+[FIX id:fix.type-theory.atom-trait-identity-scheme-v3-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,tests/test_qtt_effect.py,tests/test_effect_source_inference.py conf:high]
+  Structural effect atoms carry canonical core-owned trait sets. Trait sets
+  participate in atom equality, deterministic ordering, semantic fingerprints,
+  row identity, copying, and owned destruction. Typed effect schemes now emit
+  =monad-effect-scheme-v3= and round-trip exact trait evidence. Version-2
+  schemes retain their historical fingerprint and remain readable; trait
+  membership for such atoms can be recovered through their stable imported
+  declaration rather than fabricating evidence into the old payload. The
+  closed kind field is now only a compatibility projection and is not a
+  complete effect identity.
+
+[FIX id:fix.type-theory.finite-trait-semilattice-normal-form-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,qtt/interface.c,tests/test_effect_declarations.py,tests/test_qtt_effect.py,tests/test_qtt_interface.py conf:high]
+  Trait annotations denote the free finite join-semilattice over trait names:
+  join is union, order is subset inclusion, and equality is modulo permutation
+  and duplication. A unique lexicographically sorted, duplicate-free normal
+  form is enforced at declaration, atom, fingerprint, scheme-v3, and interface
+  trust boundaries. Regression laws cover commutativity and idempotence by
+  proving reordered duplicate annotations have equal atoms, fingerprints, and
+  portable declarations. This is syntactic normalization only; future
+  core-declared trait implication forms a separate preorder and closure.
+
+[FIX id:fix.type-theory.core-trait-implication-preorder-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,codegen.c,core/Effect.mon,tests/test_effect_declarations.py conf:high]
+  Core source declares trait implications as directed edges. Their
+  reflexive-transitive closure is a preorder, computed by deterministic,
+  cycle-safe reachability with explicit shortest witness paths. Cycles are
+  accepted as semantic equivalence classes rather than changing syntactic atom
+  identity. Exact atom membership and implication-derived satisfaction remain
+  separate judgments. Interface persistence is intentionally not claimed in
+  this slice and is the next module-ownership obligation.
+
+[FIX id:fix.type-theory.portable-trait-preorder-axioms-2026-08-03 date:2026-08-03 by:codex src:qtt/interface.h,qtt/interface.c,qtt/compiler.h,qtt/compiler_module.c,codegen.c,main.c,tests/test_qtt_interface.py conf:high]
+  =.mqti= version 7 transports the canonical finite set of direct trait
+  implication axioms, not its redundant transitive closure. Lexicographic edge
+  ordering makes serialization and fingerprints independent of source order;
+  defining-module provenance participates in the fingerprint. Interface
+  verification rejects altered premises, consequences, or provenance before
+  imports reconstruct the session graph. Derived witness paths remain
+  deterministic proof terms computed from verified direct axioms.
+
+[FIX id:fix.type-theory.has-trait-three-valued-constraint-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,effects/constraints.h,effects/constraints.c,tests/test_effect_trait_constraints.py conf:high]
+  =HasTrait(epsilon,t)= is a first-class effect obligation with statuses
+  proved, residual, and refuted. A known atom whose trait implies =t= proves
+  the judgment and supplies a deterministic shortest witness. Closed absence
+  refutes it; open-tail absence remains residual. Certificate verification
+  re-evaluates the proposition. Version-2 portable certificates encode
+  canonical =has-trait= obligations while version 1 remains stable for older
+  constraint kinds.
+
+[FIX id:fix.type-theory.qualified-effect-hm-scheme-v2-2026-08-03 date:2026-08-03 by:codex src:infer.h,infer.c,tests/test_qtt_hm_scheme.py conf:high]
+  HM scheme version 2 transports a canonical finite predicate context of
+  =HasTrait(epsilon_i,t)= obligations indexed by arrow stage. Predicates are
+  normalized, sorted by stage then trait, deduplicated, and rejected when the
+  stage is outside the scheme's arrow spine. Clone and owned destruction
+  preserve the context. Instantiation reconstructs each fresh stage row and
+  emits the same first-class three-valued constraint used by the kernel.
+  Predicate-free schemes remain version 1. Source syntax is intentionally a
+  subsequent elaboration boundary rather than part of the portable model.
+
+[FIX id:fix.type-theory.qualified-effect-application-2026-08-03 date:2026-08-03 by:codex src:infer.c,tests/test_effect_source_inference.py conf:high]
+  Source-effect application consumes each qualified predicate only when its
+  indexed arrow stage is reached. The predicate is imposed on the identical
+  fresh row whose latent effects enter the application summary, preserving
+  row-variable correlation. Closed absence refutes the judgment, open-tail
+  absence remains residual, and a core-owned trait implication can turn the
+  same application into a proved judgment without compiler vocabulary changes.
+  Surface syntax for constructing qualified schemes remains a later boundary.
+
+[FIX id:fix.type-theory.qualified-effect-residual-projection-2026-08-03 date:2026-08-03 by:codex src:infer.h,infer.c,tests/test_qtt_hm_scheme.py,tests/test_effect_source_inference.py conf:high]
+  For a partial application consuming =k= arrow domains, predicate contexts
+  are acted on by =P_k(Delta)={(i-k,t) | (i,t) in Delta, i>=k}=. Thus reached
+  predicates are discharged exactly once and residual predicates retain their
+  meaning under the shifted arrow spine. The projected context is owned by the
+  expression judgment and transported through callable contracts, their
+  fingerprinted version-2 representation, and reconstructed HM schemes.
+  Predicate-free callable contracts remain byte-compatible version 1. A
+  residual alias regression proves the predicate fires at the later call.
+
+[FIX id:fix.type-theory.lossless-effect-arrow-labels-2026-08-03 date:2026-08-03 by:codex src:types.h,types.c,infer.c,qtt/type_identity.c,tests/test_qtt_hm_scheme.py,tests/test_qtt_type_identity.py conf:high]
+  Compact arrows =A -e-> B= and =A -io.read-> B= carry a lossless source
+  effect label on the arrow node. The parser does not guess whether a label is
+  a concrete core declaration or a quantified row binder; that distinction is
+  an elaboration judgment. Labels participate in structural equality and
+  fingerprints and survive cloning, HM substitution, printing, and portable
+  QTT type serialization. This is the syntax substrate for a later lexical
+  row-binder and qualification elaborator; it does not equate repeated labels
+  by string coincidence inside the solver.
+
+[FIX id:fix.type-theory.reader-effect-arrow-token-2026-08-03 date:2026-08-03 by:codex src:reader.h,reader.c,env.c,tests/effect_arrow_reader.mon conf:high]
+  The ordinary reader recognizes =-name->= as a dedicated effect-arrow token,
+  records its label on the preceding function parameter, and transfers it to
+  the matching arrow node during HM signature construction. AST clone, print,
+  and destruction guard this optional metadata with an explicit lambda-level
+  ownership marker so legacy/generated parameters cannot expose uninitialized
+  fields. This proves the public reader boundary while leaving Wisp lowering,
+  lexical row environments, and qualification clauses for subsequent slices.
+
+[FIX id:fix.type-theory.wisp-effect-arrow-preservation-2026-08-03 date:2026-08-03 by:codex src:wisp.c,reader.c,tests/effect_arrow_wisp.mon,tests/test_effect_arrow_syntax.py conf:high]
+  Wisp arrow-signature splitting recognizes both ordinary and compact labeled
+  separators. It returns domain types and effect labels as parallel vectors,
+  then emits every label immediately after the generated domain parameter.
+  Thus stage association is preserved through Wisp lowering rather than
+  encoding an effect name into an unrelated type string. A two-stage public
+  fixture proves =e= and =io.read= both reach the fingerprinted QTT type in the
+  generated interface.
+
+[FIX id:fix.type-theory.lexical-effect-row-identity-2026-08-03 date:2026-08-03 by:codex src:infer.c,tests/test_effect_source_inference.py conf:high]
+  Within one application, equal arrow labels denote one instantiated effect
+  row. For reached stages =i,j= with the same name, elaboration emits
+  =epsilon_i = epsilon_j= into the certified constraint set. A minimal
+  spanning basis uses the first prior occurrence, so =n= occurrences require
+  =n-1= obligations rather than a quadratic clique. The rule is applied by
+  both standalone source-effect derivation and fused HM/effect inference.
+  Incompatible closed stages are rejected; distinct labels remain independent.
+  Capturing this shared instance across a partial-application boundary remains
+  the next existential-environment rule.
+
+[FIX id:fix.type-theory.partial-effect-row-capture-2026-08-03 date:2026-08-03 by:codex src:infer.c,tests/test_effect_source_inference.py conf:high]
+  Partial application retains residual rows in the application judgment until
+  its complete equality constraint set has solved. Reached and residual stages
+  sharing a lexical label are related before generalization. Only afterward is
+  each residual row existentially generalized into the returned callable
+  contract. Thus =f a= can refine an open residual =e= to the closed row learned
+  at an earlier =-e->= stage, and that refinement survives contract ownership,
+  aliasing, and the later invocation. Callable-parameter dependencies and
+  coverage gaps are preserved when the refined scheme is rebuilt; stale
+  pre-refinement certificates are deliberately not copied.
+
+[FIX id:fix.type-theory.lexical-effect-environment-2026-08-03 date:2026-08-03 by:codex src:effects/effect.c,effects/effect.h,infer.c,tests/test_effect_declarations.py,tests/test_effect_source_inference.py conf:high]
+  Application elaboration now has an executable lexical effect environment
+  =Xi=. Resolution is =Xi(label)=Declaration(d)= when the label is an exact
+  registered name or a unique compact =trait.operation= projection supplied
+  by Core metadata. A simple unresolved identifier becomes =RowVar(label)=.
+  Missing or ambiguous dotted references fail closed. For a declaration,
+  elaboration constructs its structural singleton row and emits equality with
+  the instantiated arrow stage. Thus =io.read= contains no compiler-owned
+  knowledge of IO: it resolves uniquely from a declaration carrying trait
+  =io= and operation =read=. Both source-effect and fused application paths
+  enforce the resulting obligation.
+
+[FIX id:fix.type-theory.definition-effect-contract-check-2026-08-03 date:2026-08-03 by:codex src:infer.h,infer.c,env.c,tests/test_effect_arrow_syntax.py conf:high]
+  Explicit arrow effects are checked at definition elaboration before a scheme
+  enters the lexical environment or portable interface. The inferred ordered
+  stage rows are instantiated together, then =Xi= contributes concrete-row
+  equalities and repeated binders contribute lexical equalities to one
+  certified constraint problem. Rejection identifies the one-based arrow
+  stage and source label at the definition. This closes the previous temporal
+  gap where an inconsistent contract could be exported and fail only when
+  called. Concrete declaration annotations use exact row equality. The
+  subsequent qualified-row milestone gives lexical binders an explicit
+  subeffecting rule rather than weakening concrete checking accidentally.
+
+[FIX id:fix.type-theory.qualified-effect-surface-2026-08-03 date:2026-08-03 by:codex src:reader.h,reader.c,wisp.c,infer.h,infer.c,env.c,core/Effect.mon,tests/test_effect_arrow_syntax.py,tests/test_effect_source_inference.py conf:high]
+  Source signatures accept canonical predicates =where e has t=, with comma or
+  =and= separating multiple predicates. Reader AST ownership, cloning,
+  destruction, and printing preserve the context; inline Wisp signatures lower
+  to the identical ordinary form. Elaboration maps every row name to all arrow
+  stages carrying that label, rejects unbound names, then installs normalized
+  stage-indexed =HasTrait(epsilon_i,t)= predicates in the existing HM and
+  callable-contract model.
+
+  This milestone also refines lexical arrow semantics. For an inferred
+  implementation row =delta_i= and lexical binder =e=, elaboration creates one
+  shared open row =epsilon_e= and emits =delta_i subseteq epsilon_e=. Concrete
+  declaration labels retain exact equality. Thus a pure implementation can
+  inhabit =A -e-> B where e has io= under the qualified premise, while calls
+  must discharge =HasTrait(epsilon_e,io)=. Solver refinement preserves known
+  implementation effects, and rebuilding the generalized stage preserves
+  higher-order callable-parameter dependencies. Core exports
+  =effect-qualified-id= as a proof that the surface language produces portable
+  HM-v2 and callable-contract-v2 evidence without compiler-owned trait names.
+
+[FIX id:fix.type-theory.effect-contract-principality-and-import-2026-08-03 date:2026-08-03 by:codex src:tests/test_effect_arrow_syntax.py conf:high]
+  Qualified row predicates are alpha-stable and order-independent at the
+  portable boundary: permutations of the same =HasTrait= context serialize to
+  identical HM and callable-contract payloads. A qualified import followed by
+  a wrapper definition preserves the public HM scheme and its normalized
+  stage predicate exactly. Callable evidence is intentionally not required to
+  have the same fingerprint: it also certifies the inferred implementation,
+  so a pure provider under an open allowance and a wrapper that invokes it are
+  distinct proofs of the same public scheme.
+
+[FIX id:fix.type-theory.source-free-effect-contract-replay-2026-08-03 date:2026-08-03 by:codex src:main.c,tests/test_effect_arrow_syntax.py conf:high]
+  A source-free callable import is admitted from object =O= and interface =I=
+  exactly when =I= is structurally valid, names the requested module, and
+  =artifact(I) = fingerprint(O)=. The loader reconstructs only exports with a
+  complete certified ABI signature and installs their portable HM/effect
+  schemes. Interface tampering and object substitution are rejected. Metadata
+  absent from =I= is not guessed, establishing a monotone trust boundary for
+  later layout, typeclass, macro, and FFI manifests.
+
+[FIX id:fix.type-theory.graded-handler-admission-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,tests/test_qtt_effect.py conf:high]
+  The executable handler premise for an operation resuming =q= times is
+  =q*u <= a=, where =u= is per-resumption continuation demand for a captured
+  resource and =a= is its allowance. Multiplication and order are those of
+  =N union {omega}=. A successful proof subtracts exactly one structural atom,
+  including capability identity; a failed grade premise leaves the row
+  untouched. This covers abortive, one-shot, finite, and unrestricted
+  resumptions without conflating operation multiplicity with row multiplicity.
+
+[FIX id:fix.type-theory.transactional-handler-set-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,tests/test_qtt_effect.py conf:high]
+  Multi-clause deep handlers elaborate transactionally. For distinct handled
+  atoms =E_i=, computation row =(multiset_i E_i) union epsilon=, and clause
+  effects =eta_i=, the output row is =epsilon join (join_i eta_i)=. Each clause
+  separately proves =q_i*u_i <= a_i=. Duplicate exact atoms are incoherent;
+  no partial residual authority is returned after any failed premise. A scoped
+  atom is forbidden in its own =eta_i=, expressing non-escape of the
+  generative capability. The proof fingerprint is invariant under permutation
+  of clauses and is accepted only by semantic replay.
+
+[FIX id:fix.type-theory.core-handler-profiles-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,codegen.c,core/Effect.mon,tests/test_effect_arrow_syntax.py conf:high]
+  Core may declare a named handler profile with =effect-handler h E u deep=.
+  Elaboration resolves =E= from the open declaration registry and requires
+  =u <= resumption(E)=. Unknown effects, excessive use, malformed quantities,
+  invalid depth flags, and conflicting same-name profiles are definition-local
+  errors. Profiles own public policy names; they are not compiler lowering
+  cases and do not yet constitute executable handler clauses.
+
+[FIX id:fix.type-theory.portable-handler-authority-2026-08-03 date:2026-08-03 by:codex src:qtt/interface.h,qtt/interface.c,qtt/compiler.h,qtt/compiler_module.c,main.c,effects/effect.h,effects/effect.c,tests/test_qtt_interface.py,tests/test_effect_arrow_syntax.py,tests/test_qtt_effect.py conf:high]
+  Interface v8 transports Core handler profiles in a fingerprinted canonical
+  section. Decoding first reconstructs effect declarations, then accepts a
+  profile only if its referenced declaration is present and
+  =usage <= resumption=. Source and source-free imports consequently install
+  identical handler authority. Tampering with a profile or its containing
+  object/interface binding fails closed.
+
+  A handler derivation serializes separately as =monad-handler-proof-v2= with
+  clause count and semantic, residual-row, and output-row fingerprints. Replay
+  reconstructs the transactional handler judgment and requires equality of
+  all four fields. The portable text is evidence, not an instruction to lower
+  an unverified handler.
+
+[FIX id:fix.type-theory.effect-computation-core-2026-08-03 date:2026-08-03 by:codex src:qtt/core.h,qtt/core.c,qtt/core_usage.c,qtt/demand.c,qtt/closure_policy.c,qtt/semantic_anf.c,qtt/signature.c,tests/test_qtt_core.py conf:high]
+  Algebraic operation introduction and elimination are distinct typed-Core
+  constructors. =perform E v= carries a nominal occurrence capability
+  =cap(module, E, position)= and its argument; =handle H c h= carries a
+  separately tagged profile capability, computation, and clause. Capability
+  identity is deterministic but module-generative, preventing pointer identity
+  or cross-module coincidence from entering proof fingerprints.
+
+  Every resource-sensitive traversal is structural over these constructors.
+  Operation introduction inherits argument demand. Handler construction
+  sequences computation and clause demand, conservatively treats result origin
+  as unknown, and commits both children plus nominal authority into demand
+  evidence. Runtime dispatch and resumption conversion are not derivable from
+  these nodes alone: elaboration must next resolve Core authority and attach a
+  replayed handler certificate before backend lowering is admissible.
+
+[FIX id:fix.type-theory.certified-core-effect-elaboration-2026-08-03 date:2026-08-03 by:codex src:qtt/core_effect.h,qtt/core_effect.c,qtt/core.h,qtt/core.c,qtt/demand.c,infer.c,core/Effect.mon,tests/test_qtt_core_effect.py,tests/test_effect_source_inference.py conf:high]
+  Typed-Core effect elaboration resolves operation introduction from the open
+  declaration environment and constructs the exact atom =E#cap=. For the
+  first single-operation elimination rule, a Core profile =H=(E,u,deep) and
+  capture allowance =a= admit =handle H (perform E v) h= precisely when the
+  transactional kernel proves =resumption(E)*u <= a=. The resulting row is
+  the computation residual joined with the clause row.
+
+  Success owns a portable proof whose verifier replays from the retained
+  computation row, clause row, atom, and quantities. The typed node records
+  resumption class and lowering depth; its authority fingerprint includes the
+  resolved constructor metadata and proof. Abortive and one-shot proofs have
+  distinct prospective lowering policies. Multi-shot and unrestricted proofs
+  are statically meaningful but explicitly non-executable until continuation
+  duplication has a resource-preserving semantics.
+  Attached handler evidence is affine: re-elaboration first revokes the old
+  witness and publishes a replacement only after the new judgment succeeds.
+
+[FIX id:fix.type-theory.abortive-handler-runtime-2026-08-03 date:2026-08-03 by:codex src:qtt/effect_runtime.h,qtt/effect_runtime.c,qtt/backend.h,qtt/backend.c,qtt/semantic_ir.h,qtt/semantic_ir.c,tests/test_qtt_effect_runtime.py,tests/test_qtt_semantic_ir.py conf:high]
+  A certified deep handler with =resumption(E)=0 admits a direct abortive
+  backend plan. Plan authority is the tuple of exact constructor, generative
+  capability, handler-authority fingerprint, portable-proof fingerprint,
+  operation node, and clause node. Both issuance and consumption replay the
+  semantic proof; equality of mutable plan bytes alone is insufficient.
+
+  Dynamic dispatch is lexical lookup over a strict frame stack and matches the
+  nominal pair =(constructor(E),cap(E))=. This realizes nearest matching
+  handler semantics while preventing same-constructor capability capture.
+  Frame push/pop enforce activation and LIFO well-bracketing. Since =q=0, no
+  continuation is captured or duplicated and the clause result is the handler
+  result. Semantic IR transports the same nominal authority and independently
+  rejects alteration. Policies with =q>0= remain inadmissible to this backend.
+
+[FIX id:fix.type-theory.abortive-handler-surface-2026-08-03 date:2026-08-03 by:codex src:infer.c,codegen.c,how_to/AbortiveEffects.mon,tests/test_effect_abortive_surface.py conf:high]
+  The initial source rule is homogeneous. Given payload =p:T=, clause
+  =h:T -> T=, a deep profile =H=(E,0,deep)=, and replayed elimination evidence,
+  =handle H (perform E p) h : T=. Since =resumption(E)=0=, operational lowering
+  is the direct equation =handle H (perform E p) h ==> h p=; it captures no
+  continuation and duplicates no resource.
+
+  This rule is admitted only after the typed-Core atom and portable proof pass
+  backend certification. An unhandled perform, a mismatched clause, absent
+  authority, or any positive resumption quantity fails closed. The homogeneous
+  restriction was the explicit Cycle-122 boundary and is superseded by the
+  typed-operation rule below; the compiler still must not invent signature
+  components merely from a handler use.
+
+[FIX id:fix.type-theory.typed-operation-signatures-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,core/Effect.mon,infer.c,qtt/core_effect.c,qtt/interface.c,qtt/compiler_module.c,how_to/AbortiveEffects.mon,tests/test_effect_declarations.py,tests/test_qtt_interface.py,tests/test_effect_abortive_surface.py,tests/test_effect_arrow_syntax.py conf:high]
+  Core-owned operation declarations now carry a partial function signature
+  =E : P -> R=. Introduction is the judgment
+  =Gamma |- p : P / Gamma |- perform E p : R ! {E}=. For an abortive deep
+  profile =H=(E,0,deep)=, elimination requires =Gamma |- h : P -> R= and has
+  =Gamma |- handle H (perform E p) h : R=. Thus payload and result types are
+  independent; the previous homogeneous =T -> T= approximation survives only
+  as compatibility behavior for legacy untyped declarations.
+
+  The declaration registry, compiler-module cache, and version-9 portable
+  interface all deep-own both canonical type names. They participate in
+  declaration equality and the declaration-section fingerprint, so changing
+  either type invalidates imported authority. Source-free imports reconstruct
+  the same signature before inference. Typed-Core elaboration independently
+  checks the argument, operation result, clause arrow, and handler result
+  against Core authority before proof issuance and backend certification.
+
+  This is intentionally a first-order signature kernel. Higher-rank operation
+  schemes, quantified result variables, indexed operations, and answer-type
+  modification require a canonical portable type-scheme representation rather
+  than unchecked textual substitution; they remain the next abstraction step.
+
+[FIX id:fix.type-theory.polymorphic-operation-schemes-2026-08-03 date:2026-08-03 by:codex src:infer.h,infer.c,effects/effect.h,effects/effect.c,codegen.c,qtt/interface.h,qtt/interface.c,qtt/compiler_module.c,qtt/core_effect.c,core/Effect.mon,how_to/AbortiveEffects.mon,tests/test_effect_abortive_surface.py,tests/test_effect_arrow_syntax.py,tests/test_qtt_interface.py conf:high]
+  Operation authority is now an HM scheme =forall alpha. P -> R= rather than
+  two independently interpreted type names. Lowercase variables in a Core
+  declaration are implicit universal binders. Serialization reuses the
+  alpha-canonical HM representation; consequently =String -> a= and
+  =String -> b= denote the same declaration, while every operation occurrence
+  receives a fresh substitution. Within one occurrence, repeated variables in
+  payload and result share that substitution.
+
+  Introduction instantiates once:
+  =sigma_E freshens to P[rho] -> R[rho]=, then requires
+  =Gamma |- p : P[rho]= and returns =R[rho] ! {E}=. Abortive elimination
+  instantiates a compatible occurrence and requires the clause
+  =P[rho] -> R[rho]=. This admits the conventional exception signature
+  =Core.Exception.raise : String -> a= without wrapping the computation in a
+  monadic constructor.
+
+  Interface v10 transports the canonical scheme as declaration authority.
+  Its internal HM fingerprint, structural arrow decoder, declaration-section
+  fingerprint, and object/interface binding are all checked before use.
+  Source-free replay has executable coverage at two different result types.
+  Typed-Core elaboration independently re-instantiates the scheme and checks
+  available concrete perform types before issuing effect evidence.
+
+  The remaining frontier is explicit higher-rank binders and constraints,
+  indexed/GADT operation results, and answer-type-modifying handlers. Those
+  require kinded operation binders and a handler judgment that is general over
+  nested computations rather than the current exact-operation surface slice.
+
+[FIX id:fix.type-theory.strict-abortive-contexts-2026-08-03 date:2026-08-03 by:codex src:qtt/core.h,qtt/core_effect.c,qtt/backend.h,qtt/backend.c,qtt/semantic_ir.c,codegen.c,how_to/AbortiveEffects.mon,tests/test_qtt_effect_runtime.py,tests/test_effect_abortive_surface.py conf:high]
+  Abortive elimination now selects one nominal operation inside a certified
+  strict Core evaluation context rather than requiring the computation itself
+  to be a =perform= node. For the executable fragment, contexts are generated
+  structurally by strict application positions, let value/body, sequence,
+  borrow body, and write value; lambda and nested-handler bodies are scope
+  boundaries. A matching operation in either conditional branch is rejected
+  until control-flow lowering can preserve path sensitivity.
+
+  The operational theorem is deliberately stronger than row elimination:
+
+  #+begin_src text
+  q(E) = 0    unique_E(K[perform E p])    pure(K)
+  ------------------------------------------------
+       handle H K[perform E p] h  ==>  h p
+  #+end_src
+
+  Typed elaboration may still prove subtraction of =E= while retaining other
+  effects in the residual row. Direct lowering, however, cannot erase such a
+  context: any structurally foreign operation or write makes =pure(K)= false
+  and backend certification fails with a distinct residual-context status.
+  Multiple matching occurrences also fail because a static choice would not
+  model evaluation order.
+
+  The selected operation and purity bit are not trusted annotations. Portable
+  proof verification re-traverses the computation, recounts the unique nominal
+  occurrence, checks branch admissibility, recomputes context purity, and
+  compares the selected node. The handler authority fingerprint binds this
+  result. Thus mutation between elaboration and lowering is detected, while
+  pure arithmetic around an abortive operation is safely discarded.
+
+[FIX id:fix.type-theory.core-application-latent-effects-2026-08-03 date:2026-08-03 by:codex src:effects/effect.h,effects/effect.c,qtt/core_effect.c,tests/test_qtt_core_effect.py conf:high]
+  Typed-Core application elaboration consumes the canonical latent-effect
+  scheme stored on every applied =TYPE_ARROW= stage. For
+  =f : A -epsilon-> B= and =Gamma |- x : A ! delta=, Core now derives
+  =Gamma |- f x : B ! (effects(f) join delta join epsilon)=. Multi-argument
+  application walks the curried arrow spine and imports every consumed stage,
+  rather than attributing only the final stage or treating named calls as pure.
+
+  The canonical scheme is deserialized and freshly instantiated into the
+  current Core effect arena. Malformed evidence fails elaboration closed with
+  the distinct =INVALID_CALL_EFFECT= judgment rather than becoming generic
+  invalid Core.
+  Abortive context certification independently scans the same arrow stages:
+  a non-empty latent row makes the context effectful, and an explicitly
+  incomplete contract is unsafe even when its currently known row is empty.
+  Thus row elimination may retain a named call's effect, but direct =q=0=
+  context erasure cannot discard it.
+
+  Missing arrow metadata remains a compatibility boundary rather than proof of
+  purity because bootstrap primitives do not all publish structural contracts
+  yet. Direct handler certification currently admits these primitives only via
+  the existing structural whitelist. The next ownership step is to give every
+  primitive/global callable a complete Core contract and then reject missing
+  metadata universally.
+
+[FIX id:fix.type-theory.global-call-authority-2026-08-03 date:2026-08-03 by:codex src:qtt/compiler.h,qtt/compiler_module.c,qtt/core.h,qtt/core.c,qtt/core_effect.c,qtt/backend.c,main.c,tests/test_effect_abortive_surface.py,tests/test_qtt_effect_runtime.py conf:high]
+  Global Core identifiers now snapshot callable authority from the compiler
+  module under the nominal key =(module-id, visible-name)=. The snapshot owns
+  the portable HM scheme, callable contract, and semantic contract fingerprint;
+  it therefore remains stable if the mutable module registry is later updated.
+  Applications prefer this authority over incidental source-node type metadata.
+
+  Portable imports install their ownership signature before their callable and
+  HM evidence in both qualified and unqualified namespaces. Registration no
+  longer depends on diagnostic tracing. Consequently a source-backed local
+  =A -io-> B= call and an interface-backed imported call yield the same Core
+  latent row and the same abortive-context rejection.
+
+  Core validates the callable-contract serialization against its semantic
+  fingerprint before consuming the HM arrow spine. Malformed or mismatched
+  authority fails as =INVALID_CALL_EFFECT=. Handler authority fingerprints now
+  recursively bind global contract text, its semantic fingerprint, the HM
+  scheme, and the containing application tree, so changing call authority
+  invalidates an already-issued backend plan.
+
+  Effect-trait predicates on open rows remain the next boundary: a constraint
+  such as =e has io= must be transported into the Core effect judgment rather
+  than approximated as a concrete label. Missing authority for legacy
+  primitives also remains temporarily admissible until bootstrap contracts are
+  complete.
+
+[FIX id:fix.type-theory.core-qualified-effect-obligations-2026-08-03 date:2026-08-03 by:codex src:infer.h,infer.c,qtt/core.h,qtt/core_effect.c,qtt/compiler_module.c,main.c,tests/test_effect_abortive_surface.py conf:high]
+  A callable contract may quantify an effect row while constraining an arrow
+  stage by a trait, represented canonically as =(i,tau)= for stage =i= and
+  trait =tau=. The owned v2 callable contract on a Core global is now consumed
+  as proof-relevant evidence. For an application supplying =n= arguments, the
+  active obligation set is
+
+  #+begin_src text
+  active(P,n) = { tau | (i,tau) in P and i < n }.
+  #+end_src
+
+  Abortive direct-context purity requires =active(P,n)= to be empty. This is
+  intentionally stage-sensitive: partially applying through stage =n-1= does
+  not execute a predicate attached to a residual stage =i >= n=, so the future
+  obligation remains latent on the returned arrow. Fully consuming a local or
+  imported =e has io= stage makes direct context erasure inadmissible even if
+  its presently known concrete row is empty.
+
+  The predicate vector is alpha-independent, canonically ordered by the HM
+  contract layer, included in the callable semantic fingerprint, validated on
+  Core consumption, and transitively bound into handler-plan authority through
+  the global/application fingerprint. This gives constraints operational force
+  without inventing an =io= operation occurrence or collapsing trait
+  entailment into nominal row membership.
+
+[FIX id:fix.type-theory.local-shadow-revokes-import-authority-2026-08-03 date:2026-08-03 by:codex src:qtt/compiler_module.c conf:high]
+  Replacing an imported alias with a local definition transactionally revokes
+  the provider identity, portable callable contract, semantic fingerprint, and
+  HM scheme together with the old implementation. Fresh local inference must
+  republish all evidence; stale imported authority may never survive shadowing.
+
+[FIX id:fix.type-theory.core-effect-constraint-judgment-2026-08-03 date:2026-08-03 by:codex src:effects/effect.c,effects/constraints.h,effects/constraints.c,qtt/core.h,qtt/core.c,qtt/core_effect.h,qtt/core_effect.c,tests/test_qtt_core_effect.py,tests/test_effect_abortive_surface.py conf:high]
+  Core effect elaboration now derives a pair =(epsilon,Phi)= rather than only a
+  row. Every consumed global arrow predicate =(i,tau)= contributes the
+  obligation =epsilon_i has tau= to =Phi=. Solving produces one of three
+  constructive outcomes:
+
+  #+begin_src text
+  Sigma ; Phi |- epsilon_i has tau  proved    -- concrete entailment
+  Sigma ; Phi |- epsilon_i has tau  residual  -- open existential row
+  Sigma ; Phi |- epsilon_i has tau  refuted   -- closed incompatible row
+  #+end_src
+
+  Proved and residual sets carry a replayable constraint certificate and a
+  canonical fingerprint in =QttCoreEffectResult=. Refutation fails elaboration
+  as =INVALID_CALL_EFFECT=. Verification recomputes both the certificate and
+  fingerprint; predicate stage/name vectors also participate directly in Core
+  authority hashing.
+
+  Incomplete serialized rows are opened with a fresh existential tail before
+  constraints are generated. In particular, an incomplete known-empty row is
+  not equated with the closed empty row: =exists rho. rho has io= is residual,
+  not false. Opening a closed scheme preserves every known atom and replaces
+  only its terminal empty row.
+
+  Abortive direct lowering remains stricter than logical consistency. A
+  residual or proved non-empty/qualified call can be well-typed while still
+  making its evaluation context operationally effectful, so context erasure
+  is rejected. Predicates on unapplied residual arrows generate no current
+  obligation.
+
+[FIX id:fix.type-theory.known-indirect-effects-2026-08-01 date:2026-08-01 by:codex src:qtt/semantic_ir.c,qtt/callable_env.h,tests/test_qtt_indirect_call.py conf:high]
+  Semantic IR and its independent verifier propagate latent effects through
+  exact lexical callable aliases reconstructed from typed-Core let bindings.
+  Unknown indirect calls remain rejected rather than approximated as pure.
+
+[FIX id:fix.type-theory.source-effect-derivation-2026-08-01 date:2026-08-01 by:codex src:infer.h,infer.c,env.c,tests/test_effect_source_inference.py conf:high]
+  Normal HM definition generalization attaches an inferred latent effect
+  scheme and completeness witness. Source rules compose mutation, heap
+  allocation, ASM/foreign execution, strict children, and complete callee
+  schemes; nested lambdas remain pure values. Unknown and partially applied
+  calls remain explicitly incomplete.
+
+[DEC id:dec.type-theory.partial-effect-conservative-2026-08-01 src:context/type-theory.org conf:high]
+  Until arrows carry per-domain latent rows, a saturated call imports its
+  scheme effect while partial application records only evaluation effects and
+  loses completeness. It must never eagerly claim the saturated effect or
+  certify the residual closure as pure.
+
+[FIX id:fix.type-theory.qtt-coherence-frontier-2026-07-30 date:2026-07-30 by:codex src:qtt/coherence.c,qtt/coherence.h,tests/test_qtt_coherence.py conf:high]
+  Typed-Core demand and symbolic usage now have a differential checker for
+  variables, constants, sequencing, and conditionals.  The checker reports
+  application as an explicit unproved boundary.  Graded =let= substitution and
+  closure construction were subsequently unified; a legacy application
+  certificate must not be cited as evidence for latent higher-order calls.
+
+[FIX id:fix.type-theory.direct-call-coherence-2026-07-30 date:2026-07-30 by:codex src:qtt/demand.c,qtt/coherence.c,tests/test_qtt_coherence.py conf:high]
+  The coherence frontier now includes fully applied syntactic lambdas.
+  Construction capture, one-invocation latent demand, and argument demand
+  scaled by independently derived domain grades are all explicit certificate
+  premises. Unknown and indirect calls remain the named frontier.
+* Kind discipline for qualified schemes
+
+Before type-class predicates become portable HM metadata, their constructor
+and argument kinds must be checked. The executable initial grammar is:
+
+#+begin_src text
+κ ::= Type | EffectRow | κ → κ | α
+#+end_src
+
+Kind unification is occurs-checked and transactional. Failed compound
+constraints must restore all speculative metavariable bindings. Serialization
+is restricted to closed solved kinds; compiler-local metavariables must never
+cross a module boundary. Predicate transport remains blocked until class
+constructors and every quantified HM binder carry evidence from this checker.
+* fix.type-theory.semantic-effect-judgment-transport-2026-08-03
+:PROPERTIES:
+:ID: fix.type-theory.semantic-effect-judgment-transport-2026-08-03
+:END:
+
+The proof-bearing effect judgment must cross compiler phase boundaries as an
+identity, not be reconstructed from diagnostic text.  For a certified root
+
+  Sigma ; Psi | Gamma |- t : A ! epsilon ; Phi
+
+Semantic IR records the tuple
+
+  (authority(t), fingerprint(epsilon), fingerprint(Phi), |Phi|, solve(Phi)).
+
+Acceptance additionally replays the retained Core-effect certificate.  Thus
+the tuple is a portable phase-boundary commitment, while replay remains the
+proof check; neither alone grants backend authority.  Backend handler plans
+bind both the handler proof fingerprint and the constraint-certificate
+fingerprint.  Substitution of either proof invalidates execution.
+
+Regression contracts:
+
+- =tests.test_qtt_semantic_ir= checks certified lowering and rejects mutation
+  of either the Semantic-IR judgment or its originating certificate identity.
+- =tests.test_qtt_effect_runtime= checks backend-plan constraint binding and
+  rejects a forged constraint fingerprint at dispatch.
+* fix.type-theory.interface-effect-judgment-v11-2026-08-03
+:PROPERTIES:
+:ID: fix.type-theory.interface-effect-judgment-v11-2026-08-03
+:END:
+
+Module interfaces version 11 transport an exported effect judgment as
+structured authority, independently of the legacy callable-contract string.
+For each exported contract the record contains
+
+  (fingerprint(epsilon), fingerprint(Phi), solve(Phi), [(stage, trait)]).
+
+Only =solved= and =residual= judgments are exportable: =rejected= is not a
+typing derivation and =out-of-memory= is not a semantic result.  A separate
+commitment hashes every component in order.  Import recomputes this commitment
+before granting authority, so mutation of a row fingerprint, constraint
+certificate, solver outcome, predicate stage, or predicate trait is rejected.
+Trait spellings exclude the format delimiters; the interface owns deep copies
+of all predicate names.
+
+Regression contract: =tests.test_qtt_interface= round-trips a residual
+two-stage predicate judgment and rejects a forged solver outcome.
+* fix.type-theory.production-structured-effect-authority-2026-08-03
+:PROPERTIES:
+:ID: fix.type-theory.production-structured-effect-authority-2026-08-03
+:END:
+
+Interface effect judgments become compiler authority only after the interface
+reader has verified their commitment.  The compiler registry then owns a deep
+copy of
+
+  (fingerprint(epsilon), fingerprint(Phi), solve(Phi), [(stage, trait)]).
+
+Core lowering consults this structured authority first.  Decoding predicates
+from the portable callable-contract string is retained only as compatibility
+for interfaces predating version 11.  The callable contract still supplies
+the latent row scheme; the structural interface record is authoritative for
+its qualified predicates.  Core authority fingerprints bind both commitments,
+the solver outcome, and the complete ordered predicate vector.  A local
+definition shadowing an import revokes all of these fields.
+
+Local export derives a residual predicate commitment from the canonical
+callable scheme: a nonempty staged predicate vector is =residual= until an
+application instantiates and solves it, whereas an empty vector is =solved=.
+
+Regression contract:
+=tests.test_effect_abortive_surface.AbortiveSurfaceTests.test_imported_qualified_effect_obligation_reaches_core=
+requires a production provider to emit the structured v11 judgment and its
+consumer to preserve the qualified obligation through Core.
+* fix.type-theory.local-effect-authority-coherence-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.local-effect-authority-coherence-2026-08-04
+:END:
+
+Local HM inference and v11 import now converge on one compiler-owned effect
+authority.  Registering a canonical callable scheme transactionally derives
+
+  C(Phi) = H(fingerprint(epsilon), |Phi|,
+             (stage_0, trait_0), ..., (stage_n, trait_n))
+
+and installs the tuple
+
+  (fingerprint(epsilon), C(Phi), solve(Phi), Phi).
+
+Here =solve(Phi)= is =residual= exactly when the latent scheme contains
+qualified predicates, otherwise =solved=.  Export serializes this stored tuple
+and never re-decodes the portable callable text.  Import registration accepts
+a v11 tuple only when its row fingerprint, commitment, result, predicate count,
+stages, and trait names agree with the canonical callable scheme.  Local
+callable installation is transactional: derivation failure revokes both
+callable and structured authority.  A mismatched imported tuple is denied and
+cannot replace the canonical authority derived from its callable scheme.
+
+Core may decode predicates from callable text only when no structured judgment
+exists, which is the compatibility rule for pre-v11 interfaces.
+
+Regression coverage:
+- local consumed qualification is rejected in an abortive context;
+- imported qualification is emitted structurally and reaches Core;
+- an unconsumed later stage remains latent under partial application.
+* fix.type-theory.fail-closed-v11-effect-import-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.fail-closed-v11-effect-import-2026-08-04
+:END:
+
+Version 12 establishes a total authority pair for callable exports:
+
+  callable-contract present  iff  effect-judgment present.
+
+Consequently a v12 callable record with =EFFECTJUDGMENT none= is malformed,
+not an invitation to reconstruct authority from text.  Earlier interface
+versions retain the compatibility path.  In particular v11 is the transition
+format that could encode the structural judgment but did not yet require the
+cross-record coherence law; it must not be mislabeled as v12 authority.
+
+After syntactic/interface commitment verification, external declaration must
+also discharge cross-record coherence against the canonical callable scheme.
+Failure is fatal and reported as
+
+  incoherent imported effect judgment: Module.symbol
+
+rather than ignored.  Qualified, unqualified, automatic Core, and interactive
+imports all propagate the declaration result.  Thus no executable module is
+constructed after advertised v11 authority fails installation.
+
+Regression contract: =tests.test_qtt_interface= replaces a valid v12 structural
+record with =EFFECTJUDGMENT none= and requires =QTT_INTERFACE_MALFORMED=.
+* fix.type-theory.open-row-handler-proof-v2-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.open-row-handler-proof-v2-2026-08-04
+:END:
+
+A handler judgment over an open computation row has the form
+
+  Gamma |- handle_c : <A, rho> => <A, rho'>
+
+where the residual tail is existentially bound.  Renaming that binder cannot
+change the derivation: if =alpha(rho) = rho*=, then the handler certificate for
+=rho= must replay for =rho*=.  Handler-proof v2 therefore fingerprints the
+sorted known atom prefix together with one bit distinguishing an open tail
+from a closed row.  It deliberately excludes the arena-local row-variable
+number.  Atom identities, multiplicities, clause grades, residual known
+prefix, and output known prefix remain committed.
+
+Version 1 certificates remain readable for closed-row compatibility.  Version
+2 is emitted for every new derivation and is the first portable handler proof
+whose evidence is alpha-invariant over open rows.
+
+Regression contract:
+=tests.test_qtt_core_effect.QttCoreEffectTests.test_application_imports_latent_arrow_effect_into_handler_context=
+replays a handler whose computation contains an incomplete known-empty latent
+row; =tests.test_qtt_effect= checks v2 emission, tamper rejection, and legacy v1
+decoding for a closed derivation.
+* fix.type-theory.v12-adversarial-cross-record-coherence-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.v12-adversarial-cross-record-coherence-2026-08-04
+:END:
+
+Internal checksum validity is necessary but not sufficient authority.  For a
+v12 export with callable scheme =S= and structural judgment =J=, import grants
+authority only when
+
+  decode(S) = (epsilon, Phi)
+  J = (fingerprint(epsilon), C(Phi), solve(Phi), Phi).
+
+This is a cross-record equality, independent of the commitment internal to
+=J=.  An attacker may replace =Phi= and recompute both =C(Phi)= and the
+interface judgment commitment; such a record is internally self-consistent
+but does not certify =S= and must be rejected before Core lowering.
+
+Regression contract:
+=tests.test_effect_abortive_surface.AbortiveSurfaceTests.test_v12_rejects_self_consistent_judgment_forged_against_callable=
+builds a provider/consumer artifact pair, replaces =io= by =telemetry=, repairs
+both checksums, and requires the production consumer to report an incoherent
+imported effect judgment.
+* fix.type-theory.constructive-lacks-and-exact-open-join-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.constructive-lacks-and-exact-open-join-2026-08-04
+:END:
+
+The constraint language now contains negative membership
+
+  a notin epsilon.
+
+Its information ordering is constructive: a known occurrence refutes it,
+closed absence proves it, and open-tail absence remains residual. Solving and
+certificate replay independently evaluate the proposition;
+=monad-effect-certificate-v3= is the first portable certificate shape that
+names a lacks obligation. This supplies the negative premise needed by future
+duplicate-free row extension and complete-handler elimination rules.
+
+Open-row join also preserves exact tail relationships whenever possible:
+
+  <L | rho> join K             = <L join K | rho>
+  <L | rho> join <K | rho>     = <L join K | rho>.
+
+Only two distinct unresolved tails require a fresh existential summary. This
+reduces needless loss of principality and makes same-tail composition stable
+under subsequent substitution.
+
+Regression contracts: =tests.test_effect_constraints= covers proved,
+refuted, residual, later-solved, formatted, and replayed lacks obligations;
+=tests.test_qtt_effect= checks single-tail and shared-tail preservation.
+* fix.type-theory.readable-core-effect-basis-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.readable-core-effect-basis-2026-08-04
+:END:
+
+=core/Effect.mon= is the standard effect basis rather than a compiler test
+fixture. It now states the combined QTT/effect judgment, latent-arrow reading,
+join, handling, and quantitative resumption equations before grouping the
+standard operations by runtime interaction, memory, control, and scope. The
+unrelated exported =effect-qualified-id= proof fixture was removed. The
+remaining positional declaration syntax is explicitly documented; a
+named-field surface form is a subsequent reader design task.
+
+Regression contract: compiling and testing =core/Effect.mon= under a fresh
+Core cache succeeds, and the declaration/source/syntax suites continue to
+resolve the standard basis.
+* fix.type-theory.read-only-semantic-effect-trace-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.read-only-semantic-effect-trace-2026-08-04
+:END:
+
+Effect rows are commutative typing summaries, not executable instruction
+lists. Ordered effect occurrences remain present in verified Semantic IR as
+=perform= and =handle= nodes carrying exact constructor and generative
+capability identities. =qtt_semantic_ir_effect_trace_format= exposes a
+deterministic read-only projection:
+
+  monad-effect-trace-v1
+  handle Core.Exception.abort capability=45
+  perform Core.Exception.raise constructor=9 capability=44
+
+The projection is diagnostic and owns no authority. Mutating Semantic IR or a
+future reified language value requires ordinary verification again; editing
+the printed trace cannot change a program. Effect-directed memoization should
+instead demand negative-effect proofs such as =io notin epsilon= and
+=state notin epsilon=, combined with QTT ownership/escape evidence.
+
+Regression contract: =tests.test_qtt_semantic_ir= checks stable event order,
+names, constructor identities, capability identities, and independent
+rejection of mutated Semantic IR.
+* fix.type-theory.first-production-core-io-boundary-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.first-production-core-io-boundary-2026-08-04
+:END:
+
+The first production Core IO boundary distinguishes exact implementation
+effects from portable API constraints. =System.Posix.Term.sys-read= and
+=sys-write= explicitly quantify a row satisfying =foreign= because their
+bodies execute inline assembly. Since Core declares =foreign => io=, the
+portable =IO= façade exposes rows satisfying =io= without falsely asserting
+that today's syscall body is the nominal =Core.IO.read= operation.
+
+Thus the abstraction relation is
+
+  HasTrait(epsilon, foreign)  foreign <= io
+  -------------------------------------------
+              HasTrait(epsilon, io).
+
+=IO.read-byte=, =write-byte=, and =write-text= retain explicit descriptors and
+return operating-system byte counts/status values. They do not wrap ordinary
+values in an IO container and do not allocate a reified instruction list.
+Their v12 interfaces transport the staged =io= predicate.
+
+Terminal line editing is factored as =Text.LineEditor=, a pure deterministic
+state transition module, and =IO.Readline=, which owns byte acquisition and
+terminal-mode lifecycle. The broken historical one-byte String constructor was
+not migrated: byte-to-Unicode decoding must become a separately validated IO
+layer. The recursive Readline kernel now carries the explicit contract
+
+  Int -> Int -> [Int] -io-> [Int].
+
+The apparent collection/effect-arrow failure was a partial-application parse:
+a line break ended the recursive call after its descriptor, giving the branch
+the residual type =Int -> ([Int] -e-> [Int])=. Collection indexing coercion is
+now restricted to a single pure arrow, so residual or effectful callables retain
+the direct collection-versus-function diagnostic instead of being rewritten
+into a misleading element-type error. This preserves the separation
+
+  erase(A -epsilon-> B) = A -> B
+
+while keeping effect evidence attached to the corresponding arrow stage.
+
+Above the raw integer-status primitives, =IOError= and the
+=read-byte-result=, =write-byte-result=, and =write-text-result= operations
+provide typed =Either IOError a= outcomes. Structured reads now consult
+=read-buf= directly: zero becomes =IOEndOfInput=, a negative result becomes
+=IOStatus n=, and one returns the byte. This avoids the older =read-char=
+boundary that collapses EOF and failure.
+
+Regression contract: =tests.test_core_io_effects= executes real read, byte
+write, text write, structured byte/EOF results, and Readline key acquisition
+through pipes; inspects v12 IO predicate artifacts; and enforces the
+pure/effectful module split.
+
+* fix.type-theory.compact-trait-arrows-and-nominal-results-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.compact-trait-arrows-and-nominal-results-2026-08-04
+:END:
+
+A descriptive compact label is surface sugar for one qualified row:
+
+  A -io-> B  ==  A -e-> B where e has io.
+
+This uses a syntactic namespace rather than a compiler enumeration: one-letter
+labels such as =e= are lexical row variables, while descriptive labels such as
+=io= and =state= are trait constraints. An exact registered declaration wins,
+and dotted operation references retain nominal resolution. Core still owns the
+meaning and implication graph of traits through declarations. Consequently
+single-trait APIs use the compact form, while =where= remains the explicit form
+for abstract or multiply constrained rows.
+
+Source ADT names are registered nominally during parsing, before HM and QTT
+function elaboration. Applied types such as =Either IOError Int= therefore
+serialize their actual local nominal identity rather than an unknown hole, and
+their effect contracts can be transported through module interfaces.
+
+Regression contracts are
+=test_declared_trait_label_is_single_constraint_shorthand=,
+=test_local_nominal_inside_applied_effect_result_is_portable=, and the named
+IO wrapper contracts in =tests.test_core_io_effects=.
+
+* fix.type-theory.ignored-unit-effect-entry-2026-08-04
+:PROPERTIES:
+:ID: fix.type-theory.ignored-unit-effect-entry-2026-08-04
+:END:
+
+An effectful entry point may use Unit as the domain to expose a nullary world
+transition, for example =() -io-> [Int]=. When that inhabitant is neither
+inspected nor forwarded, its clause binder is the wildcard:
+
+  define read-line :: () -io-> [Int]
+    _ -> read-line-with-saved (tty-cbreak-mode stdin)
+
+This is a quantitative statement, not merely a naming preference. The
+argument's demand is zero: the effectful computation is sequenced, while no
+value-level dependency on the Unit witness is introduced. A named binder is
+reserved for definitions that actually use or forward that binding.
+
+=()= is also the canonical source inhabitant of Unit. It lowers to the unique
+zero-valued =i8= ABI carrier rather than LLVM =void=, because Unit remains an
+ordinary first-class value that can be passed, returned, or placed in a
+polymorphic structure. The expression =(list)= remains the empty list; these
+two initial objects are syntactically and semantically distinct.
+
+Regression contracts: =tests.test_core_io_effects.CoreIOTests.test_io_modules_have_explicit_effect_boundaries=
+requires the wildcard and rejects the misleading named =unit= binder;
+=tests.test_core_io_console.CoreIOConsoleTests.test_unit_value_can_be_passed_to_a_unit_domain=
+executes the Unit inhabitant through a function domain.

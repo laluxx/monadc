@@ -6,9 +6,9 @@
 
 ;;; Commentary:
 
-;; Category describes identity arrows and right-to-left composition. Forward
-;; piping is the same operation with its arguments reversed and is therefore a
-;; shared default, not part of an instance's required implementation.
+ Category describes identity arrows and right-to-left composition. Forward
+ piping is the same operation with its arguments reversed and is therefore a
+ shared default, not part of an instance's required implementation.
 
 ;;; Code:
 

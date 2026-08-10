@@ -1,0 +1,296 @@
+#+TITLE: Monad Semantic Tooling — Lint, Format, Diagnostics, and LSP
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+
+* Next Cycle
+
+Status: paused while Core development resumes.
+
+The next tooling cycle builds the first compiler-semantic lint vertical slice:
+
+1. Introduce an immutable analysis snapshot shared by the compiler, linter,
+   formatter, and LSP.
+2. Give syntax nodes and resolved binders stable identities across the CST,
+   AST, inference, effect, QTT, and IR phases.
+3. Export resolved read/write-place facts for each mutable binder.
+4. Implement =correctness/prefer-immutable-binding=: when =x = value= creates
+   a mutable binder but complete resolved evidence proves that binder is never
+   written, explain the mismatch and propose =define x value=.
+5. Admit the automatic rewrite only after re-analysis proves preservation of
+   resolution, inferred type, effect scheme, QTT contract, and relevant IR
+   identity through the checked rewrite kernel.
+6. Make CLI diagnostics, JSON, LSP diagnostics, code actions, and fix previews
+   projections of that same evidence.
+
+Exit gate: shadowing, closure capture, projected writes, macro-origin writes,
+and incomplete imports cannot cause a false recommendation; CLI and LSP agree;
+safe-fix is idempotent; =monad lint core= and the full Core suite remain clean.
+
+Every completed tooling cycle updates this section before work stops. It must
+describe the next executable vertical slice, its proof obligations, and its
+exit gate rather than leaving the continuation only in conversation history.
+
+* Purpose
+
+This subsystem makes source tooling a checked consumer of the Monad compiler,
+not a parallel collection of text heuristics. The formatter, linter, command
+line compiler, and language server share syntax identity, semantic judgments,
+diagnostics, edits, configuration, and incremental query results.
+
+All implementation files owned by this subsystem live in =tooling/=. Root
+compiler phases may include its public headers and submit or consume evidence,
+but diagnostics, CST storage, lint rules, formatting, edit planning, policy, and
+incremental tooling queries must not grow parallel implementations elsewhere.
+
+* Authority and vocabulary
+
+The compiler owns one diagnostic protocol. Parser errors, type errors, effect
+notes, lint warnings, formatter explanations, and LSP code actions are views of
+the same =Diagnostic= evidence object. A producer may not invent an editor-only
+diagnostic representation or print an unstructured warning when the shared
+protocol can express it.
+
+Severity describes the language judgment:
+
+- =error=: the program or requested operation is invalid.
+- =warning=: the program is valid, but evidence establishes a likely defect or
+  a violated project policy.
+- =information=: useful semantic information with no defect claim.
+- =hint=: a local improvement whose value is contextual.
+
+CI policy may deny a warning and return failure, but promotion does not turn the
+underlying language judgment into an error. Notes are related evidence attached
+to a primary diagnostic rather than independent severity inflation.
+
+Every diagnostic records its phase, stable code, origin, source range,
+explanation, completeness proposition, and zero or more edits. Every edit has
+an applicability classification. Only machine-applicable edits participate in
+unattended =--fix=.
+
+* Core judgments
+
+Linting is a family of judgments over successively stronger compiler contexts:
+
+#+begin_example
+Source; Policy                         |- node => diagnostics
+CST; Policy                            |- node => diagnostics
+Gamma; Sigma; Type; Policy             |- node => diagnostics
+Gamma; Sigma; Type; Effects; QTT; Policy |- node => diagnostics
+#+end_example
+
+An analysis result is a pair =(facts, complete?)=. Convergence and completeness
+are distinct. Missing imported evidence may yield a stable result that is not
+strong enough to justify a semantic rewrite.
+
+* Binding mutability judgment
+
+Surface assignment and immutable definition are intentionally distinct:
+
+#+begin_src monad
+x = 2
+define y 2
+#+end_src
+
+The first elaborates to a mutable =var= binding. The second is an immutable
+=define=. For a binding identity =b=, mutation demand is computed from resolved
+write places, not spelling:
+
+#+begin_example
+writes(b) = { p | resolve(write-target(p)) = binder-id(b) }
+
+mutable(b) and writes(b) = empty
+  => correctness/prefer-immutable-binding
+#+end_example
+
+The default severity is =warning=: the program remains valid. The diagnostic
+explains that the mutable declaration advertises state that never occurs and
+offers a machine-applicable =define= rewrite only when re-resolution, typing,
+effects, and QTT evidence are unchanged. A project may deny the warning in CI.
+Shadowed names, captured bindings, projected writes, macro-origin writes, and
+unknown imported mutation prevent a completeness claim until their identities
+are resolved.
+
+* Executable laws
+
+The subsystem is governed by regression-tested laws:
+
+#+begin_example
+format(format(source, policy), policy) = format(source, policy)
+fix(fix(source, rule), rule)           = fix(source, rule)
+project(format(parse(source)))         = project(parse(source))
+comments(format(source))               = comments(source)
+incremental(source, delta)             = from-scratch(source + delta)
+diagnostics(CLI)                       = diagnostics(LSP)
+#+end_example
+
+Semantic equality initially means equality of resolved AST, inferred type,
+effect scheme, and QTT contract fingerprints. Each supported language fragment
+must state its boundary; unsupported constructs propagate incompleteness.
+
+* Roadmap
+
+** Cycle 0 — diagnostic calculus and executable laws
+
+- One compiler-owned diagnostic/evidence/edit protocol.
+- Stable phases, origins, applicability, and completeness.
+- Idempotent safe-fix and deterministic-output tests.
+- This roadmap and named authority boundaries.
+- Specify the mutable-but-unwritten binding judgment without approximating it
+  lexically.
+
+Exit gate: lint CLI and LSP consume shared diagnostics; safe fixes are
+idempotent; the compiler builds; Core lint remains clean.
+
+*** Cycle 0.1 — shared structured diagnostics
+
+The first vertical slice is implemented in =diagnostic.[ch]=. Diagnostics own
+their messages, explanations, completeness, primary location, related evidence,
+and a vector of independently ranged edits. Edits carry applicability rather
+than inheriting an unsafe blanket claim from the diagnostic. =DiagnosticSet=
+owns insertion and destruction, so producers do not maintain private vector or
+lifetime conventions.
+
+The lint JSON protocol exposes these edits and related locations directly. The
+LSP derives quick fixes from the same edit objects. The safe-fix regression
+checks the normalization law twice and proves that the second pass is a no-op.
+
+This is still a Cycle 0 slice: legacy parser, inference, optimization, and
+backend diagnostics that print directly to stderr must migrate to the shared
+producer before the authority boundary is complete.
+
+** Cycle 1 — lossless concrete syntax
+
+- Preserve every token, comment, delimiter, blank line, and malformed region.
+- Immutable shareable green nodes and positioned red views.
+- Project the CST into the existing compiler AST.
+- Prove byte round-trip over the reader corpus.
+
+*** Cycle 1.1 — lossless green token tape
+
+The first Cycle 1 slice is =cst.[ch]=. A document owns immutable source bytes
+and a contiguous token tape whose spans partition the source exactly. Trivia,
+newlines, line commentary, paragraph commentary, strings, characters,
+punctuation, atoms, and recoverable error tokens remain first-class. Tokens
+carry stable byte offsets plus one-based source positions.
+
+The executable contract in =tests/tooling_cst_test.c= checks:
+
+#+begin_example
+concat(tokenBytes(parse(source))) = source
+validate(parse(source))            = true
+fingerprint(parse(render(parse(source)))) = fingerprint(parse(source))
+#+end_example
+
+This tape is the leaf layer of the future immutable green tree; it is not yet a
+claim that delimiter grouping, incremental subtree reuse, or AST projection is
+implemented.
+
+*** Cycle 1.2 — delimiter structure and recoverable source projection
+
+Delimiter groups now form immutable-indexed structural nodes over token ranges.
+Parentheses, brackets, and braces retain parent identity and exact opening and
+closing token coverage. Unmatched closing delimiters become explicit error
+nodes; unclosed groups remain structurally present with =closed = false=. Both
+cases preserve exact rendering, so temporarily invalid editor buffers remain
+valid tooling inputs.
+
+=tooling_cst_validate= checks the structural invariants:
+
+#+begin_example
+root.range = [0, token-count)
+child.parent < child.index
+parent.first <= child.first < child.end <= parent.end
+token[i].offset = token[i-1].offset + token[i-1].length
+#+end_example
+
+The CST also owns the code projection used by bootstrap source lints. It masks
+commentary and quoted data while retaining byte positions and line endings.
+The former private mask scanner has been removed from the linter; this is the
+first shared CST consumer and prevents lexical rules from diverging between
+lint and future formatting/LSP analysis.
+
+** Cycle 2 — incremental analysis database
+
+- Stable file, module, definition, binder, and syntax identities.
+- Dependency-tracked queries for parsing, resolution, inference, effects, QTT,
+  lint facts, formatting, and LSP products.
+- Cancellation and immutable revision snapshots.
+- From-scratch consistency tests.
+
+** Cycle 3 — semantic lint phases
+
+- Resolved binding reads and writes.
+- Mutable-but-unwritten and immutable-write diagnostics.
+- Typed optional, match, exhaustiveness, and API rules.
+- Effect and QTT-aware recommendations with explicit completeness.
+
+** Cycle 4 — checked rewrite kernel
+
+- Preconditions, postconditions, edit overlap detection, and composition.
+- Safety lattice and transactional multi-file fixes.
+- Re-run semantic fingerprints after every claimed safe rewrite.
+
+*** Cycle 4.1 — immutable checked edit plans
+
+The first Cycle 4 slice is implemented in =rewrite.[ch]= and deliberately
+arrived before semantic fixes multiplied. A rewrite plan is derived from the
+shared diagnostic evidence, not from diagnostic presentation order. It:
+
+- admits only machine-applicable edits backed by complete evidence;
+- translates line/column spans against one immutable source revision;
+- sorts and deduplicates edits independently of producer order;
+- rejects overlapping or competing same-position insertions as a conflict;
+- fingerprints the source revision and rejects stale application;
+- constructs the complete output in a separate allocation before the caller
+  performs an atomic file replacement.
+
+This establishes the transactional part of the rewrite judgment:
+
+#+begin_example
+Evidence complete
+edits(Evidence) pairwise-compatible
+fingerprint(Source) = fingerprint(Plan)
+------------------------------------------------ rewrite-plan
+Source; Evidence |- Plan => Source'
+#+end_example
+
+The lint CLI now applies all safe fixes through this kernel. LSP quick fixes use
+the edit span rather than the wider diagnostic presentation span. The remaining
+Cycle 4 obligation is semantic validation: syntax, resolution, type, effect,
+and QTT fingerprints must be recomputed for rules that claim preservation at
+those phases.
+
+** Cycle 5 — algebraic formatter
+
+- Wadler-style document algebra implemented in C.
+- Deterministic costed layout selection.
+- Comment attachment and conservation.
+- Configurable map layouts, blank-line policies, doc widths, and stable minimal
+  edits.
+
+** Cycle 6 — typed Monad policy
+
+- Core-owned configuration schema evaluated by the normal compiler.
+- Associative layered overrides with provenance.
+- Policy fingerprints participate in incremental query identity.
+
+** Cycle 7 — documentation and commentary semantics
+
+- Checkdoc-inspired public documentation coverage and sentence discipline.
+- Type-aware parameter, predicate, optional-result, effect, and failure docs.
+- Module commentary requirements with explicit policy exceptions.
+
+** Cycle 8 — workspace refactoring and full Core gate
+
+- Cross-module evidence and multi-file edits.
+- LSP explanations, previews, suppressions, and fix-all operations.
+- =monad lint core=, =monad format --check core=, and Core tests become one
+  required completion gate.
+
+* Current boundary
+
+The current source rules are bootstrap producers using exact source ranges.
+They are not evidence of a completed CST or semantic query system. In
+particular, mutable-binding advice must not be implemented as a search for
+=set!= text: Cycle 3 consumes resolved binder identities and the compiler's
+write/place analysis.

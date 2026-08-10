@@ -4,7 +4,15 @@ libmonad.so
 libmonad.a
 *.a
 *.o
+*.mqti
+*.bad.ll
 **/*.ll
+/build/
+/how_to/AlgebraicDataTypes
+/how_to/Donut
+/how_to/FirstOrderModalLogic
+/how_to/ReaderSyntax
+/how_to/RunDonut
 tests/.test-results.json
 tests/codegen/rt_*
 tests/codegen/*.desugar

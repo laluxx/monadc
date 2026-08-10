@@ -6,15 +6,15 @@
 
 ;;; Commentary:
 
-;; Haskell-style enumeration vocabulary for the active core.  Enumeration is
-;; owned by the Enum typeclass: user-defined instances receive lawful defaults
-;; for stepping and finite ranges from their integer representation.  Int is a
-;; regular instance, not a set of functions shadowing the class methods.
-;;
-;; The representation equations are executable obligations. They compare the
-;; integer observations rather than requiring a separate Eq superclass: an
-;; Enum instance is coherent precisely when stepping agrees with its declared
-;; toEnum/fromEnum representation.
+ Haskell-style enumeration vocabulary for the active core.  Enumeration is
+ owned by the Enum typeclass: user-defined instances receive lawful defaults
+ for stepping and finite ranges from their integer representation.  Int is a
+ regular instance, not a set of functions shadowing the class methods.
+
+ The representation equations are executable obligations. They compare the
+ integer observations rather than requiring a separate Eq superclass: an
+ Enum instance is coherent precisely when stepping agrees with its declared
+ toEnum/fromEnum representation.
 
 ;;; Code:
 
@@ -25,6 +25,22 @@ module Data.Enum
    Bounded minBound maxBound
    range rangeBy]
 
+
+;;; Representation Predicates
+
+define enum-step-empty? :: Int -> Int -> Int -> Bool
+  start next end | (and (> next start) (> start end)) -> True
+  start next end | (and (< next start) (< start end)) -> True
+  _ _ _                                             -> False
+
+
+define enum-step-overshoots? :: Int -> Int -> Int -> Bool
+  start next end | (and (> next start) (> next end)) -> True
+  start next end | (and (< next start) (< next end)) -> True
+  _ _ _                                             -> False
+
+
+;;; Typeclasses
 
 class Enum a where
   toEnum         :: Int -> a
@@ -40,35 +56,22 @@ class Enum a where
   pred x ->
     toEnum ((fromEnum x) - 1)
 
-  enumFromTo start end ->
-    if (fromEnum start) > (fromEnum end)
-      (list)
-    else
-      if (fromEnum start) = (fromEnum end)
-        prepend start (list)
-      else
-        prepend start (enumFromTo (succ start) end)
+  enumFromTo start end | (fromEnum start) > (fromEnum end) -> (list)
+  enumFromTo start end | otherwise -> prepend start (enumFromTo (succ start) end)
 
-  enumFromThenTo start next end ->
-    if (fromEnum start) = (fromEnum next)
-      error "enumFromThenTo: zero step"
-    else
-      if ((fromEnum next) > (fromEnum start) and (fromEnum start) > (fromEnum end)) or ((fromEnum next) < (fromEnum start) and (fromEnum start) < (fromEnum end))
-        (list)
-      else
-        if ((fromEnum next) > (fromEnum start) and (fromEnum next) > (fromEnum end)) or ((fromEnum next) < (fromEnum start) and (fromEnum next) < (fromEnum end))
-          prepend start (list)
-        else
-          if (fromEnum next) = (fromEnum end)
-            prepend start (prepend next (list))
-          else
-            prepend start (enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end)
+  enumFromThenTo start next end | (fromEnum start) = (fromEnum next) -> error "enumFromThenTo: zero step"
+  enumFromThenTo start next end | enum-step-empty? (fromEnum start) (fromEnum next) (fromEnum end) -> (list)
+  enumFromThenTo start next end | enum-step-overshoots? (fromEnum start) (fromEnum next) (fromEnum end) -> prepend start (list)
+  enumFromThenTo start next end | otherwise -> prepend start (enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end)
 
   law successor-representation :: a -> Bool
     x -> (fromEnum (succ x)) = ((fromEnum x) + 1)
 
   law predecessor-representation :: a -> Bool
     x -> (fromEnum (pred x)) = ((fromEnum x) - 1)
+
+  law representation-idempotence :: a -> Bool
+    x -> (fromEnum (toEnum (fromEnum x))) = (fromEnum x)
 
   ;; minimal complete definition: toEnum and fromEnum
 
@@ -78,10 +81,14 @@ class Bounded a where
   maxBound :: a
 
 
+;;; Instances
+
 instance Enum Int
   toEnum x   -> x
   fromEnum x -> x
 
+
+;;; Finite Integer Ranges
 
 method range :: Int -> Int -> [Int]
   start end -> enumFromTo start end
@@ -114,6 +121,9 @@ tests
   assert-eq (show (enumFromThenTo 7 5 1)) "(7 5 3 1)"  "Enum stepped down"
   assert-eq (show (enumFromThenTo 1 3 2)) "(1)"        "Enum stepped up stops before overshoot"
   assert-eq (show (enumFromThenTo 7 5 6)) "(7)"        "Enum stepped down stops before overshoot"
+  assert-eq (show (enumFromThenTo 3 1 5)) "()"         "Enum descending step rejects an ascending interval"
+  assert-eq (show (enumFromThenTo 1 3 -1)) "()"        "Enum ascending step rejects a descending interval"
+  assert-eq (show (enumFromThenTo -5 -2 4)) "(-5 -2 1 4)" "Enum stepped ranges preserve negative values"
   assert-eq (show (range 2 5))            "(2 3 4 5)"  "Enum range"
   assert-eq (show (rangeBy 2 3 11))       "(2 5 8 11)" "Enum rangeBy positive"
   assert-eq (show (rangeBy 8 -2 2))       "(8 6 4 2)"  "Enum rangeBy negative"

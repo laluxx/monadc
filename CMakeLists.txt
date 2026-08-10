@@ -85,12 +85,55 @@ set(MONADC_COMPILER_SOURCES
   infer.c
   lsp.c
   lsp_repl.c
+  tooling/diagnostic.c
+  tooling/cst.c
+  tooling/rewrite.c
+  tooling/lint.c
   macro.c
   main.c
   module.c
   module_export.c
   optimizations.c
   pmatch.c
+  qtt/bindings.c
+  qtt/anf.c
+  qtt/backend.c
+  qtt/call.c
+  qtt/coherence.c
+  qtt/compiler.c
+  qtt/compiler_module.c
+  qtt/closure.c
+  qtt/closure_policy.c
+  qtt/constraints.c
+  qtt/core.c
+  qtt/core_effect.c
+  qtt/core_usage.c
+  qtt/demand.c
+  qtt/drop.c
+  effects/constraints.c
+  effects/effect.c
+  qtt/elaboration.c
+  qtt/environment.c
+  qtt/effect_runtime.c
+  qtt/eval.c
+  qtt/evidence.c
+  qtt/graded.c
+  qtt/interface.c
+  qtt/kind.c
+  qtt/quantity.c
+  qtt/pipeline.c
+  qtt/place.c
+  qtt/resource.c
+  qtt/rules.c
+  qtt/semantic_ir.c
+  qtt/semantic_closure.c
+  qtt/semantic_anf.c
+  qtt/rir.c
+  qtt/signature.c
+  qtt/signature_env.c
+  qtt/module.c
+  qtt/type_identity.c
+  qtt/usage.c
   reader.c
   reader_syntax.c
   repl.c
@@ -98,6 +141,7 @@ set(MONADC_COMPILER_SOURCES
   types.c
   typst_emit.c
   wisp.c
+  wisp_syntax_policy.c
 )
 
 if(WIN32)
@@ -141,6 +185,27 @@ if(NOT WIN32)
 endif()
 
 enable_testing()
+
+add_executable(tooling_cst_test
+  tests/tooling_cst_test.c
+  tooling/cst.c
+)
+target_include_directories(tooling_cst_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/tooling
+)
+target_compile_options(tooling_cst_test PRIVATE ${MONADC_WARNING_FLAGS})
+add_test(NAME tooling_cst_roundtrip COMMAND tooling_cst_test)
+
+add_executable(tooling_rewrite_test
+  tests/tooling_rewrite_test.c
+  tooling/diagnostic.c
+  tooling/rewrite.c
+)
+target_include_directories(tooling_rewrite_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/tooling
+)
+target_compile_options(tooling_rewrite_test PRIVATE ${MONADC_WARNING_FLAGS})
+add_test(NAME tooling_checked_rewrite COMMAND tooling_rewrite_test)
 
 add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)
 add_test(

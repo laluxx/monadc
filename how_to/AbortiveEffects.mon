@@ -1,0 +1,34 @@
+;;; AbortiveEffects.mon --- First executable algebraic-effect handler
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "effects handlers abortive"
+
+;;; Commentary:
+
+;; A -e-> B is the canonical computation type. Abortive operations have
+;; resumption quantity zero, so their clause becomes the handler result and no
+;; continuation is captured. The operation declaration owns its payload and
+;; result types, so callers do not repeat them around every perform or handle.
+
+;;; Code:
+
+(effect Example.Abort.raise exception raise 0 False String a)
+(effect-handler Example.Abort.catch Example.Abort.raise 0 True)
+
+define recover-code :: String -> Int
+  message -> 23
+
+define recover-message :: String -> String
+  message -> "recovered"
+
+tests
+  assert-eq (handle Example.Abort.catch
+                    (perform Example.Abort.raise "bad input")
+                    recover-code) 23 "result variable instantiates to Int"
+  assert-eq (handle Example.Abort.catch
+                    (perform Example.Abort.raise "missing input")
+                    recover-message) "recovered" "each use receives a fresh instance"
+  assert-eq (handle Example.Abort.catch
+                    (+ 100 (+ 200 (perform Example.Abort.raise "nested")))
+                    recover-code) 23 "an abort discards its certified pure strict context"

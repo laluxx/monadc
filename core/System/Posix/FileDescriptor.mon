@@ -1,0 +1,191 @@
+;;; FileDescriptor.mon --- POSIX file-descriptor backend
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "posix files descriptors foreign effects"
+
+;;; Commentary:
+
+ This module is the platform seam beneath IO.File. It exposes raw status
+ values exactly as the kernel returns them and owns no portable error policy.
+ Higher Core layers turn zero, positive counts, and negative statuses into
+ typed results.
+
+;;; Code:
+
+module System.Posix.FileDescriptor
+  [PosixStatBuffer
+   O_RDONLY O_WRONLY O_RDWR O_CREAT O_TRUNC O_APPEND O_DIRECTORY
+   O_NONBLOCK F_GETFD F_SETFD F_GETFL F_SETFL FD_CLOEXEC
+   SEEK_SET SEEK_CUR SEEK_END
+   sys-open sys-close sys-dup sys-dup2 sys-pipe sys-fcntl sys-lseek sys-fsync
+   sys-access sys-fdatasync sys-ftruncate sys-chmod
+   sys-rename sys-mkdir sys-rmdir sys-unlink sys-lstat]
+
+define O_RDONLY    0
+define O_WRONLY    1
+define O_RDWR      2
+define O_CREAT     64
+define O_TRUNC     512
+define O_APPEND    1024
+define O_DIRECTORY 65536
+define O_NONBLOCK  2048
+
+define F_GETFD 1
+define F_SETFD 2
+define F_GETFL 3
+define F_SETFL 4
+
+define FD_CLOEXEC 1
+
+define SEEK_SET 0
+define SEEK_CUR 1
+define SEEK_END 2
+
+
+layout PosixStatBuffer
+  [device           :: Int] [inode          :: Int] [links :: Int] [mode-owner :: Int]
+  [group-padding    :: Int] [device-type    :: Int]
+  [size             :: Int] [block-size     :: Int] [blocks :: Int]
+  [accessed-seconds :: Int] [accessed-nanos :: Int]
+  [mtime            :: Int] [mtime-nanos    :: Int]
+  [changed-seconds  :: Int] [changed-nanos  :: Int]
+  [reserved-a       :: Int] [reserved-b     :: Int] [reserved-c :: Int]
+
+
+define sys-open :: *U8 -> Int -> Int -foreign-> Int
+  path flags mode ->
+    asm mov 2     %rax
+        mov path  %rdi
+        mov flags %rsi
+        mov mode  %rdx
+        syscall ret
+
+
+define sys-close :: Int -foreign-> Int
+  fd ->
+    asm mov 3  %rax
+        mov fd %rdi
+        syscall ret
+
+
+define sys-dup :: Int -foreign-> Int
+  fd ->
+    asm mov 32 %rax
+        mov fd %rdi
+        syscall ret
+
+
+define sys-dup2 :: Int -> Int -foreign-> Int
+  source target ->
+    asm mov 33     %rax
+        mov source %rdi
+        mov target %rsi
+        syscall ret
+
+
+;; On success, pack Linux's adjacent 32-bit descriptors into the returned Int.
+;; The -1 sentinel remains untouched if the kernel cannot create the pipe.
+define sys-pipe :: Int -foreign-> Int
+  ignored ->
+    asm mov -1   %rcx
+        push %rcx
+        mov 22   %rax
+        mov %rsp %rdi
+        syscall
+        pop %rax
+        ret
+
+
+define sys-fcntl :: Int -> Int -> Int -foreign-> Int
+  fd operation value ->
+    asm mov 72        %rax
+        mov fd        %rdi
+        mov operation %rsi
+        mov value     %rdx
+        syscall ret
+
+
+define sys-lseek :: Int -> Int -> Int -foreign-> Int
+  fd offset origin ->
+    asm mov 8      %rax
+        mov fd     %rdi
+        mov offset %rsi
+        mov origin %rdx
+        syscall ret
+
+
+define sys-fsync :: Int -foreign-> Int
+  fd ->
+    asm mov 74 %rax
+        mov fd %rdi
+        syscall ret
+
+
+define sys-access :: *U8 -> Int -foreign-> Int
+  path mode ->
+    asm mov 21   %rax
+        mov path %rdi
+        mov mode %rsi
+        syscall ret
+
+
+define sys-fdatasync :: Int -foreign-> Int
+  fd ->
+    asm mov 75 %rax
+        mov fd %rdi
+        syscall ret
+
+
+define sys-ftruncate :: Int -> Int -foreign-> Int
+  fd size ->
+    asm mov 77   %rax
+        mov fd   %rdi
+        mov size %rsi
+        syscall ret
+
+
+define sys-chmod :: *U8 -> Int -foreign-> Int
+  path mode ->
+    asm mov 90   %rax
+        mov path %rdi
+        mov mode %rsi
+        syscall ret
+
+
+define sys-rename :: *U8 -> *U8 -foreign-> Int
+  source target ->
+    asm mov 82     %rax
+        mov source %rdi
+        mov target %rsi
+        syscall ret
+
+
+define sys-mkdir :: *U8 -> Int -foreign-> Int
+  path mode ->
+    asm mov 83   %rax
+        mov path %rdi
+        mov mode %rsi
+        syscall ret
+
+
+define sys-rmdir :: *U8 -foreign-> Int
+  path ->
+    asm mov 84   %rax
+        mov path %rdi
+        syscall ret
+
+
+define sys-unlink :: *U8 -foreign-> Int
+  path ->
+    asm mov 87   %rax
+        mov path %rdi
+        syscall ret
+
+
+define sys-lstat :: *U8 -> *PosixStatBuffer -foreign-> Int
+  path information ->
+    asm mov 6           %rax
+        mov path        %rdi
+        mov information %rsi
+        syscall ret

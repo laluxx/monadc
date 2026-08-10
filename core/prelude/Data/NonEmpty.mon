@@ -1,0 +1,66 @@
+;;; NonEmpty.mon --- Lists with a statically present first element
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "nonempty list total head invariant"
+
+;;; Commentary:
+
+ NonEmpty makes an important list invariant structural: construction always
+ supplies a first element. Total head and tail projections therefore need no
+ sentinel, optional result, or partial failure. Ordinary list algorithms remain
+ in Data.List and Sequence.
+
+;;; Code:
+
+import Sequence
+
+module Data.NonEmpty
+  [NonEmpty NonEmptyValue
+   non-empty singleton-non-empty
+   non-empty-head non-empty-tail to-list
+   prepend-non-empty append-list-non-empty]
+
+
+data NonEmpty a
+  = NonEmptyValue a [a]
+
+
+;;; Construction and elimination
+
+define non-empty :: a -> [a] -> NonEmpty a
+  head tail -> NonEmptyValue head tail
+
+
+define singleton-non-empty :: a -> NonEmpty a
+  value -> NonEmptyValue value []
+
+
+define non-empty-head :: NonEmpty a -> a
+  [NonEmptyValue head _] -> head
+
+
+define non-empty-tail :: NonEmpty a -> [a]
+  [NonEmptyValue _ tail] -> tail
+
+
+define to-list :: NonEmpty a -> [a]
+  [NonEmptyValue head tail] -> prepend head tail
+
+
+;;; Structure-preserving updates
+
+define prepend-non-empty :: a -> NonEmpty a -> NonEmpty a
+  value values -> NonEmptyValue value (to-list values)
+
+
+define append-list-non-empty :: NonEmpty a -> [a] -> NonEmpty a
+  [NonEmptyValue head tail] suffix -> NonEmptyValue head (append tail suffix)
+
+
+tests
+  assert-eq (non-empty-head (non-empty 1 (list 2 3))) 1 "NonEmpty head is total"
+  assert-eq (show (non-empty-tail (non-empty 1 (list 2 3)))) "(2 3)" "NonEmpty tail may be empty"
+  assert-eq (show (to-list (singleton-non-empty 7))) "(7)" "NonEmpty singleton converts to one value"
+  assert-eq (show (to-list (prepend-non-empty 0 (non-empty 1 (list 2))))) "(0 1 2)" "NonEmpty prepend preserves all values"
+  assert-eq (show (to-list (append-list-non-empty (non-empty 1 (list 2)) (list 3 4)))) "(1 2 3 4)" "NonEmpty append preserves its head"

@@ -29,7 +29,16 @@
 
 * Current boundary
 
-[OBS id:obs.unicode.minimal-width src:core/Text/Unicode.mon conf:high]
-  =text-width= presently counts non-continuation UTF-8 bytes.  It is sufficient
-  only for the modal tutorial's single-cell mathematical symbols.  It does not
-  claim grapheme-cluster or terminal-width conformance.
+[OBS id:obs.unicode.core-text-foundation src:core/Text/Unicode.mon conf:high]
+  =Text.Unicode= now owns UTF-8 scalar decoding, scalar counting, grapheme
+  counting, and cluster-based terminal width in Monad source. The grapheme
+  state machine explicitly covers UAX #29 GB3, GB6–GB8, GB9/GB9a-style
+  extending behavior used by the current property layer, and GB12/GB13
+  regional-indicator parity. Imported-module regression tests cover CRLF,
+  decomposed Hangul, flag pairs, and an unpaired third regional indicator.
+
+[FIX id:fix.unicode.unsigned-byte-promotion date:2026-07-28 src:codegen.c conf:high]
+  Hex octets infer as unsigned Byte values. Mixed-width comparisons, arithmetic,
+  and function arguments now zero-extend Byte operands instead of sign-extending
+  values at or above =0x80=. This fixes core-owned UTF-8 decoding without adding
+  a Unicode runtime intrinsic.

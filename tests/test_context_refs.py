@@ -213,7 +213,7 @@ def full_repo_sources_available() -> bool:
 
 def extract_test_context_refs() -> list[dict]:
     refs: list[dict] = []
-    metadata_pattern = re.compile(r';;\s*(TEST-CONTEXT):\s*(.*)')
+    metadata_pattern = re.compile(r':(TEST-CONTEXT)\s+(.*)')
     for test_file in sorted((ROOT / "tests").rglob("*.mon")):
         rel_parts = test_file.relative_to(ROOT).parts
         if any(part.startswith(".") or part == "__pycache__" for part in rel_parts):

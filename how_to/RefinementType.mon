@@ -14,8 +14,14 @@
 
 ;; TODO
 ;; Now that we have dependent types this should be possible..
+
+
 ;; type Even { x ∈ ℤ | ∃k ∈ ℤ, x = 2k }
 ;;   "Existential form."
+
+
+
+
 
 ;; TODO If Types are sets, this should be possible.
 ;; type PositiveEven = Positive ∩ Even

@@ -6,8 +6,8 @@
 
 ;;; Commentary:
 
-;; Small, law-obvious function combinators.  These are the vocabulary that lets
-;; the rest of core read like a functional library instead of open-coded calls.
+ Small, law-obvious function combinators.  These are the vocabulary that lets
+ the rest of core read like a functional library instead of open-coded calls.
 
 ;;; Code:
 

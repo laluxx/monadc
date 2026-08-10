@@ -3,37 +3,37 @@
 ;; ;; TODO constraint propagation
 ;; ;; TODO deriving Eq should work on _non nullary_ data types too
 
-class Eq a where
-  (=)  :: a -> a -> Bool
-  (!=) :: a -> a -> Bool
-  ;; Default method bodies are tracked by fixtures, not this executable how_to.
-  ;; (x != y) => not x = y
+;; class Eq a where
+;;   (=)  :: a -> a -> Bool
+;;   (!=) :: a -> a -> Bool
+;;   ;; Default method bodies are tracked by fixtures, not this executable how_to.
+;;   ;; (x != y) => not x = y
 
 
-class Enum a where
-  succ     :: a -> a
-  pred     :: a -> a
-  toEnum   :: Int -> a
-  fromEnum :: a -> Int
-  ;; (succ x) => toEnum ((fromEnum x) + 1)
-  ;; (pred x) => toEnum ((fromEnum x) - 1)
+;; class Enum a where
+;;   succ     :: a -> a
+;;   pred     :: a -> a
+;;   toEnum   :: Int -> a
+;;   fromEnum :: a -> Int
+;;   ;; (succ x) => toEnum ((fromEnum x) + 1)
+;;   ;; (pred x) => toEnum ((fromEnum x) - 1)
 
 
-data TrafficLight
-  = Red
-  | Yellow
-  | Green
-  deriving [Eq]
+;; data TrafficLight
+;;   = Red
+;;   | Yellow
+;;   | Green
+;;   deriving [Eq]
 
 
-show Red
-show Yellow
-show Green
+;; show Red
+;; show Yellow
+;; show Green
 
-show (Red = Red)
-show (Red = Green)
-show (Red != Green)
-show (Red != Red)
+;; show (Red = Red)
+;; show (Red = Green)
+;; show (Red != Green)
+;; show (Red != Red)
 
 ;; Enum deriving is not active here yet because succ/pred currently fail
 ;; dependent checking for nullary ADTs in this path.
@@ -213,12 +213,12 @@ show (Red != Red)
 
 
 
-;; ⌜1 2 3 ⌞2 + 2⌟ 5 6 7⌝
+;; show ⌜1 2 3 ⌞2 + 2⌟ 5 6 7⌝
 
 
 ;; ¬∀x. Px  =  ∃x ¬Px
 
-;; id = λx.x
+id = λx.x
 
 
 
@@ -342,9 +342,14 @@ show (Red != Red)
 
 ;; (define [pi :: Float] 3.141592653589793 :alias π)
 
+
 ;; (define (abs [x :: Float] -> Float)
 ;;   "Return the absolute value of X."
 ;;   (if (x < 0.0) (0.0 - x) x))
+
+define abs :: [x : Float] -> Float
+  "Return the absolute value of X."
+  (if (x < 0.0) (0.0 - x) x)
 
 
 ;; ;; (define (area Shape -> Float)

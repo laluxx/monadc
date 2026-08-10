@@ -1,0 +1,7 @@
+[
+  {"line":20,"col":14,"type":"symbol","name":"module"},
+  {"line":20,"col":14,"type":"symbol","name":"Main"},
+  {"line":21,"col":14,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"define"},{"line":21,"col":22,"type":"list","items":[{"line":21,"col":23,"type":"symbol","name":"buffer"},{"line":0,"col":0,"type":"symbol","name":"::"},{"line":0,"col":0,"type":"symbol","name":"Arr"},{"line":0,"col":0,"type":"symbol","name":"::"},{"line":0,"col":0,"type":"number","value":"16384"},{"line":0,"col":0,"type":"symbol","name":"::"},{"line":0,"col":0,"type":"symbol","name":"U8"}]},{"line":21,"col":53,"type":"array","is_heap":false,"elements":[]}]},
+  {"line":22,"col":14,"type":"list","items":[{"line":22,"col":15,"type":"symbol","name":"show"},{"line":22,"col":20,"type":"list","items":[{"line":22,"col":21,"type":"symbol","name":"Arr?"},{"line":22,"col":26,"type":"symbol","name":"buffer"}]}]},
+  {"line":23,"col":14,"type":"list","items":[{"line":23,"col":15,"type":"symbol","name":"show"},{"line":23,"col":20,"type":"list","items":[{"line":23,"col":21,"type":"symbol","name":"count"},{"line":23,"col":27,"type":"symbol","name":"buffer"}]}]}
+]

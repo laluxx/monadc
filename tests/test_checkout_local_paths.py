@@ -242,6 +242,45 @@ class CheckoutLocalPathTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, result.stdout)
             self.assertIn("linking failed", result.stdout)
 
+    def test_core_module_objects_survive_linking_for_warm_reuse(self):
+        with tempfile.TemporaryDirectory(
+                prefix="monadc-core-object-cache-") as td:
+            temp = Path(td)
+            home = temp / "home"
+            home.mkdir()
+            output = temp / "Bool"
+            source_dir = ROOT / "core" / "prelude" / "Data"
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["MONAD_CORE"] = str(ROOT / "core")
+
+            def compile_bool():
+                return subprocess.run(
+                    [str(MONAD), "Bool.mon", "-o", str(output)],
+                    cwd=source_dir,
+                    env=env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                    timeout=30,
+                )
+
+            cold = compile_bool()
+            self.assertEqual(cold.returncode, 0, cold.stdout)
+            cache = home / ".cache" / "monad" / "core"
+            objects = list(cache.glob("*.module.o"))
+            self.assertTrue(
+                objects,
+                "successful linking deleted the persistent core object cache",
+            )
+            for object_path in objects:
+                self.assertGreater(object_path.stat().st_size, 0)
+
+            warm = compile_bool()
+            self.assertEqual(warm.returncode, 0, warm.stdout)
+            self.assertTrue(output.exists(), warm.stdout)
+
     def test_package_build_finds_checkout_core_from_project_directory(self):
         with tempfile.TemporaryDirectory(prefix="monadc-package-checkout-") as td:
             project = Path(td)

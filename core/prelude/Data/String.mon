@@ -6,10 +6,10 @@
 
 ;;; Commentary:
 
-;; String is the set of all finite character sequences. The compiler retains
-;; its compact representation and primitive lowering, while Sequence owns generic
-;; sequence behavior and this module owns String-specific conversions and
-;; queries.
+ String is the set of all finite character sequences. The compiler retains
+ its compact representation and primitive lowering, while Sequence owns generic
+ sequence behavior and this module owns String-specific conversions and
+ queries.
 
 ;;; Code:
 

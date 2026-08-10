@@ -842,6 +842,20 @@ static AST *syntax_eval_impl(AST *node) {
         return result;
     }
 
+    if (name && strcmp(name, "syntax-keyword") == 0 && node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_STRING) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-keyword expects a String literal");
+        }
+        AST *result = ast_new_keyword(argument->string);
+        result->line = node->line;
+        result->column = node->column;
+        result->end_column = node->end_column;
+        ast_free(argument);
+        return result;
+    }
+
     if (name && (strcmp(name, "syntax-gensym") == 0 ||
                  strcmp(name, "syntax-capture") == 0) &&
         node->list.count == 2) {
@@ -911,6 +925,21 @@ static AST *syntax_eval_impl(AST *node) {
         result->line = node->line;
         result->column = node->column;
         result->end_column = node->end_column;
+        ast_free(argument);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-keyword-text") == 0 &&
+        node->list.count == 2) {
+        AST *argument = syntax_eval(node->list.items[1]);
+        if (!argument || argument->type != AST_KEYWORD) {
+            ast_free(argument);
+            syntax_eval_error(node, "syntax-keyword-text expects keyword Syntax");
+        }
+        AST *result = ast_new_string(argument->keyword);
+        result->line = argument->line;
+        result->column = argument->column;
+        result->end_column = argument->end_column;
         ast_free(argument);
         return result;
     }
@@ -1142,6 +1171,30 @@ static AST *syntax_eval_impl(AST *node) {
         for (size_t i = 0; i < list->list.count; i++)
             ast_list_append(result, ast_clone(list->list.items[i]));
         ast_free(list);
+        return result;
+    }
+
+    if (name && strcmp(name, "syntax-list-append") == 0 &&
+        node->list.count == 3) {
+        AST *left = syntax_eval(node->list.items[1]);
+        AST *right = syntax_eval(node->list.items[2]);
+        if (!left || left->type != AST_LIST ||
+            !right || right->type != AST_LIST) {
+            ast_free(left);
+            ast_free(right);
+            syntax_eval_error(node,
+                "syntax-list-append expects two list Syntax values");
+        }
+        AST *result = ast_new_list();
+        result->line = left->line;
+        result->column = left->column;
+        result->end_column = right->end_column;
+        for (size_t i = 0; i < left->list.count; i++)
+            ast_list_append(result, ast_clone(left->list.items[i]));
+        for (size_t i = 0; i < right->list.count; i++)
+            ast_list_append(result, ast_clone(right->list.items[i]));
+        ast_free(left);
+        ast_free(right);
         return result;
     }
 

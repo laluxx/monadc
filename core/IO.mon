@@ -1,0 +1,78 @@
+;;; IO.mon --- explicit Core world boundary
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "io effects bytes text handles posix"
+
+;;; Commentary:
+
+ IO is an effectful façade, not a computation container. Values retain their
+ ordinary types; arrows state exactly where interaction occurs. File
+ descriptors are explicit at the primitive boundary so tests can use pipes,
+ applications can redirect streams, and no ambient global handle is hidden.
+
+ This first portable layer exposes byte and text operations. Resource-safe
+ owned handles, structured IO errors, buffering, cancellation, and platform
+ backends will grow above this boundary rather than being encoded as magic
+ compiler behavior.
+
+;;; Code:
+
+import System.Posix.Term
+import Sequence
+import Data.Either
+
+module IO
+  [IOError IOEndOfInput IOStatus
+   stdin stdout stderr
+   read-byte write-byte write-text
+   read-byte-result write-byte-result write-text-result]
+
+                    • The portable primitive currently distinguishes a byte from a negative
+                    • status. `IOStatus` deliberately retains that status rather than claiming an
+data IOError        • errno classification the backend has not supplied. Structured reads use
+  = IOEndOfInput    • the raw read count directly: zero is EOF, a negative status is failure, and
+  | IOStatus Int    • one yields the byte. The legacy `read-byte` primitive remains available for
+                    • callers intentionally using its compact -1 sentinel protocol.
+
+define stdin  STDIN
+define stdout STDOUT
+define stderr STDERR
+
+
+define read-byte :: Int -io-> Int
+  fd -> read-char fd
+
+
+define write-byte :: Int -> Int -io-> Int
+  fd byte -> write-char fd byte
+
+
+define write-text :: Int -> String -io-> Int
+  fd text -> write-str fd text (length text)
+
+
+define read-byte-nonzero-result :: Int -> Int -> Either IOError Int
+  status byte -> if status < 0 then Left (IOStatus status) else Right byte
+
+
+define classify-read-byte :: Int -> Int -> Either IOError Int
+  status byte -> (if (= status 0)
+                     (Left IOEndOfInput)
+                     (read-byte-nonzero-result status byte))
+
+
+define read-byte-result :: Int -io-> Either IOError Int
+  fd -> def byte 0
+        def status (read-buf fd &byte 1)
+        classify-read-byte status byte
+
+
+define write-byte-result :: Int -> Int -io-> Either IOError Int
+  fd byte -> def status (write-byte fd byte)
+             if status < 0 then Left (IOStatus status) else Right status
+
+
+define write-text-result :: Int -> String -io-> Either IOError Int
+  fd text -> def status (write-text fd text)
+             if status < 0 then Left (IOStatus status) else Right status

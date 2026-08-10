@@ -16,7 +16,6 @@
 import Data.Functor
 import Data.Foldable
 import Data.Bool
-import Data.Maybe
 import Data.Semigroup
 
 module Sequence
@@ -36,7 +35,7 @@ class (Functor c, Foldable c) => Sequence c where
   null?     :: c a -> Bool
   length    :: c a -> Int
   reverse   :: c a -> c a
-  at        :: c a -> Int -> Maybe a
+  at        :: c a -> Int -> a?
   nth       :: c a -> Int -> a
   take      :: c a -> Int -> c a
   drop      :: c a -> Int -> c a
@@ -113,10 +112,10 @@ method reverse :: [a] -> [a]
   xs -> reverse-into [] xs
 
 
-method at :: [a] -> Int -> Maybe a
-  _ n      | n < 0 -> Nothing
-  [] _             -> Nothing
-  [x|xs] 0         -> Just x
+method at :: [a] -> Int -> a?
+  _ n      | n < 0 -> nil
+  [] _             -> nil
+  [x|xs] 0         -> x
   [x|xs] n         -> at xs (n - 1)
 
 
@@ -220,7 +219,8 @@ tests
   assert-eq ((list 1 2 3).length)                 3           "length"
   assert-eq (show ((list 1 2 3).reverse))         "(3 2 1)"   "reverse"
   assert-eq (show (concat (list 1 2) (list 3 4))) "(1 2 3 4)" "concat"
-  assert-eq (show ((list 5 6 7).at 1))            "(Just 6)"  "at"
+  assert-eq (show ((list 5 6 7).at 1))            "6"         "at present"
+  assert-eq (show ((list 5 6 7).at 9))            "nil"       "at absent"
   assert-eq ((list 5 6 7).nth 2)                  7           "nth"
   assert-eq (head (list 5 6 7))                   5           "head"
   assert-eq (hd (list 5 6 7))                     5           "head alias"

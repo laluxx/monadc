@@ -102,12 +102,12 @@ def write_case(root, spec):
     path = root / f"asm-{spec['name']}.mon"
     stdout_path = root / f"asm-{spec['name']}.stdout"
     content = [
-        f";; TEST-ID: tests.codegen.asm.{spec['name']}",
-        ";; TEST-SECTION: codegen",
-        f";; TEST-CONTEXT: {CONTEXT}",
-        f";; TEST-PURPOSE: {spec['purpose']}",
-        f";; TEST-ATOM: {spec['atom']}",
-        ";; TEST-EXPECT: compile, run",
+        f":TEST-ID tests.codegen.asm.{spec['name']}",
+        ":TEST-SECTION codegen",
+        f":TEST-CONTEXT {CONTEXT}",
+        f":TEST-PURPOSE {spec['purpose']}",
+        f":TEST-ATOM {spec['atom']}",
+        ":TEST-EXPECT compile, run",
         "",
         "module AsmTest",
         "",

@@ -6,12 +6,13 @@
 
 ;;; Commentary:
 
-;; Maybe is the core optional-value type.  Do not encode optional public APIs as
-;; [] / [x]; use Nothing and Just so absence is explicit in types and patterns.
-;;
-;; Its instances provide only their primitive structural behavior. Applicative
-;; lifting and Monad return/join/sequencing are inherited from the owning
-;; abstractions rather than repeated as Maybe-specific pattern matches.
+ Maybe is the explicit algebraic effect for computations that intentionally
+ use Functor, Applicative, or Monad structure. Ordinary zero-or-one results
+ use the language's first-class T? type and nil instead.
+
+ Its instances provide only their primitive structural behavior. Applicative
+ lifting and Monad return/join/sequencing are inherited from the owning
+ abstractions rather than repeated as Maybe-specific pattern matches.
 
 ;;; Code:
 
@@ -33,38 +34,58 @@ data Maybe a
   | Just a
 
 
+define map-maybe :: (a -> b) -> Maybe a -> Maybe b
+  _ Nothing  -> Nothing
+  f [Just x] -> Just (f x)
+
+
+define apply-maybe :: Maybe (a -> b) -> Maybe a -> Maybe b
+  Nothing _        -> Nothing
+  [Just f] value   -> map-maybe f value
+
+
+define bind-maybe :: Maybe a -> (a -> Maybe b) -> Maybe b
+  Nothing _  -> Nothing
+  [Just x] f -> f x
+
+
 instance Functor Maybe
-  map f value -> (match value with | Nothing -> Nothing | (Just x) -> (Just (f x)))
+  map f value -> map-maybe f value
 
 
 instance Applicative Maybe
   pure x -> Just x
-  applyA fvalue value -> (match fvalue with | Nothing -> Nothing | (Just f) -> (map f value))
+  applyA fvalue value -> apply-maybe fvalue value
 
 
 instance Monad Maybe
-  bind value f -> (match value with | Nothing -> Nothing | (Just x) -> (f x))
+  bind value f -> bind-maybe value f
   fail message -> Nothing
 
 
 method maybe :: Maybe a -> b -> (a -> b) -> b
-  value default f -> (match value with | Nothing -> default | (Just x) -> (f x))
+  Nothing default _  -> default
+  [Just x] _ f       -> f x
 
 
 method fromMaybe :: Maybe a -> a -> a
-  value default -> (match value with | Nothing -> default | (Just x) -> x)
+  Nothing default -> default
+  [Just x] _      -> x
 
 
 method fromJust :: Maybe a -> a
-  value -> (match value with | Nothing -> (error "fromJust: Nothing") | (Just x) -> x)
+  Nothing  -> error "fromJust: Nothing"
+  [Just x] -> x
 
 
 method just? :: Maybe a -> Bool
-  value -> (match value with | Nothing -> False | (Just x) -> True)
+  Nothing  -> False
+  [Just _] -> True
 
 
 method nothing? :: Maybe a -> Bool
-  value -> (match value with | Nothing -> True | (Just x) -> False)
+  Nothing  -> True
+  [Just _] -> False
 
 
 method transform :: Maybe a -> (a -> b) -> Maybe b
@@ -74,7 +95,8 @@ method transform :: Maybe a -> (a -> b) -> Maybe b
 method flatMap :: Maybe a -> (a -> Maybe b) -> Maybe b
   ;; Keep the compatibility wrapper direct until polymorphic typeclass calls
   ;; carrying closures share the ordinary closure ABI in both parser paths.
-  value f -> (match value with | Nothing -> Nothing | (Just x) -> (f x))
+  Nothing _  -> Nothing
+  [Just x] f -> f x
 
 
 method flatten :: Maybe (Maybe a) -> Maybe a
@@ -82,23 +104,31 @@ method flatten :: Maybe (Maybe a) -> Maybe a
 
 
 method apply :: Maybe (a -> b) -> Maybe a -> Maybe b
-  fvalue x -> (match fvalue with | Nothing -> Nothing | (Just f) -> (transform x f))
+  Nothing _  -> Nothing
+  [Just f] x -> transform x f
 
 
 method replace :: Maybe b -> a -> Maybe a
-  value x -> (match value with | Nothing -> Nothing | (Just ignored) -> Just x)
+  Nothing _  -> Nothing
+  [Just _] x -> Just x
 
 
 method combine :: Maybe a -> Maybe b -> (a -> b -> c) -> Maybe c
-  x y f -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> Just (f a b)))
+  Nothing _ _          -> Nothing
+  [Just _] Nothing _   -> Nothing
+  [Just a] [Just b] f  -> Just (f a b)
 
 
 method combineThree :: Maybe a -> Maybe b -> Maybe c -> (a -> b -> c -> d) -> Maybe d
-  x y z f -> (match x with | Nothing -> Nothing | (Just a) -> (match y with | Nothing -> Nothing | (Just b) -> (match z with | Nothing -> Nothing | (Just c) -> Just (f a b c))))
+  Nothing _ _ _                  -> Nothing
+  [Just _] Nothing _ _           -> Nothing
+  [Just _] [Just _] Nothing _    -> Nothing
+  [Just a] [Just b] [Just c] f   -> Just (f a b c)
 
 
 method toList :: Maybe a -> [a]
-  value -> (match value with | Nothing -> [] | (Just x) -> (list x))
+  Nothing  -> []
+  [Just x] -> list x
 
 
 method listToMaybe :: [a] -> Maybe a
@@ -107,7 +137,8 @@ method listToMaybe :: [a] -> Maybe a
 
 
 method orElse :: Maybe a -> Maybe a -> Maybe a
-  value rhs -> (match value with | Nothing -> rhs | (Just x) -> value)
+  Nothing rhs     -> rhs
+  [Just x] _    -> Just x
 
 
 method firstJust :: [Maybe a] -> Maybe a

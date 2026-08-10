@@ -297,9 +297,9 @@ def parse_test_fixture(path: Path, nodes: dict[str, Node], edges: list[Edge]) ->
     rel = path.relative_to(ROOT).as_posix()
     metadata: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        match = re.match(r";;\s*(TEST-[A-Z-]+):\s*(.*)", line)
+        match = re.match(r":(TEST-[A-Z0-9-]+)(?:\s+(.*))?$", line)
         if match:
-            metadata[match.group(1)] = match.group(2).strip()
+            metadata[match.group(1)] = (match.group(2) or "").strip()
         elif line.strip():
             break
     test_id = metadata.get("TEST-ID")

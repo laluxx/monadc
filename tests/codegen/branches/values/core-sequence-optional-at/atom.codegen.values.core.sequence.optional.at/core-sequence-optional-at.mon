@@ -1,0 +1,24 @@
+:TEST-ID tests.codegen.values.core-sequence-optional-at
+:TEST-TIER regression
+:TEST-STATUS active-2026-08-10
+:TEST-CODEGEN-ATOM atom.codegen.values.core.sequence.optional.at
+:TEST-QUALITY branch-regression
+:TEST-SUBSET optional-values
+:TEST-CATEGORY 00-values
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.style, monadc.context.core-libs.sequence
+:TEST-PURPOSE Core collection lookup uses a? and nil for ordinary absence.
+:TEST-ATOM Sequence.at returns nil out of bounds and its element when present.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE core/prelude/Sequence.mon optional public API
+:TEST-MENU branches/values/core-sequence-optional-at
+:TEST-MENU-PATH codegen/branches/values/core-sequence-optional-at
+:TEST-CLI-TARGET codegen core sequence optional at
+
+import Sequence
+
+module CoreSequenceOptionalAt
+
+
+show at [5 6 7] 1
+show at [5 6 7] 9

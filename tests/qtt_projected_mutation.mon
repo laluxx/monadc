@@ -1,0 +1,12 @@
+(module Main)
+
+(layout Vec2 [x :: Int] [y :: Int])
+
+(define mutate-x
+  (lambda ()
+    (with [value (Vec2 10 20)]
+      (begin
+        (set! value.x 99)
+        value.x))))
+
+(show (mutate-x))

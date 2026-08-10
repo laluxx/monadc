@@ -6,14 +6,14 @@
 
 ;;; Commentary:
 
-;; Bool is the finite set {True, False}. This declaration, its eliminator, and
-;; its logical algebra are public core policy. The compiler may represent the
-;; two members as primitive truth tags and specialize their operations, but it
-;; must obtain their public type, names, and behavior from this module.
-;;
-;; The exported predicates form one Boolean algebra rather than parallel
-;; compiler builtins. Code should therefore use these methods through the core
-;; abstraction; optimized lowering must remain observationally equivalent.
+ Bool is the finite set {True, False}. This declaration, its eliminator, and
+ its logical algebra are public core policy. The compiler may represent the
+ two members as primitive truth tags and specialize their operations, but it
+ must obtain their public type, names, and behavior from this module.
+
+ The exported predicates form one Boolean algebra rather than parallel
+ compiler builtins. Code should therefore use these methods through the core
+ abstraction; optimized lowering must remain observationally equivalent.
 
 ;;; Code:
 

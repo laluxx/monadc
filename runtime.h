@@ -99,6 +99,8 @@ typedef struct RuntimeValue {
 RuntimeValue *rt_value_closure(void *fn_ptr, void **env, int env_size, int arity);
 RuntimeValue *rt_value_closure_named(void *fn_ptr, void **env, int env_size, int arity, const char *name);
 RuntimeValue *rt_closure_calln(RuntimeValue *closure, int n, RuntimeValue **args);
+void          rt_closure_destroy_unique(RuntimeValue *closure,
+                                        uint64_t moved_fields);
 void         *rt_closure_get_env(RuntimeValue *closure);
 void         *rt_closure_get_fn_ptr(RuntimeValue *closure);
 
@@ -269,6 +271,7 @@ RuntimeValue *rt_value_int(int64_t val);
 RuntimeValue *rt_value_float(double val);
 RuntimeValue *rt_value_char(char val);
 RuntimeValue *rt_value_string(const char *val);
+RuntimeValue *rt_value_string_take(char *val);
 RuntimeValue *rt_value_symbol(const char *val);
 RuntimeValue *rt_value_keyword(const char *val);
 RuntimeValue *rt_value_list(RuntimeList *val);
@@ -280,7 +283,6 @@ RuntimeValue *rt_value_set(RuntimeSet *s);
 RuntimeValue *rt_value_map(RuntimeMap *m);
 RuntimeValue *rt_value_opaque(void *p);
 void *rt_unbox_opaque(RuntimeValue *v);
-int64_t rt_utf8_width(const char *text);
 
 
 /// Unboxing
@@ -356,6 +358,8 @@ void __monad_runtime_error(const char *file, long line, long col, const char *ms
 
 RuntimeValue *rt_ast_to_runtime_value(AST *ast);
 char         *rt_string_take(const char *s, int64_t n);
+char         *rt_string_drop(const char *s, int64_t n);
+int64_t       rt_string_byte(const char *s, int64_t index);
 char         *rt_string_concat(const char *a, const char *b);
 void         *rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size);
 RuntimeValue *rt_coll_wrap(RuntimeValue *coll, RuntimeValue *item);
@@ -365,6 +369,8 @@ RuntimeValue *rt_coll_lazy_cons(RuntimeValue *head, RuntimeThunk *tail_thunk);
 RuntimeValue *rt_coll_drop(RuntimeValue *coll, int64_t n);
 int64_t       rt_coll_count(RuntimeValue *coll);
 int64_t       __rt_count(RuntimeValue *coll);
+RuntimeValue *__rt_directory_names(const char *path, int64_t *status);
+char         *__rt_join_path(const char *parent, const char *child);
 bool          __rt_set_singleton(RuntimeValue *set);
 RuntimeValue *__rt_set_intersection(RuntimeValue *left, RuntimeValue *right);
 int           rt_coll_contains(RuntimeValue *coll, RuntimeValue *value);
@@ -387,6 +393,7 @@ LLVMValueRef get___monad_runtime_error(CodegenContext *ctx);
 //// Closure
 
 LLVMValueRef get_rt_value_closure(CodegenContext *ctx);
+LLVMValueRef get_rt_value_string_take(CodegenContext *ctx);
 LLVMValueRef get_rt_value_closure_named(CodegenContext *ctx);
 LLVMValueRef get_rt_closure_calln(CodegenContext *ctx);
 LLVMValueRef get_rt_closure_get_fn_ptr(CodegenContext *ctx);
@@ -519,6 +526,8 @@ LLVMValueRef get_rt_print_list(CodegenContext *ctx);
 //// String
 
 LLVMValueRef get_rt_string_take(CodegenContext *ctx);
+LLVMValueRef get_rt_string_drop(CodegenContext *ctx);
+LLVMValueRef get_rt_string_byte(CodegenContext *ctx);
 LLVMValueRef get_rt_string_concat(CodegenContext *ctx);
 LLVMValueRef get_rt_arr_concat(CodegenContext *ctx);
 LLVMValueRef get_rt_coll_wrap(CodegenContext *ctx);

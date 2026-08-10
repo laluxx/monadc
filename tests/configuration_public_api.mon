@@ -1,0 +1,57 @@
+:TEST-ID tests.configuration.public-api
+:TEST-CONTEXT monadc.context.configuration.typed-language-owned
+:TEST-PURPOSE A client defines, validates, and layers typed configuration entirely in Monad.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+:TEST-MENU-PATH core/configuration-public-api
+:TEST-CLI-TARGET configuration public-api
+
+import Configuration
+
+module Configuration.PublicApi []
+
+
+layout FormatOptions
+  [line-width :: Int]
+  [indentation :: Int]
+
+
+layout FormatConfiguration
+  [options -> FormatOptions]
+  [source -> ConfigurationSource]
+
+
+define default-format :: FormatOptions (FormatOptions 100 2)
+
+
+define positive? :: Int -> Bool
+  value | > 0       -> True
+        | otherwise -> False
+
+
+define line-width-problems :: FormatOptions -> [ConfigDiagnostic]
+  options -> require (config-path (list "format" "line-width")) "line-width must be greater than zero" (positive? options.line-width)
+
+
+define validate-line-width :: FormatOptions -> ConfigValidation FormatOptions
+  options | positive? options.line-width -> ConfigurationValid options
+          | otherwise                    -> ConfigurationInvalid (line-width-problems options)
+
+
+define project-format :: FormatConfiguration (FormatConfiguration default-format (ProjectFile "format.mon"))
+
+
+define editor-format :: FormatConfiguration (FormatConfiguration (FormatOptions 88 2) (CommandLineArgument "--line-width=88"))
+
+
+tests
+  :typed-values:
+  assert-eq editor-format.options.line-width 88 "configuration remains in the application schema"
+  assert-eq (show editor-format.source) "(CommandLineArgument --line-width=88)" "provenance records the winning source"
+  :typed-values:
+
+  :structured-validation:
+  assert-eq (show (validate-line-width default-format)) "(ConfigurationValid (FormatOptions 100 2))" "valid configuration retains its typed value"
+  assert-eq (show (validate-line-width (FormatOptions 0 2))) "(ConfigurationInvalid ((ConfigDiagnostic (ConfigPath (format line-width)) Error line-width must be greater than zero)))" "invalid configuration carries a structured diagnostic"
+  assert-eq (render-path (config-path (list "format" "line-width"))) "format.line-width" "configuration paths render deterministically"
+  :structured-validation:

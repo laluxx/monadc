@@ -1,0 +1,107 @@
+Glyph IR v0.5 reference validation
+PASS explicit graph verification: root-region, region-declarations, operation-schemas, typed-edges-and-linearity, region-boundary-protocols, branch-interface-equality, effect-and-continuation-contracts, root-result
+PASS canonical graph serialization round-trip
+PASS alpha-stable semantic identity; exact identity remains distinct
+PASS deterministic visual projection
+VISUAL-BEGIN
+fn @process-request -> Result
+◎ observe {@language, @safety, @resource-events}
+
+╭─ function @process-request
+│  ├─ in  %request : Request [unrestricted]
+│  ├─ in  κresource : Request{payload:owned,meta:owned} [linear]
+│  ╭─ call.validate  validate request.meta
+│  │  ├─ %request : Request [unrestricted] ◀── @function.request
+│  │  ├─ %valid : Bool [unrestricted] ──▶ @pure.identity.value
+│  ╰─ end call.validate
+│  ╭─ pure.identity  identity proof specimen
+│  │  ├─ %value : Bool [unrestricted] ◀── @call.validate.valid
+│  │  ├─ %value : Bool [unrestricted] ──▶ @control.branch.condition
+│  ╰─ end pure.identity
+│  ╭─ control.branch  valid?
+│  │  ├─ %condition : Bool [unrestricted] ◀── @pure.identity.value
+│  │  ├─ κresource : Request{payload:owned,meta:owned} [linear] ◀── @function.resource
+│  │  ├─ %result : Result [unrestricted] ──▶ @function.result
+│  │  ├─ owns yes @yes arm
+│  │  ├─ owns no @no arm
+│  ╰─ end control.branch
+│  ╭─ yes @yes arm
+│  │  ├─ in  κresource : Request{payload:owned,meta:owned} [linear]
+│  │  ╭─ cap.move-field  evacuate payload
+│  │  │  ├─ κsource : Request{payload:owned,meta:owned} [linear] ◀── @yes.resource
+│  │  │  ├─ κfield : String{root:owned} [linear] ──▶ @closure.make.capture
+│  │  │  ├─ κremainder : Request{payload:gone,meta:owned} [linear] ──▶ @cap.drop.resource
+│  │  ╰─ end cap.move-field
+│  │  ╭─ cap.drop  drop request remainder
+│  │  │  ├─ κresource : Request{payload:gone,meta:owned} [linear] ◀── @cap.move-field.remainder
+│  │  ╰─ end cap.drop
+│  │  ╭─ closure.make  closure emit
+│  │  │  ├─ κcapture : String{root:owned} [linear] ◀── @cap.move-field.field
+│  │  │  ├─ κclosure : Closure@emit{payload:owned} [linear] ──▶ @handle.invoke.closure
+│  │  │  ├─ owns body @emit body
+│  │  ╰─ end closure.make
+│  │  ╭─ body @emit body
+│  │  │  ├─ in  κpayload : String{root:owned} [linear]
+│  │  │  ╭─ cap.project  read captured payload
+│  │  │  │  ├─ κresource : String{root:owned} [linear] ◀── @body.payload
+│  │  │  │  ├─ κresource : String{root:owned} [linear] ──▶ @body.frame
+│  │  │  │  ├─ %value : String [unrestricted] ──▶ @effect.perform.payload
+│  │  │  ╰─ end cap.project
+│  │  │  ╭─ effect.perform  perform Console.write
+│  │  │  │  ├─ %payload : String [unrestricted] ◀── @cap.project.value
+│  │  │  │  ├─ !signal : Console.write [linear] ──▶ @body.signal
+│  │  │  ╰─ end effect.perform
+│  │  │  ╰─ exit suspend:Console.write !signal : Console.write [linear] ◀── @effect.perform.signal
+│  │  │  ╰─ exit suspend:Console.write κframe : String{root:owned} [linear] ◀── @cap.project.resource
+│  │  ╰─ end body @emit body
+│  │  ╭─ handle.invoke  handle Console.write
+│  │  │  ├─ κclosure : Closure@emit{payload:owned} [linear] ◀── @closure.make.closure
+│  │  │  ├─ κclosure : Closure@emit{payload:owned} [linear] ──▶ @cap.drop.resource
+│  │  │  ├─ owns clause @Console clause
+│  │  ╰─ end handle.invoke
+│  │  ╭─ clause @Console clause
+│  │  │  ├─ in  !signal : Console.write [linear]
+│  │  │  ╭─ handler.abort  abortive clause
+│  │  │  │  ├─ !signal : Console.write [linear] ◀── @clause.signal
+│  │  │  │  ├─ %result : Unit [unrestricted] ──▶ @clause.result
+│  │  │  ╰─ end handler.abort
+│  │  │  ╰─ exit handle:Console.write %result : Unit [unrestricted] ◀── @handler.abort.result
+│  │  ╰─ end clause @Console clause
+│  │  ╭─ cap.drop  drop closure environment
+│  │  │  ├─ κresource : Closure@emit{payload:owned} [linear] ◀── @handle.invoke.closure
+│  │  ╰─ end cap.drop
+│  │  ╭─ const.result  Ok
+│  │  │  ├─ %result : Result [unrestricted] ──▶ @yes.result
+│  │  ╰─ end const.result
+│  │  ╰─ exit normal %result : Result [unrestricted] ◀── @const.result.result
+│  ╰─ end yes @yes arm
+│  ╭─ no @no arm
+│  │  ├─ in  κresource : Request{payload:owned,meta:owned} [linear]
+│  │  ╭─ cap.drop  drop complete request
+│  │  │  ├─ κresource : Request{payload:owned,meta:owned} [linear] ◀── @no.resource
+│  │  ╰─ end cap.drop
+│  │  ╭─ const.result  Rejected
+│  │  │  ├─ %result : Result [unrestricted] ──▶ @no.result
+│  │  ╰─ end const.result
+│  │  ╰─ exit normal %result : Result [unrestricted] ◀── @const.result.result
+│  ╰─ end no @no arm
+│  ╰─ exit normal %result : Result [unrestricted] ◀── @control.branch.result
+╰─ end function @process-request
+VISUAL-END
+PASS proof-carrying identity patch independently replayed
+PASS incremental invalidation is local: sibling region hashes unchanged
+PASS reject forged patch certificate: patch hash mismatch
+PASS reject missing linear consumer: linear output p_move_field must have exactly one consumer, got 0
+PASS reject duplicated linear authority: linear output p_move_field must have exactly one consumer, got 2
+PASS reject hidden cross-region wire: edge e1 target crosses a region boundary
+PASS reject typed edge mismatch: edge e2 type mismatch: PortType(kind=<PortKind.VALUE: 'value'>, payload='Bool', linearity=<Linearity.UNRESTRICTED: 'unrestricted'>, erased=False) != PortType(kind=<PortKind.VALUE: 'value'>, payload='Result', linearity=<Linearity.UNRESTRICTED: 'unrestricted'>, erased=False)
+PASS reject unhandled latent effect: unhandled latent effects at n_handle: ['Console.write']
+PASS reject branch protocol mismatch: branch arm interface mismatch
+PASS reject illegal multi-shot frame: multi-shot handler requires clone/snapshot frame policy
+PASS reject orphan child region: child region roles mismatch at n_closure: () != ('body',)
+PASS reject closure effect declaration mismatch: closure effect contract mismatch at n_closure
+PASS reject input without producer: input p_validate_in must have exactly one producer
+SUMMARY 17/17 gates passed
+semantic-hash b7a5bb3ffeda1be563c466ec8828051201b29fe89841157913c650fc3c9cf58c
+exact-hash 10b59c2b39f3111ed5478bfd48446f826cb8c340ef6114220d274f6b757526f8
+patched-semantic-hash 13a97aab93e03b78a63a0ee9ba888b3cc351a9d8737b5cb3991cea31d917375f

@@ -74,7 +74,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "core/prelude/Data/Profunctor.mon",
             "core/prelude/Data/Semigroup.mon",
             "core/prelude/Numeric.mon",
-            "core/prelude/Text/Readline.mon",
+            "core/prelude/Text/LineEditor.mon",
         )
 
         for module in modules:
@@ -178,7 +178,45 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         ):
             self.assertNotIn(obsolete, string_core)
 
-    def test_sequence_structure_is_owned_by_sequence_class(self):
+    def test_unicode_semantics_are_versioned_and_entirely_core_owned(self):
+        unicode_core = source("core/Text/Unicode.mon")
+        infer_c = source("infer.c")
+        dep_c = source("dep.c")
+        codegen_c = source("codegen.c")
+        runtime_c = source("runtime.c")
+        runtime_h = source("runtime.h")
+
+        self.assertIn('define unicode-version :: String', unicode_core)
+        for name in (
+            "byte-count", "valid-scalar?", "valid-utf8?", "decode-utf8",
+            "scalar-count", "grapheme-count", "display-width", "text-width",
+        ):
+            self.assertRegex(unicode_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
+        self.assertIn("tests\n", unicode_core)
+        self.assertNotIn("__rt_", unicode_core)
+        self.assertRegex(unicode_core, r"byte \| >= 0 and <= 0x7f -> True")
+        self.assertRegex(unicode_core, r"scalar \| >= 0x1100  and <= 0x115f")
+        self.assertNotRegex(unicode_core, r"\(and\s+\(>=\s+(?:byte|scalar)\b")
+        self.assertNotRegex(unicode_core, r"\|\s+(?:byte|scalar)\s+[<>=]")
+
+        for compiler_source in (infer_c, dep_c, codegen_c):
+            self.assertNotIn("__rt_utf8_width", compiler_source)
+        self.assertNotIn("rt_utf8_width", runtime_c)
+        self.assertNotIn("rt_utf8_width", runtime_h)
+
+    def test_configuration_protocol_is_typed_and_core_owned(self):
+        configuration = source("core/Configuration.mon")
+
+        self.assertIn("module Configuration", configuration)
+        self.assertIn("data ConfigValidation a", configuration)
+        self.assertIn("layout ConfigDiagnostic", configuration)
+        self.assertIn("data ConfigurationSource", configuration)
+        self.assertIn("define require :: ConfigPath -> String -> Bool -> [ConfigDiagnostic]", configuration)
+        self.assertNotIn("__rt_", configuration)
+        self.assertNotIn("Map String", configuration)
+        self.assertIn("ordinary Monad modules", configuration)
+
+    def test_sequence_public_abi_has_class_and_concrete_coll_methods(self):
         coll_core = source("core/prelude/Sequence.mon")
         for name in (
             "filter", "prepend", "concat", "null?", "length", "reverse", "at", "nth",
@@ -186,8 +224,22 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "any?", "all?", "zip", "zipWith", "snoc",
         ):
             self.assertRegex(coll_core, rf"(?m)^\s+{re.escape(name)}\s+::")
-            self.assertNotRegex(coll_core, rf"(?m)^method\s+{re.escape(name)}\s+::")
             self.assertNotRegex(coll_core, rf"(?m)^define\s+{re.escape(name)}\s+::")
+
+        concrete_methods = {
+            "filter": "filter", "prepend": "prepend", "null?": "null?",
+            "length": "length", "reverse": "reverse", "at": "at",
+            "nth": "nth", "take": "take", "drop": "drop",
+            "takeWhile": "take-while", "dropWhile": "drop-while",
+            "any?": "any?", "all?": "all?", "zip": "zip",
+            "zipWith": "zip-with", "snoc": "snoc",
+        }
+        for implementation in concrete_methods.values():
+            self.assertRegex(
+                coll_core,
+                rf"(?m)^method\s+{re.escape(implementation)}\s+::",
+            )
+        self.assertIn("concat xs ys      -> rt_coll_concat xs ys", coll_core)
 
         self.assertNotRegex(coll_core, r"(?m)^(?:method|define)\s+append\s+::")
 
@@ -225,7 +277,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
     def test_core_clients_use_sequence_construction_methods(self):
         enum_core = source("core/prelude/Data/Enum.mon")
-        readline_core = source("core/prelude/Text/Readline.mon")
+        readline_core = source("core/prelude/Text/LineEditor.mon")
 
         self.assertIn("import Sequence", enum_core)
         self.assertNotIn(" ++ ", enum_core.split("\ntests\n", 1)[0])
@@ -435,7 +487,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
     def test_core_does_not_bypass_sequence_and_set_abstractions(self):
         set_core = source("core/prelude/Data/Set.mon")
         list_core = source("core/prelude/Data/List.mon")
-        readline_core = source("core/prelude/Text/Readline.mon")
+        readline_core = source("core/prelude/Text/LineEditor.mon")
 
         self.assertNotRegex(set_core, r"\b(?:head|empty\?|count)\b")
         self.assertIn("instance Eq Set", set_core)

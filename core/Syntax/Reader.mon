@@ -6,55 +6,70 @@
 
 ;;; Commentary:
 
-;; This module is the language-visible description boundary of reader
-;; extension. Values are immutable by convention: clients construct fresh
-;; descriptions rather than mutating compiler-owned buffers. No value exposes
-;; a Lexer, Parser, AST pointer, or other implementation address. A
-;; ReaderDescription records portable rule source; the live compiler registry
-;; is deliberately not presented as a mutable language value.
-;;
-;; Functions returning Syntax execute in the deterministic expansion phase.
-;; Their kernel includes ordinary `if`, `begin`, numeric arithmetic and
-;; comparison, lexical bindings (through ordinary `let`), and the immutable
-;; constructors `syntax-list`, `syntax-array`, `syntax-symbol`,
-;; `syntax-string`, and `syntax-number`. Unknown calls remain object-language
-;; syntax, which is the staging boundary used by embedded languages. Expansion
-;; has deterministic step and nesting limits, so a recursive transformer
-;; reports a compiler diagnostic instead of exhausting the host stack.
-;;
-;; Structural inspection uses `syntax-list?`, `syntax-symbol?`,
-;; `syntax-string?`, `syntax-number?`, `syntax-list-length`, `syntax-list-ref`,
-;; `syntax-list-tail`, `syntax-list-cons`, `syntax-array?`,
-;; `syntax-array-length`, `syntax-array-ref`, and `syntax-symbol-text`.
-;; `syntax-source-file`, `syntax-source-line`,
-;; `syntax-source-column`, and `syntax-source-end-column` preserve the
-;; connection to source. `syntax-error` raises a user diagnostic at a selected
-;; syntax value. Quasiquote evaluates `unquote` holes at the appropriate nesting
-;; depth and `unquote-splicing` flattens list Syntax. `syntax-kind` integrates
-;; with ordinary Monad `match`. `syntax-gensym` and `syntax-introduce` create
-;; fresh hygienic identifiers; `syntax-capture` explicitly requests an
-;; unscoped use-site name.
-;; Immutable lexical contexts are created with `syntax-fresh-context`, attached
-;; with `syntax-add-context`, inspected with `syntax-context`, and removed
-;; explicitly with `syntax-remove-context`. Context metadata survives AST
-;; cloning and appears in expansion traces.
-;;
-;; Use `import for-syntax Module.Name` when a direct dependency should
-;; contribute readers and Syntax transformers without exposing runtime
-;; definitions. Reader grammars are not re-exported transitively: every client
-;; that uses a grammar imports its owner explicitly. Two directly imported
-;; grammars for the same result type are an ambiguity and are rejected with
-;; both owning modules in the diagnostic.
-;; Syntax transformers follow the same direct-owner rule. A locally defined
-;; transformer shadows imports; two imported transformers with the same name
-;; are rejected instead of being selected by dependency compilation order.
-;; Only names in the defining module's export list are importable. Exported
-;; transformers retain their definition-site phase environment, so their
-;; implementation may be factored into private compile-time helpers safely.
-;;
-;; SourceSpan uses one-based, half-open coordinates.  START identifies the
-;; first source position and END identifies the position immediately following
-;; the represented text.
+ This module is the language-visible description boundary of reader
+ extension. Values are immutable by convention: clients construct fresh
+ descriptions rather than mutating compiler-owned buffers. No value exposes
+ a Lexer, Parser, AST pointer, or other implementation address. A
+ ReaderDescription records portable rule source; the live compiler registry
+ is deliberately not presented as a mutable language value.
+
+ Functions returning Syntax execute in the deterministic expansion phase.
+ Their kernel includes ordinary `if`, `begin`, numeric arithmetic and
+ comparison, lexical bindings (through ordinary `let`), and the immutable
+ constructors `syntax-list`, `syntax-array`, `syntax-symbol`,
+ `syntax-string`, and `syntax-number`. Unknown calls remain object-language
+ syntax, which is the staging boundary used by embedded languages. Expansion
+ has deterministic step and nesting limits, so a recursive transformer
+ reports a compiler diagnostic instead of exhausting the host stack.
+
+ Structural inspection uses `syntax-list?`, `syntax-symbol?`,
+ `syntax-string?`, `syntax-number?`, `syntax-list-length`, `syntax-list-ref`,
+ `syntax-list-tail`, `syntax-list-cons`, `syntax-array?`,
+ `syntax-array-length`, `syntax-array-ref`, and `syntax-symbol-text`.
+ `syntax-keyword` constructs keyword Syntax from computed text, while
+ `syntax-list-append` composes generated argument sequences without exposing
+ mutable AST storage.
+
+ A top-level `reader-block PATTERN TARGET` declaration gives TARGET ownership
+ of a following indented region. The initial pattern form is `KEYWORD_`: the
+ hole supplies the remaining header forms as transformer arguments, followed
+ by one neutral block Syntax value. Its children are `reader-line`,
+ `reader-blank`, and `reader-comment` forms. A block may appear anywhere an
+ expression may appear, including as the indented value of a typed `define`.
+ Its baseline is the claiming line and the region ends at the corresponding
+ dedent. Every body line records indentation relative to that baseline;
+ indentation; executable lines retain their ordinary parsed Syntax, and
+ comments retain their original text. The compiler groups source structure
+ but assigns no object-language meaning to it.
+ `syntax-source-file`, `syntax-source-line`,
+ `syntax-source-column`, and `syntax-source-end-column` preserve the
+ connection to source. `syntax-error` raises a user diagnostic at a selected
+ syntax value. Quasiquote evaluates `unquote` holes at the appropriate nesting
+ depth and `unquote-splicing` flattens list Syntax. `syntax-kind` integrates
+ with ordinary Monad `match`. `syntax-gensym` and `syntax-introduce` create
+ fresh hygienic identifiers; `syntax-capture` explicitly requests an
+ unscoped use-site name.
+ Immutable lexical contexts are created with `syntax-fresh-context`, attached
+ with `syntax-add-context`, inspected with `syntax-context`, and removed
+ explicitly with `syntax-remove-context`. Context metadata survives AST
+ cloning and appears in expansion traces.
+
+ Use `import for-syntax Module.Name` when a direct dependency should
+ contribute readers and Syntax transformers without exposing runtime
+ definitions. Reader grammars are not re-exported transitively: every client
+ that uses a grammar imports its owner explicitly. Two directly imported
+ grammars for the same result type are an ambiguity and are rejected with
+ both owning modules in the diagnostic.
+ Syntax transformers follow the same direct-owner rule. A locally defined
+ transformer shadows imports; two imported transformers with the same name
+ are rejected instead of being selected by dependency compilation order.
+ Only names in the defining module's export list are importable. Exported
+ transformers retain their definition-site phase environment, so their
+ implementation may be factored into private compile-time helpers safely.
+
+ SourceSpan uses one-based, half-open coordinates.  START identifies the
+ first source position and END identifies the position immediately following
+ the represented text.
 
 ;;; Code:
 
@@ -84,9 +99,9 @@ data TokenKind
 
 
 layout Token
-  [kind -> TokenKind]
+  [kind :: TokenKind]
   [lexeme :: String]
-  [span -> SourceSpan]
+  [span :: SourceSpan]
 
 
 data Associativity
@@ -95,14 +110,14 @@ data Associativity
 
 
 layout ReaderRule
-  [pattern :: String]
-  [target :: String]
+  [pattern       :: String]
+  [target        :: String]
   [binding-power :: Int]
-  [associativity -> Associativity]
+  [associativity :: Associativity]
 
 
 layout ReaderDescription
-  [name :: String]
+  [name        :: String]
   [result-type :: String]
   [rule-source :: String]
 

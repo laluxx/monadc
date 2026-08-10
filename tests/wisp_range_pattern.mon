@@ -1,11 +1,11 @@
-;; TEST-ID: tests.wisp.range-pattern
-;; TEST-CONTEXT: monadc.context.wisp.range-pattern, monadc.context.core-libs.enum
-;; TEST-PURPOSE: Inclusive range patterns use Enum ordering in ordinary Wisp clauses.
-;; TEST-EXPECT: pass
-;; TEST-TIER: regression
-;; TEST-MENU: wisp
-;; TEST-MENU-PATH: wisp/range-pattern
-;; TEST-CLI-TARGET: wisp range-pattern
+:TEST-ID tests.wisp.range-pattern
+:TEST-CONTEXT monadc.context.wisp.range-pattern, monadc.context.core-libs.enum
+:TEST-PURPOSE Inclusive range patterns use Enum ordering in ordinary Wisp clauses.
+:TEST-EXPECT pass
+:TEST-TIER regression
+:TEST-MENU wisp
+:TEST-MENU-PATH wisp/range-pattern
+:TEST-CLI-TARGET wisp range-pattern
 
 import Data.Enum
 

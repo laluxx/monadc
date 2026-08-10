@@ -1,0 +1,36 @@
+:TEST-ID tests.core.io.with-file
+:TEST-CONTEXT monadc.context.core-libs.resource-safe-file-scope
+:TEST-PURPOSE with-file invokes its callback and closes the owned descriptor.
+:TEST-ATOM Execute a callback through imported IO.File and observe closure.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU core
+:TEST-MENU-PATH core/io/resource-scope
+
+import IO.File
+import IO
+import Data.Either
+
+module Core.IO.WithFile []
+
+
+define remember-handle :: FileHandle -> Either IOError Int
+  handle -> Right (file-descriptor handle)
+
+
+define fail-owned :: FileHandle -io-> Either IOError Int
+  _ -> Left (IOStatus (0 - 77))
+
+
+define close-then-succeed :: FileHandle -io-> Either IOError Int
+  handle -> def closed (close-file handle)
+            Right 42
+
+
+tests
+  descriptor = fromRight (with-file /tmp/monad-with-file-probe WriteOnly remember-handle) (0 - 1)
+  assert-eq (left? (close-file (FileHandle descriptor))) True "with-file closes its descriptor"
+
+  assert-eq (left? (with-file /tmp/monad-with-file-failure WriteOnly fail-owned)) True "with-file preserves callback failure"
+
+  assert-eq (left? (with-file /tmp/monad-with-file-close-failure WriteOnly close-then-succeed)) True "cleanup failure replaces callback success"

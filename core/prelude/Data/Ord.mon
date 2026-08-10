@@ -6,17 +6,17 @@
 
 ;;; Commentary:
 
-;; Ord owns the canonical ordering vocabulary. An instance supplies strict and
-;; non-strict ascending relations; descending relations are obtained by
-;; reversing their arguments. Comparison, extrema, clamping, and interval
-;; predicates are then derived from that common basis.
-;;
-;; Primitive and user-defined instances therefore describe only their actual
-;; order, while all higher ordering algorithms share one implementation.
-;; Executable coherence laws pin the observable relationship between compare
-;; and the two primitive ascending relations. Extrema coherence remains stated
-;; below until specialized default methods preserve their concrete return ABI
-;; when nested inside a law.
+ Ord owns the canonical ordering vocabulary. An instance supplies strict and
+ non-strict ascending relations; descending relations are obtained by
+ reversing their arguments. Comparison, extrema, clamping, and interval
+ predicates are then derived from that common basis.
+
+ Primitive and user-defined instances therefore describe only their actual
+ order, while all higher ordering algorithms share one implementation.
+ Executable coherence laws pin the observable relationship between compare
+ and the two primitive ascending relations. Extrema coherence remains stated
+ below until specialized default methods preserve their concrete return ABI
+ when nested inside a law.
 
 ;;; Code:
 

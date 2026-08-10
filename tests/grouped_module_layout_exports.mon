@@ -1,0 +1,23 @@
+:TEST-ID tests.reader.module.grouped-layout-exports
+:TEST-TIER core
+:TEST-SECTION reader
+:TEST-CATEGORY modules
+
+module Test.GroupedLayoutExports where
+
+  :types
+    GroupedPoint
+
+  :construction
+    origin
+
+layout GroupedPoint
+  x :: Int
+  y :: Int
+
+define origin :: GroupedPoint
+  GroupedPoint 0 0
+
+tests
+  assert-eq origin.x 0 "grouped modules retain nominal layout fields"
+  assert-eq origin.y 0 "grouped modules retain nominal layout construction"

@@ -1,0 +1,14 @@
+:TEST-ID tests.web.html-escaping
+:TEST-CONTEXT monadc.context.reader.programmable-blocks
+:TEST-PURPOSE HTML construction is safe by default outside literal examples.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+
+import Web.HTML
+
+module Web.HTML.Escaping []
+
+
+tests
+  assert-eq (render-html (text "<script>&")) "&lt;script&gt;&amp;" "text nodes escape HTML syntax"
+  assert-eq (render-html (element "p" (list (attribute "title" "a\"&b")) (list (text "safe")))) "<p title=\"a&quot;&amp;b\">safe</p>" "attribute values escape quotes and ampersands"

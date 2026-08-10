@@ -447,20 +447,20 @@ def read_corpus(path: Path, prefix: str = "language") -> list[TestCase]:
 def read_metadata(path: Path) -> dict[str, str]:
     metadata: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not line.startswith(";;"):
-            if line.strip():
-                break
-            continue
-        match = re.match(r";;\s*(TEST-[A-Z0-9-]+):\s*(.*)", line)
+        match = re.match(r":(TEST-[A-Z0-9-]+)(?:\s+(.*))?$", line)
         if match:
-            metadata[match.group(1)] = match.group(2).strip()
+            metadata[match.group(1)] = (match.group(2) or "").strip()
+            continue
+        if line.strip() and not line.startswith(";;"):
+            break
     return metadata
 
 
 def fixture_start_line(path: Path) -> int:
     for line_number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         stripped = line.strip()
-        if not stripped or stripped.startswith(";;"):
+        if (not stripped or stripped.startswith(";;") or
+                re.match(r":TEST-[A-Z0-9-]+(?:\s|$)", stripped)):
             continue
         return line_number
     return 1
@@ -861,7 +861,8 @@ def check_expected_diagnostics(case: TestCase, output: str, stdout_path: Path | 
     if stdout_path and stdout_path.exists():
         expected = stdout_path.read_text(encoding="utf-8", errors="replace")
         expected_norm = normalize_golden_output(expected)
-        if expected_norm not in normalized:
+        diagnostic_fragment = expected_norm.rstrip("\r\n")
+        if diagnostic_fragment not in normalized:
             return f"diagnostic did not contain {stdout_path.relative_to(ROOT)}"
 
     expected_diagnostic = case.metadata.get("TEST-EXPECT-DIAGNOSTIC")

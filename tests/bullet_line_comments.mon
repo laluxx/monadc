@@ -1,0 +1,22 @@
+:TEST-ID tests.reader.bullet-line-comments
+:TEST-CONTEXT monadc.context.reader.bullet-line-comments
+:TEST-PURPOSE The bullet character introduces a line comment outside literals.
+:TEST-ATOM Inline and whole-line bullet prose is erased without changing strings.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU reader
+:TEST-MENU-PATH reader/comments/bullet
+
+module Reader.BulletLineComments []
+
+
+                    • prose may be aligned beside the declaration it explains
+define answer 42    • ignored syntax: (this does not need to balance
+
+
+define marker "• remains text inside a string"
+
+
+tests
+  assert-eq answer 42 "an inline bullet begins a comment"
+  assert-eq marker "• remains text inside a string" "a bullet inside a string remains data"

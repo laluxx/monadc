@@ -1,0 +1,27 @@
+:TEST-ID tests.codegen.unsigned-byte-promotion
+:TEST-CONTEXT monadc.context.unicode.complete-core
+:TEST-PURPOSE Mixed-width arithmetic and comparison zero-extend Byte operands.
+:TEST-ATOM Hex byte literals above 0x7F retain their unsigned values when combined with Int.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU codegen
+:TEST-MENU-PATH codegen/unsigned-byte-promotion
+:TEST-CLI-TARGET codegen unsigned-byte-promotion
+
+module UnsignedBytePromotion []
+
+
+define decode-two :: Int -> Int -> Int
+  first second -> ((first - 0xc0) * 0x40) + (second - 0x80)
+
+
+define at-most-byte? :: Int -> Bool
+  value
+    | <= 0xdf  -> True
+    | otherwise -> False
+
+
+tests
+  assert-eq (decode-two 0xce 0xbb) 955 "Byte arithmetic zero-extends UTF-8 octets"
+  assert-eq (at-most-byte? 0xce) True "mixed-width Byte comparison preserves unsigned value"
+  assert-eq (at-most-byte? 0xe0) False "mixed-width Byte comparison respects the upper bound"

@@ -1,0 +1,15 @@
+:TEST-ID tests.wisp.multiline-typed-value
+:TEST-CONTEXT monadc.context.reader.programmable-blocks
+:TEST-PURPOSE A typed define owns its following indented value expression.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+
+module Ordinary.String.Definition [who]
+
+
+define who :: String
+  "World"
+
+
+tests
+  assert-eq who "World" "ordinary String definitions retain their body"

@@ -1,0 +1,17 @@
+:TEST-ID tests.web.html-import-smoke
+:TEST-CONTEXT monadc.context.web-html.core-language
+:TEST-PURPOSE Importing a scoped block reader does not alter ordinary definitions.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+
+import Web.HTML
+
+module Web.HTML.ImportSmoke [who]
+
+
+define who :: String
+  "World"
+
+
+tests
+  assert-eq who "World" "importing Web.HTML preserves ordinary definitions"

@@ -29,7 +29,7 @@ MAKEFLAGS += -j$(NPROCS)
 RUNTIME_LIB = libmonad.a
 RUNTIME_SRC = runtime.c runtime_errors.c arena.c
 RUNTIME_OBJ = $(RUNTIME_SRC:.c=.o)
-HEADERS = $(wildcard *.h)
+HEADERS = $(wildcard *.h qtt/*.h tooling/*.h)
 
 # All compiler .c files except runtime sources and platform-only sources.
 WINDOWS_EXCLUDED_SRCS =
@@ -37,7 +37,7 @@ ifeq ($(WINDOWS_HOST),1)
 WINDOWS_EXCLUDED_SRCS = debugger.c
 endif
 COMPILER_EXCLUDED_SRCS = $(RUNTIME_SRC) $(WINDOWS_EXCLUDED_SRCS)
-SRCS = $(filter-out $(COMPILER_EXCLUDED_SRCS), $(wildcard *.c))
+SRCS = $(filter-out $(COMPILER_EXCLUDED_SRCS), $(wildcard *.c) $(wildcard qtt/*.c) $(wildcard effects/*.c) $(wildcard tooling/*.c))
 FFI_CFLAGS = $(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")
 OBJS = $(SRCS:.c=.o)
 
@@ -81,9 +81,10 @@ install: $(RUNTIME_LIB) $(TARGET)
 # Install core modules
 	rm -rf $(COREDIR)
 	find core \( -name "*.mon" -o -name "*.modules" \) | while read f; do \
-		dir=$$(dirname "$$f"); \
-		install -d $(COREDIR)/$${dir#core/}; \
-		install -m 644 "$$f" $(COREDIR)/$${dir#core/}/; \
+		rel=$${f#core/}; \
+		dir=$$(dirname "$$rel"); \
+		install -d $(COREDIR)/$$dir; \
+		install -m 644 "$$f" $(COREDIR)/$$dir/; \
 	done
 
 uninstall:

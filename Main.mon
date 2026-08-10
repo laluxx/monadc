@@ -936,6 +936,9 @@
 
 ;; Naked function
 
+
+
+
 (define (addnaked [x :: Int] -> [y :: Int] -> Int)
   :doc "Documentation for this Scheiße."
   :naked True
@@ -946,6 +949,15 @@
     add  y    %rax     ; y is second param (in rsi)
     pop  %rbp          ; epilogue
     ret))              ; return
+
+
+
+
+
+
+
+
+
 
 
 (define (addnonaked [x :: Int] -> [y :: Int] -> Int)

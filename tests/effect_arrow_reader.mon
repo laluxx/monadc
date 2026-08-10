@@ -1,0 +1,8 @@
+:TEST-PURPOSE Compact effect arrows survive ordinary source signature parsing.
+
+module EffectArrowReader []
+
+(define (effect-arrow-id Int -e-> Int) 7)
+
+(tests
+  (assert-eq (effect-arrow-id 1) 7 "effect arrow reader"))

@@ -397,3 +397,66 @@ cd context/category/catface && zig build run -- --check ../../
   Added tracking TODO block in todo.org for the human opinion
   `todo.opinions.human.test-artifact-cleanup` (auto-delete test artifacts),
   which was previously only recorded in opinions.org without a separate TODO entry.
+
+* Monad Source Linter
+:PROPERTIES:
+:ID: monadc.context.quality.monad-linter
+:CUSTOM_ID: monad-linter
+:CONTEXT_KIND: decision
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.quality.compiler-owned-monad-linter-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Core style is an executable compiler contract. Every accepted style rule
+  receives a named regression and participates in the Core completion gate.
+  The long-term authority is a compiler-owned =monad lint= pass that consumes
+  source spans, parsed forms, resolved symbols, inferred types, and effects.
+  Diagnostics carry a stable rule ID, explanation, and semantics-preserving
+  suggested edit. Purely lexical layout rules may inspect source text; semantic
+  rewrites must be justified by the compiler representation.
+
+  LSP diagnostics and code actions consume the same lint result objects as the
+  command-line pass. They must not reimplement rules with editor-only regular
+  expressions. During bootstrap, Core source-shape tests lock each agreed rule
+  before it migrates into the shared compiler lint pass. Finishing work on Core
+  requires running both the compiler linter and the Core runtime suite.
+
+  Rules live in one C registry with a stable ID, title, default severity,
+  analysis phase, and fix-safety classification. The phases are =source=,
+  =syntax=, =typed=, and =effect=. A source rule may repair spelling and layout;
+  it may not pretend to know symbol identity or semantic equivalence. Only
+  =safe= edits are applied by =monad lint --fix=. Suggested-but-unproven edits
+  remain diagnostics and editor actions that require human choice.
+
+  =monad lint FILE= checks one file. =monad lint DIRECTORY= discovers =.mon=
+  files recursively in deterministic path order and skips hidden directories.
+  =--json= exposes stable spans and rule metadata to tools. The LSP publishes
+  the same diagnostics and derives preferred quick fixes from the same edit
+  objects, keeping the terminal and editor behavior DRY.
+
+[DEC id:dec.quality.semantic-tooling-roadmap-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  The literature-grade roadmap, formal judgments, executable laws, severity
+  semantics, and mutability-lint proof obligation live in
+  [[file:../tooling/README.org][tooling/README.org]]. Lint warnings are ordinary
+  compiler diagnostics. Errors remain reserved for invalid programs or invalid
+  requested operations; CI policy may deny warnings without changing their
+  semantic classification.
+
+[FIX id:fix.quality.shared-diagnostic-kernel-2026-08-10 date:2026-08-10 by:codex src:tooling/diagnostic.c,tooling/diagnostic.h,tooling/lint.c,lsp.c,tests/test_lint.py conf:high]
+  The first Cycle 0 kernel gives compiler diagnostics shared ownership,
+  phase/origin/completeness metadata, related evidence, and independently
+  ranged edits with applicability. The CLI and LSP consume the same edit
+  objects, and safe-fix idempotence is executable regression coverage.
+
+[FIX id:fix.quality.tooling-subsystem-cycle1-2026-08-10 date:2026-08-10 by:codex src:tooling/README.org,tooling/cst.c,tooling/cst.h,tests/tooling_cst_test.c conf:high]
+  Semantic tooling now has one physical source owner under =tooling/=. Cycle 1
+  begins with a lossless green token tape whose spans partition and reconstruct
+  source bytes exactly, including commentary and malformed quoted regions.
+
+[FIX id:fix.quality.tooling-cst-groups-2026-08-10 date:2026-08-10 by:codex src:tooling/cst.c,tooling/cst.h,tooling/lint.c,tests/tooling_cst_test.c conf:high]
+  Cycle 1 now groups delimiter ranges, preserves unmatched delimiters as error
+  structure, validates parent/range invariants, and supplies the linter's shared
+  position-preserving code projection. The duplicate lint masking scanner was
+  removed.

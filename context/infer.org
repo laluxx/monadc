@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-08-10
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1525,3 +1525,7 @@
   filename, line, column, and both type sides. It is intentionally env-gated and
   useful for tracing mismatches where the final unification error reports only
   the solved conflict.
+[FIX id:fix.infer.optional-branch-injection-2026-08-10 date:2026-08-10 src:infer.c,tests/codegen/branches/values/optional-list-last/atom.codegen.values.optional.list.last/optional-list-last.mon conf:high]
+  Branch inference recognizes the lawful injection =a <: a?=. Unifying a
+  present branch with an optional branch no longer reports the false infinite
+  type =a ~ Optional a=; =nil= remains restricted to optional results.

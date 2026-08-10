@@ -27,10 +27,10 @@ superscript_square	monadc.context.reader.sugar.superscript	Superscript ² become
 superscript_cube	monadc.context.reader.sugar.superscript	Superscript ³ becomes (^ x 3).	x³	(^ x 3)			regression	passing-baseline-2026-06-15
 superscript_multi_digit	monadc.context.reader.sugar.superscript	Multi-digit superscript becomes (^ x 23).	x²³	(^ x 23)			regression	passing-baseline-2026-06-15
 # ── Postfix Index Sugar ─────────────────────────────────────────────────────
-postfix_index_array	monadc.context.reader.sugar.postfix-index	Postfix brackets become index calls.	arr[0]	(index arr 0)			regression	passing-baseline-2026-06-15
-postfix_index_multi	monadc.context.reader.sugar.postfix-index	Postfix multi-index becomes multi-arg index call.	mat[1 2]	(index mat 1 2)			regression	passing-baseline-2026-06-15
-postfix_index_three	monadc.context.reader.sugar.postfix-index	Postfix three-index becomes three-arg index call.	arr[i j k]	(index arr i j k)			regression	passing-baseline-2026-06-15
-postfix_index_two	monadc.context.reader.sugar.postfix-index	Postfix two-index becomes index call on symbol.	xs[0 1]	(index xs 0 1)			regression	passing-baseline-2026-06-15
+postfix_index_array	monadc.context.reader.sugar.postfix-index	Postfix brackets become collection calls.	arr[0]	(arr 0)			regression	passing-baseline-2026-06-15
+postfix_index_multi	monadc.context.reader.sugar.postfix-index	Postfix multi-index becomes a multi-arg collection call.	mat[1 2]	(mat 1 2)			regression	passing-baseline-2026-06-15
+postfix_index_three	monadc.context.reader.sugar.postfix-index	Postfix three-index becomes a three-arg collection call.	arr[i j k]	(arr i j k)			regression	passing-baseline-2026-06-15
+postfix_index_two	monadc.context.reader.sugar.postfix-index	Postfix two-index becomes a collection call.	xs[0 1]	(xs 0 1)			regression	passing-baseline-2026-06-15
 # ── Postfix Call Sugar ──────────────────────────────────────────────────────
 postfix_call_unary	monadc.context.reader.sugar.postfix-call	Postfix parenthesized args become function call.	f(x)	(f x)			regression	passing-baseline-2026-06-15
 postfix_call_binary	monadc.context.reader.sugar.postfix-call	Postfix with multiple args.	add(1 2)	(add 1 2)			regression	passing-baseline-2026-06-15

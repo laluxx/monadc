@@ -2,7 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
 #include "infer.h"
+#include "qtt/constraints.h"
+#include "qtt/environment.h"
+#include "qtt/type_identity.h"
+#include "effects/effect.h"
+#include "effects/constraints.h"
 #include "types.h"
 #include "reader.h"
 #include "dep.h"
@@ -299,6 +305,12 @@ Type *subst_apply_shallow(Substitution *s, Type *t) {
     return t;
 }
 
+static bool infer_optional_like(InferCtx *ctx, Type *t) {
+    Type *resolved = ctx && ctx->subst ? subst_apply_shallow(ctx->subst, t) : t;
+    return resolved &&
+        (resolved->kind == TYPE_OPTIONAL || resolved->kind == TYPE_NIL);
+}
+
 static Type *subst_apply_depth(Substitution *s, Type *t, int depth) {
     if (!t) return NULL;
     if (depth > 64) return t;  /* cycle guard: stop recursion */
@@ -360,7 +372,16 @@ static Type *subst_apply_depth(Substitution *s, Type *t, int depth) {
         Type *p = subst_apply_depth(s, t->arrow_param, depth + 1);
         Type *r = subst_apply_depth(s, t->arrow_ret,   depth + 1);
         if (p == t->arrow_param && r == t->arrow_ret) return t;
-        return type_arrow(p, r);
+        Type *arrow = type_arrow(p, r);
+        arrow->arrow_effect_complete = t->arrow_effect_complete;
+        arrow->arrow_effect_name = t->arrow_effect_name
+            ? strdup(t->arrow_effect_name) : NULL;
+        if (t->arrow_effect_scheme) {
+            arrow->arrow_effect_scheme = strdup(t->arrow_effect_scheme);
+            arrow->arrow_effect_scheme_owned =
+                arrow->arrow_effect_scheme != NULL;
+        }
+        return arrow;
     }
 
     case TYPE_APP: {
@@ -384,6 +405,7 @@ Type *subst_apply(Substitution *s, Type *t) {
 
 InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filename) {
     InferCtx *ctx       = calloc(1, sizeof(InferCtx));
+    if (!ctx) return NULL;
     ctx->subst          = subst_create();
     ctx->constraint_cap = 256;
     ctx->constraints    = malloc(sizeof(TypeConstraint) * ctx->constraint_cap);
@@ -392,6 +414,16 @@ InferCtx *infer_ctx_create(InferEnv *env, struct DepCtx *dctx, const char *filen
     ctx->dctx           = dctx;
     ctx->filename       = filename ? filename : "<unknown>";
     ctx->had_error      = false;
+    ctx->next_closure_instance_id = 1;
+    ctx->grade_arena    = qtt_grade_arena_new();
+    ctx->effect_arena   = qtt_effect_arena_new();
+    ctx->effect_solver  = ctx->effect_arena
+        ? qtt_effect_solver_new(ctx->effect_arena) : NULL;
+    if (!ctx->subst || !ctx->constraints || !ctx->grade_arena ||
+        !ctx->effect_solver) {
+        infer_ctx_free(ctx);
+        return NULL;
+    }
     return ctx;
 }
 
@@ -399,6 +431,38 @@ void infer_ctx_free(InferCtx *ctx) {
     if (!ctx) return;
     subst_free(ctx->subst);
     free(ctx->constraints);
+    for (size_t i = 0; i < ctx->grade_application_count; i++) {
+        free(ctx->grade_applications[i].domain_grades);
+        free(ctx->grade_applications[i].closure_module_ids);
+        free(ctx->grade_applications[i].closure_ids);
+        free(ctx->grade_applications[i].closure_binder_ids);
+        free(ctx->grade_applications[i].closure_slots);
+        free(ctx->grade_applications[i].closure_parameter_indices);
+        free(ctx->grade_applications[i].closure_origin_kinds);
+        free(ctx->grade_applications[i].closure_origin_ids);
+        free(ctx->grade_applications[i].closure_domain_module_ids);
+        free(ctx->grade_applications[i].closure_domain_ids);
+        free(ctx->grade_applications[i].closure_domain_indices);
+        free(ctx->grade_applications[i].result_closure_module_ids);
+        free(ctx->grade_applications[i].result_closure_ids);
+        free(ctx->grade_applications[i].result_closure_instance_ids);
+        if (ctx->grade_applications[i].result_closure_environments) {
+            for (size_t j = 0;
+                 j < ctx->grade_applications[i].result_closure_count; j++)
+                qtt_environment_free(
+                    ctx->grade_applications[i]
+                        .result_closure_environments[j]);
+            free(ctx->grade_applications[i].result_closure_environments);
+        }
+        free(ctx->grade_applications[i].callable_parameter_indices);
+        free(ctx->grade_applications[i]
+                 .callable_domain_parameter_indices);
+        free(ctx->grade_applications[i].callable_domain_indices);
+    }
+    free(ctx->grade_applications);
+    qtt_grade_arena_free(ctx->grade_arena);
+    qtt_effect_solver_free(ctx->effect_solver);
+    qtt_effect_arena_free(ctx->effect_arena);
     free(ctx);
 }
 
@@ -527,6 +591,11 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         if (s->bound[root])
             return infer_unify_one_internal(ctx, s->bound[root], b, line, col);
         if (infer_occurs(s, root, b)) {
+            Type *inner = b->kind == TYPE_OPTIONAL
+                ? subst_apply_shallow(s, b->element_type) : NULL;
+            if (inner && inner->kind == TYPE_VAR &&
+                subst_find(s, inner->var_id) == root)
+                return true;
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                      "%s:%d:%d: type error: infinite type (occurs check failed)",
                      ctx->filename, line, col);
@@ -555,6 +624,11 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         if (s->bound[root])
             return infer_unify_one_internal(ctx, a, s->bound[root], line, col);
         if (infer_occurs(s, root, a)) {
+            Type *inner = a->kind == TYPE_OPTIONAL
+                ? subst_apply_shallow(s, a->element_type) : NULL;
+            if (inner && inner->kind == TYPE_VAR &&
+                subst_find(s, inner->var_id) == root)
+                return true;
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                      "%s:%d:%d: type error: infinite type (occurs check failed)",
                      ctx->filename, line, col);
@@ -592,6 +666,39 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
         /* TYPE_FN (unannotated Fn) is compatible with any arrow type */
         if (a->kind == TYPE_FN && b->kind == TYPE_ARROW) return true;
 
+        /* Core String has the byte-address representation accepted by the
+         * low-level FFI boundary. Preserve that established ABI when a fresh
+         * portable interface makes Pointer U8 explicit instead of relying on
+         * an unknown legacy import type. */
+        if (a->kind == TYPE_STRING && b->kind == TYPE_PTR &&
+            b->element_type &&
+            (b->element_type->kind == TYPE_U8 ||
+             b->element_type->kind == TYPE_BYTE ||
+             b->element_type->kind == TYPE_CHAR))
+            return true;
+        if (b->kind == TYPE_STRING && a->kind == TYPE_PTR &&
+            a->element_type &&
+            (a->element_type->kind == TYPE_U8 ||
+             a->element_type->kind == TYPE_BYTE ||
+             a->element_type->kind == TYPE_CHAR))
+            return true;
+
+        /* Path is the portable filesystem name type and has the same raw,
+         * NUL-terminated byte-address representation at a POSIX boundary.
+         * Keep this compatibility restricted to byte/character pointers. */
+        if (a->kind == TYPE_PATH && b->kind == TYPE_PTR &&
+            b->element_type &&
+            (b->element_type->kind == TYPE_U8 ||
+             b->element_type->kind == TYPE_BYTE ||
+             b->element_type->kind == TYPE_CHAR))
+            return true;
+        if (b->kind == TYPE_PATH && a->kind == TYPE_PTR &&
+            a->element_type &&
+            (a->element_type->kind == TYPE_U8 ||
+             a->element_type->kind == TYPE_BYTE ||
+             a->element_type->kind == TYPE_CHAR))
+            return true;
+
         /* Collection acting as a function: (Coll -> 'a) ~ (Int -> 'a)
          * SAFETY GUARD: only allow this coercion when the arrow param is
          * already a concrete integer/char type or an unbound fresh var.
@@ -599,7 +706,8 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
          * that means we are inside a polymorphic instantiation and the
          * coercion would bind a shared type var to both String and an
          * arrow type, creating a cycle in subst_apply.                  */
-        if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST || a->kind == TYPE_ARR) &&
+        if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST ||
+             a->kind == TYPE_ARR || a->kind == TYPE_STRING) &&
             b->kind == TYPE_ARROW) {
             /* Collection indexing coercion: Coll a ~ (Int -> a)
              * Only applies to actual collection types, never to String.
@@ -612,6 +720,14 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
              * can never be an index. Allow when param is Int, Char, or an
              * unbound fresh variable — those are all valid index types.  */
             Type *bp = subst_apply_shallow(ctx->subst, b->arrow_param);
+            /* Indexing a collection is a single, pure Int -> element
+             * coercion.  A residual multi-stage or effect-annotated arrow is
+             * a partially applied callable, never an indexing operation.
+             * Rejecting it here preserves the original type mismatch and
+             * prevents diagnostics such as `Int ~ [Int] -e-> [Int]`. */
+            if (b->arrow_effect_name ||
+                (b->arrow_ret && b->arrow_ret->kind == TYPE_ARROW))
+                goto skip_coll_as_fn_ab;
             if (bp && (bp->kind == TYPE_ARROW || bp->kind == TYPE_FN ||
                        bp->kind == TYPE_COLL  || bp->kind == TYPE_LIST ||
                        bp->kind == TYPE_ARR   || bp->kind == TYPE_STRING ||
@@ -623,13 +739,18 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                 if (!ok) return false;
                 if (a->kind == TYPE_COLL) return infer_unify_one(ctx, a->element_type, b->arrow_ret, line, col);
                 if (a->kind == TYPE_ARR) return infer_unify_one(ctx, a->arr_element_type, b->arrow_ret, line, col);
+                if (a->kind == TYPE_STRING) return infer_unify_one(ctx, type_char(), b->arrow_ret, line, col);
                 return true;
             }
             skip_coll_as_fn_ab:;
         }
-        if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST || b->kind == TYPE_ARR) &&
+        if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST ||
+             b->kind == TYPE_ARR || b->kind == TYPE_STRING) &&
             a->kind == TYPE_ARROW) {
             Type *ap = subst_apply_shallow(ctx->subst, a->arrow_param);
+            if (a->arrow_effect_name ||
+                (a->arrow_ret && a->arrow_ret->kind == TYPE_ARROW))
+                goto skip_coll_as_fn_ba;
             if (ap && (ap->kind == TYPE_ARROW || ap->kind == TYPE_FN ||
                        ap->kind == TYPE_COLL  || ap->kind == TYPE_LIST ||
                        ap->kind == TYPE_ARR   || ap->kind == TYPE_STRING ||
@@ -641,6 +762,7 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                 if (!ok) return false;
                 if (b->kind == TYPE_COLL) return infer_unify_one(ctx, a->arrow_ret, b->element_type, line, col);
                 if (b->kind == TYPE_ARR) return infer_unify_one(ctx, a->arrow_ret, b->arr_element_type, line, col);
+                if (b->kind == TYPE_STRING) return infer_unify_one(ctx, a->arrow_ret, type_char(), line, col);
                 return true;
             }
             skip_coll_as_fn_ba:;
@@ -950,7 +1072,9 @@ void infer_free_vars_type(Substitution *s, Type *t, int *out, int *count, int ca
     }
 }
 
-void infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int cap) {
+static void infer_free_vars_env_excluding(
+    InferCtx *ctx, InferEnv *env, const char *excluded_name,
+    int *out, int *count, int cap) {
     if (!env) return;
     /* Only walk the single env level passed — do NOT follow parent chain.
      * Parent envs contain schemes from previous InferCtx runs whose type
@@ -963,6 +1087,7 @@ void infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int
      *   pre-bind schemes that matter for generalisation                */
     for (size_t i = 0; i < env->size; i++) {
         for (InferEnvEntry *e = env->buckets[i]; e; e = e->next) {
+            if (excluded_name && !strcmp(e->name, excluded_name)) continue;
             TypeScheme *sc = e->scheme;
             /* Guard against NULL or corrupt pointers from stale entries */
             if (!sc || (uintptr_t)sc < 0x1000) continue;
@@ -986,9 +1111,16 @@ void infer_free_vars_env(InferCtx *ctx, InferEnv *env, int *out, int *count, int
     }
 }
 
+void infer_free_vars_env(
+    InferCtx *ctx, InferEnv *env, int *out, int *count, int cap) {
+    infer_free_vars_env_excluding(ctx, env, NULL, out, count, cap);
+}
+
 /// Generalisation and Instantiation
 
-TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env) {
+TypeScheme *infer_generalise_excluding(
+    InferCtx *ctx, Type *t, InferEnv *outer_env,
+    const char *excluded_name) {
     /* Apply substitution fully first */
     t = subst_apply(ctx->subst, t);
 
@@ -1000,7 +1132,9 @@ TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env) {
     /* Collect free vars in the outer environment */
     int env_free[INFER_MAX_VARS];
     int env_free_count = 0;
-    infer_free_vars_env(ctx, outer_env, env_free, &env_free_count, INFER_MAX_VARS);
+    infer_free_vars_env_excluding(
+        ctx, outer_env, excluded_name,
+        env_free, &env_free_count, INFER_MAX_VARS);
 
     /* Quantify vars that are free in t but not free in the environment */
     TypeScheme *sc       = calloc(1, sizeof(TypeScheme));
@@ -1016,6 +1150,10 @@ TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env) {
     return sc;
 }
 
+TypeScheme *infer_generalise(InferCtx *ctx, Type *t, InferEnv *outer_env) {
+    return infer_generalise_excluding(ctx, t, outer_env, NULL);
+}
+
 static Type *infer_substitute_vars(Type *t, int *from, Type **to, int count) {
     if (!t) return NULL;
 
@@ -1028,9 +1166,20 @@ static Type *infer_substitute_vars(Type *t, int *from, Type **to, int count) {
     }
 
     switch (t->kind) {
-    case TYPE_ARROW:
-        return type_arrow(infer_substitute_vars(t->arrow_param, from, to, count),
-                          infer_substitute_vars(t->arrow_ret,   from, to, count));
+    case TYPE_ARROW: {
+        Type *arrow = type_arrow(
+            infer_substitute_vars(t->arrow_param, from, to, count),
+            infer_substitute_vars(t->arrow_ret, from, to, count));
+        arrow->arrow_effect_complete = t->arrow_effect_complete;
+        arrow->arrow_effect_name = t->arrow_effect_name
+            ? strdup(t->arrow_effect_name) : NULL;
+        if (t->arrow_effect_scheme) {
+            arrow->arrow_effect_scheme = strdup(t->arrow_effect_scheme);
+            arrow->arrow_effect_scheme_owned =
+                arrow->arrow_effect_scheme != NULL;
+        }
+        return arrow;
+    }
 
     case TYPE_LIST: {
         if (t->list_count > 0 && t->list_types) {
@@ -1112,6 +1261,10 @@ static Type *infer_substitute_vars(Type *t, int *from, Type **to, int count) {
     }
 }
 
+Type *infer_substitute_type_vars(Type *t, int *from, Type **to, int count) {
+    return infer_substitute_vars(t, from, to, count);
+}
+
 static int infer_fresh_not_quantified(InferCtx *ctx, int *quantified, int count) {
     int id = subst_fresh(ctx->subst);
     while (int_array_contains(quantified, count, id))
@@ -1131,6 +1284,636 @@ Type *infer_instantiate(InferCtx *ctx, TypeScheme *scheme) {
 
     return infer_substitute_vars(scheme->type, scheme->quantified, fresh,
                                  scheme->quantified_count);
+}
+
+static size_t infer_arrow_domain_count(Type *type) {
+    size_t count = 0;
+    while (type && type->kind == TYPE_ARROW) {
+        count++;
+        type = type->arrow_ret;
+    }
+    return count;
+}
+
+/* Canonical arrows are the primary source of per-stage latent effects.
+ * The TypeScheme vectors remain a migration oracle for legacy producers. */
+static size_t infer_scheme_arrow_effect_count(const TypeScheme *scheme) {
+    if (!scheme) return 0;
+    size_t domains = 0;
+    bool canonical = true;
+    for (Type *arrow = scheme->type;
+         arrow && arrow->kind == TYPE_ARROW; arrow = arrow->arrow_ret) {
+        domains++;
+        canonical = canonical && arrow->arrow_effect_scheme != NULL;
+    }
+    return domains && canonical ? domains : scheme->arrow_effect_count;
+}
+
+static QttEffectScheme *infer_scheme_arrow_effect_at(
+    const TypeScheme *scheme, size_t index, bool *complete,
+    bool *from_canonical) {
+    if (complete) *complete = false;
+    if (from_canonical) *from_canonical = false;
+    if (!scheme) return NULL;
+    Type *arrow = scheme->type;
+    for (size_t i = 0;
+         arrow && arrow->kind == TYPE_ARROW && i < index; i++)
+        arrow = arrow->arrow_ret;
+    if (arrow && arrow->kind == TYPE_ARROW &&
+        arrow->arrow_effect_scheme) {
+        QttEffectScheme *effect = qtt_effect_scheme_deserialize(
+            arrow->arrow_effect_scheme);
+        if (effect) {
+            if (complete) *complete = arrow->arrow_effect_complete;
+            if (from_canonical) *from_canonical = true;
+            return effect;
+        }
+    }
+    if (index >= scheme->arrow_effect_count ||
+        !scheme->arrow_effect_schemes[index])
+        return NULL;
+    if (complete) *complete = scheme->arrow_effects_complete[index];
+    return qtt_effect_scheme_retain(scheme->arrow_effect_schemes[index]);
+}
+
+static const char *infer_scheme_arrow_effect_name_at(
+    const TypeScheme *scheme, size_t index) {
+    Type *arrow = scheme ? scheme->type : NULL;
+    for (size_t i = 0;
+         arrow && arrow->kind == TYPE_ARROW && i < index; i++)
+        arrow = arrow->arrow_ret;
+    return arrow && arrow->kind == TYPE_ARROW
+        ? arrow->arrow_effect_name : NULL;
+}
+
+bool scheme_instantiate_effect_trait_constraints(
+    const TypeScheme *scheme, QttEffectArena *arena,
+    QttEffectConstraintSet *constraints) {
+    if (!scheme || !arena || !constraints) return false;
+    for (size_t i = 0; i < scheme->effect_trait_predicate_count; i++) {
+        bool complete = false;
+        QttEffectScheme *stage = infer_scheme_arrow_effect_at(
+            scheme, scheme->effect_trait_predicate_stages[i],
+            &complete, NULL);
+        QttEffectRow *row = stage
+            ? qtt_effect_instantiate(arena, stage) : NULL;
+        qtt_effect_scheme_free(stage);
+        if (!row || !qtt_effect_constrain_has_trait(
+                constraints, row, scheme->effect_trait_predicate_names[i]))
+            return false;
+    }
+    return true;
+}
+
+void infer_quantitative_type_free(InferQuantitativeType *instance) {
+    if (!instance) return;
+    free(instance->domain_grades);
+    free(instance->domain_effects);
+    free(instance->domain_effects_complete);
+    free(instance->closure_module_ids);
+    free(instance->closure_ids);
+    free(instance->closure_binder_ids);
+    free(instance->closure_slots);
+    free(instance->closure_parameter_indices);
+    free(instance->closure_origin_kinds);
+    free(instance->closure_origin_ids);
+    free(instance->closure_domain_module_ids);
+    free(instance->closure_domain_ids);
+    free(instance->closure_domain_indices);
+    free(instance->result_closure_module_ids);
+    free(instance->result_closure_ids);
+    free(instance->callable_parameter_indices);
+    free(instance->callable_domain_parameter_indices);
+    free(instance->callable_domain_indices);
+    memset(instance, 0, sizeof(*instance));
+}
+
+InferQuantitativeResult infer_instantiate_quantitative(
+    InferCtx *ctx, TypeScheme *scheme, InferQuantitativeType *out) {
+    if (!ctx || !scheme || !out)
+        return INFER_QUANTITATIVE_INVALID_ARGUMENT;
+
+    memset(out, 0, sizeof(*out));
+    Type *type = infer_instantiate(ctx, scheme);
+    size_t arrow_count = infer_arrow_domain_count(type);
+    size_t grade_count = scheme_grade_count(scheme);
+
+    if (!scheme->grade_scheme || grade_count != arrow_count)
+        return INFER_QUANTITATIVE_GRADE_ARITY_MISMATCH;
+    size_t arrow_effect_count = infer_scheme_arrow_effect_count(scheme);
+    if (arrow_effect_count && arrow_effect_count != arrow_count)
+        return INFER_QUANTITATIVE_EFFECT_ARITY_MISMATCH;
+
+    size_t closure_count = scheme_closure_grade_count(scheme);
+    size_t result_count =
+        qtt_grade_scheme_result_closure_count(scheme->grade_scheme);
+    size_t closure_domain_count =
+        qtt_grade_scheme_closure_domain_count(scheme->grade_scheme);
+    size_t callable_count =
+        qtt_grade_scheme_callable_parameter_count(scheme->grade_scheme);
+    size_t callable_domain_count =
+        qtt_grade_scheme_callable_domain_count(scheme->grade_scheme);
+    QttGradeExpr **grades =
+        qtt_grade_instantiate(ctx->grade_arena, scheme->grade_scheme);
+    if ((grade_count + closure_count + closure_domain_count) && !grades)
+        return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+    uint64_t *closure_modules = closure_count
+        ? malloc(closure_count * sizeof(*closure_modules)) : NULL;
+    uint64_t *closure_ids = closure_count
+        ? malloc(closure_count * sizeof(*closure_ids)) : NULL;
+    uint64_t *closure_binders = closure_count
+        ? malloc(closure_count * sizeof(*closure_binders)) : NULL;
+    size_t *closure_slots = closure_count
+        ? malloc(closure_count * sizeof(*closure_slots)) : NULL;
+    size_t *closure_parameters = closure_count
+        ? malloc(closure_count * sizeof(*closure_parameters)) : NULL;
+    int *closure_origin_kinds = closure_count
+        ? malloc(closure_count * sizeof(*closure_origin_kinds)) : NULL;
+    uint64_t *closure_origin_ids = closure_count
+        ? malloc(closure_count * sizeof(*closure_origin_ids)) : NULL;
+    uint64_t *closure_domain_modules = closure_domain_count
+        ? malloc(closure_domain_count *
+                 sizeof(*closure_domain_modules)) : NULL;
+    uint64_t *closure_domain_ids = closure_domain_count
+        ? malloc(closure_domain_count * sizeof(*closure_domain_ids)) : NULL;
+    size_t *closure_domain_indices = closure_domain_count
+        ? malloc(closure_domain_count *
+                 sizeof(*closure_domain_indices)) : NULL;
+    uint64_t *result_modules = result_count
+        ? malloc(result_count * sizeof(*result_modules)) : NULL;
+    uint64_t *result_ids = result_count
+        ? malloc(result_count * sizeof(*result_ids)) : NULL;
+    size_t *callable_parameters = callable_count
+        ? malloc(callable_count * sizeof(*callable_parameters)) : NULL;
+    size_t *callable_domain_parameters = callable_domain_count
+        ? malloc(callable_domain_count *
+                 sizeof(*callable_domain_parameters)) : NULL;
+    size_t *callable_domain_indices = callable_domain_count
+        ? malloc(callable_domain_count *
+                 sizeof(*callable_domain_indices)) : NULL;
+    if (closure_count &&
+        (!closure_modules || !closure_ids || !closure_binders ||
+         !closure_slots || !closure_parameters ||
+         !closure_origin_kinds || !closure_origin_ids)) {
+        free(result_modules);
+        free(result_ids);
+        free(closure_modules);
+        free(closure_ids);
+        free(closure_binders);
+        free(closure_slots);
+        free(closure_parameters);
+        free(closure_origin_kinds);
+        free(closure_origin_ids);
+        free(callable_parameters);
+        free(callable_domain_parameters);
+        free(callable_domain_indices);
+        free(closure_domain_modules);
+        free(closure_domain_ids);
+        free(closure_domain_indices);
+        free(grades);
+        return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+    }
+    if ((result_count && (!result_modules || !result_ids)) ||
+        (callable_count && !callable_parameters) ||
+        (callable_domain_count &&
+         (!callable_domain_parameters || !callable_domain_indices))) {
+        free(result_modules);
+        free(result_ids);
+        free(closure_modules);
+        free(closure_ids);
+        free(closure_binders);
+        free(closure_slots);
+        free(closure_parameters);
+        free(closure_origin_kinds);
+        free(closure_origin_ids);
+        free(callable_parameters);
+        free(callable_domain_parameters);
+        free(callable_domain_indices);
+        free(closure_domain_modules);
+        free(closure_domain_ids);
+        free(closure_domain_indices);
+        free(grades);
+        return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+    }
+    if (closure_domain_count &&
+        (!closure_domain_modules || !closure_domain_ids ||
+         !closure_domain_indices)) {
+        free(result_modules);
+        free(result_ids);
+        free(closure_modules);
+        free(closure_ids);
+        free(closure_binders);
+        free(closure_slots);
+        free(closure_parameters);
+        free(closure_origin_kinds);
+        free(closure_origin_ids);
+        free(callable_parameters);
+        free(callable_domain_parameters);
+        free(callable_domain_indices);
+        free(closure_domain_modules);
+        free(closure_domain_ids);
+        free(closure_domain_indices);
+        free(grades);
+        return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+    }
+    for (size_t i = 0; i < closure_count; i++) {
+        closure_modules[i] =
+            qtt_grade_scheme_closure_module(scheme->grade_scheme, i);
+        closure_ids[i] =
+            qtt_grade_scheme_closure_id(scheme->grade_scheme, i);
+        closure_binders[i] =
+            qtt_grade_scheme_closure_binder(scheme->grade_scheme, i);
+        closure_slots[i] =
+            qtt_grade_scheme_closure_slot(scheme->grade_scheme, i);
+        closure_parameters[i] =
+            qtt_grade_scheme_closure_parameter_index(
+                scheme->grade_scheme, i);
+        closure_origin_kinds[i] =
+            qtt_grade_scheme_closure_origin_kind(
+                scheme->grade_scheme, i);
+        closure_origin_ids[i] =
+            qtt_grade_scheme_closure_origin_id(
+                scheme->grade_scheme, i);
+    }
+    for (size_t i = 0; i < result_count; i++) {
+        result_modules[i] = qtt_grade_scheme_result_closure_module(
+            scheme->grade_scheme, i);
+        result_ids[i] = qtt_grade_scheme_result_closure_id(
+            scheme->grade_scheme, i);
+    }
+    for (size_t i = 0; i < callable_count; i++)
+        callable_parameters[i] =
+            qtt_grade_scheme_callable_parameter_index(
+                scheme->grade_scheme, i);
+    for (size_t i = 0; i < callable_domain_count; i++) {
+        callable_domain_parameters[i] =
+            qtt_grade_scheme_callable_domain_parameter_index(
+                scheme->grade_scheme, i);
+        callable_domain_indices[i] =
+            qtt_grade_scheme_callable_domain_index(
+                scheme->grade_scheme, i);
+    }
+    for (size_t i = 0; i < closure_domain_count; i++) {
+        closure_domain_modules[i] =
+            qtt_grade_scheme_closure_domain_module(
+                scheme->grade_scheme, i);
+        closure_domain_ids[i] = qtt_grade_scheme_closure_domain_id(
+            scheme->grade_scheme, i);
+        closure_domain_indices[i] =
+            qtt_grade_scheme_closure_domain_index(
+                scheme->grade_scheme, i);
+    }
+
+    out->type = type;
+    out->domain_grades = grades;
+    out->domain_count = grade_count;
+    out->closure_module_ids = closure_modules;
+    out->closure_ids = closure_ids;
+    out->closure_binder_ids = closure_binders;
+    out->closure_slots = closure_slots;
+    out->closure_parameter_indices = closure_parameters;
+    out->closure_origin_kinds = closure_origin_kinds;
+    out->closure_origin_ids = closure_origin_ids;
+    out->closure_grades = grades ? grades + grade_count : NULL;
+    out->closure_grade_count = closure_count;
+    out->closure_domain_module_ids = closure_domain_modules;
+    out->closure_domain_ids = closure_domain_ids;
+    out->closure_domain_indices = closure_domain_indices;
+    out->closure_domain_grades = grades
+        ? grades + grade_count + closure_count : NULL;
+    out->closure_domain_grade_count = closure_domain_count;
+    out->result_closure_module_ids = result_modules;
+    out->result_closure_ids = result_ids;
+    out->result_closure_count = result_count;
+    out->callable_parameter_indices = callable_parameters;
+    out->callable_invocation_grades = grades
+        ? grades + grade_count + closure_count + closure_domain_count
+        : NULL;
+    out->callable_parameter_count = callable_count;
+    out->callable_domain_parameter_indices =
+        callable_domain_parameters;
+    out->callable_domain_indices = callable_domain_indices;
+    out->callable_domain_grades = grades
+        ? grades + grade_count + closure_count + closure_domain_count +
+              callable_count
+        : NULL;
+    out->callable_domain_count = callable_domain_count;
+    out->effect_arena = ctx->effect_arena;
+    out->effect_solver = ctx->effect_solver;
+    out->latent_effects = out->effect_solver
+        ? (scheme->effect_scheme
+            ? qtt_effect_instantiate(
+                  out->effect_arena, scheme->effect_scheme)
+            : qtt_effect_empty(out->effect_arena))
+        : NULL;
+    out->effects_complete = scheme->effects_complete;
+    if (!out->latent_effects) {
+        infer_quantitative_type_free(out);
+        return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+    }
+    out->domain_effect_count = arrow_effect_count;
+    if (out->domain_effect_count) {
+        out->domain_effects = calloc(
+            out->domain_effect_count, sizeof(*out->domain_effects));
+        out->domain_effects_complete = malloc(
+            out->domain_effect_count *
+            sizeof(*out->domain_effects_complete));
+        if (!out->domain_effects || !out->domain_effects_complete) {
+            infer_quantitative_type_free(out);
+            return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+        }
+        for (size_t i = 0; i < out->domain_effect_count; i++) {
+            bool effect_complete = false;
+            QttEffectScheme *effect = infer_scheme_arrow_effect_at(
+                scheme, i, &effect_complete, NULL);
+            out->domain_effects[i] = qtt_effect_instantiate(
+                out->effect_arena, effect);
+            out->domain_effects_complete[i] = effect_complete;
+            qtt_effect_scheme_free(effect);
+            if (!out->domain_effects[i]) {
+                infer_quantitative_type_free(out);
+                return INFER_QUANTITATIVE_OUT_OF_MEMORY;
+            }
+        }
+    }
+    return INFER_QUANTITATIVE_OK;
+}
+
+bool infer_quantitative_take_domain(
+    InferQuantitativeType *instance,
+    Type **parameter,
+    QttGradeExpr **grade) {
+    return infer_quantitative_take_domain_contract(
+        instance, parameter, grade, NULL, NULL);
+}
+
+bool infer_quantitative_take_domain_contract(
+    InferQuantitativeType *instance, Type **parameter,
+    QttGradeExpr **grade, QttEffectRow **effects,
+    bool *effects_complete) {
+    if (!instance || !instance->type ||
+        instance->type->kind != TYPE_ARROW ||
+        instance->domain_offset >= instance->domain_count)
+        return false;
+
+    if (parameter) *parameter = instance->type->arrow_param;
+    if (grade)
+        *grade = instance->domain_grades[instance->domain_offset];
+    if (effects)
+        *effects = instance->domain_effect_offset <
+                instance->domain_effect_count
+            ? instance->domain_effects[instance->domain_effect_offset]
+            : NULL;
+    if (effects_complete)
+        *effects_complete = instance->domain_effect_offset <
+                instance->domain_effect_count
+            ? instance->domain_effects_complete[
+                  instance->domain_effect_offset]
+            : false;
+    instance->domain_offset++;
+    if (instance->domain_effect_offset < instance->domain_effect_count)
+        instance->domain_effect_offset++;
+    instance->type = instance->type->arrow_ret;
+    return true;
+}
+
+QttGradeExpr *infer_quantitative_closure_grade(
+    const InferQuantitativeType *instance,
+    uint64_t module_id,
+    uint64_t closure_id,
+    uint64_t binder_id) {
+    if (!instance || !module_id || !closure_id || !binder_id) return NULL;
+    for (size_t i = 0; i < instance->closure_grade_count; i++)
+        if (instance->closure_module_ids[i] == module_id &&
+            instance->closure_ids[i] == closure_id &&
+            instance->closure_binder_ids[i] == binder_id)
+            return instance->closure_grades[i];
+    return NULL;
+}
+
+QttGradeExpr *infer_quantitative_closure_slot_grade(
+    const InferQuantitativeType *instance,
+    uint64_t module_id,
+    uint64_t closure_id,
+    size_t slot) {
+    if (!instance || !module_id || !closure_id) return NULL;
+    for (size_t i = 0; i < instance->closure_grade_count; i++)
+        if (instance->closure_module_ids[i] == module_id &&
+            instance->closure_ids[i] == closure_id &&
+            instance->closure_slots[i] == slot)
+            return instance->closure_grades[i];
+    return NULL;
+}
+
+QttGradeExpr *infer_quantitative_closure_domain_grade(
+    const InferQuantitativeType *instance,
+    uint64_t module_id,
+    uint64_t closure_id,
+    size_t parameter_index) {
+    if (!instance || !module_id || !closure_id) return NULL;
+    for (size_t i = 0; i < instance->closure_domain_grade_count; i++)
+        if (instance->closure_domain_module_ids[i] == module_id &&
+            instance->closure_domain_ids[i] == closure_id &&
+            instance->closure_domain_indices[i] == parameter_index)
+            return instance->closure_domain_grades[i];
+    return NULL;
+}
+
+QttGradeExpr *infer_quantitative_callable_domain_grade(
+    const InferQuantitativeType *instance,
+    size_t callable_parameter_index, size_t domain_index) {
+    if (!instance) return NULL;
+    for (size_t i = 0; i < instance->callable_domain_count; i++)
+        if (instance->callable_domain_parameter_indices[i] ==
+                callable_parameter_index &&
+            instance->callable_domain_indices[i] == domain_index)
+            return instance->callable_domain_grades[i];
+    return NULL;
+}
+
+size_t infer_grade_application_count(const InferCtx *ctx) {
+    return ctx ? ctx->grade_application_count : 0;
+}
+
+const InferGradeApplication *infer_grade_application(
+    const InferCtx *ctx, size_t index) {
+    if (!ctx || index >= ctx->grade_application_count) return NULL;
+    return &ctx->grade_applications[index];
+}
+
+static bool infer_retain_quantitative_application(
+    InferCtx *ctx,
+    const AST *application,
+    InferQuantitativeType *instance,
+    size_t applied_count) {
+    if (!ctx || !instance || applied_count > instance->domain_count)
+        return false;
+    if (ctx->grade_application_count == ctx->grade_application_cap) {
+        size_t capacity = ctx->grade_application_cap
+            ? ctx->grade_application_cap * 2 : 8;
+        InferGradeApplication *grown = realloc(
+            ctx->grade_applications, capacity * sizeof(*grown));
+        if (!grown) return false;
+        ctx->grade_applications = grown;
+        ctx->grade_application_cap = capacity;
+    }
+    InferGradeApplication *record =
+        &ctx->grade_applications[ctx->grade_application_count++];
+    memset(record, 0, sizeof(*record));
+    uint64_t *result_instances = NULL;
+    QttClosureEnvironment **result_environments = NULL;
+    if (applied_count == instance->domain_count &&
+        instance->result_closure_count) {
+        if (!ctx->next_closure_instance_id ||
+            instance->result_closure_count - 1 >
+                UINT64_MAX - ctx->next_closure_instance_id) {
+            ctx->grade_application_count--;
+            return false;
+        }
+        result_instances = malloc(
+            instance->result_closure_count * sizeof(*result_instances));
+        result_environments = calloc(
+            instance->result_closure_count, sizeof(*result_environments));
+        if (!result_instances || !result_environments) {
+            free(result_instances);
+            free(result_environments);
+            ctx->grade_application_count--;
+            return false;
+        }
+        for (size_t i = 0; i < instance->result_closure_count; i++) {
+            result_instances[i] = ctx->next_closure_instance_id++;
+            size_t slot_count = 0;
+            for (size_t j = 0; j < instance->closure_grade_count; j++)
+                if (instance->closure_module_ids[j] ==
+                        instance->result_closure_module_ids[i] &&
+                    instance->closure_ids[j] ==
+                        instance->result_closure_ids[i]) {
+                    if (instance->closure_slots[j] >= slot_count)
+                        slot_count = instance->closure_slots[j] + 1;
+                }
+            QttEnvironmentOrigin *origins = slot_count
+                ? calloc(slot_count, sizeof(*origins)) : NULL;
+            QttEnvironmentOrigin *arguments = applied_count
+                ? calloc(applied_count, sizeof(*arguments)) : NULL;
+            if ((slot_count && !origins) ||
+                (applied_count && !arguments)) {
+                free(origins);
+                free(arguments);
+                goto environment_failure;
+            }
+            for (size_t j = 0; j < applied_count; j++) {
+                const AST *argument = application->list.items[j + 1];
+                arguments[j] = argument->type == AST_SYMBOL &&
+                        argument->resolved_binder_id
+                    ? qtt_environment_local(argument->resolved_binder_id)
+                    : qtt_environment_expression(
+                          (uint64_t)(uintptr_t)argument);
+            }
+            for (size_t j = 0; j < instance->closure_grade_count; j++)
+                if (instance->closure_module_ids[j] ==
+                        instance->result_closure_module_ids[i] &&
+                    instance->closure_ids[j] ==
+                        instance->result_closure_ids[i])
+                    origins[instance->closure_slots[j]] =
+                        instance->closure_origin_kinds[j] ==
+                                QTT_ENVIRONMENT_PARAMETER
+                            ? qtt_environment_parameter(
+                                  instance->closure_origin_ids[j])
+                            : instance->closure_origin_kinds[j] ==
+                                    QTT_ENVIRONMENT_EXPRESSION
+                                ? qtt_environment_expression(
+                                      instance->closure_origin_ids[j])
+                                : qtt_environment_local(
+                                      instance->closure_origin_ids[j]);
+            QttClosureEnvironment *environment = qtt_environment_new(
+                result_instances[i],
+                instance->result_closure_module_ids[i],
+                instance->result_closure_ids[i], origins, slot_count,
+                instance->domain_count);
+            result_environments[i] = qtt_environment_substitute(
+                environment, arguments, applied_count);
+            qtt_environment_free(environment);
+            free(origins);
+            free(arguments);
+            if (!result_environments[i]) goto environment_failure;
+        }
+    }
+    record->application = application;
+    record->domain_grades = instance->domain_grades;
+    record->applied_count = applied_count;
+    record->closure_module_ids = instance->closure_module_ids;
+    record->closure_ids = instance->closure_ids;
+    record->closure_binder_ids = instance->closure_binder_ids;
+    record->closure_slots = instance->closure_slots;
+    record->closure_parameter_indices =
+        instance->closure_parameter_indices;
+    record->closure_origin_kinds = instance->closure_origin_kinds;
+    record->closure_origin_ids = instance->closure_origin_ids;
+    record->closure_grades = instance->closure_grades;
+    record->closure_grade_count = instance->closure_grade_count;
+    record->closure_domain_module_ids =
+        instance->closure_domain_module_ids;
+    record->closure_domain_ids = instance->closure_domain_ids;
+    record->closure_domain_indices = instance->closure_domain_indices;
+    record->closure_domain_grades = instance->closure_domain_grades;
+    record->closure_domain_grade_count =
+        instance->closure_domain_grade_count;
+    record->callable_parameter_indices =
+        instance->callable_parameter_indices;
+    record->callable_invocation_grades =
+        instance->callable_invocation_grades;
+    record->callable_parameter_count =
+        instance->callable_parameter_count;
+    record->callable_domain_parameter_indices =
+        instance->callable_domain_parameter_indices;
+    record->callable_domain_indices =
+        instance->callable_domain_indices;
+    record->callable_domain_grades =
+        instance->callable_domain_grades;
+    record->callable_domain_count =
+        instance->callable_domain_count;
+    if (applied_count == instance->domain_count) {
+        record->result_closure_module_ids =
+            instance->result_closure_module_ids;
+        record->result_closure_ids = instance->result_closure_ids;
+        record->result_closure_instance_ids = result_instances;
+        record->result_closure_environments = result_environments;
+        record->result_closure_count = instance->result_closure_count;
+        instance->result_closure_module_ids = NULL;
+        instance->result_closure_ids = NULL;
+        instance->result_closure_count = 0;
+    }
+    instance->domain_grades = NULL;
+    instance->closure_module_ids = NULL;
+    instance->closure_ids = NULL;
+    instance->closure_binder_ids = NULL;
+    instance->closure_slots = NULL;
+    instance->closure_parameter_indices = NULL;
+    instance->closure_origin_kinds = NULL;
+    instance->closure_origin_ids = NULL;
+    instance->closure_grades = NULL;
+    instance->closure_grade_count = 0;
+    instance->closure_domain_module_ids = NULL;
+    instance->closure_domain_ids = NULL;
+    instance->closure_domain_indices = NULL;
+    instance->closure_domain_grades = NULL;
+    instance->closure_domain_grade_count = 0;
+    instance->callable_parameter_indices = NULL;
+    instance->callable_invocation_grades = NULL;
+    instance->callable_parameter_count = 0;
+    instance->callable_domain_parameter_indices = NULL;
+    instance->callable_domain_indices = NULL;
+    instance->callable_domain_grades = NULL;
+    instance->callable_domain_count = 0;
+    return true;
+
+environment_failure:
+    for (size_t i = 0; i < instance->result_closure_count; i++)
+        qtt_environment_free(result_environments[i]);
+    free(result_environments);
+    free(result_instances);
+    ctx->grade_application_count--;
+    return false;
 }
 
 Type *infer_instantiate_with_subst(InferCtx *ctx, TypeScheme *scheme,
@@ -1164,18 +1947,1732 @@ TypeScheme *scheme_mono(Type *t) {
 }
 
 TypeScheme *scheme_clone(TypeScheme *s) {
+    if (!s) return NULL;
     TypeScheme *c       = calloc(1, sizeof(TypeScheme));
+    if (!c) return NULL;
     c->quantified_count = s->quantified_count;
-    c->quantified       = malloc(sizeof(int) * s->quantified_count);
-    memcpy(c->quantified, s->quantified, sizeof(int) * s->quantified_count);
-    c->type             = s->type;  /* type nodes are shared — not deep-copied */
+    if (s->quantified_count) {
+        c->quantified = malloc(sizeof(int) * s->quantified_count);
+        if (!c->quantified) {
+            free(c);
+            return NULL;
+        }
+        memcpy(c->quantified, s->quantified,
+               sizeof(int) * s->quantified_count);
+    }
+    c->type = s->owns_type ? type_clone(s->type) : s->type;
+    c->owns_type = s->owns_type;
+    if (s->owns_type && !c->type) {
+        free(c->quantified);
+        free(c);
+        return NULL;
+    }
+    c->grade_scheme = qtt_grade_scheme_retain(s->grade_scheme);
+    c->effect_scheme = qtt_effect_scheme_retain(s->effect_scheme);
+    c->effects_complete = s->effects_complete;
+    if (!scheme_set_arrow_effect_schemes(
+            c, s->arrow_effect_schemes, s->arrow_effects_complete,
+            s->arrow_effect_count)) {
+        scheme_free(c);
+        return NULL;
+    }
+    if (!scheme_set_effect_trait_predicates(c,
+            s->effect_trait_predicate_stages,
+            (const char *const *)s->effect_trait_predicate_names,
+            s->effect_trait_predicate_count)) {
+        scheme_free(c); return NULL;
+    }
     return c;
 }
 
 void scheme_free(TypeScheme *s) {
     if (!s) return;
     free(s->quantified);
+    qtt_grade_scheme_free(s->grade_scheme);
+    qtt_effect_scheme_free(s->effect_scheme);
+    for (size_t i = 0; i < s->arrow_effect_count; i++)
+        qtt_effect_scheme_free(s->arrow_effect_schemes[i]);
+    free(s->arrow_effect_schemes);
+    free(s->arrow_effects_complete);
+    for (size_t i = 0; i < s->effect_trait_predicate_count; i++)
+        free(s->effect_trait_predicate_names[i]);
+    free(s->effect_trait_predicate_names);
+    free(s->effect_trait_predicate_stages);
+    if (s->owns_type) type_free(s->type);
     free(s);
+}
+
+typedef struct { size_t stage; char *trait; } SchemeTraitPredicate;
+static int scheme_trait_predicate_compare(const void *a, const void *b) {
+    const SchemeTraitPredicate *x = a, *y = b;
+    if (x->stage != y->stage) return x->stage < y->stage ? -1 : 1;
+    return strcmp(x->trait, y->trait);
+}
+
+bool scheme_set_effect_trait_predicates(
+    TypeScheme *scheme, const size_t *stages,
+    const char *const *traits, size_t count) {
+    if (!scheme || (count && (!stages || !traits))) return false;
+    size_t stage_count = 0;
+    for (Type *arrow = scheme->type;
+         arrow && arrow->kind == TYPE_ARROW; arrow = arrow->arrow_ret)
+        stage_count++;
+    SchemeTraitPredicate *items = count ? calloc(count, sizeof(*items)) : NULL;
+    if (count && !items) return false;
+    for (size_t i = 0; i < count; i++) {
+        if (stages[i] >= stage_count) {
+            for (size_t j = 0; j < i; j++) free(items[j].trait);
+            free(items); return false;
+        }
+        items[i].stage = stages[i];
+        items[i].trait = qtt_effect_traits_normalize(traits[i]);
+        if (!items[i].trait || strchr(items[i].trait, ',')) {
+            for (size_t j = 0; j <= i; j++) free(items[j].trait);
+            free(items); return false;
+        }
+    }
+    if (count)
+        qsort(items, count, sizeof(*items), scheme_trait_predicate_compare);
+    size_t unique = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (unique && items[unique-1].stage == items[i].stage &&
+            !strcmp(items[unique-1].trait, items[i].trait)) {
+            free(items[i].trait); continue;
+        }
+        items[unique++] = items[i];
+    }
+    size_t *owned_stages = unique ? malloc(unique * sizeof(*owned_stages)) : NULL;
+    char **owned_traits = unique ? malloc(unique * sizeof(*owned_traits)) : NULL;
+    if (unique && (!owned_stages || !owned_traits)) {
+        for (size_t i = 0; i < unique; i++) free(items[i].trait);
+        free(items); free(owned_stages); free(owned_traits); return false;
+    }
+    for (size_t i = 0; i < unique; i++) {
+        owned_stages[i] = items[i].stage; owned_traits[i] = items[i].trait;
+    }
+    free(items);
+    for (size_t i = 0; i < scheme->effect_trait_predicate_count; i++)
+        free(scheme->effect_trait_predicate_names[i]);
+    free(scheme->effect_trait_predicate_names);
+    free(scheme->effect_trait_predicate_stages);
+    scheme->effect_trait_predicate_stages = owned_stages;
+    scheme->effect_trait_predicate_names = owned_traits;
+    scheme->effect_trait_predicate_count = unique;
+    return true;
+}
+
+size_t scheme_effect_trait_predicate_count(const TypeScheme *scheme) {
+    return scheme ? scheme->effect_trait_predicate_count : 0;
+}
+size_t scheme_effect_trait_predicate_stage(const TypeScheme *scheme, size_t i) {
+    return scheme && i < scheme->effect_trait_predicate_count
+        ? scheme->effect_trait_predicate_stages[i] : SIZE_MAX;
+}
+const char *scheme_effect_trait_predicate_name(const TypeScheme *scheme, size_t i) {
+    return scheme && i < scheme->effect_trait_predicate_count
+        ? scheme->effect_trait_predicate_names[i] : NULL;
+}
+
+static int scheme_quantifier_index(
+    const TypeScheme *scheme, int variable) {
+    for (int i = 0; i < scheme->quantified_count; i++)
+        if (scheme->quantified[i] == variable) return i;
+    return -1;
+}
+
+static bool scheme_canonicalize_type(
+    Type *type, const TypeScheme *scheme, unsigned depth) {
+    if (!type || !scheme || depth > 128) return false;
+    if (type->kind == TYPE_VAR) {
+        int canonical = scheme_quantifier_index(scheme, type->var_id);
+        if (canonical < 0) return false;
+        type->var_id = canonical;
+        return true;
+    }
+#define WALK(child) \
+    do { if ((child) && !scheme_canonicalize_type( \
+             (child), scheme, depth + 1)) return false; } while (0)
+    switch (type->kind) {
+    case TYPE_ARROW: WALK(type->arrow_param); WALK(type->arrow_ret); break;
+    case TYPE_FN:
+        for (int i = 0; i < type->param_count; i++) WALK(type->params[i].type);
+        WALK(type->return_type);
+        break;
+    case TYPE_LIST:
+        for (int i = 0; i < type->list_count; i++) WALK(type->list_types[i]);
+        break;
+    case TYPE_OPTIONAL: case TYPE_PTR: case TYPE_COLL: case TYPE_VARIADIC:
+        WALK(type->element_type); break;
+    case TYPE_ARR: WALK(type->arr_element_type); break;
+    case TYPE_MAP: WALK(type->map_key_type); WALK(type->map_value_type); break;
+    case TYPE_LAYOUT:
+        for (int i = 0; i < type->layout_field_count; i++)
+            WALK(type->layout_fields[i].type);
+        break;
+    case TYPE_APP: WALK(type->app_arg); break;
+    default: break;
+    }
+#undef WALK
+    return type->kind != TYPE_UNKNOWN;
+}
+
+static uint64_t scheme_text_fingerprint(const char *text) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
+        hash ^= *p;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash ? hash : 1;
+}
+
+char *infer_type_scheme_serialize(const TypeScheme *scheme) {
+    if (!scheme || !scheme->type || scheme->quantified_count < 0 ||
+        scheme->quantified_count > 4096) return NULL;
+    for (int i = 0; i < scheme->quantified_count; i++)
+        for (int j = i + 1; j < scheme->quantified_count; j++)
+            if (scheme->quantified[i] == scheme->quantified[j]) return NULL;
+    Type *canonical = type_clone(scheme->type);
+    if (!canonical || !scheme_canonicalize_type(canonical, scheme, 0)) {
+        type_free(canonical);
+        return NULL;
+    }
+    char *body = qtt_type_serialize(canonical);
+    type_free(canonical);
+    if (!body) return NULL;
+    size_t predicate_size = 32;
+    for (size_t i = 0; i < scheme->effect_trait_predicate_count; i++)
+        predicate_size += strlen(scheme->effect_trait_predicate_names[i]) + 32;
+    size_t size = strlen(body) + predicate_size + 96;
+    char *text = malloc(size);
+    if (text && !scheme->effect_trait_predicate_count)
+        snprintf(text, size, "monad-hm-scheme-v1|%016llx|%d|%s",
+            (unsigned long long)scheme_text_fingerprint(body),
+            scheme->quantified_count, body);
+    else if (text) {
+        char *payload = malloc(strlen(body) + predicate_size);
+        if (!payload) { free(text); text = NULL; }
+        else {
+            size_t used = (size_t)snprintf(payload,
+                strlen(body) + predicate_size, "%s|%zu|", body,
+                scheme->effect_trait_predicate_count);
+            for (size_t i = 0; i < scheme->effect_trait_predicate_count; i++)
+                used += (size_t)snprintf(payload + used,
+                    strlen(body) + predicate_size - used, "%s%zu:%s",
+                    i ? "," : "", scheme->effect_trait_predicate_stages[i],
+                    scheme->effect_trait_predicate_names[i]);
+            snprintf(text, size, "monad-hm-scheme-v2|%016llx|%d|%s",
+                (unsigned long long)scheme_text_fingerprint(payload),
+                scheme->quantified_count, payload);
+            free(payload);
+        }
+    }
+    free(body);
+    return text;
+}
+
+TypeScheme *infer_type_scheme_deserialize(const char *text) {
+    static const char header_v1[] = "monad-hm-scheme-v1|";
+    static const char header_v2[] = "monad-hm-scheme-v2|";
+    bool v2 = text && !strncmp(text, header_v2, sizeof(header_v2) - 1);
+    if (!v2 && (!text || strncmp(text, header_v1, sizeof(header_v1) - 1)))
+        return NULL;
+    const char *fingerprint_text = text + (v2
+        ? sizeof(header_v2) - 1 : sizeof(header_v1) - 1);
+    char *fingerprint_end = NULL;
+    errno = 0;
+    unsigned long long fingerprint =
+        strtoull(fingerprint_text, &fingerprint_end, 16);
+    if (errno == ERANGE || !fingerprint_end ||
+        fingerprint_end != fingerprint_text + 16 ||
+        *fingerprint_end != '|') return NULL;
+    const char *count_text = fingerprint_end + 1;
+    char *count_end = NULL;
+    errno = 0;
+    long count = strtol(count_text, &count_end, 10);
+    if (errno == ERANGE || !count_end || count_end == count_text ||
+        *count_end != '|' || count < 0 || count > 4096)
+        return NULL;
+    const char *payload = count_end + 1;
+    if (!*payload || scheme_text_fingerprint(payload) != (uint64_t)fingerprint)
+        return NULL;
+    char *owned_payload = v2 ? strdup(payload) : NULL;
+    char *body = v2 ? owned_payload : (char *)payload;
+    char *predicate_count_text = NULL, *predicate_text = NULL;
+    if (v2) {
+        char *separator = body ? strchr(body, '|') : NULL;
+        if (!separator) { free(owned_payload); return NULL; }
+        *separator = '\0'; predicate_count_text = separator + 1;
+        separator = strchr(predicate_count_text, '|');
+        if (!separator) { free(owned_payload); return NULL; }
+        *separator = '\0'; predicate_text = separator + 1;
+    }
+    Type *type = qtt_type_deserialize(body);
+    TypeScheme *scheme = type ? scheme_mono(type) : NULL;
+    if (!scheme) {
+        qtt_type_free_owned(type);
+        free(owned_payload); return NULL;
+    }
+    scheme->owns_type = true;
+    scheme->quantified_count = (int)count;
+    scheme->quantified = count
+        ? malloc((size_t)count * sizeof(*scheme->quantified)) : NULL;
+    if (count && !scheme->quantified) {
+        scheme_free(scheme);
+        return NULL;
+    }
+    for (int i = 0; i < scheme->quantified_count; i++)
+        scheme->quantified[i] = i;
+    if (v2) {
+        char *end = NULL; errno = 0;
+        unsigned long declared_count = strtoul(predicate_count_text, &end, 10);
+        if (errno || !end || *end || declared_count > 4096) {
+            free(owned_payload); scheme_free(scheme); return NULL;
+        }
+        size_t *stages = declared_count ? malloc(declared_count * sizeof(*stages)) : NULL;
+        const char **traits = declared_count ? malloc(declared_count * sizeof(*traits)) : NULL;
+        size_t parsed = 0;
+        for (char *token = predicate_text; token && *token;) {
+            char *next = strchr(token, ','); if (next) *next++ = '\0';
+            char *colon = strchr(token, ':');
+            if (!colon || parsed >= declared_count) break;
+            *colon = '\0'; errno = 0; char *stage_end = NULL;
+            unsigned long stage = strtoul(token, &stage_end, 10);
+            if (errno || !stage_end || *stage_end) break;
+            stages[parsed] = stage; traits[parsed] = colon + 1; parsed++;
+            token = next;
+        }
+        bool predicates_ok = parsed == declared_count &&
+            scheme_set_effect_trait_predicates(scheme, stages, traits, parsed);
+        free(stages); free(traits);
+        if (!predicates_ok) {
+            free(owned_payload); scheme_free(scheme); return NULL;
+        }
+    }
+    free(owned_payload);
+    TypeScheme canonical_view = *scheme;
+    if (!scheme_canonicalize_type(scheme->type, &canonical_view, 0)) {
+        scheme_free(scheme);
+        return NULL;
+    }
+    size_t arrow_count = 0;
+    bool has_arrow_effects = false;
+    for (Type *arrow = scheme->type;
+         arrow && arrow->kind == TYPE_ARROW; arrow = arrow->arrow_ret) {
+        arrow_count++;
+        has_arrow_effects = has_arrow_effects ||
+            arrow->arrow_effect_scheme != NULL;
+    }
+    if (has_arrow_effects) {
+        QttEffectScheme **effects = calloc(
+            arrow_count, sizeof(*effects));
+        bool *complete = malloc(arrow_count * sizeof(*complete));
+        bool valid = effects && complete;
+        Type *arrow = scheme->type;
+        for (size_t i = 0; valid && i < arrow_count; i++) {
+            valid = arrow->arrow_effect_scheme != NULL;
+            if (valid) {
+                effects[i] = qtt_effect_scheme_deserialize(
+                    arrow->arrow_effect_scheme);
+                complete[i] = arrow->arrow_effect_complete;
+                valid = effects[i] != NULL;
+            }
+            arrow = arrow->arrow_ret;
+        }
+        if (valid)
+            valid = scheme_set_arrow_effect_schemes(
+                scheme, effects, complete, arrow_count);
+        for (size_t i = 0; i < arrow_count; i++)
+            qtt_effect_scheme_free(effects ? effects[i] : NULL);
+        free(effects);
+        free(complete);
+        if (!valid) {
+            scheme_free(scheme);
+            return NULL;
+        }
+    }
+    return scheme;
+}
+
+char *infer_operation_scheme_serialize(
+    const char *payload_name, const char *result_name) {
+    Type *payload = type_from_name(payload_name);
+    Type *result = type_from_name(result_name);
+    Type *arrow = payload && result ? type_arrow(payload, result) : NULL;
+    if (!arrow) return NULL;
+    int variables[INFER_MAX_VARS];
+    int count = 0;
+    /* Collect the implicit forall binders without coupling canonicalization
+     * to the caller's live inference substitution. */
+    Substitution *substitution = subst_create();
+    if (substitution)
+        infer_free_vars_type(substitution, arrow, variables, &count,
+                             INFER_MAX_VARS);
+    TypeScheme scheme = {
+        .type = arrow,
+        .quantified = variables,
+        .quantified_count = count,
+    };
+    char *portable = substitution
+        ? infer_type_scheme_serialize(&scheme) : NULL;
+    subst_free(substitution);
+    type_free(arrow);
+    return portable;
+}
+
+bool infer_operation_scheme_instantiate(
+    InferCtx *ctx, const char *portable_scheme,
+    Type **payload_type, Type **result_type) {
+    if (!ctx || !portable_scheme || !payload_type || !result_type)
+        return false;
+    *payload_type = NULL;
+    *result_type = NULL;
+    TypeScheme *scheme = infer_type_scheme_deserialize(portable_scheme);
+    Type *instance = scheme ? infer_instantiate(ctx, scheme) : NULL;
+    bool ok = instance && instance->kind == TYPE_ARROW &&
+        instance->arrow_param && instance->arrow_ret;
+    if (ok) {
+        *payload_type = instance->arrow_param;
+        *result_type = instance->arrow_ret;
+    }
+    scheme_free(scheme);
+    return ok;
+}
+
+bool infer_operation_scheme_accepts(
+    const char *portable_scheme,
+    Type *payload_type, Type *result_type) {
+    if (!portable_scheme || !payload_type || !result_type) return false;
+    InferCtx *ctx = infer_ctx_create(NULL, NULL, "<operation-scheme>");
+    Type *expected_payload = NULL, *expected_result = NULL;
+    bool ok = ctx && infer_operation_scheme_instantiate(
+        ctx, portable_scheme, &expected_payload, &expected_result);
+    if (ok)
+        ok = infer_unify_one(ctx, expected_payload, payload_type, 0, 0) &&
+             infer_unify_one(ctx, expected_result, result_type, 0, 0);
+    infer_ctx_free(ctx);
+    return ok;
+}
+
+void scheme_set_grade_scheme(
+    TypeScheme *scheme, QttGradeScheme *grades) {
+    if (!scheme || scheme->grade_scheme == grades) return;
+    qtt_grade_scheme_free(scheme->grade_scheme);
+    scheme->grade_scheme = qtt_grade_scheme_retain(grades);
+}
+
+void scheme_set_effect_scheme(
+    TypeScheme *scheme, QttEffectScheme *effects, bool complete) {
+    if (!scheme) return;
+    if (scheme->effect_scheme != effects) {
+        qtt_effect_scheme_free(scheme->effect_scheme);
+        scheme->effect_scheme = qtt_effect_scheme_retain(effects);
+    }
+    scheme->effects_complete = complete;
+}
+
+bool scheme_set_arrow_effect_schemes(
+    TypeScheme *scheme, QttEffectScheme *const *effects,
+    const bool *complete, size_t count) {
+    if (!scheme || (count && (!effects || !complete))) return false;
+    size_t arrow_depth = 0;
+    for (Type *cursor = scheme->type;
+         cursor && cursor->kind == TYPE_ARROW; cursor = cursor->arrow_ret)
+        arrow_depth++;
+    bool structural = count && arrow_depth == count;
+    if (structural && !scheme->owns_type) {
+        Type *owned_type = type_clone(scheme->type);
+        if (!owned_type) return false;
+        scheme->type = owned_type;
+        scheme->owns_type = true;
+    }
+    char **portable = structural
+        ? calloc(count, sizeof(*portable)) : NULL;
+    if (structural && !portable) return false;
+    if (structural) {
+        for (size_t i = 0; i < count; i++) {
+            portable[i] = effects[i]
+                ? qtt_effect_scheme_serialize(effects[i]) : NULL;
+            if (!portable[i]) {
+                for (size_t j = 0; j < i; j++) free(portable[j]);
+                free(portable);
+                return false;
+            }
+        }
+    }
+    QttEffectScheme **owned = count
+        ? calloc(count, sizeof(*owned)) : NULL;
+    bool *owned_complete = count
+        ? malloc(count * sizeof(*owned_complete)) : NULL;
+    if (count && (!owned || !owned_complete)) {
+        for (size_t i = 0; portable && i < count; i++) free(portable[i]);
+        free(portable);
+        free(owned);
+        free(owned_complete);
+        return false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        if (!effects[i]) {
+            for (size_t j = 0; j < i; j++)
+                qtt_effect_scheme_free(owned[j]);
+            free(owned);
+            free(owned_complete);
+            for (size_t j = 0; portable && j < count; j++) free(portable[j]);
+            free(portable);
+            return false;
+        }
+        owned[i] = qtt_effect_scheme_retain(effects[i]);
+        owned_complete[i] = complete[i];
+    }
+    for (size_t i = 0; i < scheme->arrow_effect_count; i++)
+        qtt_effect_scheme_free(scheme->arrow_effect_schemes[i]);
+    free(scheme->arrow_effect_schemes);
+    free(scheme->arrow_effects_complete);
+    scheme->arrow_effect_schemes = owned;
+    scheme->arrow_effects_complete = owned_complete;
+    scheme->arrow_effect_count = count;
+    if (structural) {
+        Type *arrow = scheme->type;
+        for (size_t i = 0; i < count; i++) {
+            if (arrow->arrow_effect_scheme_owned)
+                free(arrow->arrow_effect_scheme);
+            arrow->arrow_effect_scheme = portable[i];
+            arrow->arrow_effect_scheme_owned = true;
+            arrow->arrow_effect_complete = complete[i];
+            arrow = arrow->arrow_ret;
+        }
+    }
+    free(portable);
+    return true;
+}
+
+void infer_callable_contract_free(InferCallableContract *contract) {
+    if (!contract) return;
+    qtt_effect_scheme_free(contract->effect_scheme);
+    for (size_t i = 0; i < contract->arrow_effect_count; i++)
+        qtt_effect_scheme_free(contract->arrow_effect_schemes[i]);
+    free(contract->arrow_effect_schemes);
+    free(contract->arrow_effects_complete);
+    for (size_t i = 0; i < contract->effect_trait_predicate_count; i++)
+        free(contract->effect_trait_predicate_names[i]);
+    free(contract->effect_trait_predicate_names);
+    free(contract->effect_trait_predicate_stages);
+    memset(contract, 0, sizeof(*contract));
+}
+
+static bool infer_callable_contract_copy(
+    InferCallableContract *contract, QttEffectScheme *effect_scheme,
+    bool effects_complete, QttEffectScheme *const *arrow_effects,
+    const bool *arrow_complete, size_t arrow_count,
+    const size_t *predicate_stages, char *const *predicate_names,
+    size_t predicate_count) {
+    if (!contract || !effect_scheme ||
+            (arrow_count && (!arrow_effects || !arrow_complete)) ||
+            (predicate_count && (!predicate_stages || !predicate_names)))
+        return false;
+    InferCallableContract copied = {
+        .effect_scheme = qtt_effect_scheme_retain(effect_scheme),
+        .effects_complete = effects_complete,
+        .arrow_effect_count = arrow_count,
+    };
+    copied.arrow_effect_schemes = arrow_count
+        ? calloc(arrow_count, sizeof(*copied.arrow_effect_schemes)) : NULL;
+    copied.arrow_effects_complete = arrow_count
+        ? malloc(arrow_count * sizeof(*copied.arrow_effects_complete)) : NULL;
+    copied.effect_trait_predicate_stages = predicate_count
+        ? malloc(predicate_count *
+            sizeof(*copied.effect_trait_predicate_stages)) : NULL;
+    copied.effect_trait_predicate_names = predicate_count
+        ? calloc(predicate_count,
+            sizeof(*copied.effect_trait_predicate_names)) : NULL;
+    if (arrow_count &&
+            (!copied.arrow_effect_schemes ||
+             !copied.arrow_effects_complete)) {
+        infer_callable_contract_free(&copied);
+        return false;
+    }
+    if (predicate_count &&
+            (!copied.effect_trait_predicate_stages ||
+             !copied.effect_trait_predicate_names)) {
+        infer_callable_contract_free(&copied);
+        return false;
+    }
+    for (size_t i = 0; i < arrow_count; i++) {
+        if (!arrow_effects[i]) {
+            infer_callable_contract_free(&copied);
+            return false;
+        }
+        copied.arrow_effect_schemes[i] =
+            qtt_effect_scheme_retain(arrow_effects[i]);
+        copied.arrow_effects_complete[i] = arrow_complete[i];
+    }
+    for (size_t i = 0; i < predicate_count; i++) {
+        if (predicate_stages[i] >= arrow_count || !predicate_names[i]) {
+            infer_callable_contract_free(&copied);
+            return false;
+        }
+        copied.effect_trait_predicate_stages[i] = predicate_stages[i];
+        copied.effect_trait_predicate_names[i] = strdup(predicate_names[i]);
+        copied.effect_trait_predicate_count++;
+        if (!copied.effect_trait_predicate_names[i]) {
+            infer_callable_contract_free(&copied);
+            return false;
+        }
+    }
+    infer_callable_contract_free(contract);
+    *contract = copied;
+    return true;
+}
+
+bool infer_callable_contract_from_judgment(
+    InferCallableContract *contract,
+    const InferExpressionJudgment *judgment) {
+    return judgment && infer_callable_contract_copy(
+        contract, judgment->effects, judgment->effects_complete,
+        judgment->arrow_effect_schemes,
+        judgment->arrow_effects_complete,
+        judgment->arrow_effect_count,
+        judgment->effect_trait_predicate_stages,
+        judgment->effect_trait_predicate_names,
+        judgment->effect_trait_predicate_count);
+}
+
+bool infer_callable_contract_from_scheme(
+    InferCallableContract *contract, const TypeScheme *scheme) {
+    return scheme && infer_callable_contract_copy(
+        contract, scheme->effect_scheme, scheme->effects_complete,
+        scheme->arrow_effect_schemes, scheme->arrow_effects_complete,
+        scheme->arrow_effect_count,
+        scheme->effect_trait_predicate_stages,
+        scheme->effect_trait_predicate_names,
+        scheme->effect_trait_predicate_count);
+}
+
+bool scheme_set_callable_contract(
+    TypeScheme *scheme, const InferCallableContract *contract) {
+    if (!scheme || !contract || !contract->effect_scheme) return false;
+    if (!scheme_set_arrow_effect_schemes(
+            scheme, contract->arrow_effect_schemes,
+            contract->arrow_effects_complete,
+            contract->arrow_effect_count))
+        return false;
+    scheme_set_effect_scheme(
+        scheme, contract->effect_scheme, contract->effects_complete);
+    return scheme_set_effect_trait_predicates(
+        scheme, contract->effect_trait_predicate_stages,
+        (const char *const *)contract->effect_trait_predicate_names,
+        contract->effect_trait_predicate_count);
+}
+
+uint64_t infer_callable_contract_fingerprint(
+    const InferCallableContract *contract) {
+    if (!contract) return 0;
+    uint64_t hash = contract->effect_scheme
+        ? qtt_effect_scheme_fingerprint(contract->effect_scheme) : 0;
+    hash ^= contract->effects_complete
+        ? UINT64_C(0xc3c3c3c3c3c3c3c3)
+        : UINT64_C(0x3c3c3c3c3c3c3c3c);
+    for (size_t i = 0; i < contract->arrow_effect_count; i++) {
+        uint64_t part = qtt_effect_scheme_fingerprint(
+            contract->arrow_effect_schemes[i]);
+        hash ^= part + UINT64_C(0x9e3779b97f4a7c15) +
+                (hash << 6) + (hash >> 2);
+        hash ^= contract->arrow_effects_complete[i]
+            ? UINT64_C(0xa5a5a5a5a5a5a5a5)
+            : UINT64_C(0x5a5a5a5a5a5a5a5a);
+    }
+    for (size_t i = 0; i < contract->effect_trait_predicate_count; i++) {
+        hash ^= contract->effect_trait_predicate_stages[i] +
+            UINT64_C(0x517cc1b727220a95) + (hash << 6) + (hash >> 2);
+        const unsigned char *at = (const unsigned char *)
+            contract->effect_trait_predicate_names[i];
+        while (at && *at) {
+            hash ^= *at++;
+            hash *= UINT64_C(1099511628211);
+        }
+    }
+    return hash;
+}
+
+static char infer_contract_hex_digit(unsigned value) {
+    return "0123456789abcdef"[value & 15u];
+}
+
+static char *infer_contract_hex_encode(const char *input) {
+    size_t length = strlen(input);
+    char *output = malloc(length * 2 + 1);
+    if (!output) return NULL;
+    for (size_t i = 0; i < length; i++) {
+        unsigned char byte = (unsigned char)input[i];
+        output[i * 2] = infer_contract_hex_digit(byte >> 4);
+        output[i * 2 + 1] = infer_contract_hex_digit(byte);
+    }
+    output[length * 2] = '\0';
+    return output;
+}
+
+static int infer_contract_hex_value(char digit) {
+    if (digit >= '0' && digit <= '9') return digit - '0';
+    if (digit >= 'a' && digit <= 'f') return digit - 'a' + 10;
+    if (digit >= 'A' && digit <= 'F') return digit - 'A' + 10;
+    return -1;
+}
+
+static char *infer_contract_hex_decode(const char *input) {
+    size_t length = strlen(input);
+    if (length & 1u) return NULL;
+    char *output = malloc(length / 2 + 1);
+    if (!output) return NULL;
+    for (size_t i = 0; i < length; i += 2) {
+        int high = infer_contract_hex_value(input[i]);
+        int low = infer_contract_hex_value(input[i + 1]);
+        if (high < 0 || low < 0) {
+            free(output);
+            return NULL;
+        }
+        output[i / 2] = (char)((high << 4) | low);
+    }
+    output[length / 2] = '\0';
+    return output;
+}
+
+char *infer_callable_contract_serialize(
+    const InferCallableContract *contract) {
+    if (!contract || !contract->effect_scheme) return NULL;
+    char *effect_text = qtt_effect_scheme_serialize(contract->effect_scheme);
+    char *effect_hex = effect_text
+        ? infer_contract_hex_encode(effect_text) : NULL;
+    free(effect_text);
+    if (!effect_hex) return NULL;
+    char **stage_hex = contract->arrow_effect_count
+        ? calloc(contract->arrow_effect_count, sizeof(*stage_hex)) : NULL;
+    size_t capacity = 128 + strlen(effect_hex);
+    bool valid = !contract->arrow_effect_count || stage_hex;
+    for (size_t i = 0; valid && i < contract->arrow_effect_count; i++) {
+        char *stage_text = qtt_effect_scheme_serialize(
+            contract->arrow_effect_schemes[i]);
+        stage_hex[i] = stage_text
+            ? infer_contract_hex_encode(stage_text) : NULL;
+        free(stage_text);
+        valid = stage_hex[i] != NULL;
+        if (valid) capacity += strlen(stage_hex[i]) + 4;
+    }
+    for (size_t i = 0; i < contract->effect_trait_predicate_count; i++)
+        capacity += strlen(contract->effect_trait_predicate_names[i]) + 32;
+    char *text = valid ? malloc(capacity) : NULL;
+    if (text) {
+        size_t used = (size_t)snprintf(
+            text, capacity, "monad-callable-contract-%s|%016llx|%u|%s|",
+            contract->effect_trait_predicate_count ? "v2" : "v1",
+            (unsigned long long)
+                infer_callable_contract_fingerprint(contract),
+            contract->effects_complete ? 1u : 0u, effect_hex);
+        for (size_t i = 0; i < contract->arrow_effect_count; i++)
+            used += (size_t)snprintf(
+                text + used, capacity - used, "%s%u:%s",
+                i ? "," : "",
+                contract->arrow_effects_complete[i] ? 1u : 0u,
+                stage_hex[i]);
+        if (contract->effect_trait_predicate_count) {
+            used += (size_t)snprintf(text + used, capacity - used, "|");
+            for (size_t i = 0;
+                 i < contract->effect_trait_predicate_count; i++)
+                used += (size_t)snprintf(
+                    text + used, capacity - used, "%s%zu:%s",
+                    i ? "," : "",
+                    contract->effect_trait_predicate_stages[i],
+                    contract->effect_trait_predicate_names[i]);
+        }
+    }
+    for (size_t i = 0; i < contract->arrow_effect_count; i++)
+        free(stage_hex ? stage_hex[i] : NULL);
+    free(stage_hex);
+    free(effect_hex);
+    return text;
+}
+
+bool infer_callable_contract_deserialize(
+    InferCallableContract *contract, const char *text) {
+    static const char header_v1[] = "monad-callable-contract-v1|";
+    static const char header_v2[] = "monad-callable-contract-v2|";
+    if (!contract || !text) return false;
+    bool version2 = strncmp(
+        text, header_v2, sizeof(header_v2) - 1) == 0;
+    const char *payload = version2 ? text + sizeof(header_v2) - 1
+        : strncmp(text, header_v1, sizeof(header_v1) - 1) == 0
+            ? text + sizeof(header_v1) - 1 : NULL;
+    if (!payload)
+        return false;
+    char *copy = malloc(strlen(payload) + 1);
+    if (!copy) return false;
+    strcpy(copy, payload);
+    char *fields[4] = {copy, NULL, NULL, NULL};
+    bool valid = true;
+    for (size_t i = 0; i < 3; i++) {
+        char *separator = strchr(fields[i], '|');
+        if (!separator) { valid = false; break; }
+        *separator = '\0';
+        fields[i + 1] = separator + 1;
+    }
+    unsigned long long declared = 0;
+    char extra = '\0';
+    if (!valid || sscanf(fields[0], "%llx%c", &declared, &extra) != 1 ||
+            (strcmp(fields[1], "0") != 0 && strcmp(fields[1], "1") != 0)) {
+        free(copy);
+        return false;
+    }
+    char *effect_text = infer_contract_hex_decode(fields[2]);
+    InferCallableContract decoded = {0};
+    decoded.effect_scheme = effect_text
+        ? qtt_effect_scheme_deserialize(effect_text) : NULL;
+    decoded.effects_complete = fields[1][0] == '1';
+    free(effect_text);
+    valid = decoded.effect_scheme != NULL;
+    char *predicate_text = NULL;
+    if (version2) {
+        predicate_text = strchr(fields[3], '|');
+        if (predicate_text) *predicate_text++ = '\0';
+        else valid = false;
+    }
+    for (char *token = valid && *fields[3] ? fields[3] : NULL;
+         token && valid;) {
+        char *next = strchr(token, ',');
+        if (next) *next++ = '\0';
+        char *colon = strchr(token, ':');
+        if (!colon || colon == token || colon[1] == '\0') {
+            valid = false;
+            break;
+        }
+        *colon = '\0';
+        if ((strcmp(token, "0") != 0 && strcmp(token, "1") != 0)) {
+            valid = false;
+            break;
+        }
+        char *stage_text = infer_contract_hex_decode(colon + 1);
+        QttEffectScheme *stage = stage_text
+            ? qtt_effect_scheme_deserialize(stage_text) : NULL;
+        free(stage_text);
+        if (!stage) { valid = false; break; }
+        size_t count = decoded.arrow_effect_count;
+        QttEffectScheme **grown_stages = malloc(
+            (count + 1) * sizeof(*grown_stages));
+        bool *grown_complete = malloc(
+            (count + 1) * sizeof(*grown_complete));
+        if (!grown_stages || !grown_complete) {
+            qtt_effect_scheme_free(stage);
+            free(grown_stages);
+            free(grown_complete);
+            valid = false;
+            break;
+        }
+        if (count) {
+            memcpy(grown_stages, decoded.arrow_effect_schemes,
+                   count * sizeof(*grown_stages));
+            memcpy(grown_complete, decoded.arrow_effects_complete,
+                   count * sizeof(*grown_complete));
+        }
+        free(decoded.arrow_effect_schemes);
+        free(decoded.arrow_effects_complete);
+        decoded.arrow_effect_schemes = grown_stages;
+        decoded.arrow_effects_complete = grown_complete;
+        decoded.arrow_effect_schemes[count] = stage;
+        decoded.arrow_effects_complete[count] = token[0] == '1';
+        decoded.arrow_effect_count++;
+        token = next;
+    }
+    if (version2) {
+        for (char *token = valid && predicate_text && *predicate_text
+                 ? predicate_text : NULL;
+             token && valid;) {
+            char *next = strchr(token, ',');
+            if (next) *next++ = '\0';
+            char *colon = strchr(token, ':');
+            unsigned long stage = 0;
+            char extra_stage = '\0';
+            if (!colon || colon == token || colon[1] == '\0') {
+                valid = false; break;
+            }
+            *colon = '\0';
+            if (sscanf(token, "%lu%c", &stage, &extra_stage) != 1 ||
+                    stage >= decoded.arrow_effect_count) {
+                valid = false; break;
+            }
+            size_t count = decoded.effect_trait_predicate_count;
+            size_t *grown_stages = realloc(
+                decoded.effect_trait_predicate_stages,
+                (count + 1) * sizeof(*grown_stages));
+            if (!grown_stages) { valid = false; break; }
+            decoded.effect_trait_predicate_stages = grown_stages;
+            char **grown_names = realloc(
+                decoded.effect_trait_predicate_names,
+                (count + 1) * sizeof(*grown_names));
+            if (!grown_names) { valid = false; break; }
+            decoded.effect_trait_predicate_names = grown_names;
+            decoded.effect_trait_predicate_stages[count] = (size_t)stage;
+            decoded.effect_trait_predicate_names[count] = strdup(colon + 1);
+            if (!decoded.effect_trait_predicate_names[count]) {
+                valid = false; break;
+            }
+            decoded.effect_trait_predicate_count++;
+            token = next;
+        }
+    }
+    if (!valid || infer_callable_contract_fingerprint(&decoded) !=
+            (uint64_t)declared) {
+        infer_callable_contract_free(&decoded);
+        free(copy);
+        return false;
+    }
+    infer_callable_contract_free(contract);
+    *contract = decoded;
+    free(copy);
+    return true;
+}
+
+uint64_t scheme_effect_fingerprint(const TypeScheme *scheme) {
+    if (!scheme) return 0;
+    InferCallableContract view = {
+        .effect_scheme = scheme->effect_scheme,
+        .effects_complete = scheme->effects_complete,
+        .arrow_effect_schemes = scheme->arrow_effect_schemes,
+        .arrow_effects_complete = scheme->arrow_effects_complete,
+        .arrow_effect_count = scheme->arrow_effect_count,
+    };
+    return infer_callable_contract_fingerprint(&view);
+}
+
+typedef struct {
+    InferCtx *ctx;
+    QttEffectConstraintSet *constraints;
+    uint32_t coverage_gaps;
+    bool append_failed;
+    TypeScheme *lambda_parameters[64];
+    size_t lambda_parameter_count;
+    uint64_t callable_parameter_mask;
+    size_t callable_parameter_arities[64];
+    QttEffectScheme **returned_arrow_effects;
+    QttEffectRow **returned_arrow_rows;
+    char **returned_arrow_effect_names;
+    bool *returned_arrow_effects_complete;
+    size_t returned_arrow_effect_count;
+    size_t *returned_effect_trait_predicate_stages;
+    char **returned_effect_trait_predicate_names;
+    size_t returned_effect_trait_predicate_count;
+} SourceEffectJudgment;
+
+static void infer_source_effect_clear_returned(
+    SourceEffectJudgment *judgment) {
+    for (size_t i = 0; i < judgment->returned_arrow_effect_count; i++)
+        qtt_effect_scheme_free(judgment->returned_arrow_effects[i]);
+    free(judgment->returned_arrow_effects);
+    free(judgment->returned_arrow_rows);
+    if (judgment->returned_arrow_effect_names)
+        for (size_t i = 0; i < judgment->returned_arrow_effect_count; i++)
+            free(judgment->returned_arrow_effect_names[i]);
+    free(judgment->returned_arrow_effect_names);
+    free(judgment->returned_arrow_effects_complete);
+    for (size_t i = 0;
+         i < judgment->returned_effect_trait_predicate_count; i++)
+        free(judgment->returned_effect_trait_predicate_names[i]);
+    free(judgment->returned_effect_trait_predicate_names);
+    free(judgment->returned_effect_trait_predicate_stages);
+    judgment->returned_arrow_effects = NULL;
+    judgment->returned_arrow_rows = NULL;
+    judgment->returned_arrow_effect_names = NULL;
+    judgment->returned_arrow_effects_complete = NULL;
+    judgment->returned_arrow_effect_count = 0;
+    judgment->returned_effect_trait_predicate_names = NULL;
+    judgment->returned_effect_trait_predicate_stages = NULL;
+    judgment->returned_effect_trait_predicate_count = 0;
+}
+
+static QttEffectRow *infer_source_effect_join(
+    SourceEffectJudgment *judgment,
+    QttEffectRow *left, QttEffectRow *right) {
+    if (!left || !right) return NULL;
+    InferCtx *ctx = judgment->ctx;
+    if (!qtt_effect_is_closed(ctx->effect_solver, left) ||
+        !qtt_effect_is_closed(ctx->effect_solver, right))
+        judgment->coverage_gaps |= QTT_EFFECT_COVERAGE_OPEN_ROW;
+    QttEffectRow *joined = qtt_effect_join(
+        ctx->effect_arena, ctx->effect_solver, left, right);
+    if (joined &&
+        !qtt_effect_constrain_join(
+            judgment->constraints, left, right, joined))
+        judgment->append_failed = true;
+    return joined;
+}
+
+/* Instantiate qualified scheme predicates at the same application boundary
+ * as their arrow row.  Re-instantiating the scheme independently here would
+ * create a different open tail and prove a proposition about the wrong row. */
+static bool infer_source_constrain_stage_traits(
+    SourceEffectJudgment *judgment, const TypeScheme *scheme,
+    size_t stage, QttEffectRow *row) {
+    if (!judgment || !scheme || !row) return false;
+    for (size_t i = 0; i < scheme->effect_trait_predicate_count; i++) {
+        if (scheme->effect_trait_predicate_stages[i] != stage) continue;
+        if (!qtt_effect_constrain_has_trait(
+                judgment->constraints, row,
+                scheme->effect_trait_predicate_names[i])) {
+            judgment->append_failed = true;
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Arrow effect names are lexical row binders.  Every occurrence of one name
+ * in a single instantiated application denotes the same row, so later
+ * occurrences contribute equality obligations against the exact earlier
+ * stage instances (not independently re-instantiated copies). */
+static bool infer_source_constrain_named_stage(
+    SourceEffectJudgment *judgment, const char *name, QttEffectRow *row,
+    const char *const *prior_names, QttEffectRow *const *prior_rows,
+    size_t prior_count) {
+    if (!judgment || !row) return false;
+    if (!name) return true;
+    for (size_t i = 0; i < prior_count; i++) {
+        if (!prior_names[i] || strcmp(name, prior_names[i]) != 0) continue;
+        if (!qtt_effect_constrain_equal(
+                judgment->constraints, prior_rows[i], row)) {
+            judgment->append_failed = true;
+            return false;
+        }
+        /* Equality is transitive: one representative gives a minimal
+         * spanning basis instead of a quadratic clique of obligations. */
+        return true;
+    }
+    return true;
+}
+
+/* Xi classifies a compact arrow label from Core-owned declarations. Exact
+ * names win; a unique trait.operation projection is accepted as shorthand.
+ * Unresolved simple identifiers are implicit lexical row binders. Dotted
+ * references are reserved for declarations and fail closed when absent or
+ * ambiguous. */
+static bool infer_source_constrain_stage_label(
+    SourceEffectJudgment *judgment, const char *name, QttEffectRow *row,
+    const char *const *prior_names, QttEffectRow *const *prior_rows,
+    size_t prior_count) {
+    if (!judgment || !row) return false;
+    bool ambiguous = false;
+    const QttEffectDeclaration *declaration =
+        qtt_effect_declaration_resolve(name, &ambiguous);
+    if (declaration) {
+        InferCtx *ctx = judgment->ctx;
+        QttEffectRow *declared = qtt_effect_extend_declared(
+            ctx->effect_arena, declaration->name, 0, 0,
+            qtt_effect_empty(ctx->effect_arena));
+        if (!declared || !qtt_effect_constrain_equal(
+                judgment->constraints, row, declared)) {
+            judgment->append_failed = true;
+            return false;
+        }
+    } else if (ambiguous || (name && strchr(name, '.'))) {
+        judgment->append_failed = true;
+        return false;
+    }
+    return infer_source_constrain_named_stage(
+        judgment, name, row, prior_names, prior_rows, prior_count);
+}
+
+bool infer_validate_effect_annotations(
+    InferCtx *ctx, const TypeScheme *scheme,
+    size_t *failing_stage, const char **failing_label) {
+    if (failing_stage) *failing_stage = SIZE_MAX;
+    if (failing_label) *failing_label = NULL;
+    if (!ctx || !scheme) return false;
+    size_t count = infer_scheme_arrow_effect_count(scheme);
+    if (!count) return true;
+    QttEffectConstraintSet *constraints = qtt_effect_constraints_new();
+    const char **names = calloc(count, sizeof(*names));
+    QttEffectRow **rows = calloc(count, sizeof(*rows));
+    if (!constraints || !names || !rows) {
+        qtt_effect_constraints_free(constraints);
+        free(names);
+        free(rows);
+        return false;
+    }
+    SourceEffectJudgment judgment = {
+        .ctx = ctx, .constraints = constraints,
+    };
+    bool valid = true;
+    for (size_t i = 0; valid && i < count; i++) {
+        bool complete = false;
+        QttEffectScheme *stage_scheme = infer_scheme_arrow_effect_at(
+            scheme, i, &complete, NULL);
+        QttEffectRow *row = stage_scheme
+            ? qtt_effect_instantiate(ctx->effect_arena, stage_scheme) : NULL;
+        qtt_effect_scheme_free(stage_scheme);
+        names[i] = infer_scheme_arrow_effect_name_at(scheme, i);
+        rows[i] = row;
+        valid = row &&
+            infer_source_constrain_stage_traits(
+                &judgment, scheme, i, row) &&
+            infer_source_constrain_stage_label(
+                &judgment, names[i], row, names, rows, i);
+        if (!valid) {
+            if (failing_stage) *failing_stage = i;
+            if (failing_label) *failing_label = names[i];
+        }
+    }
+    QttEffectConstraintCertificate *certificate = NULL;
+    QttEffectConstraintResult solved = valid
+        ? qtt_effect_constraints_solve(
+            constraints, ctx->effect_arena, ctx->effect_solver,
+            &certificate)
+        : QTT_EFFECT_CONSTRAINT_REJECTED;
+    valid = valid && certificate &&
+        solved != QTT_EFFECT_CONSTRAINT_REJECTED &&
+        solved != QTT_EFFECT_CONSTRAINT_OUT_OF_MEMORY &&
+        qtt_effect_certificate_verify(
+            certificate, ctx->effect_arena, ctx->effect_solver);
+    if (!valid && failing_stage && *failing_stage == SIZE_MAX) {
+        for (size_t i = 0; i < count; i++)
+            if (names[i]) {
+                *failing_stage = i;
+                if (failing_label) *failing_label = names[i];
+                break;
+            }
+    }
+    qtt_effect_certificate_free(certificate);
+    qtt_effect_constraints_free(constraints);
+    free(names);
+    free(rows);
+    return valid;
+}
+
+bool infer_elaborate_effect_row_binders(
+    InferCtx *ctx, TypeScheme *scheme) {
+    if (!ctx || !scheme) return false;
+    size_t count = infer_scheme_arrow_effect_count(scheme);
+    if (!count) return true;
+    QttEffectScheme **stages = calloc(count, sizeof(*stages));
+    bool *complete = malloc(count * sizeof(*complete));
+    const char **names = calloc(count, sizeof(*names));
+    QttEffectRow **binders = calloc(count, sizeof(*binders));
+    size_t **dependency_indices = calloc(
+        count, sizeof(*dependency_indices));
+    size_t **dependency_arities = calloc(
+        count, sizeof(*dependency_arities));
+    size_t *dependency_counts = calloc(
+        count, sizeof(*dependency_counts));
+    QttEffectConstraintSet *constraints = qtt_effect_constraints_new();
+    if (!stages || !complete || !names || !binders ||
+            !dependency_indices || !dependency_arities ||
+            !dependency_counts || !constraints) {
+        free(stages); free(complete); free(names); free(binders);
+        free(dependency_indices); free(dependency_arities);
+        free(dependency_counts);
+        qtt_effect_constraints_free(constraints);
+        return false;
+    }
+    bool valid = true;
+    bool has_lexical = false;
+    for (size_t i = 0; valid && i < count; i++) {
+        bool stage_complete = false;
+        QttEffectScheme *source = infer_scheme_arrow_effect_at(
+            scheme, i, &stage_complete, NULL);
+        names[i] = infer_scheme_arrow_effect_name_at(scheme, i);
+        bool ambiguous = false;
+        const QttEffectDeclaration *declaration =
+            qtt_effect_declaration_resolve(names[i], &ambiguous);
+        bool lexical = names[i] && !declaration && !ambiguous &&
+            !strchr(names[i], '.');
+        if (!source) {
+            qtt_effect_scheme_free(source);
+            valid = false;
+            break;
+        }
+        if (!lexical) {
+            stages[i] = source;
+            complete[i] = stage_complete;
+            continue;
+        }
+        has_lexical = true;
+        dependency_counts[i] =
+            qtt_effect_scheme_callable_parameter_count(source);
+        if (dependency_counts[i]) {
+            dependency_indices[i] = malloc(
+                dependency_counts[i] *
+                    sizeof(*dependency_indices[i]));
+            dependency_arities[i] = malloc(
+                dependency_counts[i] *
+                    sizeof(*dependency_arities[i]));
+            if (!dependency_indices[i] || !dependency_arities[i]) {
+                qtt_effect_scheme_free(source);
+                valid = false;
+                break;
+            }
+            for (size_t j = 0; j < dependency_counts[i]; j++) {
+                dependency_indices[i][j] =
+                    qtt_effect_scheme_callable_parameter_index(source, j);
+                dependency_arities[i][j] =
+                    qtt_effect_scheme_callable_parameter_arity(source, j);
+            }
+        }
+        QttEffectRow *implementation = qtt_effect_instantiate(
+            ctx->effect_arena, source);
+        QttEffectRow *binder = NULL;
+        for (size_t j = 0; j < i; j++)
+            if (names[j] && strcmp(names[j], names[i]) == 0) {
+                binder = binders[j];
+                break;
+            }
+        if (!binder) binder = qtt_effect_fresh(ctx->effect_arena);
+        binders[i] = binder;
+        valid = implementation && binder && qtt_effect_constrain_subrow(
+            constraints, implementation, binder);
+        qtt_effect_scheme_free(source);
+        complete[i] = false;
+    }
+    if (valid && !has_lexical) {
+        for (size_t i = 0; i < count; i++)
+            qtt_effect_scheme_free(stages[i]);
+        qtt_effect_constraints_free(constraints);
+        free(stages); free(complete); free(names); free(binders);
+        free(dependency_indices); free(dependency_arities);
+        free(dependency_counts);
+        return true;
+    }
+    QttEffectConstraintCertificate *certificate = NULL;
+    QttEffectConstraintResult solved = valid
+        ? qtt_effect_constraints_solve(
+            constraints, ctx->effect_arena, ctx->effect_solver,
+            &certificate)
+        : QTT_EFFECT_CONSTRAINT_REJECTED;
+    valid = valid && certificate &&
+        solved != QTT_EFFECT_CONSTRAINT_REJECTED &&
+        solved != QTT_EFFECT_CONSTRAINT_OUT_OF_MEMORY &&
+        qtt_effect_certificate_verify(
+            certificate, ctx->effect_arena, ctx->effect_solver);
+    for (size_t i = 0; valid && i < count; i++) {
+        if (!binders[i]) continue;
+        stages[i] = qtt_effect_generalize(
+            ctx->effect_arena, ctx->effect_solver, binders[i]);
+        valid = stages[i] != NULL &&
+            (!dependency_counts[i] ||
+             qtt_effect_scheme_set_callable_parameter_contracts(
+                stages[i], dependency_indices[i], dependency_arities[i],
+                dependency_counts[i]));
+    }
+    if (valid)
+        valid = scheme_set_arrow_effect_schemes(
+            scheme, stages, complete, count);
+    for (size_t i = 0; i < count; i++)
+        qtt_effect_scheme_free(stages[i]);
+    qtt_effect_certificate_free(certificate);
+    qtt_effect_constraints_free(constraints);
+    free(stages); free(complete); free(names); free(binders);
+    for (size_t i = 0; i < count; i++) {
+        free(dependency_indices[i]);
+        free(dependency_arities[i]);
+    }
+    free(dependency_indices); free(dependency_arities);
+    free(dependency_counts);
+    return valid;
+}
+
+static QttEffectRow *infer_source_argument_invocation_effect(
+    SourceEffectJudgment *judgment, TypeScheme *argument,
+    size_t invoked, bool *complete) {
+    if (!argument || !invoked || !complete) return NULL;
+    InferCtx *ctx = judgment->ctx;
+    QttEffectRow *summary = qtt_effect_empty(ctx->effect_arena);
+    *complete = true;
+    size_t arrow_effect_count = infer_scheme_arrow_effect_count(argument);
+    if (arrow_effect_count) {
+        if (invoked > arrow_effect_count) return NULL;
+        for (size_t stage = 0; summary && stage < invoked; stage++) {
+            bool stage_complete = false;
+            QttEffectScheme *stage_scheme =
+                infer_scheme_arrow_effect_at(
+                    argument, stage, &stage_complete, NULL);
+            QttEffectRow *effect = qtt_effect_instantiate(
+                ctx->effect_arena, stage_scheme);
+            qtt_effect_scheme_free(stage_scheme);
+            summary = qtt_effect_join(
+                ctx->effect_arena, ctx->effect_solver, summary, effect);
+            *complete = *complete && stage_complete;
+        }
+        return summary;
+    }
+    if (!argument->effect_scheme) return NULL;
+    *complete = argument->effects_complete;
+    return qtt_effect_instantiate(
+        ctx->effect_arena, argument->effect_scheme);
+}
+
+static QttEffectScheme *infer_source_specialize_residual_stage(
+    SourceEffectJudgment *judgment, QttEffectScheme *stage,
+    AST *call, size_t supplied, bool original_complete,
+    bool *complete) {
+    size_t dependency_count =
+        qtt_effect_scheme_callable_parameter_count(stage);
+    if (!dependency_count) {
+        *complete = original_complete;
+        return qtt_effect_scheme_retain(stage);
+    }
+    InferCtx *ctx = judgment->ctx;
+    QttEffectRow *replacement = qtt_effect_empty(ctx->effect_arena);
+    size_t remaining_indices[64];
+    size_t remaining_arities[64];
+    size_t remaining_count = 0;
+    bool known_complete = true;
+    for (size_t i = 0; replacement && i < dependency_count; i++) {
+        size_t parameter =
+            qtt_effect_scheme_callable_parameter_index(stage, i);
+        size_t arity =
+            qtt_effect_scheme_callable_parameter_arity(stage, i);
+        if (parameter >= supplied) {
+            if (remaining_count == 64) return NULL;
+            remaining_indices[remaining_count] = parameter - supplied;
+            remaining_arities[remaining_count++] = arity;
+            continue;
+        }
+        AST *argument_ast = call->list.items[parameter + 1];
+        TypeScheme *argument = argument_ast->type == AST_SYMBOL
+            ? infer_env_lookup(ctx, argument_ast->symbol) : NULL;
+        bool argument_complete = false;
+        QttEffectRow *argument_effect =
+            infer_source_argument_invocation_effect(
+                judgment, argument, arity, &argument_complete);
+        replacement = qtt_effect_join(
+            ctx->effect_arena, ctx->effect_solver,
+            replacement, argument_effect);
+        known_complete = known_complete && argument_complete;
+    }
+    if (!replacement) return NULL;
+    if (remaining_count)
+        replacement = qtt_effect_join(
+            ctx->effect_arena, ctx->effect_solver, replacement,
+            qtt_effect_fresh(ctx->effect_arena));
+    QttEffectRow *row = qtt_effect_instantiate_with_tail(
+        ctx->effect_arena, stage, replacement);
+    QttEffectScheme *specialized = row
+        ? qtt_effect_generalize(ctx->effect_arena, ctx->effect_solver, row)
+        : NULL;
+    if (specialized &&
+            !qtt_effect_scheme_set_callable_parameter_contracts(
+                specialized, remaining_indices,
+                remaining_arities, remaining_count)) {
+        qtt_effect_scheme_free(specialized);
+        specialized = NULL;
+    }
+    *complete = specialized && known_complete && !remaining_count;
+    return specialized;
+}
+
+static bool infer_source_special_form(const char *name) {
+    static const char *forms[] = {
+        "if", "with", "let", "begin", "do", "quote", "quasiquote",
+        "unquote", "set!", "define", "lambda", "match", "tests",
+        "perform", "handle",
+    };
+    if (!name) return false;
+    for (size_t i = 0; i < sizeof(forms) / sizeof(forms[0]); i++)
+        if (strcmp(name, forms[i]) == 0) return true;
+    return false;
+}
+
+static QttEffectRow *infer_source_effect_expr(
+    SourceEffectJudgment *judgment, const AST *ast) {
+    InferCtx *ctx = judgment->ctx;
+    QttEffectRow *summary = qtt_effect_empty(ctx->effect_arena);
+    if (!summary || !ast) return summary;
+    if (ast->type == AST_LAMBDA)
+        return summary; /* Closure construction is pure; its body is latent. */
+    if (ast->type == AST_ASM) {
+        QttEffectRow *declared = qtt_effect_extend_declared(
+            ctx->effect_arena, "Core.Foreign.asm", 0, 0, summary);
+        return declared ? declared : qtt_effect_extend(
+            ctx->effect_arena, "ffi", summary);
+    }
+
+    if (ast->type == AST_ARRAY) {
+        if (ast->array.is_heap) {
+            QttEffectRow *declared = qtt_effect_extend_declared(
+                ctx->effect_arena, "Core.Alloc.heap", 0, 0, summary);
+            summary = declared ? declared : qtt_effect_extend(
+                ctx->effect_arena, "alloc", summary);
+        }
+        for (size_t i = 0; summary && i < ast->array.element_count; i++) {
+            QttEffectRow *item = infer_source_effect_expr(
+                judgment, ast->array.elements[i]);
+            summary = infer_source_effect_join(judgment, summary, item);
+        }
+        return summary;
+    }
+    if (ast->type == AST_SET) {
+        for (size_t i = 0; summary && i < ast->set.element_count; i++) {
+            QttEffectRow *item = infer_source_effect_expr(
+                judgment, ast->set.elements[i]);
+            summary = infer_source_effect_join(judgment, summary, item);
+        }
+        return summary;
+    }
+    if (ast->type == AST_MAP) {
+        for (size_t i = 0; summary && i < ast->map.count; i++) {
+            QttEffectRow *key = infer_source_effect_expr(
+                judgment, ast->map.keys[i]);
+            QttEffectRow *value = infer_source_effect_expr(
+                judgment, ast->map.vals[i]);
+            summary = infer_source_effect_join(judgment, summary, key);
+            summary = infer_source_effect_join(judgment, summary, value);
+        }
+        return summary;
+    }
+    if (ast->type != AST_LIST) return summary;
+
+    const char *head = ast->list.count && ast->list.items[0] &&
+            ast->list.items[0]->type == AST_SYMBOL
+        ? ast->list.items[0]->symbol : NULL;
+    if (head && strcmp(head, "perform") == 0) {
+        if (ast->list.count != 3 || !ast->list.items[1] ||
+            ast->list.items[1]->type != AST_SYMBOL ||
+            !ast->list.items[1]->symbol ||
+            !qtt_effect_declaration_resolve(
+                ast->list.items[1]->symbol, NULL)) {
+            judgment->append_failed = true;
+            return NULL;
+        }
+        QttEffectRow *argument = infer_source_effect_expr(
+            judgment, ast->list.items[2]);
+        return argument ? qtt_effect_extend_declared(
+            ctx->effect_arena, ast->list.items[1]->symbol,
+            0, 0, argument) : NULL;
+    }
+    if (head && strcmp(head, "set!") == 0) {
+        QttEffectRow *declared = qtt_effect_extend_declared(
+            ctx->effect_arena, "Core.State.write", 0, 0, summary);
+        summary = declared ? declared : qtt_effect_extend(
+            ctx->effect_arena, "state.write", summary);
+    }
+    if (head && strcmp(head, "__rt_directory_names") == 0) {
+        QttEffectRow *declared = qtt_effect_extend_declared(
+            ctx->effect_arena, "Core.IO.read", 0, 0, summary);
+        summary = declared ? declared : qtt_effect_extend(
+            ctx->effect_arena, "io", summary);
+    }
+    for (size_t i = head ? 1 : 0;
+         summary && i < ast->list.count; i++) {
+        QttEffectRow *item = infer_source_effect_expr(
+            judgment, ast->list.items[i]);
+        summary = infer_source_effect_join(judgment, summary, item);
+    }
+    if (!head || infer_source_special_form(head)) return summary;
+
+    TypeScheme *callee = infer_env_lookup(ctx, head);
+    if (!callee) {
+        Type *head_type = ast->list.items[0]->inferred_type;
+        judgment->coverage_gaps |= head_type &&
+                head_type->kind == TYPE_ARROW
+            ? QTT_EFFECT_COVERAGE_MISSING_ARROW_CONTRACT
+            : QTT_EFFECT_COVERAGE_UNKNOWN_CALLEE;
+        return summary;
+    }
+    size_t domains = 0;
+    for (Type *type = callee->type;
+         type && type->kind == TYPE_ARROW; type = type->arrow_ret)
+        domains++;
+    size_t supplied = ast->list.count ? ast->list.count - 1 : 0;
+    size_t arrow_effect_count = infer_scheme_arrow_effect_count(callee);
+    if (arrow_effect_count) {
+        if (arrow_effect_count != domains) {
+            judgment->coverage_gaps |= QTT_EFFECT_COVERAGE_ARITY_MISMATCH;
+            return summary;
+        }
+        size_t reached = supplied < domains ? supplied : domains;
+        const char **stage_names = reached
+            ? calloc(reached, sizeof(*stage_names)) : NULL;
+        QttEffectRow **stage_rows = reached
+            ? calloc(reached, sizeof(*stage_rows)) : NULL;
+        if (reached && (!stage_names || !stage_rows)) {
+            free(stage_names);
+            free(stage_rows);
+            return NULL;
+        }
+        for (size_t i = 0; i < reached; i++) {
+            bool stage_complete = false;
+            QttEffectScheme *stage_scheme = infer_scheme_arrow_effect_at(
+                callee, i, &stage_complete, NULL);
+            if (!stage_scheme) {
+                judgment->coverage_gaps |=
+                    QTT_EFFECT_COVERAGE_MISSING_ARROW_CONTRACT;
+                free(stage_names);
+                free(stage_rows);
+                return summary;
+            }
+            if (!stage_complete)
+                judgment->coverage_gaps |=
+                    QTT_EFFECT_COVERAGE_INCOMPLETE_CALLEE;
+            QttEffectRow *stage = qtt_effect_instantiate(
+                ctx->effect_arena, stage_scheme);
+            qtt_effect_scheme_free(stage_scheme);
+            if (!infer_source_constrain_stage_traits(
+                    judgment, callee, i, stage) ||
+                !infer_source_constrain_stage_label(
+                    judgment,
+                    infer_scheme_arrow_effect_name_at(callee, i), stage,
+                    stage_names, stage_rows, i)) {
+                free(stage_names);
+                free(stage_rows);
+                return NULL;
+            }
+            stage_names[i] = infer_scheme_arrow_effect_name_at(callee, i);
+            stage_rows[i] = stage;
+            summary = infer_source_effect_join(judgment, summary, stage);
+            if (!summary) {
+                free(stage_names);
+                free(stage_rows);
+                return NULL;
+            }
+        }
+        free(stage_names);
+        free(stage_rows);
+        return summary;
+    }
+    if (!callee->effects_complete || supplied < domains) {
+        /* Compatibility schemes carry only their saturated projection.
+         * They remain conservative under partial application. */
+        if (!callee->effects_complete)
+            judgment->coverage_gaps |=
+                QTT_EFFECT_COVERAGE_INCOMPLETE_CALLEE;
+        if (!callee->effects_complete && !callee->effect_scheme &&
+            !arrow_effect_count)
+            judgment->coverage_gaps |=
+                QTT_EFFECT_COVERAGE_MISSING_ARROW_CONTRACT;
+        if (supplied < domains)
+            judgment->coverage_gaps |=
+                QTT_EFFECT_COVERAGE_PARTIAL_LEGACY_CALL;
+        return summary;
+    }
+    QttEffectRow *latent = callee->effect_scheme
+        ? qtt_effect_instantiate(ctx->effect_arena, callee->effect_scheme)
+        : qtt_effect_empty(ctx->effect_arena);
+    return infer_source_effect_join(judgment, summary, latent);
+}
+
+static QttEffectScheme *infer_source_effect_finish(
+    SourceEffectJudgment *judgment, QttEffectRow *summary,
+    bool *complete) {
+    InferCtx *ctx = judgment->ctx;
+    QttEffectConstraintSet *constraints = judgment->constraints;
+    if (!summary || judgment->append_failed) {
+        qtt_effect_constraints_free(constraints);
+        return NULL;
+    }
+    QttEffectConstraintCertificate *certificate = NULL;
+    QttEffectConstraintResult constraint_result =
+        qtt_effect_constraints_solve(
+            constraints, ctx->effect_arena, ctx->effect_solver,
+            &certificate);
+    ctx->last_effect_constraint_count =
+        qtt_effect_constraints_count(constraints);
+    ctx->last_effect_constraints_residual =
+        constraint_result == QTT_EFFECT_CONSTRAINT_RESIDUAL;
+    bool constraint_valid = certificate &&
+        constraint_result != QTT_EFFECT_CONSTRAINT_REJECTED &&
+        constraint_result != QTT_EFFECT_CONSTRAINT_OUT_OF_MEMORY &&
+        qtt_effect_certificate_verify(
+            certificate, ctx->effect_arena, ctx->effect_solver);
+    char *portable_certificate = NULL;
+    if (constraint_valid) {
+        ctx->last_effect_certificate_fingerprint =
+            qtt_effect_certificate_fingerprint(
+                certificate, ctx->effect_solver);
+        portable_certificate = qtt_effect_certificate_format(
+            certificate, ctx->effect_solver);
+        if (!portable_certificate ||
+            !ctx->last_effect_certificate_fingerprint)
+            constraint_valid = false;
+    }
+    if (constraint_result == QTT_EFFECT_CONSTRAINT_RESIDUAL)
+        judgment->coverage_gaps |=
+            QTT_EFFECT_COVERAGE_RESIDUAL_OBLIGATION;
+    if (constraint_valid) {
+        for (size_t i = 0;
+             i < judgment->returned_arrow_effect_count; i++) {
+            QttEffectScheme *old = judgment->returned_arrow_effects[i];
+            QttEffectScheme *captured = qtt_effect_generalize(
+                ctx->effect_arena, ctx->effect_solver,
+                judgment->returned_arrow_rows[i]);
+            size_t dependency_count =
+                qtt_effect_scheme_callable_parameter_count(old);
+            size_t *indices = dependency_count
+                ? malloc(dependency_count * sizeof(*indices)) : NULL;
+            size_t *arities = dependency_count
+                ? malloc(dependency_count * sizeof(*arities)) : NULL;
+            if (dependency_count && (!indices || !arities)) {
+                free(indices);
+                free(arities);
+                qtt_effect_scheme_free(captured);
+                constraint_valid = false;
+                break;
+            }
+            for (size_t j = 0; j < dependency_count; j++) {
+                indices[j] = qtt_effect_scheme_callable_parameter_index(
+                    old, j);
+                arities[j] = qtt_effect_scheme_callable_parameter_arity(
+                    old, j);
+            }
+            if (!captured || (dependency_count &&
+                    !qtt_effect_scheme_set_callable_parameter_contracts(
+                        captured, indices, arities, dependency_count))) {
+                qtt_effect_scheme_free(captured);
+                captured = NULL;
+            }
+            free(indices);
+            free(arities);
+            if (!captured) {
+                constraint_valid = false;
+                break;
+            }
+            qtt_effect_scheme_set_coverage_gaps(
+                captured, qtt_effect_scheme_coverage_gaps(old));
+            judgment->returned_arrow_effects[i] = captured;
+            qtt_effect_scheme_free(old);
+        }
+    }
+    qtt_effect_constraints_free(constraints);
+    if (!constraint_valid) {
+        free(portable_certificate);
+        qtt_effect_certificate_free(certificate);
+        return NULL;
+    }
+    QttEffectScheme *scheme = qtt_effect_generalize(
+        ctx->effect_arena, ctx->effect_solver, summary);
+    if (scheme && !qtt_effect_scheme_set_evidence(
+            scheme, portable_certificate,
+            ctx->last_effect_constraint_count,
+            ctx->last_effect_certificate_fingerprint,
+            constraint_result == QTT_EFFECT_CONSTRAINT_RESIDUAL
+                ? QTT_EFFECT_EVIDENCE_RESIDUAL
+                : QTT_EFFECT_EVIDENCE_SOLVED)) {
+        qtt_effect_scheme_free(scheme);
+        scheme = NULL;
+    }
+    qtt_effect_scheme_set_coverage_gaps(
+        scheme, judgment->coverage_gaps);
+    if (scheme && judgment->callable_parameter_mask) {
+        size_t indices[64];
+        size_t arities[64];
+        size_t count = 0;
+        for (size_t i = 0; i < 64; i++)
+            if (judgment->callable_parameter_mask & (UINT64_C(1) << i)) {
+                indices[count++] = i;
+                arities[count - 1] = judgment->callable_parameter_arities[i];
+            }
+        if (!qtt_effect_scheme_set_callable_parameter_contracts(
+                scheme, indices, arities, count)) {
+            qtt_effect_scheme_free(scheme);
+            scheme = NULL;
+        }
+    }
+    free(portable_certificate);
+    qtt_effect_certificate_free(certificate);
+    if (complete) *complete = scheme && judgment->coverage_gaps == 0;
+    return scheme;
+}
+
+static QttEffectScheme *infer_effect_scheme_for_roots(
+    InferCtx *ctx, const AST *const *roots, size_t root_count,
+    bool *complete) {
+    if (complete) *complete = false;
+    if (!ctx || (root_count && !roots) ||
+        !ctx->effect_arena || !ctx->effect_solver)
+        return NULL;
+    QttEffectConstraintSet *constraints = qtt_effect_constraints_new();
+    if (!constraints) return NULL;
+    ctx->last_effect_constraint_count = 0;
+    ctx->last_effect_certificate_fingerprint = 0;
+    ctx->last_effect_constraints_residual = false;
+    SourceEffectJudgment judgment = {
+        .ctx = ctx,
+        .constraints = constraints,
+    };
+    QttEffectRow *summary = qtt_effect_empty(ctx->effect_arena);
+    for (size_t i = 0; summary && i < root_count; i++) {
+        QttEffectRow *body = infer_source_effect_expr(
+            &judgment, roots[i]);
+        summary = infer_source_effect_join(&judgment, summary, body);
+    }
+    return infer_source_effect_finish(&judgment, summary, complete);
+}
+
+QttEffectScheme *infer_effect_scheme_for_lambda(
+    InferCtx *ctx, const AST *lambda, bool *complete) {
+    if (!lambda || lambda->type != AST_LAMBDA) {
+        if (complete) *complete = false;
+        return NULL;
+    }
+    return infer_effect_scheme_for_roots(
+        ctx, (const AST *const *)lambda->lambda.body_exprs,
+        (size_t)lambda->lambda.body_count, complete);
+}
+
+QttEffectScheme *infer_effect_scheme_for_expression(
+    InferCtx *ctx, const AST *expression, bool *complete) {
+    if (!expression) {
+        if (complete) *complete = false;
+        return NULL;
+    }
+    const AST *root = expression;
+    return infer_effect_scheme_for_roots(ctx, &root, 1, complete);
+}
+
+size_t infer_effect_constraint_count(const InferCtx *ctx) {
+    return ctx ? ctx->last_effect_constraint_count : 0;
+}
+
+uint64_t infer_effect_certificate_fingerprint(const InferCtx *ctx) {
+    return ctx ? ctx->last_effect_certificate_fingerprint : 0;
+}
+
+bool infer_effect_constraints_residual(const InferCtx *ctx) {
+    return ctx && ctx->last_effect_constraints_residual;
+}
+
+size_t scheme_grade_count(const TypeScheme *scheme) {
+    return scheme
+        ? qtt_grade_scheme_domain_count(scheme->grade_scheme) : 0;
+}
+
+size_t scheme_closure_grade_count(const TypeScheme *scheme) {
+    return scheme
+        ? qtt_grade_scheme_closure_count(scheme->grade_scheme) : 0;
+}
+
+QttGradeExpr **scheme_instantiate_grades(
+    const TypeScheme *scheme, QttGradeArena *target, size_t *count) {
+    if (count) *count = scheme_grade_count(scheme);
+    if (!scheme || !scheme->grade_scheme) return NULL;
+    QttGradeExpr **all =
+        qtt_grade_instantiate(target, scheme->grade_scheme);
+    size_t domain_count = scheme_grade_count(scheme);
+    size_t closure_count = scheme_closure_grade_count(scheme);
+    if (!closure_count) return all;
+    QttGradeExpr **domains =
+        domain_count ? malloc(domain_count * sizeof(*domains))
+                     : calloc(1, sizeof(*domains));
+    if (!domains) {
+        free(all);
+        return NULL;
+    }
+    if (domain_count)
+        memcpy(domains, all, domain_count * sizeof(*domains));
+    free(all);
+    return domains;
+}
+
+QttGradeExpr **infer_instantiate_scheme_grades(
+    InferCtx *ctx, const TypeScheme *scheme, size_t *count) {
+    if (!ctx) {
+        if (count) *count = 0;
+        return NULL;
+    }
+    return scheme_instantiate_grades(
+        scheme, ctx->grade_arena, count);
 }
 
 
@@ -1588,7 +4085,9 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
     case AST_LIST: {
         if (ast->list.count == 0) {
-            result = infer_fresh(ctx);
+            /* () is the canonical inhabitant of Unit.  It is deliberately
+             * distinct from the empty list constructor, (list). */
+            result = type_unit();
             break;
         }
 
@@ -1755,6 +4254,96 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         /* ---- if ------------------------------------------------------ */
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "perform") == 0) {
+            if (ast->list.count != 3 ||
+                ast->list.items[1]->type != AST_SYMBOL)
+                READER_ERROR(ast->line, ast->column,
+                    "perform expects an effect name and one payload");
+            Type *payload = infer_expr(ctx, ast->list.items[2]);
+            const QttEffectDeclaration *declaration =
+                qtt_effect_declaration_lookup(ast->list.items[1]->symbol);
+            if (declaration && declaration->operation_scheme) {
+                Type *expected = NULL, *operation_result = NULL;
+                if (!infer_operation_scheme_instantiate(
+                        ctx, declaration->operation_scheme,
+                        &expected, &operation_result))
+                    READER_ERROR(ast->line, ast->column,
+                        "effect '%s' has an invalid portable operation scheme",
+                        declaration->name);
+                infer_constrain(ctx, payload, expected,
+                    ast->list.items[2]->line,
+                    ast->list.items[2]->column);
+                result = operation_result;
+            } else if (declaration && declaration->payload_type &&
+                declaration->result_type) {
+                Type *expected = type_from_name(declaration->payload_type);
+                Type *operation_result =
+                    type_from_name(declaration->result_type);
+                if (!expected || !operation_result)
+                    READER_ERROR(ast->line, ast->column,
+                        "effect '%s' has a non-resolvable operation signature",
+                        declaration->name);
+                infer_constrain(ctx, payload, expected,
+                    ast->list.items[2]->line,
+                    ast->list.items[2]->column);
+                result = operation_result;
+            } else {
+                /* Compatibility for declarations predating typed operation
+                 * signatures. New Core declarations must use the typed ABI. */
+                result = payload;
+            }
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "handle") == 0) {
+            if (ast->list.count != 4 ||
+                ast->list.items[1]->type != AST_SYMBOL)
+                READER_ERROR(ast->line, ast->column,
+                    "handle expects a profile, computation, and clause");
+            Type *computation = infer_expr(ctx, ast->list.items[2]);
+            Type *clause = infer_expr(ctx, ast->list.items[3]);
+            Type *clause_payload = computation;
+            const QttEffectHandlerProfile *profile =
+                qtt_effect_handler_profile_lookup(
+                    ast->list.items[1]->symbol);
+            const QttEffectDeclaration *declaration = profile
+                ? qtt_effect_declaration_lookup(profile->effect_name) : NULL;
+            if (declaration && declaration->operation_scheme) {
+                Type *declared_result = NULL;
+                if (!infer_operation_scheme_instantiate(
+                        ctx, declaration->operation_scheme,
+                        &clause_payload, &declared_result))
+                    READER_ERROR(ast->line, ast->column,
+                        "handler '%s' refers to an invalid portable operation "
+                        "scheme", ast->list.items[1]->symbol);
+                infer_constrain(ctx, computation, declared_result,
+                    ast->list.items[2]->line,
+                    ast->list.items[2]->column);
+                computation = declared_result;
+            } else if (declaration && declaration->payload_type &&
+                declaration->result_type) {
+                clause_payload = type_from_name(declaration->payload_type);
+                Type *declared_result =
+                    type_from_name(declaration->result_type);
+                if (!clause_payload || !declared_result)
+                    READER_ERROR(ast->line, ast->column,
+                        "handler '%s' refers to a non-resolvable operation "
+                        "signature", ast->list.items[1]->symbol);
+                infer_constrain(ctx, computation, declared_result,
+                    ast->list.items[2]->line,
+                    ast->list.items[2]->column);
+                computation = declared_result;
+            }
+            infer_constrain(ctx, clause,
+                type_arrow(clause_payload, computation),
+                ast->list.items[3]->line, ast->list.items[3]->column);
+            result = computation;
+            break;
+        }
+
+        /* ---- if ------------------------------------------------------ */
         if (head->type == AST_SYMBOL && strcmp(head->symbol, "if") == 0) {
             if (ast->list.count >= 3) {
                 bool infix_subtype_cond =
@@ -1774,8 +4363,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                     Type *else_t = infer_expr(ctx, ast->list.items[else_idx]);
 
                     /* Smart Optional Promotion for Branches */
-                    bool then_opt = (then_t->kind == TYPE_OPTIONAL || then_t->kind == TYPE_NIL);
-                    bool else_opt = (else_t->kind == TYPE_OPTIONAL || else_t->kind == TYPE_NIL);
+                    bool then_opt = infer_optional_like(ctx, then_t);
+                    bool else_opt = infer_optional_like(ctx, else_t);
 
                     if (then_opt && !else_opt) {
                         else_t = type_optional(else_t);
@@ -1879,8 +4468,56 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
-        if (head->type == AST_SYMBOL && strcmp(head->symbol, "__rt_utf8_width") == 0 && ast->list.count == 2) {
-            (void)infer_expr(ctx, ast->list.items[1]); result = type_int(); break;
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "__rt_directory_names") == 0 &&
+            ast->list.count == 3) {
+            (void)infer_expr(ctx, ast->list.items[1]);
+            (void)infer_expr(ctx, ast->list.items[2]);
+            result = type_coll();
+            result->element_type = type_string();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "__rt_join_path") == 0 &&
+            ast->list.count == 3) {
+            (void)infer_expr(ctx, ast->list.items[1]);
+            (void)infer_expr(ctx, ast->list.items[2]);
+            result = type_path();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "__rt_path_text") == 0 ||
+             strcmp(head->symbol, "__rt_text_path") == 0) &&
+            ast->list.count == 2) {
+            (void)infer_expr(ctx, ast->list.items[1]);
+            result = strcmp(head->symbol, "__rt_path_text") == 0
+                ? type_string() : type_path();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            (strcmp(head->symbol, "__rt_string_take") == 0 ||
+             strcmp(head->symbol, "__rt_string_drop") == 0) &&
+            ast->list.count == 3) {
+            Type *text_t = infer_expr(ctx, ast->list.items[1]);
+            Type *count_t = infer_expr(ctx, ast->list.items[2]);
+            infer_constrain(ctx, text_t, type_string(), ast->line, ast->column);
+            infer_constrain(ctx, count_t, type_int(), ast->line, ast->column);
+            result = type_string();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "__rt_string_byte") == 0 &&
+            ast->list.count == 3) {
+            Type *text_t = infer_expr(ctx, ast->list.items[1]);
+            Type *index_t = infer_expr(ctx, ast->list.items[2]);
+            infer_constrain(ctx, text_t, type_string(), ast->line, ast->column);
+            infer_constrain(ctx, index_t, type_int(), ast->line, ast->column);
+            result = type_int();
+            break;
         }
 
         if (head->type == AST_SYMBOL &&
@@ -2275,7 +4912,33 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             }
         }
 
-        Type *fn_t  = infer_normalize_annotation_type(infer_expr(ctx, head));
+        InferQuantitativeType quantitative_head = {0};
+        bool has_quantitative_head = false;
+        Type *fn_t = NULL;
+        if (head->type == AST_SYMBOL) {
+            TypeScheme *head_sc = infer_env_lookup(ctx, head->symbol);
+            if (head_sc && head_sc->grade_scheme) {
+                InferQuantitativeResult quantitative_result =
+                    infer_instantiate_quantitative(
+                        ctx, head_sc, &quantitative_head);
+                if (quantitative_result == INFER_QUANTITATIVE_OK) {
+                    fn_t = infer_normalize_annotation_type(
+                        quantitative_head.type);
+                    head->inferred_type = fn_t;
+                    has_quantitative_head = true;
+                } else {
+                    ctx->had_error = true;
+                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                             "%s:%d:%d: quantitative type scheme for '%s' "
+                             "has %zu grades but its type has a different "
+                             "arrow arity",
+                             ctx->filename, head->line, head->column,
+                             head->symbol, scheme_grade_count(head_sc));
+                }
+            }
+        }
+        if (!fn_t)
+            fn_t = infer_normalize_annotation_type(infer_expr(ctx, head));
         Type *ret_t = infer_fresh(ctx);
 
         /* Compile-time refinement check for literal arguments.
@@ -2321,6 +4984,34 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         infer_constrain(ctx, fn_t, expected, ast->line, ast->column);
+        if (has_quantitative_head) {
+            size_t supplied = ast->list.count - 1;
+            size_t applied = supplied < quantitative_head.domain_count
+                ? supplied : quantitative_head.domain_count;
+            for (size_t i = 0; i < applied; i++) {
+                Type *domain_type = NULL;
+                QttGradeExpr *domain_grade = NULL;
+                if (!infer_quantitative_take_domain(
+                        &quantitative_head, &domain_type, &domain_grade) ||
+                    !domain_type || !domain_grade) {
+                    ctx->had_error = true;
+                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                             "%s:%d:%d: quantitative application evidence "
+                             "lost arrow-domain alignment",
+                             ctx->filename, ast->line, ast->column);
+                    break;
+                }
+            }
+            if (!infer_retain_quantitative_application(
+                    ctx, ast, &quantitative_head, applied)) {
+                ctx->had_error = true;
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                         "%s:%d:%d: out of memory retaining quantitative "
+                         "application evidence",
+                         ctx->filename, ast->line, ast->column);
+            }
+            infer_quantitative_type_free(&quantitative_head);
+        }
         result = ret_t;
         break;
     }
@@ -2497,8 +5188,27 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "rt_coll_is_empty", rt_is_empty_sc);
     infer_env_insert(ctx->env, "__rt_count",
                      scheme_mono(type_arrow(type_coll(), type_int())));
-    infer_env_insert(ctx->env, "__rt_utf8_width",
-                     scheme_mono(type_arrow(type_string(), type_int())));
+    Type *directory_names = type_coll();
+    directory_names->element_type = type_string();
+    infer_env_insert(ctx->env, "__rt_directory_names",
+                     scheme_mono(type_arrow(type_path(),
+                         type_arrow(type_ptr(type_int()), directory_names))));
+    infer_env_insert(ctx->env, "__rt_join_path",
+                     scheme_mono(type_arrow(type_path(),
+                         type_arrow(type_string(), type_path()))));
+    infer_env_insert(ctx->env, "__rt_path_text",
+                     scheme_mono(type_arrow(type_path(), type_string())));
+    infer_env_insert(ctx->env, "__rt_text_path",
+                     scheme_mono(type_arrow(type_string(), type_path())));
+    Type *string_slice_type = type_arrow(
+        type_string(), type_arrow(type_int(), type_string()));
+    infer_env_insert(ctx->env, "__rt_string_take",
+                     scheme_mono(type_clone(string_slice_type)));
+    infer_env_insert(ctx->env, "__rt_string_drop",
+                     scheme_mono(string_slice_type));
+    infer_env_insert(ctx->env, "__rt_string_byte",
+                     scheme_mono(type_arrow(type_string(),
+                                            type_arrow(type_int(), type_int()))));
     infer_env_insert(ctx->env, "__rt_set_singleton",
                      scheme_mono(type_arrow(type_set(), type_bool())));
 
@@ -2780,6 +5490,804 @@ Type *infer_toplevel(InferCtx *ctx, AST *ast) {
     ctx->dctx = saved_dctx;
 
     return subst_apply(ctx->subst, t);
+}
+
+static bool infer_fused_fragment_supported(
+    InferCtx *ctx, const AST *ast, bool allow_lambda) {
+    if (!ast) return true;
+    switch (ast->type) {
+    case AST_NUMBER: case AST_STRING: case AST_PATH: case AST_CHAR:
+    case AST_KEYWORD: case AST_RATIO:
+        return true;
+    case AST_SYMBOL:
+        return true;
+    case AST_ARRAY:
+        for (size_t i = 0; i < ast->array.element_count; i++)
+            if (!infer_fused_fragment_supported(
+                    ctx, ast->array.elements[i], false))
+                return false;
+        return true;
+    case AST_SET:
+        for (size_t i = 0; i < ast->set.element_count; i++)
+            if (!infer_fused_fragment_supported(
+                    ctx, ast->set.elements[i], false))
+                return false;
+        return true;
+    case AST_MAP:
+        for (size_t i = 0; i < ast->map.count; i++)
+            if (!infer_fused_fragment_supported(
+                    ctx, ast->map.keys[i], false) ||
+                !infer_fused_fragment_supported(
+                    ctx, ast->map.vals[i], false))
+                return false;
+        return true;
+    case AST_LIST: {
+        if (!ast->list.count || !ast->list.items[0] ||
+            ast->list.items[0]->type != AST_SYMBOL)
+            return false;
+        const char *name = ast->list.items[0]->symbol;
+        if (strcmp(name, "begin") == 0) {
+            for (size_t i = 1; i < ast->list.count; i++)
+                if (!infer_fused_fragment_supported(
+                        ctx, ast->list.items[i], false))
+                    return false;
+            return true;
+        }
+        if (strcmp(name, "if") == 0) {
+            if (ast->list.count < 3 || ast->list.count > 4)
+                return false;
+            for (size_t i = 1; i < ast->list.count; i++)
+                if (!infer_fused_fragment_supported(
+                        ctx, ast->list.items[i], false))
+                    return false;
+            return true;
+        }
+        if (infer_source_special_form(name)) return false;
+        TypeScheme *callee = infer_env_lookup(
+            ctx, name);
+        if (!callee || callee->grade_scheme) return false;
+        size_t domains = 0;
+        for (Type *type = callee->type;
+             type && type->kind == TYPE_ARROW; type = type->arrow_ret)
+            domains++;
+        if (callee->type->kind != TYPE_VAR &&
+            ast->list.count - 1 > domains)
+            return false;
+        for (size_t i = 1; i < ast->list.count; i++)
+            if (!infer_fused_fragment_supported(
+                    ctx, ast->list.items[i], false))
+                return false;
+        return true;
+    }
+    case AST_LAMBDA:
+        if (!allow_lambda) return false;
+        for (int i = 0; i < ast->lambda.param_count; i++)
+            if (ast->lambda.params[i].is_rest ||
+                ast->lambda.params[i].type_name)
+                return false;
+        if (ast->lambda.return_type) return false;
+        {
+            InferEnv *saved = ctx->env;
+            InferEnv *child = infer_env_create_child(saved);
+            ctx->env = child;
+            for (int i = 0; i < ast->lambda.param_count; i++) {
+                TypeScheme *parameter = scheme_mono(infer_fresh(ctx));
+                QttEffectScheme *open = qtt_effect_generalize(
+                    ctx->effect_arena, ctx->effect_solver,
+                    qtt_effect_fresh(ctx->effect_arena));
+                scheme_set_effect_scheme(parameter, open, false);
+                qtt_effect_scheme_free(open);
+                infer_env_insert(
+                    child, ast->lambda.params[i].name, parameter);
+            }
+            bool supported = true;
+            for (int i = 0; i < ast->lambda.body_count; i++)
+                if (!infer_fused_fragment_supported(
+                        ctx, ast->lambda.body_exprs[i], false)) {
+                    supported = false;
+                    break;
+                }
+            ctx->env = saved;
+            infer_env_free(child);
+            return supported;
+        }
+    default:
+        return false;
+    }
+}
+
+static Type *infer_fused_fragment(
+    SourceEffectJudgment *judgment, AST *ast, QttEffectRow **effect) {
+    InferCtx *ctx = judgment->ctx;
+    QttEffectRow *summary = qtt_effect_empty(ctx->effect_arena);
+    Type *type = NULL;
+    switch (ast->type) {
+    case AST_NUMBER: {
+        bool is_float = false;
+        if (ast->literal_str) {
+            bool radix_literal = ast->literal_str[0] == '0' &&
+                (ast->literal_str[1] == 'x' || ast->literal_str[1] == 'X' ||
+                 ast->literal_str[1] == 'b' || ast->literal_str[1] == 'B' ||
+                 ast->literal_str[1] == 'o' || ast->literal_str[1] == 'O');
+            if (!radix_literal)
+                for (const char *p = ast->literal_str; *p; p++)
+                    if (*p == '.' || *p == 'e' || *p == 'E') {
+                        is_float = true;
+                        break;
+                    }
+        } else {
+            is_float = ast->number != (double)(int64_t)ast->number;
+        }
+        if (!is_float && ast->inferred_type &&
+            ast->inferred_type->kind == TYPE_FLOAT)
+            is_float = true;
+        type = is_float ? type_float() : type_int();
+        break;
+    }
+    case AST_STRING: type = type_string(); break;
+    case AST_PATH: type = type_path(); break;
+    case AST_CHAR: type = type_char(); break;
+    case AST_KEYWORD: type = type_keyword(); break;
+    case AST_RATIO: type = type_ratio(); break;
+    case AST_SYMBOL: {
+        if (strcmp(ast->symbol, "nil") == 0) {
+            type = type_nil();
+            break;
+        }
+        TypeScheme *scheme = infer_env_lookup(ctx, ast->symbol);
+        type = scheme ? infer_instantiate(ctx, scheme) : infer_fresh(ctx);
+        break;
+    }
+    case AST_ARRAY: {
+        Type *element = infer_fresh(ctx);
+        if (ast->array.is_heap) {
+            QttEffectRow *declared = qtt_effect_extend_declared(
+                ctx->effect_arena, "Core.Alloc.heap", 0, 0, summary);
+            summary = declared ? declared : qtt_effect_extend(
+                ctx->effect_arena, "alloc", summary);
+        }
+        for (size_t i = 0; summary && i < ast->array.element_count; i++) {
+            QttEffectRow *child_effect = NULL;
+            Type *child = infer_fused_fragment(
+                judgment, ast->array.elements[i], &child_effect);
+            infer_constrain(ctx, child, element, ast->line, ast->column);
+            summary = infer_source_effect_join(
+                judgment, summary, child_effect);
+        }
+        if (!ast->array.element_count) {
+            type = type_coll();
+            type->element_type = element;
+        } else {
+            type = ast->array.is_heap
+                ? type_arr_heap(element)
+                : type_arr(element, (int)ast->array.element_count);
+        }
+        break;
+    }
+    case AST_SET: {
+        Type *element = infer_fresh(ctx);
+        for (size_t i = 0; summary && i < ast->set.element_count; i++) {
+            QttEffectRow *child_effect = NULL;
+            Type *child = infer_fused_fragment(
+                judgment, ast->set.elements[i], &child_effect);
+            infer_constrain(ctx, child, element, ast->line, ast->column);
+            summary = infer_source_effect_join(
+                judgment, summary, child_effect);
+        }
+        type = type_set();
+        break;
+    }
+    case AST_MAP: {
+        Type *key = infer_fresh(ctx);
+        Type *value = infer_fresh(ctx);
+        for (size_t i = 0; summary && i < ast->map.count; i++) {
+            QttEffectRow *key_effect = NULL;
+            QttEffectRow *value_effect = NULL;
+            Type *key_type = infer_fused_fragment(
+                judgment, ast->map.keys[i], &key_effect);
+            Type *value_type = infer_fused_fragment(
+                judgment, ast->map.vals[i], &value_effect);
+            infer_constrain(ctx, key_type, key, ast->line, ast->column);
+            infer_constrain(ctx, value_type, value, ast->line, ast->column);
+            summary = infer_source_effect_join(
+                judgment, summary, key_effect);
+            summary = infer_source_effect_join(
+                judgment, summary, value_effect);
+        }
+        type = type_map_of(key, value);
+        break;
+    }
+    case AST_LIST: {
+        AST *head = ast->list.items[0];
+        if (strcmp(head->symbol, "begin") == 0) {
+            type = type_int();
+            for (size_t i = 1; summary && i < ast->list.count; i++) {
+                QttEffectRow *item_effect = NULL;
+                type = infer_fused_fragment(
+                    judgment, ast->list.items[i], &item_effect);
+                summary = infer_source_effect_join(
+                    judgment, summary, item_effect);
+            }
+            break;
+        }
+        if (strcmp(head->symbol, "if") == 0) {
+            QttEffectRow *condition_effect = NULL;
+            QttEffectRow *then_effect = NULL;
+            QttEffectRow *else_effect = NULL;
+            Type *condition = infer_fused_fragment(
+                judgment, ast->list.items[1], &condition_effect);
+            Type *then_type = infer_fused_fragment(
+                judgment, ast->list.items[2], &then_effect);
+            infer_constrain(
+                ctx, condition, type_bool(),
+                ast->list.items[1]->line,
+                ast->list.items[1]->column);
+            summary = infer_source_effect_join(
+                judgment, summary, condition_effect);
+            summary = infer_source_effect_join(
+                judgment, summary, then_effect);
+            if (ast->list.count == 4) {
+                Type *else_type = infer_fused_fragment(
+                    judgment, ast->list.items[3], &else_effect);
+                bool then_optional = infer_optional_like(ctx, then_type);
+                bool else_optional = infer_optional_like(ctx, else_type);
+                if (then_optional && !else_optional)
+                    else_type = type_optional(else_type);
+                else if (else_optional && !then_optional)
+                    then_type = type_optional(then_type);
+                infer_constrain(
+                    ctx, then_type, else_type,
+                    ast->list.items[3]->line,
+                    ast->list.items[3]->column);
+                summary = infer_source_effect_join(
+                    judgment, summary, else_effect);
+            }
+            type = then_type;
+            break;
+        }
+        TypeScheme *callee = infer_env_lookup(ctx, head->symbol);
+        size_t supplied = ast->list.count - 1;
+        for (size_t i = 0; i < judgment->lambda_parameter_count; i++)
+            if (callee == judgment->lambda_parameters[i]) {
+                judgment->callable_parameter_mask |= UINT64_C(1) << i;
+                if (supplied > judgment->callable_parameter_arities[i])
+                    judgment->callable_parameter_arities[i] = supplied;
+            }
+        Type *function = infer_instantiate(ctx, callee);
+        head->inferred_type = function;
+        size_t domains = 0;
+        for (Type *cursor = function;
+             cursor && cursor->kind == TYPE_ARROW; cursor = cursor->arrow_ret)
+            domains++;
+        Type *cursor = function;
+        bool existential_arrow = cursor && cursor->kind == TYPE_VAR;
+        Type **argument_types = existential_arrow && supplied
+            ? malloc(supplied * sizeof(*argument_types)) : NULL;
+        if (existential_arrow && supplied && !argument_types) return NULL;
+        for (size_t i = 0; summary && i < supplied; i++) {
+            QttEffectRow *argument_effect = NULL;
+            Type *argument = infer_fused_fragment(
+                judgment, ast->list.items[i + 1], &argument_effect);
+            if (existential_arrow) {
+                argument_types[i] = argument;
+            } else {
+                if (!cursor || cursor->kind != TYPE_ARROW) {
+                    free(argument_types);
+                    return NULL;
+                }
+                infer_constrain(
+                    ctx, argument, cursor->arrow_param,
+                    ast->line, ast->column);
+                cursor = cursor->arrow_ret;
+            }
+            summary = infer_source_effect_join(
+                judgment, summary, argument_effect);
+        }
+        if (existential_arrow) {
+            Type *return_type = infer_fresh(ctx);
+            Type *expected = return_type;
+            for (size_t i = supplied; i > 0; i--)
+                expected = type_arrow(argument_types[i - 1], expected);
+            infer_constrain(
+                ctx, function, expected, ast->line, ast->column);
+            cursor = return_type;
+            domains = supplied;
+        }
+        free(argument_types);
+        infer_source_effect_clear_returned(judgment);
+        size_t arrow_effect_count = infer_scheme_arrow_effect_count(callee);
+        if (supplied < domains && arrow_effect_count == domains) {
+            size_t residual_count = domains - supplied;
+            judgment->returned_arrow_effects = calloc(
+                residual_count, sizeof(*judgment->returned_arrow_effects));
+            judgment->returned_arrow_rows = calloc(
+                residual_count, sizeof(*judgment->returned_arrow_rows));
+            judgment->returned_arrow_effect_names = calloc(
+                residual_count,
+                sizeof(*judgment->returned_arrow_effect_names));
+            judgment->returned_arrow_effects_complete = malloc(
+                residual_count *
+                    sizeof(*judgment->returned_arrow_effects_complete));
+            if (!judgment->returned_arrow_effects ||
+                    !judgment->returned_arrow_rows ||
+                    !judgment->returned_arrow_effect_names ||
+                    !judgment->returned_arrow_effects_complete) {
+                infer_source_effect_clear_returned(judgment);
+                return NULL;
+            }
+            judgment->returned_arrow_effect_count = residual_count;
+            for (size_t i = 0; i < residual_count; i++) {
+                bool source_complete = false;
+                QttEffectScheme *source_stage =
+                    infer_scheme_arrow_effect_at(
+                        callee, supplied + i, &source_complete, NULL);
+                judgment->returned_arrow_effects[i] =
+                    source_stage ? infer_source_specialize_residual_stage(
+                        judgment,
+                        source_stage, ast, supplied, source_complete,
+                        &judgment->returned_arrow_effects_complete[i])
+                    : NULL;
+                qtt_effect_scheme_free(source_stage);
+                if (!judgment->returned_arrow_effects[i]) {
+                    infer_source_effect_clear_returned(judgment);
+                    return NULL;
+                }
+                judgment->returned_arrow_rows[i] = qtt_effect_instantiate(
+                    ctx->effect_arena,
+                    judgment->returned_arrow_effects[i]);
+                const char *effect_name =
+                    infer_scheme_arrow_effect_name_at(callee, supplied + i);
+                judgment->returned_arrow_effect_names[i] = effect_name
+                    ? strdup(effect_name) : NULL;
+                if (!judgment->returned_arrow_rows[i] ||
+                        (effect_name &&
+                         !judgment->returned_arrow_effect_names[i])) {
+                    infer_source_effect_clear_returned(judgment);
+                    return NULL;
+                }
+                if (!infer_source_constrain_stage_label(
+                        judgment,
+                        judgment->returned_arrow_effect_names[i],
+                        judgment->returned_arrow_rows[i],
+                        (const char *const *)
+                            judgment->returned_arrow_effect_names,
+                        judgment->returned_arrow_rows, i)) {
+                    infer_source_effect_clear_returned(judgment);
+                    return NULL;
+                }
+            }
+            size_t residual_predicates = 0;
+            for (size_t i = 0;
+                 i < callee->effect_trait_predicate_count; i++)
+                if (callee->effect_trait_predicate_stages[i] >= supplied)
+                    residual_predicates++;
+            judgment->returned_effect_trait_predicate_stages =
+                residual_predicates ? malloc(residual_predicates *
+                    sizeof(*judgment->
+                        returned_effect_trait_predicate_stages)) : NULL;
+            judgment->returned_effect_trait_predicate_names =
+                residual_predicates ? calloc(residual_predicates,
+                    sizeof(*judgment->
+                        returned_effect_trait_predicate_names)) : NULL;
+            if (residual_predicates &&
+                    (!judgment->returned_effect_trait_predicate_stages ||
+                     !judgment->returned_effect_trait_predicate_names)) {
+                infer_source_effect_clear_returned(judgment);
+                return NULL;
+            }
+            for (size_t i = 0;
+                 i < callee->effect_trait_predicate_count; i++) {
+                size_t source_stage =
+                    callee->effect_trait_predicate_stages[i];
+                if (source_stage < supplied) continue;
+                size_t at =
+                    judgment->returned_effect_trait_predicate_count;
+                judgment->returned_effect_trait_predicate_stages[at] =
+                    source_stage - supplied;
+                judgment->returned_effect_trait_predicate_names[at] =
+                    strdup(callee->effect_trait_predicate_names[i]);
+                if (!judgment->returned_effect_trait_predicate_names[at]) {
+                    infer_source_effect_clear_returned(judgment);
+                    return NULL;
+                }
+                judgment->returned_effect_trait_predicate_count++;
+            }
+        }
+        if (arrow_effect_count) {
+            if (arrow_effect_count != domains) {
+                judgment->coverage_gaps |=
+                    QTT_EFFECT_COVERAGE_ARITY_MISMATCH;
+            } else {
+                const char **stage_names = supplied
+                    ? calloc(supplied, sizeof(*stage_names)) : NULL;
+                QttEffectRow **stage_rows = supplied
+                    ? calloc(supplied, sizeof(*stage_rows)) : NULL;
+                if (supplied && (!stage_names || !stage_rows)) {
+                    free(stage_names);
+                    free(stage_rows);
+                    return NULL;
+                }
+                for (size_t i = 0; summary && i < supplied; i++) {
+                    bool stage_complete = false;
+                    QttEffectScheme *stage_scheme =
+                        infer_scheme_arrow_effect_at(
+                            callee, i, &stage_complete, NULL);
+                    if (!stage_scheme) {
+                        judgment->coverage_gaps |=
+                            QTT_EFFECT_COVERAGE_MISSING_ARROW_CONTRACT;
+                        break;
+                    }
+                    QttEffectRow *stage = NULL;
+                    size_t callable_count =
+                        qtt_effect_scheme_callable_parameter_count(
+                            stage_scheme);
+                    if (callable_count) {
+                        QttEffectRow *replacement =
+                            qtt_effect_empty(ctx->effect_arena);
+                        bool substitution_ready = replacement != NULL;
+                        bool arguments_complete = true;
+                        for (size_t dependency = 0;
+                             substitution_ready &&
+                                 dependency < callable_count;
+                             dependency++) {
+                            size_t parameter =
+                                qtt_effect_scheme_callable_parameter_index(
+                                    stage_scheme, dependency);
+                            AST *argument_ast = parameter < supplied
+                                ? ast->list.items[parameter + 1] : NULL;
+                            TypeScheme *argument_scheme = argument_ast &&
+                                    argument_ast->type == AST_SYMBOL
+                                ? infer_env_lookup(
+                                    ctx, argument_ast->symbol)
+                                : NULL;
+                            size_t invoked =
+                                qtt_effect_scheme_callable_parameter_arity(
+                                    stage_scheme, dependency);
+                            if (!argument_scheme || !invoked) {
+                                substitution_ready = false;
+                                break;
+                            }
+                            size_t argument_effect_count =
+                                infer_scheme_arrow_effect_count(
+                                    argument_scheme);
+                            if (argument_effect_count) {
+                                if (invoked > argument_effect_count) {
+                                    substitution_ready = false;
+                                    break;
+                                }
+                                for (size_t reached = 0;
+                                     substitution_ready && reached < invoked;
+                                     reached++) {
+                                    bool argument_complete = false;
+                                    QttEffectScheme *argument_stage =
+                                        infer_scheme_arrow_effect_at(
+                                            argument_scheme, reached,
+                                            &argument_complete, NULL);
+                                    QttEffectRow *instantiated =
+                                        argument_stage
+                                        ? qtt_effect_instantiate(
+                                            ctx->effect_arena,
+                                            argument_stage) : NULL;
+                                    qtt_effect_scheme_free(argument_stage);
+                                    replacement = infer_source_effect_join(
+                                        judgment, replacement, instantiated);
+                                    substitution_ready = replacement != NULL;
+                                    arguments_complete = arguments_complete &&
+                                        argument_complete;
+                                }
+                            } else {
+                                QttEffectScheme *argument_effect =
+                                    argument_scheme->effect_scheme;
+                                if (!argument_effect) {
+                                    substitution_ready = false;
+                                    break;
+                                }
+                                QttEffectRow *instantiated =
+                                    qtt_effect_instantiate(
+                                        ctx->effect_arena, argument_effect);
+                                replacement = infer_source_effect_join(
+                                    judgment, replacement, instantiated);
+                                substitution_ready = replacement != NULL;
+                                arguments_complete = arguments_complete &&
+                                    argument_scheme->effects_complete;
+                            }
+                        }
+                        if (substitution_ready) {
+                            stage = qtt_effect_instantiate_with_tail(
+                                ctx->effect_arena, stage_scheme,
+                                replacement);
+                            stage_complete = stage && arguments_complete;
+                        }
+                    }
+                    if (!stage_complete)
+                        judgment->coverage_gaps |=
+                            QTT_EFFECT_COVERAGE_INCOMPLETE_CALLEE;
+                    if (!stage)
+                        stage = qtt_effect_instantiate(
+                            ctx->effect_arena, stage_scheme);
+                    if (!infer_source_constrain_stage_traits(
+                            judgment, callee, i, stage) ||
+                        !infer_source_constrain_stage_label(
+                            judgment,
+                            infer_scheme_arrow_effect_name_at(callee, i),
+                            stage, stage_names, stage_rows, i) ||
+                        !infer_source_constrain_named_stage(
+                            judgment,
+                            infer_scheme_arrow_effect_name_at(callee, i),
+                            stage,
+                            (const char *const *)
+                                judgment->returned_arrow_effect_names,
+                            judgment->returned_arrow_rows,
+                            judgment->returned_arrow_effect_count)) {
+                        qtt_effect_scheme_free(stage_scheme);
+                        free(stage_names);
+                        free(stage_rows);
+                        return NULL;
+                    }
+                    stage_names[i] =
+                        infer_scheme_arrow_effect_name_at(callee, i);
+                    stage_rows[i] = stage;
+                    summary = infer_source_effect_join(
+                        judgment, summary, stage);
+                    qtt_effect_scheme_free(stage_scheme);
+                }
+                free(stage_names);
+                free(stage_rows);
+            }
+        } else if (supplied < domains) {
+            judgment->coverage_gaps |=
+                QTT_EFFECT_COVERAGE_PARTIAL_LEGACY_CALL;
+            if (!callee->effects_complete)
+                judgment->coverage_gaps |=
+                    QTT_EFFECT_COVERAGE_INCOMPLETE_CALLEE;
+        } else {
+            if (!callee->effects_complete)
+                judgment->coverage_gaps |=
+                    QTT_EFFECT_COVERAGE_INCOMPLETE_CALLEE;
+            QttEffectRow *latent = callee->effect_scheme
+                ? qtt_effect_instantiate(
+                    ctx->effect_arena, callee->effect_scheme)
+                : qtt_effect_empty(ctx->effect_arena);
+            summary = infer_source_effect_join(
+                judgment, summary, latent);
+        }
+        type = cursor;
+        break;
+    }
+    case AST_LAMBDA: {
+        InferEnv *child = infer_env_create_child(ctx->env);
+        InferEnv *saved = ctx->env;
+        ctx->env = child;
+        Type **parameters = ast->lambda.param_count
+            ? malloc((size_t)ast->lambda.param_count * sizeof(*parameters))
+            : NULL;
+        if (ast->lambda.param_count && !parameters) {
+            ctx->env = saved;
+            infer_env_free(child);
+            return NULL;
+        }
+        for (int i = 0; i < ast->lambda.param_count; i++) {
+            parameters[i] = infer_fresh(ctx);
+            TypeScheme *parameter = scheme_mono(parameters[i]);
+            QttEffectScheme *open = qtt_effect_generalize(
+                ctx->effect_arena, ctx->effect_solver,
+                qtt_effect_fresh(ctx->effect_arena));
+            scheme_set_effect_scheme(parameter, open, false);
+            qtt_effect_scheme_free(open);
+            infer_env_insert(
+                child, ast->lambda.params[i].name,
+                parameter);
+            if (i < 64) {
+                judgment->lambda_parameters[i] = parameter;
+                judgment->lambda_parameter_count = (size_t)i + 1;
+            }
+        }
+        Type *return_type = infer_fresh(ctx);
+        for (int i = 0; summary && i < ast->lambda.body_count; i++) {
+            QttEffectRow *body_effect = NULL;
+            Type *body = infer_fused_fragment(
+                judgment, ast->lambda.body_exprs[i], &body_effect);
+            summary = infer_source_effect_join(
+                judgment, summary, body_effect);
+            if (i + 1 == ast->lambda.body_count) return_type = body;
+        }
+        ctx->env = saved;
+        infer_env_free(child);
+        type = return_type;
+        for (int i = ast->lambda.param_count - 1; i >= 0; i--)
+            type = type_arrow(parameters[i], type);
+        free(parameters);
+        break;
+    }
+    default:
+        return NULL;
+    }
+    ast->inferred_type = type;
+    *effect = summary;
+    return type;
+}
+
+static bool infer_toplevel_fused_fragment(
+    InferCtx *ctx, AST *ast, InferExpressionJudgment *result) {
+    QttEffectConstraintSet *constraints = qtt_effect_constraints_new();
+    if (!constraints) return false;
+    ctx->last_effect_constraint_count = 0;
+    ctx->last_effect_certificate_fingerprint = 0;
+    ctx->last_effect_constraints_residual = false;
+    SourceEffectJudgment effect_judgment = {
+        .ctx = ctx, .constraints = constraints,
+    };
+    QttEffectRow *effect = NULL;
+    Type *type = infer_fused_fragment(&effect_judgment, ast, &effect);
+    if (!type || ctx->had_error || !infer_unify_all(ctx)) {
+        qtt_effect_constraints_free(constraints);
+        infer_source_effect_clear_returned(&effect_judgment);
+        result->type = type ? subst_apply(ctx->subst, type) : NULL;
+        return false;
+    }
+    infer_zonk_ast(ctx, ast);
+    result->type = subst_apply(ctx->subst, type);
+    result->effects = infer_source_effect_finish(
+        &effect_judgment, effect, &result->effects_complete);
+    size_t lambda_domains = ast->type == AST_LAMBDA
+        ? (size_t)ast->lambda.param_count : 0;
+    size_t residual_domains = effect_judgment.returned_arrow_effect_count;
+    size_t arrow_count = lambda_domains + residual_domains;
+    if (result->effects && arrow_count) {
+        result->arrow_effect_schemes = calloc(
+            arrow_count, sizeof(*result->arrow_effect_schemes));
+        result->arrow_effects_complete = malloc(
+            arrow_count * sizeof(*result->arrow_effects_complete));
+        QttEffectScheme *pure = lambda_domains > 1
+            ? qtt_effect_generalize(
+                ctx->effect_arena, ctx->effect_solver,
+                qtt_effect_empty(ctx->effect_arena))
+            : NULL;
+        if (!result->arrow_effect_schemes ||
+                !result->arrow_effects_complete ||
+                (lambda_domains > 1 && !pure)) {
+            qtt_effect_scheme_free(pure);
+            infer_expression_judgment_free(result);
+            return false;
+        }
+        for (size_t i = 0; i < lambda_domains; i++) {
+            QttEffectScheme *stage = i + 1 == lambda_domains
+                ? result->effects : pure;
+            result->arrow_effect_schemes[i] =
+                qtt_effect_scheme_retain(stage);
+            result->arrow_effects_complete[i] = i + 1 == lambda_domains
+                ? result->effects_complete : true;
+        }
+        for (size_t i = 0; i < residual_domains; i++) {
+            result->arrow_effect_schemes[lambda_domains + i] =
+                qtt_effect_scheme_retain(
+                    effect_judgment.returned_arrow_effects[i]);
+            result->arrow_effects_complete[lambda_domains + i] =
+                effect_judgment.returned_arrow_effects_complete[i];
+        }
+        qtt_effect_scheme_free(pure);
+        result->arrow_effect_count = arrow_count;
+    }
+    result->effect_trait_predicate_stages =
+        effect_judgment.returned_effect_trait_predicate_stages;
+    result->effect_trait_predicate_names =
+        effect_judgment.returned_effect_trait_predicate_names;
+    result->effect_trait_predicate_count =
+        effect_judgment.returned_effect_trait_predicate_count;
+    effect_judgment.returned_effect_trait_predicate_stages = NULL;
+    effect_judgment.returned_effect_trait_predicate_names = NULL;
+    effect_judgment.returned_effect_trait_predicate_count = 0;
+    infer_source_effect_clear_returned(&effect_judgment);
+    result->recursively_fused = result->effects != NULL;
+    return result->effects != NULL;
+}
+
+static bool infer_toplevel_inline_lambda_call(
+    InferCtx *ctx, AST *ast, InferExpressionJudgment *judgment,
+    bool *handled) {
+    *handled = false;
+    if (ast->type != AST_LIST || ast->list.count < 2) return false;
+    size_t inline_count = 0;
+    for (size_t i = 1; i < ast->list.count; i++)
+        if (ast->list.items[i]->type == AST_LAMBDA) inline_count++;
+    if (!inline_count) return false;
+    *handled = true;
+
+    AST **originals = calloc(ast->list.count, sizeof(*originals));
+    AST *symbols = calloc(ast->list.count, sizeof(*symbols));
+    char **names = calloc(ast->list.count, sizeof(*names));
+    InferEnv *saved_env = ctx->env;
+    InferEnv *inline_env = infer_env_create_child(saved_env);
+    bool ok = originals && symbols && names && inline_env;
+    if (inline_env) ctx->env = inline_env;
+    for (size_t i = 1; ok && i < ast->list.count; i++) {
+        AST *argument = ast->list.items[i];
+        if (argument->type != AST_LAMBDA) continue;
+        InferExpressionJudgment inferred = {0};
+        ok = infer_toplevel_judgment(ctx, argument, &inferred);
+        TypeScheme *scheme = ok ? scheme_mono(inferred.type) : NULL;
+        InferCallableContract contract = {0};
+        if (ok && scheme) {
+            ok = infer_callable_contract_from_judgment(
+                    &contract, &inferred) &&
+                scheme_set_callable_contract(scheme, &contract);
+        } else {
+            ok = false;
+        }
+        if (ok) {
+            char generated[96];
+            snprintf(
+                generated, sizeof(generated),
+                "__effect_inline_%p_%zu", (void *)argument, i);
+            names[i] = strdup(generated);
+            ok = names[i] != NULL;
+        }
+        if (ok) {
+            infer_env_insert(ctx->env, names[i], scheme);
+            originals[i] = argument;
+            symbols[i].type = AST_SYMBOL;
+            symbols[i].symbol = names[i];
+            symbols[i].line = argument->line;
+            symbols[i].column = argument->column;
+            ast->list.items[i] = &symbols[i];
+        } else {
+            scheme_free(scheme);
+        }
+        infer_callable_contract_free(&contract);
+        infer_expression_judgment_free(&inferred);
+    }
+    if (ok && infer_fused_fragment_supported(ctx, ast, true))
+        ok = infer_toplevel_fused_fragment(ctx, ast, judgment);
+    else
+        ok = false;
+    for (size_t i = 1; i < ast->list.count; i++) {
+        if (originals && originals[i]) ast->list.items[i] = originals[i];
+        free(names ? names[i] : NULL);
+    }
+    free(names);
+    free(symbols);
+    free(originals);
+    ctx->env = saved_env;
+    infer_env_free(inline_env);
+    return ok;
+}
+
+bool infer_toplevel_judgment(
+    InferCtx *ctx, AST *ast, InferExpressionJudgment *judgment) {
+    if (!ctx || !ast || !judgment) return false;
+    memset(judgment, 0, sizeof(*judgment));
+    bool handled_inline = false;
+    bool inline_result = infer_toplevel_inline_lambda_call(
+        ctx, ast, judgment, &handled_inline);
+    if (handled_inline) return inline_result;
+    if (infer_fused_fragment_supported(ctx, ast, true))
+        return infer_toplevel_fused_fragment(ctx, ast, judgment);
+    judgment->type = infer_toplevel(ctx, ast);
+    if (!judgment->type || ctx->had_error) return false;
+    judgment->effects = ast->type == AST_LAMBDA
+        ? infer_effect_scheme_for_lambda(
+            ctx, ast, &judgment->effects_complete)
+        : infer_effect_scheme_for_expression(
+            ctx, ast, &judgment->effects_complete);
+    if (!judgment->effects) {
+        judgment->type = NULL;
+        return false;
+    }
+    return true;
+}
+
+void infer_expression_judgment_free(InferExpressionJudgment *judgment) {
+    if (!judgment) return;
+    for (size_t i = 0; i < judgment->arrow_effect_count; i++)
+        qtt_effect_scheme_free(judgment->arrow_effect_schemes[i]);
+    free(judgment->arrow_effect_schemes);
+    free(judgment->arrow_effects_complete);
+    for (size_t i = 0; i < judgment->effect_trait_predicate_count; i++)
+        free(judgment->effect_trait_predicate_names[i]);
+    free(judgment->effect_trait_predicate_names);
+    free(judgment->effect_trait_predicate_stages);
+    qtt_effect_scheme_free(judgment->effects);
+    memset(judgment, 0, sizeof(*judgment));
 }
 
 

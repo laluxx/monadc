@@ -168,6 +168,20 @@
   Pipe sugar: =x |> f= transforms to =(f x)=. Pipe chains are handled by the
   wisp transformer using the arity table to determine correct grouping.
 
+[DEC id:dec.wisp.phase-oriented-file-split-2026-07-29 src:wisp.c,wisp_syntax_policy.c conf:high]
+  Split the Wisp implementation by phase and ownership, not by helper size.
+  Pure surface classification belongs in independent modules; token-stream
+  mutation, scoped expansion state, and AST handoff remain separate boundaries.
+  Each extraction must preserve the focused reader/Wisp regression baseline
+  before another boundary moves.
+
+[FIX id:fix.wisp.syntax-policy-extraction-2026-07-29 src:wisp_syntax_policy.c,wisp_syntax_policy.h,wisp.c conf:high]
+  Operator precedence, infix-name classification, callable-token
+  classification, and the quote/character-literal barrier now live in
+  =wisp_syntax_policy=. The module has no arity table or token-stream access,
+  making its phase purity enforceable through its interface. Focused operator
+  and quotation suites retain their pre-extraction results.
+
 * Integration Points
 :PROPERTIES:
 :ID: monadc.context.wisp.integration
@@ -234,6 +248,57 @@
   body, so =x= is bound as the function parameter rather than treated as an
   unbound pattern variable. Non-simple clauses containing =_=, literals,
   collection patterns such as =[x|xs]=, or guards keep the pattern-clause path.
+
+* Deferred Column Layout Idea
+:PROPERTIES:
+:ID: monadc.context.wisp.column-layout
+:CUSTOM_ID: wisp-column-layout
+:CONTEXT_KIND: idea
+:CONTEXT_STATUS: deferred
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-design-discussion
+:CONFIDENCE: low
+:END:
+
+[IDEA id:idea.wisp.column-layout-2026-08-10 date:2026-08-10 by:human src:user-request conf:low]
+  A possible future Wisp design gives code two compositional spatial
+  dimensions. Greater indentation would continue an application downward.
+  Stable horizontal cell alignment could form a table in which an omitted
+  leading cell inherits a prefix established by the first row. This is a design
+  discussion only: no column reader, lowering, formatter, lint, or LSP feature
+  is currently implemented, and ordinary Wisp layout remains authoritative.
+
+  In that prospective design, a blank physical line would terminate column
+  inheritance. Balanced parenthesized,
+  bracketed, braced, quoted, and character forms each occupy one cell regardless
+  of internal whitespace. Tabs in a column table and ragged rows are rejected
+  with source-spanned diagnostics; the reader never silently chooses a nearby
+  column. Parentheses remain the unambiguous escape hatch.
+
+  A future experiment should begin with an explicit whitelist of
+  column-capable forms rather than interpreting arbitrary aligned applications.
+  Surface forms would consume the resulting table through explicit lowering. A
+  conditional binding table evaluates its predicate once, evaluates only the
+  selected value column, and introduces all row bindings together. Inference,
+  effects, and QTT check the lowered form exactly as if the corresponding
+  product-valued conditional and destructuring binding had been written by hand.
+
+[IDEA id:idea.wisp.column-format-evidence-2026-08-10 date:2026-08-10 by:human src:user-request conf:low]
+  A future formatter could render a column-layout AST as repeated S-expressions, an
+  explicit product-valued form, or an aligned table. The linter detects
+  repetitive sibling forms and suggests the table representation. Automatic
+  transposition requires compiler evidence that heads resolve identically,
+  shared expressions are pure and equivalent, evaluation count and order are
+  preserved, branch types unify, and QTT usage is unchanged. LSP code actions
+  and command-line fixes consume the same checked rewrite evidence.
+
+[DEC id:dec.wisp.column-layout-removed-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  The experimental column-layout implementation and all executable fixtures
+  were removed after collision testing showed that alignment alone can
+  reinterpret established multiline conditionals, argument continuations, and
+  assembly layout. Preserve this section only as design history. Any future
+  implementation starts test-first from an explicit activation grammar and
+  must retain the complete pre-existing Wisp and Core baseline.
 
 [DEC id:dec.wisp.ignored-signature-param date:2026-06-27 by:codex]
   A parameter type segment written as =_= in a function signature is an
@@ -918,3 +983,16 @@ Test-driven observations and failure records for the corresponding subsystem.
   scrutinees remain ambiguous with guard parameter heads and use explicit
   =(value)= when this case-analysis form is intended. The lowering preserves
   input line count for diagnostics.
+
+[FIX id:fix.wisp.inline-effect-qualification-2026-08-03 date:2026-08-03 by:codex src:wisp.c,reader.c,tests/test_effect_arrow_syntax.py conf:high]
+  Inline Wisp arrow signatures retain a trailing =where e has trait= clause in
+  the generated ordinary function header. The ordinary reader owns parsing and
+  validation, so Wisp does not implement a second qualification calculus.
+
+[FIX id:fix.wisp.indented-effect-qualification-2026-08-03 date:2026-08-03 by:codex src:wisp.c,core/Effect.mon,tests/test_effect_arrow_syntax.py conf:high]
+  A =where= qualification immediately below a typed Wisp definition is one
+  layout continuation of its signature. Wisp joins that physical line before
+  define lowering, then delegates grammar, normalization, and semantics to the
+  ordinary reader. Inline and indented qualifications therefore generate the
+  same AST and portable evidence; the Core Effect module exercises the
+  indented form as a proof of availability.

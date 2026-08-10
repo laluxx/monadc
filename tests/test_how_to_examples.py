@@ -26,6 +26,33 @@ class HowToExampleTests(unittest.TestCase):
         "how_to/FirstOrderModalLogic.mon",
     )
 
+    def test_unicode_public_api_preserves_imported_value_abi(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-unicode-public-") as td:
+            temp = Path(td)
+            output = temp / "unicode-public"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(ROOT / "tests/unicode_public_api.mon"),
+                 "-o", str(output)],
+                cwd=ROOT, env=env, text=True, encoding="utf-8",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True, encoding="utf-8",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(
+                run.stdout,
+                "7\nTrue\n(65 955 128578)\n3\n1\n7\n"
+                "1\n1\n2\n1\n1\n2\n2\n",
+            )
+
     def test_monad_sources_use_multiline_haskell_style_data_declarations(self):
         offenders = []
         for root_name in ("core", "how_to", "tests"):
@@ -344,6 +371,131 @@ class HowToExampleTests(unittest.TestCase):
             )
             self.assertEqual(run.returncode, 0, run.stdout[-4000:])
             self.assertEqual(run.stdout, "7\n7\n-7\n6\n")
+
+    def test_html_tutorial_is_executable_safe_and_dual_notation(self):
+        source = ROOT / "how_to/WebHTML.mon"
+        source_text = source.read_text()
+        self.assertIn("import Web.HTML", source_text)
+        self.assertIn("define canonical :: HTML", source_text)
+        self.assertIn("define literal :: HTML", source_text)
+        self.assertIn('html :lang "en"', source_text)
+        self.assertIn('a :href "/me?from=how_to&safe=yes"', source_text)
+        self.assertIn("render-html", source_text)
+        with tempfile.TemporaryDirectory(prefix="monadc-html-howto-") as td:
+            temp = Path(td)
+            output = temp / "WebHTML"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)], cwd=ROOT,
+                env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(
+                run.stdout,
+                '<p class="notice">Safe &lt;text&gt; &amp; attributes</p>\n'
+                '<html lang="en">\n'
+                '  <head>\n'
+                '    <title>Reader-owned HTML</title>\n'
+                '  </head>\n'
+                '  <body>\n'
+                '    <h1>Hello, Monad!</h1>\n'
+                '    <p>Read the <a href="/me?from=how_to&amp;safe=yes">configuration guide</a>.</p>\n'
+                '  </body>\n'
+                '</html>\n',
+            )
+
+    def test_configuration_tutorial_is_executable_typed_and_validated(self):
+        source = ROOT / "how_to/Configuration.mon"
+        source_text = source.read_text()
+        self.assertIn("import Configuration", source_text)
+        self.assertIn("layout FormatterOptions", source_text)
+        self.assertIn("configuration formatting :: FormatterOptions", source_text)
+        self.assertIn("line-width = 100", source_text)
+        self.assertIn("ConfigValidation", source_text)
+        self.assertIn("ProjectFile", source_text)
+        with tempfile.TemporaryDirectory(prefix="monadc-config-howto-") as td:
+            temp = Path(td)
+            output = temp / "Configuration"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)], cwd=ROOT,
+                env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(
+                run.stdout,
+                "100\n2\nTrue\n",
+            )
+
+    def test_imported_layout_and_generic_adt_abi_in_standalone_client(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-imported-type-abi-") as td:
+            temp = Path(td)
+            source = temp / "imported_type_abi.mon"
+            shutil.copy2(ROOT / "tests/imported_type_abi.mon", source)
+            fixture_dir = temp / "Test"
+            fixture_dir.mkdir()
+            shutil.copy2(
+                ROOT / "tests/fixtures/Test/ImportedTypes.mon",
+                fixture_dir / "ImportedTypes.mon",
+            )
+            output = temp / "imported-type-abi"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), source.name, "-o", str(output)], cwd=temp,
+                env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=temp, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(
+                run.stdout,
+                "42\n42\nTrue\nFalse\n",
+            )
+            cached_output = temp / "imported-type-abi-cached"
+            cached = subprocess.run(
+                [str(MONAD), source.name, "-o", str(cached_output)], cwd=temp,
+                env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(cached.returncode, 0, cached.stdout[-4000:])
+            cached_run = subprocess.run(
+                [str(cached_output)], cwd=temp, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(cached_run.returncode, 0, cached_run.stdout[-4000:])
+            self.assertEqual(cached_run.stdout, run.stdout)
 
     def test_formula_reader_is_expected_type_scoped(self):
         """Logic punctuation must not capture types, clauses, or for arrows."""
@@ -1060,6 +1212,51 @@ class HowToExampleTests(unittest.TestCase):
             )
             self.assertEqual(run.returncode, 0, run.stdout[-4000:])
             self.assertEqual(run.stdout, "7\n7\n-7\n6\n")
+
+    def test_html_dsl_runs_from_an_installed_read_only_core(self):
+        """The shipped compiler/core pair must execute the public HTML DSL."""
+        with tempfile.TemporaryDirectory(prefix="monadc-installed-html-") as td:
+            temp = Path(td)
+            prefix = temp / "prefix"
+            bin_dir = prefix / "bin"
+            lib_dir = prefix / "lib"
+            installed_core = lib_dir / "monad" / "core"
+            work = temp / "work"
+            home = temp / "home"
+            bin_dir.mkdir(parents=True)
+            lib_dir.mkdir(parents=True)
+            work.mkdir()
+            home.mkdir()
+            installed_monad = bin_dir / ("monad.exe" if os.name == "nt" else "monad")
+            shutil.copy2(MONAD, installed_monad)
+            shutil.copy2(RUNTIME, lib_dir / "libmonad.a")
+            shutil.copytree(ROOT / "core", installed_core)
+            shutil.copy2(ROOT / "how_to/WebHTML.mon", work / "WebHTML.mon")
+
+            if os.name != "nt":
+                for path in installed_core.rglob("*"):
+                    path.chmod(0o555 if path.is_dir() else 0o444)
+                installed_core.chmod(0o555)
+
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env.pop("MONAD_CORE", None)
+            env.pop("MONAD_RUNTIME_LIB", None)
+            compiled = subprocess.run(
+                [str(installed_monad), "WebHTML.mon"], cwd=work, env=env,
+                text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            executable = work / ("WebHTML.exe" if os.name == "nt" else "WebHTML")
+            run = subprocess.run(
+                [str(executable)], cwd=work, env=env, text=True,
+                encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertIn('<html lang="en">', run.stdout)
+            self.assertIn('href="/me?from=how_to&amp;safe=yes"', run.stdout)
 
     def test_recursive_compile_time_helpers_process_syntax_lists(self):
         with tempfile.TemporaryDirectory(prefix="monadc-recursive-syntax-") as td:

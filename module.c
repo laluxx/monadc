@@ -904,6 +904,30 @@ char *module_name_to_path(const char *module_name)
         if (found) return found;
     }
 
+    /* Per-user installations place Core under ~/.local. Dependency discovery
+       can call this resolver before main.c has published MONAD_CORE, so keep
+       PATH-based `monad` invocation relocatable here as well. */
+    const char *user_home = getenv("HOME");
+    if (user_home && *user_home) {
+        char user_core[1024];
+        snprintf(user_core, sizeof(user_core), "%s/.local/lib/monad/core",
+                 user_home);
+
+        snprintf(candidate, sizeof(candidate), "%s/%s.mon", user_core, rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "%s/%s.monad", user_core, rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "%s/prelude/%s.mon", user_core,
+                 rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+        snprintf(candidate, sizeof(candidate), "%s/prelude/%s.monad", user_core,
+                 rel);
+        if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
+
+        char *found = find_mon_recursive(user_core, module_name);
+        if (found) return found;
+    }
+
     /* 3. Installed core */
     snprintf(candidate, sizeof(candidate), "/usr/local/lib/monad/core/%s.mon", rel);
     if (access(candidate, F_OK) == 0) return mod_xstrdup(candidate);
@@ -927,6 +951,22 @@ char *module_name_to_path(const char *module_name)
 
 
 /// §10  Parsing module/import/export forms
+
+static void module_decl_add_grouped_exports(ModuleDecl *decl, AST *node)
+{
+    if (!decl || !node) return;
+
+    if (node->type == AST_SYMBOL) {
+        if (strcmp(node->symbol, "where") != 0)
+            module_decl_add_export(decl, node->symbol);
+        return;
+    }
+
+    if (node->type == AST_LIST) {
+        for (size_t i = 0; i < node->list.count; i++)
+            module_decl_add_grouped_exports(decl, node->list.items[i]);
+    }
+}
 
 ModuleDecl *parse_module_decl(AST *ast)
 {
@@ -963,11 +1003,8 @@ ModuleDecl *parse_module_decl(AST *ast)
     ModuleDecl *decl = module_decl_create(name_ast->symbol, EXPORT_SELECTED);
     if (!decl) return NULL;
 
-    for (size_t i = 0; i < exports_ast->array.element_count; i++) {
-        AST *sym = exports_ast->array.elements[i];
-        if (sym->type == AST_SYMBOL)
-            module_decl_add_export(decl, sym->symbol);
-    }
+    for (size_t i = 0; i < exports_ast->array.element_count; i++)
+        module_decl_add_grouped_exports(decl, exports_ast->array.elements[i]);
     return decl;
 }
 

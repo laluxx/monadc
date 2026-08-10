@@ -53,6 +53,23 @@
 | =./path=       | pass token text through | lex as =TOK_PATH=       | =AST_PATH=                     |
 | =/abs/path=    | pass token text through | lex as =TOK_PATH=       | =AST_PATH=                     |
 
+* Bullet Line Comments
+:PROPERTIES:
+:ID: monadc.context.reader.bullet-line-comments
+:CUSTOM_ID: reader-bullet-line-comments
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: reader.c,wisp.c,tests/bullet_line_comments.mon
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.reader.bullet-line-comments-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Outside strings and character literals, Unicode bullet =•= starts a line
+  comment exactly like =;=. It may begin a whole prose line or follow code, so
+  Core declarations can carry aligned marginal commentary. Comment stripping
+  replaces its bytes and the remaining line with spaces, preserving newlines
+  and source positions. A bullet inside a literal remains ordinary data.
+
 * AST and Token Header
 :PROPERTIES:
 :ID: monadc.context.reader.header
@@ -1228,3 +1245,136 @@ Test-driven observations and failure records for the corresponding subsystem.
   compiler, runtime archive, and read-only installed core without development
   environment overrides. This covers discovery, module loading, expansion,
   inference, linking, and runtime behavior in the public deployment topology.
+
+* Programmable Indentation Blocks
+:PROPERTIES:
+:ID: monadc.context.reader.programmable-blocks
+:CUSTOM_ID: programmable-blocks
+:CONTEXT_KIND: component
+:CONTEXT_DESCRIPTION: Scoped language-defined readers for indentation-owned source regions.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-28
+:CONTEXT_UPDATED: 2026-07-28
+:CONTEXT_STATUS: active
+:SOURCE: reader_syntax.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.reader.programmable-blocks date:2026-07-28 by:human src:user-request conf:high]
+  Monad is a language platform: reader ownership extends beyond mixfix
+  expressions to source blocks whose syntax may look unrelated to ordinary
+  Monad. The compiler kernel groups and locates source; a scoped Monad Syntax
+  transformer owns the block's object-language meaning.
+
+[OBS id:obs.reader.block-protocol-2026-07-28 src:reader_syntax.c,macro.c conf:high]
+  =reader-block KEYWORD_ TARGET= registers a dynamically stored, direct-owner
+  scoped block reader. A claimed region reaches TARGET as neutral
+  =reader-block= Syntax containing =reader-line=, =reader-blank=, and
+  =reader-comment= children. Lines retain relative indentation and source line;
+  comments retain text. =syntax-keyword= and =syntax-list-append= extend the
+  deterministic Syntax evaluator without exposing mutable compiler ASTs.
+
+[OBS id:obs.reader.block-regressions-2026-07-28 src:tests/reader_block_transformer.mon,tests/test_reader_blocks.py conf:high]
+  Executable coverage proves a non-configuration DSL, direct-import
+  activation, absence without import, explicit ambiguity between two owners,
+  malformed-pattern diagnostics, and a source-located configuration error.
+
+[TODO id:todo.reader.lossless-token-tree-bridge-2026-07-28 priority:high]
+  Generalize line payloads from ordinary parsed expressions to a lossless
+  TokenTree bridge with delimiter groups, all trivia, byte ranges, token-level
+  recovery, and nested reader invocation. The current protocol preserves line
+  structure, comments, indentation, and ordinary expression Syntax, but it is
+  not yet the final arbitrary-token parser-combinator interface.
+
+[FIX id:fix.reader.expression-position-blocks-2026-07-28 src:reader_syntax.c,wisp.c,tests/web_html_reader.mon conf:high]
+  Scoped block readers may claim an indented region in expression position,
+  not only at top level. The claiming line establishes the indentation
+  baseline and the first nonblank dedent ends the region. Multiline typed
+  values keep their annotated =define= open for the following indented
+  expression instead of fabricating an empty-array initializer.
+
+[OBS id:obs.reader.web-html-client-2026-07-28 src:core/Web/HTML.mon,tests/web_html_reader.mon conf:high]
+  =Web.HTML= is an independent core client of the programmable block protocol.
+  Its Monad transformer owns tag symbols, keyword attributes, nesting, mixed
+  content, and interpolation. Executable coverage proves that the reader
+  kernel contains no HTML tag table or configuration-specific grammar.
+
+[FIX id:fix.reader.installed-web-html-distribution-2026-07-28 src:tests/test_how_to_examples.py conf:high]
+  The public =WebHTML.mon= tutorial is compiled and executed by a copied
+  installed compiler, static runtime archive, and read-only installed core.
+  This deployment regression prevents a workspace-only reader implementation
+  or an omitted core reader module from appearing shippable. The exact user
+  command =monad WebHTML.mon && ./WebHTML= is also a release gate after install.
+
+[FIX id:fix.reader.release-gate-optimizer-aliasing-2026-07-28 src:optimizations.c,tests/codegen/branches/optimizations/constant-folding/atom.codegen.optimizations.constant-folding.o-flag/rt_optimization_constant_folding.mon conf:high]
+  The reader release gate exposed an alias-unsafe partial constant fold. The
+  optimizer wrote a folded literal into its live operand array and then freed
+  that slot while scanning the same array, producing =(+ nil y)=. Partial
+  arithmetic folding now constructs a fresh operand vector before releasing
+  consumed literals. This preserves AST ownership and yields =(+ 40 y)= for
+  =(+ 30 y (* 2 5))= without relying on traversal order.
+
+[FIX id:fix.reader.release-gate-monoid-minimal-instance-2026-07-28 src:core/prelude/Data/Semigroup.mon,tests/test_core_abstraction_ownership.py conf:high]
+  Release validation removed the redundant =mappend= override from =Monoid
+  Bool=. The instance now supplies only =mempty= and inherits the class-derived
+  operation, matching its documented minimal complete definition.
+
+[TODO id:todo.typeclass.sequence-imported-dictionary-abi-2026-07-28 priority:high]
+  Remove the same-named concrete =Sequence= methods only after imported class
+  calls lower through stable instance dictionary symbols. Today imported core
+  clients link to symbols such as =Sequence__length=; merely renaming the
+  concrete implementation makes those clients fail at link time. Cover the
+  migration with a separately compiled client before enforcing the no-shadow
+  ownership rule.
+
+* Reader Theory and Phase Invariants
+:PROPERTIES:
+:ID: monadc.context.reader.phase-invariants
+:CUSTOM_ID: reader-phase-invariants
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Structural and semantic invariants for a programmable reader.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_CREATED: 2026-07-29
+:CONTEXT_UPDATED: 2026-07-29
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,reader_syntax.c,wisp.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.reader.bicameral-pipeline-2026-07-29 src:context/reader.org conf:high]
+  Monad's programmable syntax follows a bicameral pipeline: reading produces
+  source-located groups, delimiters, blocks, atoms, and trivia; scoped
+  expansion assigns language meaning; typed core lowering happens only after
+  expansion. Reader extensions must not depend on runtime function arity to
+  recover grouping that the structural phase discarded.
+
+[DEC id:dec.reader.syntax-provenance-2026-07-29 src:reader_syntax.c conf:high]
+  Every introduced syntax node needs an origin class (source, introduced, or
+  relocated), an owning reader binding, a phase, and a complete source span.
+  Extension lookup is lexical and phase-specific. Two active owners for the
+  same trigger are an error rather than an order-dependent choice.
+
+[DEC id:dec.reader.quote-barrier-2026-07-29 src:wisp.c,reader.c conf:high]
+  Quote is a structural barrier. Wisp grouping and infix rewriting preserve
+  quote-prefixed atoms and delimited data byte-for-byte until the ordinary
+  reader constructs the quote AST. Character literals remain distinct because
+  they have a closing apostrophe.
+
+[FIX id:fix.wisp-quoted-atom-loss-2026-07-29 src:wisp.c,tests/codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.quote conf:high]
+  Grouped-infix rewriting previously erased a quoted atom in
+  =define sym 'hello=. Quote detection now distinguishes quote-prefixed atoms
+  from closed character literals before rewriting. The Wisp quote regression
+  compiles and its emitted AST retains both symbol and list quotations.
+
+[FIX id:fix.reader.effect-qualification-context-2026-08-03 date:2026-08-03 by:codex src:reader.h,reader.c,tests/test_effect_arrow_syntax.py conf:high]
+  Function signatures parse =where row has trait= after the return type.
+  Comma and =and= separators are accepted. Lambda ASTs own parallel row/trait
+  vectors and preserve them through cloning, printing, and destruction. The
+  return-type parser stops before =where=, preventing qualification text from
+  being misdiagnosed as an unknown nominal return type.

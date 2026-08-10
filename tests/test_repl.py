@@ -205,6 +205,22 @@ class ReplTests(unittest.TestCase):
         self.assertNotIn("Class:", result.stdout)
         self.assertTrue(clean_output(result.stdout).endswith("False"), result.stdout)
 
+    def test_repl_imported_values_work_qualified_and_unqualified(self):
+        result = self.run_repl(
+            "import Math\n"
+            "Math.e\n"
+            "show Math.e\n"
+            "e\n",
+            timeout=30,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        output = clean_output(result.stdout)
+        self.assertNotIn("no module context", output)
+        self.assertNotIn("JIT session error", output)
+        self.assertNotIn("ORC lookup failed", output)
+        self.assertGreaterEqual(output.count("2.71828"), 3, output)
+
     def test_eval_runs_import_then_expression_in_one_source_argument(self):
         with tempfile.TemporaryDirectory(prefix="monadc-eval-import-") as td:
             env = os.environ.copy()

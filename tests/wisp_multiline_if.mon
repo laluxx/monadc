@@ -1,0 +1,30 @@
+:TEST-ID tests.wisp.multiline-if
+:TEST-CONTEXT monadc.context.style.multiline-conditionals
+:TEST-PURPOSE Long conditionals use vertically aligned `then` and `else` branches.
+:TEST-ATOM A three-line conditional lowers to the ordinary `if` AST.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU wisp
+:TEST-MENU-PATH wisp/multiline-if
+:TEST-CLI-TARGET wisp multiline-if
+
+module Wisp.MultilineIf []
+
+
+define status-result :: Int -> Either Int Int
+  status -> if status < 0
+             then Left status
+              else Right status
+
+
+define magnitude :: Int -> Int
+  value -> if value < 0
+            then 0 - value
+             else value
+
+
+tests
+  assert-eq (status-result -7) (Left -7) "multiline then branch preserves its value"
+  assert-eq (status-result 7) (Right 7) "multiline else branch preserves its value"
+  assert-eq (magnitude -9) 9 "multiline branches accept infix bodies"
+  assert-eq (magnitude 9) 9 "multiline conditional returns its else body"

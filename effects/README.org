@@ -1,0 +1,952 @@
+#+title: Monad Effect System
+
+* Scope
+
+This directory owns the language-independent effect calculus: structural
+effect atoms, duplicate-label rows, row variables, unification,
+generalization/instantiation, closed-row joins, canonical fingerprints, and
+eventually handlers and evidence terms.
+
+QTT remains responsible for integration.  In particular, typed-Core
+interpretation, callable signatures, resumption ownership, module fixed
+points, Semantic IR, and cleanup obligations live beside the judgments they
+connect.  This prevents the effect kernel from depending on a particular
+ownership IR while preserving the combined judgment
+
+#+begin_example
+Sigma ; Psi | Gamma |-l e : A ! epsilon |> Delta
+#+end_example
+
+as the authoritative compiler boundary.
+
+* Core-owned declaration boundary
+
+The first declarative slice is implemented. Core's =Effect= module declares
+public effect identities, operations, resumption quantities, scopedness, and
+lowering traits with the generic form
+
+#+begin_src monad
+(effect Core.Foreign.asm foreign asm 1 False)
+#+end_src
+
+The effect kernel stores these declarations in an open name-indexed registry
+and constructs structural atoms from them. Assembly, heap allocation, and
+mutation inference resolve =Core.Foreign.asm=, =Core.Alloc.heap=, and
+=Core.State.write= through that registry. Their old labels remain only as
+bootstrap fallbacks when foundational declarations have not been loaded.
+
+Version-5 =.mqti= interfaces carry a separately fingerprinted top-level effect
+declaration section. Fresh compilation exports declarations from the defining
+module and dependency loading reconstructs the registry before importing
+values. Versions 1 through 4 remain readable and simply provide no declaration
+evidence. Conflicting imported declarations fail closed.
+
+Declarations now carry arbitrary comma-separated core-owned trait names.
+Known historical names derive a =QttEffectKind= compatibility projection, but
+unknown traits are accepted and transported without a compiler change;
+=Core.Trace.emit= with its =telemetry= trait is the executable witness. Trait
+membership is queried by name rather than by extending an enum.
+
+Structural atoms now own exact trait-set text. Atom equality, ordering,
+fingerprints, row identity, and =monad-effect-scheme-v3= serialization preserve
+it. Version-2 schemes remain readable with their historical fingerprint;
+because those bytes contain no trait evidence, trait queries may resolve the
+atom's stable declaration identity through the imported declaration registry.
+
+The closed =QttEffectKind= field remains in atoms only as a version-2 and C API
+compatibility projection. It no longer suffices for identity when traits are
+present. The next removal cycle can introduce explicit v2 upgrade diagnostics
+and eliminate the projection from newly constructed atoms.
+
+* Trait-set algebra
+
+Trait annotations denote elements of the free finite join-semilattice over
+trait names. For finite sets =S= and =T=, join is union and the induced order is
+subset inclusion:
+
+#+begin_example
+S join T = S union T       S <= T iff S union T = T
+#+end_example
+
+Consequently join is associative, commutative, and idempotent, with the empty
+set as identity. The executable normal form sorts names lexicographically and
+removes duplicates. Declaration registration, atom construction, semantic
+fingerprinting, scheme-v3 serialization, and interface ingestion normalize at
+their trust boundaries. Thus =state,read,read= and =read,state= have identical
+type identity and portable bytes.
+
+This normalization is deliberately syntactic. Semantic implications such as
+=allocate <= state= belong to the separate core-declared preorder below; they
+must not be confused with equality in the free semilattice.
+
+* Core-owned trait preorder
+
+Core declares directed trait implications with =effect-trait=. Their
+reflexive-transitive closure defines a preorder =preceq*= independently of
+finite-set identity:
+
+#+begin_example
+(effect-trait allocate state)
+(effect-trait state io)
+
+allocate preceq* io
+#+end_example
+
+The kernel computes reachability with cycle-safe graph search and returns an
+explicit shortest implication witness. Cycles are deliberate equivalence
+classes of the preorder: if =a preceq* b= and =b preceq* a=, constraints may
+use either semantic classification while the original atom traits remain
+distinct. Exact membership uses =qtt_effect_atom_has_trait=; derived
+satisfaction uses =qtt_effect_atom_satisfies_trait=.
+
+Version-7 module interfaces persist the canonical direct-edge set separately
+from its derived closure. Edges are sorted by premise and consequence, carry
+their defining module as provenance, and have an order-independent semantic
+fingerprint. Imports verify the fingerprint before reconstructing the graph,
+so cached and fresh core compilation provide the same direct axioms. Witness
+paths remain derived evidence and are never serialized as additional axioms.
+
+* Trait predicates over rows
+
+=HasTrait(epsilon,t)= is a three-valued proposition. For a row with known atom
+prefix =K= and optional tail =rho=:
+
+#+begin_example
+proved   iff exists e in K, exists s in traits(e). s preceq* t
+refuted  iff rho is absent and no such e,s exist
+residual iff rho is open and no known atom proves the proposition
+#+end_example
+
+This is the information order required by row polymorphism: resolving an open
+tail refines residual evidence, while a known proof remains stable. A proved
+certificate carries the shortest lexicographically deterministic implication
+path. Exact trait membership remains distinct from semantic satisfaction.
+
+=monad-effect-certificate-v2= adds canonical =has-trait= obligations to the
+portable grammar. Certificates using only older obligations remain version 1.
+
+* Qualified effect schemes
+
+HM scheme version 2 carries a finite canonical predicate context
+=Delta = {(i,t)}= where =i= identifies an arrow stage and =t= is a normalized
+trait name. Its meaning is the qualified scheme
+
+#+begin_example
+forall alpha epsilon. Delta => A
+Delta(i,t) = HasTrait(epsilon_i,t)
+#+end_example
+
+Predicates sort by stage then trait and duplicates contract by idempotence.
+Every stage index must name an actual arrow in the serialized type. Cloning,
+interface transport, and deserialization preserve the context; instantiation
+freshens the stage effect rows and emits ordinary three-valued =HasTrait=
+constraints. Predicate-free schemes retain HM version 1 byte-for-byte.
+
+The source spelling of qualified effect schemes is not fixed in this slice.
+That is deliberate: the portable judgment and substitution behavior are the
+semantic boundary on which syntax must elaborate.
+
+At application, a predicate is instantiated only when its indexed arrow stage
+is consumed. The =HasTrait= obligation and the latent call effect share the
+same fresh row; independently freshening them would be unsound for open tails.
+Closed absence rejects the application, open absence remains residual, and a
+direct or implication-derived witness proves it. Unsupplied stages are not
+discharged. Partial application projects their context by the canonical suffix
+action
+
+#+begin_example
+P_k(Delta) = {(i-k,t) | (i,t) in Delta, i >= k}
+#+end_example
+
+where =k= stages were consumed. The projected context travels through source
+expression judgments, callable contracts, contract serialization, and rebuilt
+HM schemes. Predicate-free callable contracts remain version 1; qualified
+contracts use fingerprinted version 2.
+
+* Effect-arrow source identity
+
+The type AST losslessly represents compact labeled arrows:
+
+#+begin_example
+Int -e-> String -io.read-> ()
+#+end_example
+
+The text between =-= and =->= is stored as source-level effect identity rather
+than prematurely classified. Elaboration will resolve it either as a concrete
+core-declared effect or as a lexically bound row variable. Parsing, printing,
+structural equality, cloning, substitution, fingerprints, and portable QTT type
+identity all preserve the label. Ordinary =->= remains unchanged. This avoids
+the unsound shortcut of treating repeated =e= occurrences as unrelated rows.
+
+The ordinary reader now tokenizes compact effect arrows as a distinct syntax
+class and attaches each label to the domain whose arrow it decorates. Function
+signature construction transfers that label into the corresponding
+=TYPE_ARROW= node, with guarded ownership so legacy and compiler-generated AST
+parameters remain unchanged. Reader syntax such as
+
+#+begin_example
+(define (f Int -e-> Int) 7)
+#+end_example
+
+therefore survives source parsing and HM signature construction. Wisp header
+lowering now preserves a parallel vector of arrow labels while splitting the
+type spine, re-emits each label after its matching generated parameter, and
+therefore reaches the identical reader/HM representation. Multi-stage Wisp
+signatures are regression-checked through portable =.mqti= type identity.
+Lexical =where e has t= elaboration remains the next boundary; neither reader
+pretends that a bare =e= creates a shared solver row.
+
+The target boundary is open and core-owned: core modules declare effect
+constructors, operations, resumptions, handler interfaces, and primitive
+contracts. The compiler retains only the generic effect-expression/row
+calculus, elaboration, constraint and evidence machinery, and the irreducible
+mapping from trusted ABI primitives to declared contracts. Adding a new
+ordinary effect must not require adding a compiler enum case or recognizing a
+core function name. Compiler-known properties such as read, write, allocation,
+foreign execution, or control are traits on declarations because ownership and
+lowering consume them; they are not a closed public effect vocabulary.
+
+* Cycle 100
+
+The hundredth QTT/effect cycle moves direct application and simple lambdas
+onto recursively fused typing/effect rules. Application instantiates the
+callee's HM scheme, constrains argument types, returns the residual arrow under
+partial application, imports exactly the reached arrow-stage effects, and
+records incomplete or open contracts in the same derivation. Simple
+definitions whose bodies stay inside the fused fragment use this path in
+ordinary compiler inference.
+
+This is a milestone rather than a finish line. The fallback remains necessary
+for general annotated and higher-order functions, special forms, and control
+flow, and its certificate boundary remains authoritative wherever fusion is
+not yet claimed.
+
+* Fused sequencing and branching
+
+=begin= now derives each expression in order, returns the final HM type, and
+joins every evaluation effect through the same constraint scope. =if= checks
+the condition against =Bool=, unifies branch result types (including the
+existing optional/nil promotion), and joins condition and alternative effects
+in the same recursive judgment.
+
+Higher-order calls now expose a dedicated =missing-arrow-contract= coverage
+gap when HM proves that the callee is an arrow but no latent effect scheme is
+available. This is more precise than treating a lexical function parameter as
+an arbitrary unknown name and identifies the required design: effect schemes
+must travel with arrow values, not only global names.
+
+* Existential contracts for lexical arrow values
+
+Unannotated lambda parameters now enter the fused lexical environment with a
+fresh existential effect tail in addition to their fresh HM type. If a
+parameter is applied, the fused rule constrains its type variable to the arrow
+constructed from the observed argument and fresh result types, then joins the
+instantiated latent effect tail. The enclosing lambda consequently generalizes
+an open effect contract and carries residual certified evidence instead of
+falling back to =missing-arrow-contract=.
+
+This is sound conservative higher-order inference. Named call sites now
+specialize its existential contract as described below; arbitrary closure flow
+and independent domain variables remain beyond the current fragment.
+
+Generalized effect schemes retain the ordered indices of lambda parameters
+actually invoked as callables. The indices participate in semantic scheme
+fingerprints and survive reference-counted scheme ownership. Each index is
+paired with the maximum arrow depth reached at its invocation site. At a named
+call site, a stage finds every corresponding function argument, instantiates
+exactly the argument stages reached by that depth, joins the resulting rows,
+and capture-avoidingly substitutes that union for the stage's quantified tail.
+Thus applying
+=lambda f v -> f v= to a known pure, closed-IO, or open-network function yields
+respectively a closed empty row, a closed =io= row, or a residual open
+=network= row. Completeness follows the substituted argument contract rather
+than the unspecialized existential.
+
+For several callable domains, completeness is the conjunction of all argument
+contracts. This correctly computes saturated unions such as the effects of
+=lambda f g v -> begin (f v) (g v)= without closing an unknown remainder.
+
+Writing the callable dependencies as =D = [(i₁,k₁),...,(iₙ,kₙ)]=, the current
+saturated substitution is
+
+#+begin_example
+σ(D) = ⨆ⱼ ⨆_{0 ≤ s < kⱼ} instantiate(stage(argumentᵢⱼ, s))
+ε[α] at the call site becomes ε[α ↦ σ(D)]
+#+end_example
+
+The scheme fingerprint includes both =iⱼ= and =kⱼ=. Contracts that invoke the
+same function parameter to different depths are therefore not conflated.
+
+This is deliberately a restricted correlated rule, not a claim of principal
+higher-order inference. Arguments must currently be named symbols with stored
+=TypeScheme= contracts. One flat tail represents the saturated union but
+cannot preserve dependencies independently through partial application.
+Curried callable arguments need stage-indexed substitution; general higher-
+order flow needs domain-indexed effect variables or an effect-expression
+vector. Unsupported shapes retain the original open row and incomplete
+evidence.
+
+* Current files
+
+- =effect.h= defines structural atoms, rows, reference-counted schemes, and
+  their public laws.
+- =effect.c= implements canonical row algebra, alpha-invariant scheme
+  fingerprints, instantiation, and solver operations.
+- =constraints.h= defines equality, subrow, and join obligations, three-way
+  solver outcomes, and replayable certificate queries.
+- =constraints.c= implements the constraint set, conservative open-row
+  relation, solver, and independent certificate replay.
+- =../qtt/effect.h= is a temporary compatibility include for existing QTT
+  clients.  New effect-kernel clients should include =effects/effect.h=.
+
+* Algebraic contract
+
+Closed rows form a finite join-semilattice under multiset maximum:
+
+#+begin_example
+epsilon <= delta  iff  every atom multiplicity in epsilon
+                       is <= its multiplicity in delta
+epsilon join delta     = pointwise maximum
+bottom                 = {}
+#+end_example
+
+Recursive module inference uses Kleene iteration from intrinsic body effects.
+Because a finite module contributes only finitely many canonical closed atoms,
+the ascending chain terminates.  Completeness is a separate proposition:
+convergence can succeed while an unresolved external or indirect call leaves
+the resulting contract incomplete.
+
+Open rows expose a separate abstraction boundary. Their known multiset
+components use the same maximum join. If either input has an unresolved tail,
+the result receives a fresh existential remainder and the producer retains an
+incomplete witness. This preserves known effects without pretending that the
+kernel solved the principal union of both tails. Only =qtt_effect_join_closed=
+authorizes exact closed-row equality claims.
+
+* End-state: an inferred, proof-producing effect calculus
+
+The intended system is not merely a list of effect labels. Its authoritative
+judgment is
+
+#+begin_example
+Sigma ; Psi | Gamma |-l e : A ! epsilon |> Delta -| C
+#+end_example
+
+where =epsilon= is an inferred effect expression, =Delta= is the resulting
+resource context, and =C= is a set of grade, row, capability, borrowing, and
+layer constraints. Surface annotations remain optional except at deliberately
+abstract API boundaries. Successful compilation eventually carries an
+erasable certificate for every constraint consumed by lowering.
+
+The roadmap is gated by semantic dependencies:
+
+** Phase I: principal row inference
+
+1. Equality, inclusion, and join constraints with residual obligations.
+2. Principal substitutions for open tails, occurs checking, and canonical
+   residual constraint sets.
+3. Environment free-row-variable analysis, let generalization, and a value
+   restriction justified by allocation and mutation effects.
+4. Staged arrow schemes through arbitrary closures, data, and modules.
+5. Portable interface serialization and source-free certificate replay.
+
+Exit criterion: independently checked principal schemes agree under alpha
+renaming, substitution, and separate compilation.
+
+** Phase II: algebraic and scoped effects
+
+Handlers introduce generative capability identities and eliminate operations
+by row subtraction. Resumptions carry QTT grades: =0= is abortive, =1= is
+one-shot, finite =n= is bounded multi-shot, and =omega= is unrestricted.
+Scoped effects follow the higher-order scoped-operation discipline rather than
+encoding every scope as an ordinary algebraic operation.
+
+Exit criterion: preservation covers handler reduction, resumption duplication,
+and capability escape; lowering evidence proves when direct style, selective
+CPS, or stack allocation is valid.
+
+** Phase III: ownership, regions, and effects lock together
+
+=state.read(r)= requires shared-loan evidence; =state.write(r)= requires an
+exclusive loan; allocation and escape constraints determine regions; foreign
+effects consume declared ABI capabilities. The effect checker cannot grant
+mutation authority by itself, and the borrow checker cannot authorize a write
+whose effect is absent from the inferred row.
+
+Exit criterion: the combined preservation theorem connects effect reduction,
+resource-state transition, and generated cleanup.
+
+** Phase IV: layered and modal effects
+
+Effects are indexed by layer =l=: reader expansion, compile time, runtime, and
+foreign execution cannot be conflated. =box= transports code only when its
+cross-layer effects and captured capabilities satisfy the modal context split;
+=diamond= represents suspended computation rather than S4 necessity.
+
+Exit criterion: staging safety and erasure simulation are checked across layer
+transitions, including programmable-reader execution.
+
+** Phase V: niche, high-value theory
+
+Only after the earlier phases are authoritative should Monad add:
+
+- effect quantales or graded monoids for order-sensitive effects, keeping
+  commutative row effects separate from traces;
+- commutativity and independence evidence for safe reordering, fusion, and
+  deterministic parallelism;
+- coeffects for contextual requirements such as capabilities, locality, and
+  compile-time availability;
+- effect provenance terms explaining the exact call/handler path for each
+  atom;
+- negative constraints such as =io notin epsilon= for sandboxed APIs;
+- effect-directed memoization and partial evaluation, combined with QTT demand;
+- relational or polymonadic constraints only where multiple computation
+  indices genuinely require them.
+
+These are not independent decorations. Each must elaborate into the same
+constraint language, possess a conservative unsupported case, and ship with a
+replayable proof boundary.
+
+Effect-directed memoization does not require reifying every computation into
+an instruction list. The ordinary path uses row evidence to prove forbidden
+observable effects absent and QTT evidence to prove captured inputs stable.
+Explicit effect-program reification may be added as a handler-controlled
+language feature, but it is semantically different from the inferred row and
+must be reverified after transformation. Verified Semantic IR already exposes
+a read-only ordered effect trace for diagnostics.
+
+* Constraint kernel
+
+The Phase-I kernel represents four obligations:
+
+#+begin_example
+epsilon = delta
+epsilon <= delta
+theta = epsilon join delta
+label notin epsilon
+#+end_example
+
+Closed rows decide these propositions exactly. Open rows use a three-valued
+information order: =proved=, =refuted=, or =residual=. A tail never turns lack
+of information into success or failure. Batch solving returns =SOLVED= only
+when every obligation is proved, =REJECTED= if one is refuted, and =RESIDUAL=
+otherwise. Accepted certificates replay each semantic obligation independently
+while the originating row arena remains alive.
+
+Negative membership is constructive. =label notin epsilon= is refuted when
+the known prefix contains =label=, proved when the row is closed and does not
+contain it, and residual when an open tail might still contain it. This is the
+foundation for duplicate-free extension, sandbox boundaries, and claims that
+a handler fully eliminates an operation rather than merely removing one known
+occurrence. Certificates containing this obligation use
+=monad-effect-certificate-v3=.
+
+Open join preserves a tail when only one operand is open or both operands
+share the same tail. Thus
+
+  <L | rho> join K = <L join K | rho>
+
+and same-tail joins remain exact. Two distinct open tails still produce a
+fresh existential summary until a join constraint relates them.
+
+This is deliberately not yet a principal solver or portable proof object.
+Certificates currently retain row references, equality solving may refine the
+shared row solver, and residual constraints are not canonicalized. Those are
+the next Phase-I steps.
+
+** Principal closed-lower refinement
+
+The first constructive inclusion rule is now implemented:
+
+#+begin_example
+L closed    K known    missing = L \\ K    gamma fresh
+-------------------------------------------------------
+L <= <K | rho>    solves rho := <missing | gamma>
+#+end_example
+
+The fresh remainder is essential. Binding =rho= to exactly =missing= would
+prematurely close the upper row and destroy principality for later lower
+bounds. With =gamma=, subsequent constraints extend the same chain, so solving
+={io,state} <= <io|rho>= and then ={alloc} <= <io|rho>= yields the most-general
+known component =<alloc,io,state|gamma'>=. Reversing those independent lower
+bounds yields the same known component modulo fresh-tail identity.
+
+An open lower tail remains residual: proving =<L|alpha> <= R= requires a real
+inclusion relation between =alpha= and the remainder of =R=, which equality
+unification cannot encode soundly. Open-row reflexivity is nevertheless proved
+directly.
+
+Closed join operands now solve an open result by unifying it with their exact
+semilattice join. Constraint batches iterate monotonically to a fixed point,
+so a later equality can discharge an earlier residual regardless of insertion
+order. This is a genuine principal fragment, not yet a complete principal row
+solver.
+
+** Persistent open inequalities and SCC quotienting
+
+For two open rows, the solver propagates the known lower difference while
+retaining the original inclusion as a residual graph edge:
+
+#+begin_example
+<L | alpha> <= <K | beta>
+missing = L \\ K
+beta := <missing | gamma>       when missing is nonempty
+residual: <L | alpha> <= <K | beta>
+#+end_example
+
+This does not equate =alpha= with =gamma=. The residual proposition remains
+available for later substitutions, while every currently mandatory known
+effect becomes visible in the upper row. Once no known difference remains,
+another pass performs no allocation, so fixed-point iteration terminates for
+this fragment.
+
+Duplicate residual propositions are quotiented in certificates. Proved
+obligations remain source-ordered and individually visible; only residual
+graph nodes are deduplicated, including commuted join operands.
+
+The subrow graph also uses antisymmetry:
+
+#+begin_example
+epsilon <= delta  and  delta <= epsilon  implies  epsilon = delta
+#+end_example
+
+Transitive closure identifies arbitrary strongly connected components, and a
+single representative is unified with every member before ordinary solving.
+This avoids the occurs cycles caused by redundant all-pairs unification.
+
+The quotient is canonical only relative to the live solver: it preserves the
+first source occurrence and compares resolved row identity. Alpha-normalized
+portable ordering and serialized residual graphs remain future work.
+
+** Alpha-normalized certificate export
+
+Certificates now have a deterministic textual projection and stable 64-bit
+fingerprint. Export first formats every row through the final solver
+substitution, then replaces arena tail identities by local names =e0=, =e1=,
+and so on at first structural occurrence. Obligation kind and
+=proved/residual/refuted= status are part of the representation and digest.
+
+Consequently, alpha-equivalent residual graphs produced after unrelated fresh
+allocations have byte-identical exports and fingerprints. The fingerprint is
+FNV-1a over the canonical text; it is an identity/checking aid, not a
+cryptographic commitment.
+
+This is allocation-independent export, not yet a portable proof file. The
+format now has a version tag, but it has no parser and independent replay still
+needs live row objects. Source-free reconstruction remains required.
+
+** Structure-first graph ordering
+
+Certificate export begins with =monad-effect-certificate-v1=. Before assigning
+alpha names, it computes an ordering key from each fully resolved constraint
+with every open tail replaced by the wildcard =e*=. Obligations are sorted by
+kind, status, and these row shapes. Join operands are ordered by the same key,
+respecting commutativity. Only then are concrete tail identities renamed to
+=e0=, =e1=, and so on.
+
+Thus isomorphic graphs whose structurally distinguishable obligations were
+inserted in opposite orders produce byte-identical text and fingerprints. The
+regression covers two independent residual inclusions, reverses their source
+order, changes every tail identity, and obtains the same export.
+
+This is not yet a complete graph-isomorphism canonical form. If several nodes
+have identical wildcard shapes but different higher-order connectivity, the
+current tie-breaker preserves source order. Canonical labeling of those
+symmetric partitions requires iterative graph coloring/refinement or an exact
+canonical-label search. The =v1= text is also not yet a portable grammar:
+labels are emitted through the human row formatter and are not length-prefixed
+or escaped.
+
+* Extraction rule
+
+Moving code here must preserve behavior and executable evidence.  Every move
+updates Make, CMake, focused sanitizer harnesses, and full QTT discovery in the
+same change.  Integration code is not moved merely because it mentions an
+effect row; ownership belongs to the subsystem whose judgment it implements.
+
+* Next decomposition
+
+As the subsystem grows, split by semantic responsibility rather than file
+size:
+
+1. =row.*= for canonical rows and unification;
+2. =scheme.*= for generalization and instantiation;
+3. =inference.*= for constraints and principal solutions;
+4. =handler.*= for elimination and capability evidence;
+5. =certificate.*= for independently checkable derivations.
+
+The split is complete only when effect-bearing HM arrows and serialized module
+interfaces consume these APIs without compatibility assumptions.
+
+* Source inference boundary
+
+=infer_effect_scheme_for_lambda= is the current source producer.  It derives a
+closed latent row after HM typing and stores it in =TypeScheme=.  Each leading
+arrow also owns a stage scheme: closure-building stages are pure and the final
+stage owns the body row. Partial application therefore retains a precise
+residual contract. Open-row composition preserves all known atoms while
+deliberately losing completeness.
+The next solver
+must replace that limitation with row constraints of the form
+
+#+begin_example
+epsilon_call >= epsilon_callee[eta / epsilon]
+epsilon_call >= epsilon_argument_i
+#+end_example
+
+and generalize only row variables not free in the environment, subject to the
+same value restriction as type generalization.
+
+** Authoritative join obligations in ordinary inference
+
+Ordinary lambda inference now creates a fresh constraint scope. Every
+structural composition emits
+
+#+begin_example
+theta = epsilon_left join epsilon_right
+#+end_example
+
+alongside construction of =theta=. At the lambda boundary, the complete batch
+is solved and its certificate replayed. A rejected, out-of-memory, or
+unverifiable batch prevents production of an effect scheme. A residual batch
+retains its conservative row but revokes the completeness witness. Only a
+solved and replayed batch can support a complete inferred contract.
+
+The inference context exposes the last obligation count, alpha-normalized
+certificate fingerprint, and solved/residual status. More importantly, the
+generalized effect scheme owns the canonical =v1= certificate text together
+with its count, fingerprint, and solved/residual classification. Retaining an
+effect scheme therefore retains the evidence boundary; diagnostics consume
+the scheme-owned witness instead of mutable last-inference telemetry.
+
+This is the first authoritative use of =effects/constraints.c= in ordinary HM
+source inference. The structural interpreter still chooses the candidate rows,
+so differential row generation and constraint generation have not yet become
+one bidirectional HM judgment. The portable text also still needs a parser and
+source-free verifier before it can cross module or process boundaries as a
+proof-carrying interface artifact.
+
+** Unified source judgment and coverage evidence
+
+Recursive source inference now threads one =SourceEffectJudgment= containing
+the effect arena/solver context, the authoritative obligation set, append
+failure state, and a monotone bitset of coverage gaps. Row construction and
+obligation construction therefore have the same lexical owner; there is no
+longer a hidden active constraint set or failure flag on =InferCtx=.
+
+Completeness is no longer represented internally by an information-poor
+boolean. The judgment records why total inference was lost:
+
+- =open-row=;
+- =unknown-callee=;
+- =incomplete-callee=;
+- =partial-legacy-call=;
+- =arity-mismatch=;
+- =residual-obligation=.
+
+These gaps are copied into the generalized effect scheme and formatted in QTT
+diagnostics as =effect-coverage=. Solver status and coverage are deliberately
+orthogonal: an unknown call may have a completely solved set of generated
+equations while source coverage remains incomplete.
+
+Scheme evidence attachment also recomputes the canonical FNV-1a fingerprint
+from the certificate text and checks the version header. This is an integrity
+boundary against accidental mismatch, not a cryptographic signature or a
+source-free semantic verifier.
+
+** Combined HM/effect result boundary
+
+=infer_toplevel_judgment= is now the compiler-facing entry point for a typed
+expression. It owns the solved HM type, evaluation-effect scheme, coverage
+result, and any latent arrow-stage schemes returned by the expression as one
+lifetime-managed value. Evaluation effects answer “what happens now”; arrow
+stages answer “what happens when the resulting callable is invoked”.
+Definition compilation consumes this object directly instead of calling the
+type and effect top-level APIs independently.
+
+For a partial call with =n= remaining arrow domains, the judgment retains the
+callee's residual stage suffix. Callable dependencies in that suffix are
+partially substituted: supplied domains contribute their instantiated stage
+effects, while unsupplied domains remain beneath a fresh tail and are reindexed
+relative to the returned arrow. For a lambda with =m= parameters returning that
+callable, its stage vector is the lambda prefix followed by the specialized
+residual suffix. The body effect belongs to prefix stage =m-1=, not
+automatically to the last arrow in the result type. This distinction prevents
+returned functions from losing their latent effects.
+
+Residual construction is intentionally separate from evaluation coverage. An
+open effect variable describing a future invocation does not make evaluation
+of the partial call incomplete. Its completeness bit belongs to the returned
+stage and becomes relevant only when that stage is reached.
+
+** Lexical row identity
+
+Compact arrow labels are row names, not decorative strings. During one
+application, if reached stages =i= and =j= have the same label =e=, elaboration
+adds the equation =epsilon_i = epsilon_j= to the ordinary effect constraint
+set. The solver and its certificate therefore own equality; inference does not
+special-case individual effects or compare rendered rows.
+
+For repeated occurrences the elaborator emits a spanning basis of =n-1=
+equations. Equality transitivity supplies the remaining pairs. Consequently a
+type whose two =-e->= stages have incompatible closed rows is uninhabitable at
+that application, while =-e->= and =-f->= stages remain independent.
+
+Partial application keeps residual row instances alive until the entire
+application constraint set is solved. Reached and residual stages with the
+same name are equated first; the refined residual is generalized only after
+solving and installed in the returned callable contract. In logical form the
+closure boundary is an existential package =exists epsilon. <B -epsilon-> C,
+e maps-to epsilon>=. Reconstructing an alias from that owned contract and
+invoking it later therefore observes the captured row rather than an unrelated
+fresh interpretation of the printed name.
+
+** Lexical effect environment
+
+The elaborator classifies arrow labels through a lexical environment =Xi=:
+
+#+begin_src text
+Xi |- l => Declaration(d)   when l names d exactly
+Xi |- t.op => Declaration(d) when exactly one d has trait t and operation op
+Xi |- e => RowVar(e)         when e is an unresolved simple identifier
+#+end_src
+
+Compact declaration resolution is derived exclusively from the open Core
+registry. The compiler does not contain a table mapping =io.read= to
+=Core.IO.read=. An ambiguous compact reference or an unresolved dotted
+reference fails closed. A resolved declaration produces a structural singleton
+row, and application adds equality between that row and the corresponding
+instantiated arrow stage. Simple row variables continue to use lexical
+same-name equality and partial-application capture.
+
+** Definition-site contract checking
+
+Explicit effect arrows are assertions checked before definition installation.
+The elaborator instantiates every inferred stage row in one environment and
+adds the same =Xi= declaration equations and lexical same-name equations used
+for calls. The ordinary constraint solver produces and verifies the result;
+there is no separate ad-hoc comparison of formatted rows.
+
+An inconsistent concrete contract therefore reports its definition, one-based
+arrow stage, and label before the value can enter an HM environment or =.mqti=
+interface. Concrete declaration labels use exact row equality. Lexical row
+binders use the principled widening rule described below.
+
+** Qualified row-polymorphic signatures
+
+Both ordinary and inline Wisp signatures accept:
+
+#+begin_src monad
+map :: (a -e-> b) -> [a] -e-> [b] where e has io
+#+end_src
+
+Multiple constraints use commas or =and=. The parser stores owned row/trait
+pairs on the lambda AST. Elaboration resolves each row name against the arrow
+spine and produces the already-portable canonical predicate set
+=HasTrait(epsilon_i,t)=. Missing binders fail at the definition; duplicate
+stage/trait pairs normalize deterministically.
+
+A lexical label introduces one shared open row rather than renaming the closed
+implementation effect. If =delta_i= is the effect inferred for stage =i= and
+the arrow is labeled =e=, definition elaboration emits:
+
+#+begin_src text
+delta_i subseteq epsilon_e
+#+end_src
+
+Every occurrence of =e= uses the same =epsilon_e=. The qualified premise is
+then checked or retained as a residual obligation according to the solver's
+three-valued semantics. Concrete declaration labels continue to use equality.
+This distinction gives useful row polymorphism while keeping exact concrete
+contracts honest.
+
+Rebuilt binder schemes preserve callable-parameter dependency metadata, so a
+higher-order =map=-like contract does not lose correlation with the effects of
+its function argument. HM scheme v2, callable-contract v2, partial-application
+projection, and module interfaces need no new transport format.
+
+** Expression-valued lambda contracts
+
+An inline lambda in function-argument position is elaborated through the same
+combined judgment as a named definition. The compiler installs its inferred HM
+type, saturated effect scheme, and arrow-stage vector under a generated symbol
+in a temporary child inference environment. The ordinary fused application
+rule then performs correlation against that contract. The original AST pointer
+is restored afterward and the child environment owns all temporary schemes.
+
+This makes lambda construction pure while keeping the body computation latent.
+For example, passing =lambda x -> ioFn x= to a higher-order caller contributes
+=io= only when the caller invokes the argument. Passing a lambda whose body has
+=network | ε= preserves the open tail and incomplete status. The elaboration
+does not rewrite the runtime program or expose generated names to diagnostics.
+
+The judgment covers arbitrary expressions, not only lambdas. For a lambda its
+effect scheme denotes the latent body computation; for a non-lambda it denotes
+the effects of evaluating that expression. The sanitizer regression checks
+both a latent IO lambda and an immediately evaluated heap-array allocation.
+
+This unifies the public and compiler ownership boundary. Internally HM
+constraint generation and effect-row generation are still separate recursive
+walks, so this is not yet a syntax-directed rule of the mathematical form
+=Gamma |- e : A ! epsilon=. The next step is to make the recursive expression
+cases construct both components together.
+
+** First recursively fused rule fragment
+
+The combined judgment now has a recursively fused path for literals, arrays,
+sets, and maps. Each rule returns its HM type and effect row together; child
+types generate ordinary HM constraints while child rows generate join
+obligations in the same traversal. Heap arrays introduce =alloc= directly in
+that rule. Nested containers therefore propagate both element/key/value types
+and effects without a second effect walk.
+
+Unsupported syntax deliberately falls back to the certified two-walk path.
+The result records whether recursive fusion was authoritative, preventing the
+implementation from claiming fusion for calls, lambdas, or control flow that
+have not yet migrated.
+
+Tests cover a heap array, a map containing that allocation, and radix numeric
+literals. The radix case found and fixed a parity error where hexadecimal
+=0xdead= could be mistaken for a floating exponent because it contains =e=.
+
+** Owned callable-contract boundary
+
+=InferCallableContract= is the common in-memory transport for value-level
+effect evidence. It owns the saturated effect scheme and completeness bit
+together with the ordered arrow-stage schemes and their completeness vector.
+It can retain evidence from either an =InferExpressionJudgment= or a
+=TypeScheme=, survive destruction of that producer, and install the same
+contract into another scheme through one checked operation.
+
+Its canonical fingerprint covers both effect rows and completeness evidence.
+Two equal rows with different proof coverage are therefore distinct callable
+contracts. Inline-lambda elaboration and fused definition installation now use
+this object instead of manually transferring parallel fields.
+
+This is an owned compiler boundary, not yet a serialized module artifact or a
+general IR value annotation.
+
+** Versioned portable contracts
+
+Label-based effect schemes have a canonical =monad-effect-scheme-v1= encoding.
+It preserves canonical label order, whether the tail is open, and every ordered
+callable =(domain, depth)= dependency. Labels are hex encoded, and the declared
+semantic fingerprint must match the reconstructed scheme before deserialization
+succeeds. Malformed fields, invalid hex, invalid arities, excessive dependency
+counts, and integrity mismatches fail closed.
+
+=monad-callable-contract-v1= composes these scheme payloads into the owned
+callable contract. It includes saturated completeness plus every ordered stage
+and stage-completeness bit, then verifies the whole contract fingerprint after
+decoding.
+
+Typed effect atoms use =monad-effect-scheme-v2=. Every entry is distinguished
+from an ordinary label and carries its effect kind, constructor identity,
+canonical type identity, generative capability identity, exact finite-or-omega
+resumption quantity, scopedness, and independently nullable name and operation.
+The decoder accepts existing label-only =v1= schemes but never projects a typed
+atom to its display label.
+
+Callable contracts are persisted directly in versioned =.mqti= records.
+The interface checks a byte-level payload checksum before the effect decoder
+checks its semantic fingerprint. Definition inference is the producer;
+qualified and unqualified imports reconstruct their HM callable schemes from
+the verified payload. Missing or rejected evidence remains conservative.
+
+The enclosing interface is now =.mqti= version 4. Version 3 introduced the
+canonical recursive QTT grammar for parameter and result types. Effect payload semantics
+are unchanged; version 4 additionally carries alpha-canonical quantified HM
+schemes and permits metadata-only records when ownership evidence is absent.
+This lets the same callable evidence accompany arrows,
+collections, applications, and structural layouts rather than only flat ABI
+types. Older ownership/effect interface versions remain readable.
+
+** Qualified rows at the source and module boundary
+
+The compact source form is =A -e-> B where e has io=. Wisp additionally treats
+an immediately indented =where= line as a continuation of the signature, not
+as a body form. Both spellings lower into the ordinary reader's single AST
+representation.
+
+The predicate context denotes a constrained open row, not a hard-coded effect
+name: for implementation row =delta= and declared row =epsilon=, definition
+checking proves =delta subseteq epsilon= under =HasTrait(epsilon, io)=.
+Concrete declaration labels still use equality. Predicate sets are sorted and
+deduplicated before certification, so source ordering cannot change interface
+identity. HM scheme v2 carries the public constrained type; callable-contract
+v2 separately carries implementation-sensitive evidence. Qualified imports
+reconstruct both from the provider's verified =.mqti= artifact.
+
+** Certified binary callable imports
+
+The compiler can now load the callable fragment of a module from
+=Module.module.o + Module.module.mqti= when =Module.mon= is unavailable. The
+interface must parse successfully, name the requested module, and carry the
+exact fingerprint of the object bytes. Only entries with complete portable
+ABI/ownership signatures become externals; their HM-v2 and callable-contract-v2
+evidence is installed through the same path as source-built imports.
+
+This loader is deliberately capability-limited. It does not reconstruct
+layouts, macros, reader transformers, typeclasses, or FFI headers, because the
+current interface does not prove those structures. Present but corrupted
+evidence and object/interface mismatches fail closed rather than falling back
+to an unchecked call.
+
+** Quantitatively admissible handler subtraction
+
+The handler kernel combines exact structural row subtraction with QTT usage.
+For an operation whose declared resumption quantity is =q=, a continuation
+using a captured resource =u= times per invocation, and capture allowance =a=,
+handler admission requires
+
+#+begin_example
+q * u <= a
+#+end_example
+
+Only after this inequality succeeds does elimination remove one atom including
+its generative capability identity. Abortive operations have zero demand;
+linear operations accept linear captures; unrestricted resumptions require an
+unrestricted allowance unless continuation usage is zero. This is the kernel
+law needed by future source handler syntax and selective-CPS lowering.
+
+** Transactional handler sets and Core profiles
+
+A handler set is elaborated as one transaction. Every clause names one exact
+structural atom, a continuation usage, a capture allowance, and its body
+effects. Duplicate clauses for the same generative atom are rejected. Each
+quantitative premise is checked before any result authority is returned;
+failure exposes neither a residual row nor an output row.
+
+For computation effects =E_1 + ... + E_n + epsilon= and clause-body effects
+=eta_i=, successful deep-handler elaboration computes
+
+#+begin_example
+residual = epsilon
+output   = epsilon join eta_1 join ... join eta_n
+#+end_example
+
+A scoped atom may not occur in its own clause effects, preventing its
+generative capability from escaping the scope being eliminated. Canonical
+proof fingerprints sort clause witnesses, making evidence independent of
+source clause order; verification replays the full judgment.
+
+Core owns named continuation policies through the public =effect-handler=
+declaration. A profile contains its name, handled effect, continuation usage,
+and deep/shallow choice. Registration resolves the Core effect declaration and
+proves that usage does not exceed its declared resumption bound. The compiler
+contains no table of handler names.
+
+Handler profiles cross module and source boundaries in =.mqti= v8. The
+=HANDLERS= section has a canonical name order and a section fingerprint; each
+record carries profile name, exact handled declaration name, finite-or-omega
+continuation usage, and depth policy. Decoding resolves the referenced effect
+inside the same interface and rechecks the resumption bound before accepting
+the section. Source-free imports register declarations first and profiles
+second, preserving that dependency without compiler vocabulary.
+
+Handler-set derivations also have a portable
+=monad-handler-proof-v2= certificate containing clause count, semantic proof
+identity, residual-row identity, and output-row identity. Verification does
+not trust these fields: it re-elaborates the clauses and compares every
+fingerprint. This is the typed-Core/interface evidence boundary required
+before executable handler nodes can be accepted from separately compiled code.

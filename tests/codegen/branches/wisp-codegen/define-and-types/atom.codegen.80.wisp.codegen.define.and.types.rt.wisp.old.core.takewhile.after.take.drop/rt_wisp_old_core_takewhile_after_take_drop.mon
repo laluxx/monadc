@@ -1,11 +1,11 @@
-;; TEST-CATEGORY: codegen
-;; TEST-KIND: runtime
-;; TEST-FEATURES: wisp, define, typed-signature, pattern-clause, guard, higher-order, collection, generic
-;; TEST-EXPECT: pass
-;; TEST-STDOUT-FILE: rt_wisp_old_core_takewhile_after_take_drop.stdout
-;; TEST-WORKFLOW: core-prelude
-;; TEST-ATOM: old-core style takeWhile compiles after take/drop definitions in the same module.
-;; TEST-CONTEXT: monadc.context.wisp.old-core-prelude-compat
+:TEST-CATEGORY codegen
+:TEST-KIND runtime
+:TEST-FEATURES wisp, define, typed-signature, pattern-clause, guard, higher-order, collection, generic
+:TEST-EXPECT pass
+:TEST-STDOUT-FILE rt_wisp_old_core_takewhile_after_take_drop.stdout
+:TEST-WORKFLOW core-prelude
+:TEST-ATOM old-core style takeWhile compiles after take/drop definitions in the same module.
+:TEST-CONTEXT monadc.context.wisp.old-core-prelude-compat
 
 module Main
 

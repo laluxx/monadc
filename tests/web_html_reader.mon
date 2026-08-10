@@ -1,0 +1,26 @@
+:TEST-ID tests.web.html-reader
+:TEST-CONTEXT monadc.context.reader.programmable-blocks
+:TEST-PURPOSE A core library owns a nested HTML language without compiler HTML cases.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+
+import Web.HTML
+
+module Web.HTML.Reader []
+
+
+define who :: String
+  "World"
+
+
+define page :: HTML
+  html :lang "en"
+    head
+      title "dream-html first look"
+    body
+      h1 "Hello, _!" who
+      p "This page is at: " a :href "/me?x=1&y=2" "this URL" "."
+
+
+tests
+  assert-eq (render-html page) "<html lang=\"en\">\n  <head>\n    <title>dream-html first look</title>\n  </head>\n  <body>\n    <h1>Hello, World!</h1>\n    <p>This page is at: <a href=\"/me?x=1&amp;y=2\">this URL</a>.</p>\n  </body>\n</html>" "the reader preserves nesting, attributes, mixed content, interpolation, and escaping"

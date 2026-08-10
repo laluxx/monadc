@@ -6,13 +6,13 @@
 
 ;;; Commentary:
 
-;; Monad extends Applicative with value-dependent sequencing. An instance
-;; supplies bind and its failure policy; return is inherited from pure, while
-;; join and non-dependent sequencing are derived from bind.
-;;
-;; Reader, State, Writer, Error, transformers, and Comonad remain separate
-;; capability abstractions. Their derived operations should move here only when
-;; a smaller basis is executable and covered by a concrete instance.
+ Monad extends Applicative with value-dependent sequencing. An instance
+ supplies bind and its failure policy; return is inherited from pure, while
+ join and non-dependent sequencing are derived from bind.
+
+ Reader, State, Writer, Error, transformers, and Comonad remain separate
+ capability abstractions. Their derived operations should move here only when
+ a smaller basis is executable and covered by a concrete instance.
 
 ;;; Code:
 
@@ -30,11 +30,11 @@ module Control.Monad
 
 
 class Applicative m => Monad m where
-  bind   :: m a -> (a -> m b) -> m b
-  return :: a -> m a
+  bind   :: m a     -> (a -> m b) -> m b
+  return :: a       -> m a
   join   :: m (m a) -> m a
-  then   :: m a -> m b -> m b
-  fail   :: String -> m a
+  then   :: m a     -> m b -> m b
+  fail   :: String  -> m a
 
   return x ->
     pure x

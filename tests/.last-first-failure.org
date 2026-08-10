@@ -1,5 +1,5 @@
 #+TITLE: Last First Failing Test
-#+DATE: 2026-06-30T05:36:11
+#+DATE: 2026-08-10T04:56:46
 
 [OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
   This generated record captures the first failing test from the latest
@@ -7,30 +7,41 @@
   debugging pass can start from the earliest observed failure.
 
 * Failure
-- Test: =sugar.wisp_def_simple=
+- Test: =codegen.rt-range-enum-helpers=
 - Status: =FAIL=
-- Menu: =sugar=
-- Duration: =[  26.29 ] ms=
-- Reason: =desugared AST mismatch: expected '(define x 42)', got ''=
-- Failure kind: =desugar-mismatch=
-- Artifacts: =tests/.last-failures/sugar.wisp_def_simple=
-
-** Materialized Source
-#+BEGIN_SRC monad
-define x 42
-#+END_SRC
+- Menu: =codegen/branches/collections/arrays-ranges=
+- Duration: =[  33.50 ] ms=
+- Reason: =--emit-json failed=
+- Failure kind: =emit-json-failed=
+- Fixture: =tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers/rt_range_enum_helpers.mon=
+- Artifacts: =tests/.last-failures/codegen.rt-range-enum-helpers=
 
 ** Metadata
-- =TEST-CLI-TARGET=: sugar
-- =TEST-CONTEXT=: monadc.context.wisp.sugar.def
-- =TEST-EXPECT=: parse-json
-- =TEST-EXPECT-DESUGAR=: (define x 42)
-- =TEST-ID=: tests.sugar.wisp_def_simple
-- =TEST-MENU=: sugar
-- =TEST-MENU-PATH=: sugar
-- =TEST-PURPOSE=: Wisp def shorthand desugars to define.
-- =TEST-STATUS=: passing-baseline-2026-06-15
+- =TEST-ATOM=: (1..4) matches enumFromTo, and (1,3..7) matches enumFromThenTo.
+- =TEST-ATOM-LEAF=: atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+- =TEST-CATEGORY=: 40-collections
+- =TEST-CLI-TARGET=: codegen branches collections arrays-ranges
+- =TEST-CODEGEN-ATOM=: atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+- =TEST-CONTEXT=: monadc.context.collections.range-enum
+- =TEST-COVERAGE=: codegen.c AST_RANGE finite list lowering to Data.Enum helpers
+- =TEST-EXPECT=: compile, run
+- =TEST-ID=: tests.codegen.rt-range-enum-helpers
+- =TEST-MENU=: branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+- =TEST-MENU-PATH=: codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers
+- =TEST-PURPOSE=: Range syntax follows core Data.Enum helper semantics.
+- =TEST-QUALITY=: branch-regression
+- =TEST-SECTION=: codegen
+- =TEST-STATUS=: active
+- =TEST-SUBSET=: arrays-ranges
 - =TEST-TIER=: regression
+- =TEST-USES-ATOM=: atom.codegen.category.40.collections
 
 ** Context Links
-- =monadc.context.wisp.sugar.def=
+- =monadc.context.collections.range-enum=
+
+** Output
+#+BEGIN_EXAMPLE
+<repo>/core/prelude/Data/Enum.mon:31:148: error: unexpected token type: 2
+   31 | define enum-step-empty? :: Int -> Int -> Int -> Bool
+      |                                                                                                                                                    ^
+#+END_EXAMPLE

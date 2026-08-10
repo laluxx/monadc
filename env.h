@@ -38,6 +38,7 @@ typedef struct EnvEntry {
      * Richer than `type`: carries quantified type variables for
      * polymorphic definitions.  Used by infer_instantiate at call sites. */
     struct TypeScheme *scheme;
+    bool scheme_codegen_evidence_only;
 
     // Arity  (-1 = variadic)
     int arity_min;
@@ -122,6 +123,13 @@ bool env_is_local(Env *table, const char *name);
 void env_init_infer(Env *root);
 struct InferEnv *env_get_infer(Env *env);
 void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme);
+bool env_install_hm_scheme(
+    Env *env, const char *name, const char *portable_hm_scheme);
+bool env_set_portable_scheme(
+    Env *env, const char *name, const char *portable_hm_scheme);
+bool env_install_callable_contract(
+    Env *env, const char *name, const char *portable_contract,
+    uint64_t expected_fingerprint, const char *portable_hm_scheme);
 
 struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                                        AST *lambda_ast, const char *filename);

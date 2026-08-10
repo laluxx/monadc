@@ -42,6 +42,7 @@
 //
 
 #include "lsp.h"
+#include "tooling/lint.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -1507,9 +1508,44 @@ void lsp_workspace_index(LspWorkspace *ws)
 LspAnalysisResult *lsp_analyze_file(const char *path, const char *source,
                                      LspWorkspace *ws)
 {
-    (void)path; (void)source; (void)ws;
+    (void)ws;
     LspAnalysisResult *r = lsp_xcalloc(1, sizeof(*r));
+    LintResult lint;
+    lint_result_init(&lint);
+    if (!lint_source(path ? path : "<buffer>", source ? source : "", &lint)) {
+        r->success = false;
+        r->error_message = lsp_xstrdup("lint analysis failed");
+        lint_result_dispose(&lint);
+        return r;
+    }
+    if (lint.count)
+        r->diagnostics = lsp_xcalloc(lint.count, sizeof(*r->diagnostics));
+    r->diag_count = lint.count;
+    for (size_t i = 0; i < lint.count; i++) {
+        const LintDiagnostic *source_diagnostic = &lint.items[i];
+        LspDiagnostic *diagnostic = &r->diagnostics[i];
+        diagnostic->range.start.line = (uint32_t)(source_diagnostic->line - 1);
+        diagnostic->range.start.character =
+            (uint32_t)(source_diagnostic->column - 1);
+        diagnostic->range.end.line =
+            (uint32_t)(source_diagnostic->end_line - 1);
+        diagnostic->range.end.character =
+            (uint32_t)(source_diagnostic->end_column - 1);
+        diagnostic->severity = source_diagnostic->severity == LINT_ERROR
+                                   ? LSP_SEVERITY_ERROR
+                               : source_diagnostic->severity == LINT_WARNING
+                                   ? LSP_SEVERITY_WARNING
+                               : source_diagnostic->severity == LINT_INFORMATION
+                                   ? LSP_SEVERITY_INFORMATION
+                                   : LSP_SEVERITY_HINT;
+        diagnostic->code = lsp_xstrdup(source_diagnostic->code);
+        diagnostic->source = lsp_xstrdup("monad-lint");
+        diagnostic->message = lsp_xstrdup(source_diagnostic->message);
+        diagnostic->message_detail =
+            lsp_xstrdup(source_diagnostic->explanation);
+    }
     r->success = true;
+    lint_result_dispose(&lint);
     return r;
 }
 
@@ -2206,6 +2242,42 @@ LspAction **lsp_code_actions(LspDocument *doc, LspRange range,
     for (size_t i = 0; i < diag_count; i++) {
         LspDiagnostic *d = diags[i];
         if (!d || !d->message) continue;
+
+        if (d->source && strcmp(d->source, "monad-lint") == 0 && d->code) {
+            LintResult lint;
+            lint_result_init(&lint);
+            lint_source(doc->path ? doc->path : "<buffer>",
+                        doc->source ? doc->source : "", &lint);
+            for (size_t j = 0; j < lint.count; j++) {
+                LintDiagnostic *candidate = &lint.items[j];
+                if (!candidate->edit_count ||
+                    strcmp(candidate->code, d->code) != 0 ||
+                    candidate->line - 1 != d->range.start.line ||
+                    candidate->column - 1 != d->range.start.character)
+                    continue;
+                char title[512];
+                snprintf(title, sizeof(title), "%s",
+                         candidate->explanation ? candidate->explanation
+                                               : "Apply Monad lint fix");
+                const DiagnosticEdit *edit = &candidate->edits[0];
+                LspRange edit_range = {
+                    {(uint32_t)(edit->span.line - 1),
+                     (uint32_t)(edit->span.column - 1)},
+                    {(uint32_t)(edit->span.end_line - 1),
+                     (uint32_t)(edit->span.end_column - 1)}
+                };
+                LspAction *a = make_simple_edit_action(
+                    title, LSP_ACTION_QUICKFIX, doc->uri, edit_range,
+                    edit->replacement);
+                a->is_preferred =
+                    edit->applicability ==
+                    DIAGNOSTIC_EDIT_MACHINE_APPLICABLE;
+                LSP_GROW(list, *count, cap, LspAction *);
+                list[(*count)++] = a;
+                break;
+            }
+            lint_result_dispose(&lint);
+        }
 
         /* Unbound variable → offer import */
         if (strstr(d->message, "unbound") || strstr(d->message, "not in scope")) {

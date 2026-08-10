@@ -1,4 +1,4 @@
-;; TEST-CONTEXT: monadc.context.core-libs.data-int-float, monadc.context.module.path-resolution
+:TEST-CONTEXT monadc.context.core-libs.data-int-float, monadc.context.module.path-resolution
 
 import Data.Int
 

@@ -1,0 +1,22 @@
+:TEST-ID tests.core.math.unicode-aliases
+:TEST-CONTEXT monadc.context.core-libs.math-angle
+:TEST-PURPOSE Mathematical constants and angle operations remain available through expressive Unicode names.
+:TEST-ATOM Import Math and Math.Angle, then exercise aliases across compiled module boundaries.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU core
+:TEST-MENU-PATH core/math/angle
+
+import Math
+import Math.Angle
+
+module Core.MathUnicodeAliases []
+
+
+tests
+  assert-eq π pi "Pi Unicode alias"
+  assert-eq τ tau "Tau Unicode alias"
+  assert-eq φ phi "Phi Unicode alias"
+  assert-eq (normalize-radians (τ + half-pi)) half-pi "Radian normalization uses Math constants"
+  assert-eq (degrees->radians 180.0) π "Degrees convert to radians"
+  assert-eq (radians->degrees π) 180.0 "Radians convert to degrees"

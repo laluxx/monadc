@@ -1,0 +1,25 @@
+:TEST-ID tests.codegen.values.inferred-corner-collection
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-08-10
+:TEST-CODEGEN-ATOM atom.codegen.values.inferred.corner.collection
+:TEST-QUALITY branch-regression
+:TEST-SUBSET inferred-values
+:TEST-CATEGORY 00-values
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.infer, monadc.context.reader.sugar.quasiquote-corner
+:TEST-PURPOSE A hole-typed corner collection is a value, not an inferred lambda.
+:TEST-ATOM Character elements infer one concrete collection element type.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE wisp.c hole-only signature value lowering
+:TEST-MENU branches/values/inferred-corner-collection
+:TEST-MENU-PATH codegen/branches/values/inferred-corner-collection
+:TEST-CLI-TARGET codegen inferred corner collection
+
+module InferredCornerCollection
+
+
+define shades :: ?
+  ⌜'.' ',' '-' '~' ':' ';' '=' '!' '*' '#' '$' '@'⌝
+
+
+show shades

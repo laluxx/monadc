@@ -1,0 +1,91 @@
+;;; Angle.mon --- Angle units, normalization, and trigonometry
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "math angle radians degrees turns trigonometry"
+
+;;; Commentary:
+
+ Math.Angle owns unit conversion and periodic angle operations. Radians are
+ represented as Float at the numerical boundary so geometry code composes with
+ ordinary arithmetic without allocation. Names retain the unit explicitly;
+ future dimensional types can refine this boundary without changing the
+ normalization laws.
+
+ Angles normalize either into one positive turn [0, tau), or into the signed
+ interval (-pi, pi]. Sine and cosine reduce their input before evaluating a
+ short Taylor recurrence, keeping convergence independent of the caller's
+ accumulated rotation count.
+
+;;; Code:
+
+import Math
+
+module Math.Angle
+  [radians-per-degree degrees-per-radian
+   degrees->radians radians->degrees
+   turns->radians radians->turns
+   normalize-radians normalize-signed-radians
+   sin-radians cos-radians]
+
+
+;;; Unit conversion
+
+define radians-per-degree :: Float
+  π / 180.0
+
+define degrees-per-radian :: Float
+  180.0 / π
+
+define degrees->radians :: Float -> Float
+  degrees -> degrees * radians-per-degree
+
+define radians->degrees :: Float -> Float
+  radians -> radians * degrees-per-radian
+
+define turns->radians :: Float -> Float
+  turns -> turns * τ
+
+define radians->turns :: Float -> Float
+  radians -> radians / τ
+
+
+;;; Canonical intervals
+
+define normalize-radians :: Float -> Float
+  angle | >= τ      -> normalize-radians (angle - τ)
+        | < 0.0     -> normalize-radians (angle + τ)
+        | otherwise -> angle
+
+define normalize-signed-radians :: Float -> Float
+  angle | > π          -> normalize-signed-radians (angle - τ)
+        | <= (0.0 - π) -> normalize-signed-radians (angle + τ)
+        | otherwise    -> angle
+
+
+;;; Trigonometry
+
+define sin-series :: Float -> Float -> Float -> Int -> Int -> Float
+  x term result i limit | i > limit -> result
+  x term result i limit ->
+    def two-i (Float (2 * i))
+    def next ((0.0 - term) * x * x) / (two-i * (two-i + 1.0))
+    sin-series x next (result + next) (i + 1) limit
+
+define sin-radians :: Float -> Float
+  angle ->
+    def reduced (normalize-signed-radians angle)
+    sin-series reduced reduced reduced 1 9
+
+define cos-radians :: Float -> Float
+  angle -> sin-radians (angle + half-pi)
+
+
+tests
+  assert-eq (normalize-radians τ) 0.0 "Angle positive normalization"
+  assert-eq (normalize-radians (0.0 - half-pi)) (τ - half-pi) "Angle negative normalization"
+  assert-eq (normalize-signed-radians (τ + half-pi)) half-pi "Angle signed normalization"
+  assert-eq (degrees->radians 180.0) π "Angle degrees to radians"
+  assert-eq (radians->degrees π) 180.0 "Angle radians to degrees"
+  assert-eq (sin-radians 0.0) 0.0 "Angle sine origin"
+  assert-eq (cos-radians 0.0) 1.0 "Angle cosine origin"

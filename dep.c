@@ -3798,6 +3798,25 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
 
     /* Intercept top-level (type Name { x in T | pred }) refinement definitions */
     if (ast->type == AST_REFINEMENT) {
+        /*
+         * The HM declaration pass runs after dependent checking but before
+         * refinement codegen.  Publish the refinement's ground-type bridge
+         * here so annotations using the new name are resolvable during that
+         * intervening pass.
+         */
+        type_alias_register(ast->refinement.name, ast->refinement.base_type);
+        if (ast->refinement.alias_name && ast->refinement.alias_name[0])
+            type_alias_register(ast->refinement.alias_name, ast->refinement.name);
+        if (ast->refinement.predicate &&
+            !refinement_pred_name(ast->refinement.name)) {
+            char pred_name[256];
+            snprintf(pred_name, sizeof(pred_name), "%s?", ast->refinement.name);
+            refinement_register(ast->refinement.name, pred_name,
+                                ast->refinement.base_type,
+                                ast->refinement.predicate,
+                                ast->refinement.var);
+        }
+
         Type *base_ground = type_from_name(ast->refinement.base_type);
         if (!base_ground) base_ground = type_int();
         Term *base_term = term_embed(base_ground);
@@ -4197,7 +4216,6 @@ void dep_register_builtins(DepCtx *ctx) {
     dep_env_declare(env, "rt_coll_empty", dep_eval(poly_identity, ee, NULL));
     dep_env_declare(env, "rt_coll_is_empty", dep_eval(poly_bool, ee, NULL));
     dep_env_declare(env, "__rt_count", dep_eval(poly_int, ee, NULL));
-    dep_env_declare(env, "__rt_utf8_width", dep_eval(poly_int, ee, NULL));
     dep_env_declare(env, "__rt_set_singleton", dep_eval(poly_bool, ee, NULL));
     dep_env_declare(env, "and", dep_eval(bool_bool_bool, ee, NULL));
     dep_env_declare(env, "or",  dep_eval(bool_bool_bool, ee, NULL));

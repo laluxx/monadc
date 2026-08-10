@@ -151,6 +151,16 @@
   termination avoids converting values beyond the endpoint.  Runtime opaque
   boxing lets user ADT values inhabit generic core collections safely.
 
+[FIX id:fix.core-libs.enum-guarded-range-kernel-2026-08-10 date:2026-08-10 by:codex src:core/prelude/Data/Enum.mon conf:high]
+  Finite Enum defaults use guarded clauses and small integer-representation
+  predicates instead of a deeply nested conditional pyramid. Wrong-direction
+  intervals, immediate overshoot, recursive stepping, and conversion remain
+  separate decisions. A representation-idempotence law and negative stepped
+  ranges extend executable coverage. The Int instance, a user-defined Enum
+  instance, and derived Enum instances retain the same dispatch behavior. This
+  Core-only refactor restores the complete 38-module, 697-assertion Core suite
+  without adding another compiler workaround.
+
 [FIX id:fix.core-libs.old-core-retirement-2026-07-16 date:2026-07-16 by:codex src:core/Math.mon,core/prelude/Data/Set.mon,core/prelude/Data/List.mon,core/prelude/Data/String.mon conf:high]
   Retired the =old-core/= staging tree after moving its durable behavior into
   active, tested owners. =Math= owns integer arithmetic and number theory;
@@ -1899,3 +1909,465 @@
   function as a closure. Regression coverage executes the exact public command
   and requires Eq, Semigroup, Monoid, Enum, Ord, Ring, Show, and Sequence to
   pass.
+* fix.core-libs.io-line-editor-boundary-2026-08-04
+:PROPERTIES:
+:ID: fix.core-libs.io-line-editor-boundary-2026-08-04
+:END:
+
+The former =Text.Readline= module mixed a pure editing algebra with POSIX byte
+input and terminal-mode mutation. It is superseded by two ownership domains:
+
+- =Text.LineEditor= owns deterministic cursor, deletion, insertion, key
+  decoding, and completion predicates.
+- =IO.Readline= owns effectful byte acquisition, escape-sequence acquisition,
+  and cbreak-mode bracketing.
+
+The distinct basenames also avoid the compiler's legacy basename cache
+collision between =Text.Readline= and =IO.Readline=. =IO= is the portable
+descriptor-explicit byte/text façade over =System.Posix.Term=. Regression
+coverage is =tests.test_core_io_effects= plus the existing Core abstraction and
+fresh-home standalone compilation suites.
+
+The effectful Readline recursion is now explicitly typed, including its
+collection domain and codomain. =IO= additionally owns =IOError= and typed
+=Either= wrappers around its raw status-returning primitives. Raw operations
+remain public for systems code; ordinary Core clients can distinguish a byte,
+EOF, and a negative raw read status without sentinel arithmetic. Portable
+errno decoding and resource-safe owned descriptors remain later layers.
+
+Single-trait IO signatures use the compact =-io->= spelling. Its meaning is
+not typographic convention: importing Core's effect declarations causes the
+label to elaborate to the same trait obligation previously written as
+=-e-> ... where e has io=. The longer qualified form remains appropriate for
+effect-polymorphic and multiply constrained combinators.
+
+* fix.core-libs.production-file-io-slice-2026-08-04
+:PROPERTIES:
+:ID: fix.core-libs.production-file-io-slice-2026-08-04
+:END:
+
+=IO.File= is the portable, explicitly effect-typed layer over
+=System.Posix.FileDescriptor=. It owns open modes, seek origins, structured
+=Either IOError a= outcomes, descriptor handles, byte/text reads and writes,
+flush, seek, whole-file read/write/append, rename/unlink, and directory
+creation/removal. The POSIX module owns syscall numbers and flag values; the
+portable module owns result classification and lifecycle policy.
+
+Whole-file helpers close on both success and failure. When the primary
+operation succeeds, a close failure becomes the result; when the primary
+operation fails, that first error remains authoritative after close is still
+attempted. Raw text writes expose the actual byte count and do not claim
+exact-write semantics. An exact buffered writer requires a single coherent
+raw-String slicing representation and remains future work.
+
+Regression contract: =tests.test_core_io_files= executes create/open/close,
+write/append/read-to-EOF, seek/overwrite, flush, missing-file failure,
+rename/unlink, and directory lifecycle operations against temporary real
+filesystem objects.
+
+[FIX id:fix.core-libs.path-metadata-console-io-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,core/IO/Console.mon,core/System/Posix/FileDescriptor.mon,infer.c,env.c,tests/test_core_io_files.py,tests/test_core_io_console.py conf:high]
+  Portable filesystem APIs consume the language's existing =Path= type. Raw
+  =*U8= path addresses are confined to =System.Posix.FileDescriptor=, with a
+  deliberately narrow Path-to-byte-pointer compatibility rule at the foreign
+  boundary. Programs use =AST_PATH= literals directly rather than pretending
+  filesystem names are arbitrary text.
+
+  =IO.File= additionally owns structured existence probing, descriptor data
+  synchronization, truncation, and permission changes. Existence maps success
+  to =Right True=, =ENOENT= to =Right False=, and retains every other status as
+  =Left (IOStatus n)=. =IO.Console= owns standard-stream text, line, error-line,
+  and byte-input conveniences. Every signature uses =-io->= and every fallible
+  operation returns =Either IOError a=; line output reports text plus newline
+  bytes and checks both writes.
+
+  A current generic-ADT ABI gap remains explicit: imported polymorphic
+  extraction of =Either IOError Bool= exposes optimized booleans as =0/1= when
+  rendered. This does not alter =path-exists='s source type, but generic payload
+  representation must be unified before claiming complete cross-module result
+  ergonomics. Pointer-shaped polymorphic payloads are now covered by extracting
+  the actual byte list from =read-file-bytes= and measuring it across the same
+  boundary.
+
+  =()= is now the first-class Unit inhabitant, represented by a stable =i8 0=
+  carrier rather than =void=. Consequently =read-stdin-byte ()= compiles and
+  executes as the intended =() -io-> Either IOError Int= world transition.
+
+[FIX id:fix.core-libs.path-owned-file-operations-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,tests/test_core_io_files.py conf:high]
+  The portable file layer now owns =file-size=, =touch-file=,
+  =truncate-file=, and =move-file=. Every public operand is =Path= and every
+  filesystem transition is explicitly =-io-> Either IOError a=. Size and
+  truncation are composed from handles, seek, and close in Core; lifecycle
+  helpers preserve the primary failure while still closing their descriptor.
+  The runtime regression passes literal paths directly and verifies resulting
+  file contents and existence on the host filesystem.
+
+  Path rendering remains pure: =show p= prints the Path value and never probes
+  the filesystem. Rich previews and directory listings belong to an explicit
+  operation such as =inspect-path :: Path -io-> ...=. Home-relative syntax is
+  already a Path literal, but resolving =~/= is environment-sensitive and must
+  be specified as an explicit portable resolution operation rather than hidden
+  inside literal evaluation. Directory iteration, metadata records, portable
+  home resolution, and GNU-style Core rendering form the next filesystem
+  slice; Linux and Windows backends should expose only the irreducible host
+  primitives.
+
+[FIX id:fix.core-libs.clear-bounded-file-reading-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,tests/test_core_io_files.py conf:high]
+  =read-file-prefix :: Path -> Int -io-> Either IOError [Int]= is the bounded,
+  binary-safe primitive for previews and format sniffing. Its name states both
+  the resource and the bounded behavior; it does not pretend arbitrary bytes
+  are valid text. It stops without an extra read when the limit is exhausted,
+  accepts zero as an empty prefix, treats EOF before the limit as success, and
+  closes the handle on every result path. Regression coverage checks an exact
+  prefix, a limit larger than the file, and a zero limit against a real Path
+  literal.
+
+  A proposed convenience =read-file :: Path -io-> Either IOError String= was
+  rejected during this cycle: naïvely mapping bytes to characters is neither
+  correct Unicode decoding nor currently representation-safe across imported
+  polymorphic list transformations. The eventual easy text API should be named
+  =read-text= or =read-text-file= and must take an explicit/default encoding
+  policy with structured decoding failures. Likewise, =copy-file= must remain
+  byte-preserving; it must not be implemented by round-tripping through text.
+
+  An effect-system regression was exposed while prototyping byte-copy loops:
+  recursive effectful list consumers require clause/guard-aware latent-effect
+  inference. The bounded reader uses guarded recursion successfully, but the
+  generic recursion rule should receive focused compiler coverage before a
+  Core binary-copy operation depends on it.
+
+[FIX id:fix.core-libs.streaming-binary-copy-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,tests/test_core_io_files.py conf:high]
+  =copy-file :: Path -> Path -io-> Either IOError Int= is a streaming,
+  byte-preserving operation. It does not decode text or retain the complete
+  source in memory. Success reports the exact byte count. The destination is
+  created or truncated, source-open failure does not create a destination, and
+  both handles are closed after copying. A primary read/write error remains
+  authoritative; otherwise a close failure becomes the result.
+
+  Regression coverage copies repeated NUL, control, ASCII, high-bit, and =255=
+  bytes over a pre-existing larger destination and compares the files exactly.
+  It also verifies that a missing source returns =Left= without leaving a
+  destination behind.
+
+  The implementation deliberately uses the raw one-byte write at the internal
+  Core boundary and classifies its status locally. Imported polymorphic
+  =Either= elimination can still lose the concrete scalar payload ABI when the
+  extracted value immediately participates in arithmetic. That compiler issue
+  remains distinct from effect inference and should be repaired through
+  instantiated ADT payload evidence, not operation-specific conversions.
+
+[FIX id:fix.core-libs.path-kind-metadata-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,core/System/Posix/FileDescriptor.mon,tests/test_core_io_files.py conf:high]
+  Filesystem inspection now begins with exact Path-centered names and a
+  portable algebra: =PathKind= distinguishes =RegularFile=, =Directory=,
+  =SymbolicLink=, and =Other=. =path-kind= returns structured failure for a
+  missing or inaccessible entry. Convenience operations are named
+  =is-directory=, =is-regular-file=, =is-symbolic-link=, and =is-other= rather
+  than using a misleading pure-predicate suffix: each performs IO and returns
+  =Either IOError Bool=.
+
+  =metadata :: Path -io-> Either IOError FileMetadata= exposes kind, byte size,
+  permission bits, hard-link count, and modification time. Focused scalar
+  accessors retain the same structured failure while avoiding repeated naming
+  ambiguity at call sites. Core owns classification and the portable record;
+  =System.Posix.FileDescriptor= owns only the raw =lstat= buffer and syscall.
+  The public layer contains no syscall numbers, mode masks, or raw pointers.
+
+  Runtime coverage uses regular files, directories, symbolic links, FIFOs, and
+  missing paths. Metadata coverage verifies exact file size, =0640= permission
+  bits, link count, and a nonzero modification timestamp. This is the substrate
+  for =DirectoryEntry= and advanced listing; directory enumeration itself is
+  still pending because it requires a separately specified variable-length
+  backend record iterator rather than exposing Linux =getdents64= layout in
+  portable Core.
+
+[FIX id:fix.core-libs.portable-directory-names-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,runtime.c,runtime.h,infer.c,codegen.c,tests/test_core_io_files.py conf:high]
+  =list-directory-names :: Path -io-> Either IOError [String]= is the first
+  portable directory operation. It includes hidden entries by default, omits
+  only the synthetic =.= and =..= entries, and never uses an empty collection
+  as an error sentinel. Host enumeration order is deliberately unspecified;
+  deterministic sorting is a separate Core policy rather than an accidental
+  backend promise.
+
+  The runtime owns only the irreducible host iterator: =opendir/readdir= on
+  POSIX and =FindFirstFile/FindNextFile= on Windows. It returns names plus a
+  raw status. Core owns the public Path/effect type and converts that status to
+  =Either IOError=. This boundary keeps filtering, sorting, metadata
+  enrichment, rendering, and future directory-stream resource policy
+  expressible and testable in the language.
+
+  Runtime coverage creates ordinary, hidden, directory, and symbolic-link
+  entries and proves membership independent of host iteration order. It also
+  proves exclusion of both dot entries and structured failure for a missing
+  directory. The next layer is a Core-owned =DirectoryEntry= scan enriched by
+  =metadata=, followed by explicit ordering/view options for an advanced
+  cross-platform listing rather than baking GNU =ls= presentation into the
+  primitive.
+
+[FIX id:fix.core-libs.typed-directory-identity-2026-08-04 date:2026-08-04 by:codex src:core/IO/File.mon,core/IO/Directory.mon,runtime.c,runtime.h,infer.c,codegen.c,tests/test_core_io_files.py conf:high]
+  Directory policy now has its own =IO.Directory= module instead of turning
+  =IO.File= into a filesystem monolith. =join-path :: Path -> String -> Path=
+  performs separator-aware component composition, and
+  =scan-directory :: Path -io-> Either IOError [DirectoryEntry]= converts the
+  portable name enumeration into stable name/full-Path identities entirely in
+  Core. Enumeration order remains unspecified and the scan includes hidden
+  names while excluding only =.= and =..= through the underlying contract.
+
+  =DirectoryEntry= intentionally represents identity rather than an eager
+  metadata snapshot. =directory-entry-size= and
+  =directory-entry-is-directory= are explicit =-io-> Either IOError ...=
+  observations over the entry's Path. This avoids stale-data semantics and,
+  presently, avoids the known cross-module instantiated =Either FileMetadata=
+  payload-evidence gap. A future =DirectorySnapshot= may batch metadata once
+  that ABI proof is available; it must be named separately so freshness is
+  visible in the type/API.
+
+  Production traversal exposed and fixed a compiler lowering defect: a typed
+  String obtained by list-pattern decomposition was peeled as opaque instead
+  of with =rt_unbox_string=. Directory-name traversal is the retained
+  regression. Empty accumulators also use =(list)= explicitly because bare
+  =[]= currently selects the array representation in this context.
+
+  The erased =DirectoryEntry= carrier stores its full Path as text because
+  Path and String share the runtime byte-address representation while Path in
+  imported aggregate fields is not yet uniformly supported. Private identity
+  projections preserve the public Path type. Removing those projections by
+  teaching aggregate ABI evidence about Path is preferred future work.
+
+[FIX id:fix.core-libs.imported-polymorphic-layout-evidence-2026-08-04 date:2026-08-04 by:codex src:main.c,env.c,env.h,infer.c,infer.h,codegen.c,tests/test_core_io_files.py conf:high]
+  In-memory module exports now retain their portable principal HM scheme.
+  Imported entries install that scheme as code-generation evidence even when
+  an older or effect-free interface has no callable-contract payload. Partial
+  application instantiation structurally combines all supplied argument types,
+  including nested layout-constructor applications, and substitutes the known
+  variables into the result. This repairs the important case where one
+  quantified variable remains unknown but the returned aggregate is known.
+
+  The retained regression embeds a =Path= in a user layout, calls imported
+  =metadata=, extracts its success through imported polymorphic =fromRight=
+  without a result annotation, and accesses =FileMetadata= fields. It proves
+  both nominal aggregate identity and the runtime payload ABI. Evidence-only
+  imported schemes do not trigger source monomorphization. Aggregate and
+  pointer-backed collection results recover their semantic type after the
+  quantified ADT payload ABI repair described below.
+
+[FIX id:fix.core-libs.directory-size-snapshots-2026-08-04 date:2026-08-04 by:codex src:core/IO/Directory.mon,core/IO/File.mon,codegen.c,tests/test_core_io_files.py conf:high]
+  =snapshot-directory :: Path -io-> Either IOError [DirectoryEntrySnapshot]=
+  makes filesystem observation explicit. The initial stable snapshot records
+  the entry name and byte size. Creating the collection performs IO; reading
+  names, individual sizes, and total size is pure. Snapshot traversal uses a
+  tail-recursive accumulator and stops at the first structured error. Host
+  enumeration order remains deliberately unspecified.
+
+  Quantified ADT fields now use an opaque pointer representation instead of
+  defaulting unresolved type variables to =Int=. This makes =Either e [a]= and
+  lists of layouts representation-safe across module boundaries. Imported
+  call-result instantiation therefore retains =TYPE_COLL= and =TYPE_LIST=
+  evidence as well as nominal layouts. A regression constructs two snapshots
+  from imported metadata and proves list count and total byte size.
+
+  Exported Core projection also exposed a missing LLVM nominal-layout
+  materialization path. Both dot-access lowering branches now materialize a
+  known portable layout before building a GEP and report a compiler error if
+  no LLVM shape can be formed instead of dereferencing a null LLVM type.
+
+  The richer Path/kind/permissions/link/time snapshot remains deferred. Direct
+  nested-layout fields and forwarding imported aggregate values through Core
+  helper parameters still need dedicated ABI regressions. The public snapshot
+  intentionally exposes only fields proven sound in compile-and-run coverage.
+
+[FIX id:fix.core-libs.directory-snapshot-evidence-2026-08-05 date:2026-08-05 by:codex src:core/IO/Directory.mon,core/IO/File.mon,tests/test_core_io_files.py conf:high]
+  =DirectoryEntrySnapshot= now retains canonical Path text, byte size,
+  permissions, hard-link count, and modification seconds from one metadata
+  observation per entry. Pure views expose the exact Path, Path membership,
+  names, total size, total links, and latest modification time. Runtime tests
+  use a file and directory, prove both exact child Paths, and verify nontrivial
+  scalar aggregates independently of host enumeration order.
+
+  Directory classification was tested but deliberately withheld: the nested
+  =FileMetadata.kind :: PathKind= constructor identity does not yet survive
+  the imported aggregate boundary, even though every scalar field does. Core
+  must not snapshot a false classification bit. Add a dedicated imported
+  nested-ADT-field ABI regression before publishing snapshot kind predicates.
+
+  The module is organized into Entry identity, Directory observation, and Pure
+  snapshot views. A retained source-quality test enforces those sections,
+  prevents excessive blank runs and raw =__rt_prepend= use, and caps the
+  focused module at 120 columns. =IO.File= also no longer contains the large
+  accidental blank wall following =PathKind=.
+
+[FIX id:fix.core-libs.pipe-descriptor-capabilities-2026-08-05 date:2026-08-05 by:codex src:core/IO/Pipe.mon,core/IO/File.mon,core/System/Posix/FileDescriptor.mon,tests/test_core_io_files.py conf:high]
+  Anonymous byte channels now have a Core-owned =IO.Pipe= layer. Pipe creation
+  is explicitly =-io->= and returns a =PipeOpenResult= observation containing
+  status plus reader and writer descriptors. =Pipe= itself is an opaque
+  algebraic pair eliminated through named endpoint projections; the foreign
+  Linux packed descriptor representation does not escape the backend.
+
+  =IO.File= now exposes pure =file-descriptor= projection, structured descriptor
+  duplication and =dup2=-style redirection, and =read-handle-bytes= for reading
+  an already-open handle without stealing its ownership. Whole-file helpers
+  retain their open/read/close policy, so the API distinguishes borrowed-handle
+  streaming from owned resource workflows.
+
+  The retained runtime regression creates a real kernel pipe, duplicates and
+  redirects an endpoint, closes every writer before reading, verifies the byte
+  stream and EOF, and closes the remaining reader. The raw x86-64 backend uses
+  Linux syscall numbers behind =System.Posix.FileDescriptor=; a Windows backend
+  remains required before the channel implementation is platform-complete.
+
+  Current lowering cannot safely return a nested aggregate through the generic
+  =Either= payload ABI in this module, and branch PHIs of layout values remain
+  fragile. =PipeOpenResult= therefore constructs one observation record after
+  scalar branch selection. Replace it with =Either IOError Pipe= only after a
+  dedicated nested-aggregate ABI regression passes across module boundaries.
+
+[FIX id:fix.core-libs.descriptor-control-2026-08-05 date:2026-08-05 by:codex src:core/IO/File.mon,core/System/Posix/FileDescriptor.mon,tests/test_core_io_files.py conf:high]
+  Core now owns the POSIX descriptor-control vocabulary required by event
+  loops and safe process spawning. The backend exposes =fcntl= with the
+  =F_GETFL=, =F_SETFL=, =F_GETFD=, and =F_SETFD= commands plus =O_NONBLOCK=
+  and =FD_CLOEXEC=. =IO.File= provides raw structured flag access, named
+  enable/disable operations, scalar state observations, descriptor projection,
+  duplication, redirection, and pure standard-stream handle constructors.
+
+  File-status flags and descriptor flags remain deliberately distinct:
+  nonblocking mode belongs to the shared open-file description, while
+  close-on-exec belongs to one descriptor. The runtime regression toggles both
+  independently on a real pipe, proves that an empty nonblocking read returns
+  immediately, restores blocking mode, transmits data, closes both endpoints,
+  and verifies that later control calls return structured failure.
+
+  A bulk =[Int]= write API was tested but withheld. The effectful final-arrow
+  arity defect described below is repaired, but list-tail decomposition across
+  the imported stream boundary still retains only the first element. Do not
+  publish a one-byte or sentinel-based substitute. Repair collection evidence
+  at that boundary first, then retain a partial-progress result containing both
+  terminal status and the number of bytes committed.
+
+  =nonblocking-status= and =close-on-exec-status= currently return structured
+  scalar 0/1 observations rather than =Either IOError Bool=: imported generic
+  extraction presently loses nominal Bool evidence. Restore Bool only with a
+  compile-and-run cross-module regression, not through source-only typing.
+
+[FIX id:fix.core-libs.effect-arrow-runtime-arity-2026-08-05 date:2026-08-05 by:codex src:codegen.c,tests/test_core_io_files.py conf:high]
+  Typed ABI calls now recover their concrete value-parameter count from the
+  materialized LLVM function when effect-arrow environment metadata reports a
+  smaller count. Effects are erased from runtime calling convention; they must
+  not erase the value immediately before the final effectful arrow.
+
+  Previously, =Int -> Int -io-> Int= could be recorded as one declared runtime
+  parameter even though its generated function correctly accepted two. Calling
+  it with two values emitted the valid direct call and then invoked the integer
+  result as a closure with the allegedly extra value. The retained regression
+  executes =add-through-io 20 22= and requires =42=, proving that both operands
+  are consumed exactly once. Lifted closure parameters remain excluded from the
+  recovered source arity.
+
+  =IO.File= is organized by semantic ownership rather than backend chronology:
+  Descriptor identity, Status and inheritance flags, Handle lifecycle,
+  Borrowed-handle streaming, Owned path workflows, and Standard streams. The
+  source-quality regression retains those landmarks so future IO expansion
+  remains navigable and visually deliberate.
+[FIX id:fix.core-libs.finite-list-algorithms-2026-08-10 date:2026-08-10 by:codex src:core/prelude/Data/List.mon,tests/core_data_list_algorithms.mon conf:high]
+  =Data.List= now owns productive algorithms whose contract depends on a
+  finite list spine: stable =partition= and =span=, =split-at=, =chunks-of=,
+  =intersperse=, and =intercalate=. Generic collection structure remains in
+  =Sequence=, and the legacy composite accessors remain compatibility surface
+  rather than defining the module.
+
+  The retained importer regression is essential. It caught comparator-valued
+  ordering and optional-result search implementations that passed a module's
+  own tests but did not preserve their values across a compiled module
+  boundary. Those APIs were withheld instead of publishing locally green,
+  externally unsound Core contracts. Reintroduce them only with an independent
+  importing =.mon= runtime test.
+
+[FIX id:fix.core-libs.large-export-catalogue-lint-2026-08-10 date:2026-08-10 by:codex src:tooling/lint.c,tests/test_lint.py conf:medium]
+  The compiler linter now recognizes exceptionally large flat module export
+  lists and recommends the grouped =module … where= catalogue with semantic
+  section labels. The threshold is deliberately conservative until grouped
+  modules containing local payload ADTs preserve nominal constructor identity;
+  =Data.Char='s closed type-module form is proven, while general =data= remains
+  a distinct compiler regression rather than something Core may assume.
+
+  =IO.File= therefore retains its flat exports for now. Its unrelated broken
+  multiline conditional was replaced by receiver-relative guarded clauses, so
+  the module itself once again compiles and runs its focused test gate.
+[FIX id:fix.core-libs.resource-safe-file-scope-2026-08-10 date:2026-08-10 by:codex src:core/IO/File.mon,codegen.c,tests/core_io_with_file.mon,tests/test_core_io_files.py conf:high]
+  =IO.File.with-file= is the first Core-owned higher-order resource boundary:
+
+    =Path -> OpenMode -> (FileHandle -> Either IOError a) -io-> Either IOError a=
+
+  It opens one owned handle, lends that handle to the callback for the dynamic
+  extent of the scope, and attempts exactly one Core-owned close after the
+  callback returns. Primary callback failure is authoritative; cleanup failure
+  replaces callback success. The generic =finish-file-scope= policy now also
+  replaces the former byte-specific and integer-specific close combiners used
+  by existing owned workflows.
+
+  The retained =.mon= regression executes success, callback failure, and
+  cleanup failure against real kernel descriptors. An independent Python
+  importer additionally performs an effectful write through a named callback,
+  observes the resulting file, and proves that closing the returned descriptor
+  a second time fails.
+
+  Making this possible repaired two first-class-function ABI invariants. A
+  typed function trampoline now recovers value arity from its materialized LLVM
+  function when erased-effect metadata reports too few parameters, matching the
+  existing direct-call rule. It also unboxes =TYPE_LAYOUT= arguments through
+  =rt_unbox_opaque= before invoking typed code, so nominal capabilities such as
+  =FileHandle= do not arrive as =RuntimeValue= wrappers.
+
+  The callback annotation intentionally omits a nested explicit effect arrow:
+  Monad infers callback effects, while the scope itself explicitly exposes
+  =-io->=. Nested effect-arrow annotations in higher-order parameter positions
+  remain a separate reader/type-annotation issue and must not be used as a
+  precondition for resource safety.
+[FIX id:fix.core-libs.structured-log-validation-2026-08-10 date:2026-08-10 by:codex src:core/prelude/Data/Log.mon,core/prelude/Data/Validation.mon,core/prelude/Data/Queue.mon,core/prelude/Data/NonEmpty.mon,tests/core_data_structures_batch.mon conf:high]
+  Core now has explicit structures for non-empty sequences, persistent FIFO
+  queues, immutable structured logs, and accumulating validation. =Data.Log=
+  owns severity-tagged messages and uses an append tree: singleton creation
+  and composition are constant-time, order is deterministic, and flattening
+  happens only at an observation boundary. =Data.Validation= carries that Log
+  in =Invalid= and combines independent failures without importing IO.
+
+  Logging is therefore data first. Pure code may construct and combine logs;
+  an application-selected effectful sink may render them at the world boundary.
+  This keeps validation reproducible and prevents console policy from becoming
+  an ambient Core effect.
+
+  =Log= deliberately carries =String= messages rather than a polymorphic
+  payload. Cross-module regressions proved that recursive generic ADT payloads
+  currently lose values at compiled boundaries even when local tests pass.
+  Generalize the payload only after an importing runtime regression preserves
+  every entry. The same evidence led =Data.Queue= to use its own structural
+  chain instead of storing a polymorphic empty list inside a constructor.
+[FIX id:fix.core-libs.math-angle-donut-extraction-2026-08-10 date:2026-08-10 by:codex src:core/Math.mon,core/Math/Angle.mon,core/prelude/Data/List.mon,how_to/Donut.mon,how_to/RunDonut.mon,tests/core_math_unicode_aliases.mon,tests/core_data_list_algorithms.mon conf:high]
+  The terminal donut is now a Core-growth probe rather than a private miniature
+  standard library. Mathematical constants remain owned by =Math= and expose
+  Unicode aliases including =π=, =τ=, =ℯ=, and =φ=. =Math.Angle= owns degree,
+  radian, and turn conversion; positive and signed normalization; and reduced
+  sine/cosine evaluation. An independent importer proves the aliases and angle
+  operations across compiled module boundaries.
+
+  The renderer also caused immutable positional replacement to move into
+  =Data.List.replace-at=. Donut now owns only torus projection, sampling,
+  rasterization, and terminal presentation. Scalar geometry constants use the
+  compact =define name :: Type value= form.
+
+  One full 90-by-314 sample frame still crashes in =Donut.scan-phi= after
+  compilation succeeds. The persistent-list framebuffer requires roughly one
+  complete path copy per winning sample and is not an acceptable animation
+  representation. Do not hide this by lowering the documented sampling
+  quality. The next extracted Core facility should be a mutable, bounds-aware
+  array/buffer abstraction whose mutation is visible in the effect/type story;
+  then retain an executable visual regression for =RunDonut.mon=.
+[THINK id:think.core-libs.array-buffer-syntax-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Reserve =#[]= for an empty contiguous array literal and =#[1 2 3]= for a
+  contiguous array whose element type and fixed extent are inferred from its
+  values. Lists retain =[]= and linked-spine semantics.
+
+  Buffers are related but not synonymous. A buffer owns mutable capacity and
+  must distinguish byte capacity, element capacity, initialized length,
+  bounds, allocation ownership, and state effects. The proposed =[2kb]= form
+  is attractive capacity notation, but it must not make uninitialized bytes
+  readable or silently choose an element type. Design it with =Buffer a=,
+  explicit capacity units, scoped allocation, and checked indexing before the
+  donut migrates away from its persistent-list framebuffer.

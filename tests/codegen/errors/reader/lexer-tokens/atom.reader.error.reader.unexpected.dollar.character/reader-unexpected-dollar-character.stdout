@@ -1,1 +1,1 @@
-unexpected character '$'
+error: unbound variable: $

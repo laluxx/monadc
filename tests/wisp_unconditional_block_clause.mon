@@ -1,0 +1,28 @@
+:TEST-ID tests.wisp.unconditional-block-clause
+:TEST-CONTEXT monadc.context.style.unconditional-block-clause
+:TEST-PURPOSE An ordinary arrow introduces a block body without a synthetic guard or undefined expression.
+:TEST-ATOM `value ->` followed by local definitions lowers to one unconditional function clause.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU wisp
+:TEST-MENU-PATH wisp/functions/unconditional-block
+
+module Wisp.UnconditionalBlockClause []
+
+
+layout BlockResult
+  value :: Int
+
+
+define build-result :: Int -> BlockResult
+  value ->
+    def incremented value + 1
+    BlockResult incremented
+
+
+define result-value :: BlockResult -> Int
+  result -> result.value
+
+
+tests
+  assert-eq (result-value (build-result 41)) 42 "an unconditional arrow owns its indented block"

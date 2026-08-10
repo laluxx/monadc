@@ -1,0 +1,17 @@
+:TEST-ID tests.codegen.core.math.runtime
+:TEST-TIER regression
+:TEST-CONTEXT monadc.context.core-libs
+:TEST-PURPOSE Exported Math constants and functions execute safely through an imported Core module.
+:TEST-EXPECT compile, run, stdout
+:TEST-SECTION codegen
+
+import Math
+module Main []
+
+show pi
+show (factorial 6)
+show (fib 10)
+show (prime? 29)
+show (sum-range 1 100)
+show (product-range 2 5)
+show (pow 3 4)

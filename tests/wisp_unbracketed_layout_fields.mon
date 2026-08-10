@@ -1,0 +1,57 @@
+:TEST-ID tests.wisp.unbracketed-layout-fields
+:TEST-CONTEXT monadc.context.style.large-layouts
+:TEST-PURPOSE Vertically written layout fields do not require square brackets.
+:TEST-ATOM `name :: Type` and `[name :: Type]` are equivalent layout field forms.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
+:TEST-MENU wisp
+:TEST-MENU-PATH wisp/unbracketed-layout-fields
+:TEST-CLI-TARGET wisp unbracketed-layout-fields
+
+module Wisp.UnbracketedLayoutFields []
+
+
+layout ParseResult
+  ok     :: Bool
+  value  :: Int
+  offset :: Int
+  error  :: Int
+
+
+layout BracketedPair
+  [left  :: Int]
+  [right :: Int]
+
+
+data TableauEntry
+  = FormulaAt Int
+
+
+data BranchStatus
+  = OpenBranch
+  | ClosedBranch Int
+
+
+layout Tableau
+  entries :: [TableauEntry]
+  status  :: BranchStatus
+
+
+define parsed :: ParseResult
+  ParseResult True 42 7 0
+
+
+define pair :: BracketedPair
+  BracketedPair 20 22
+
+
+define make-tableau :: [TableauEntry] -> BranchStatus -> Tableau
+  entries status -> Tableau entries status
+
+
+tests
+  assert-eq parsed.ok True "an unbracketed Boolean field is readable"
+  assert-eq parsed.value 42 "an unbracketed value field is readable"
+  assert-eq parsed.offset 7 "unbracketed layouts retain constructor order"
+  assert-eq parsed.error 0 "the last unbracketed field is retained"
+  assert-eq pair.right 22 "bracketed fields remain supported"

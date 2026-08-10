@@ -1,0 +1,25 @@
+:TEST-ID tests.reader.block-transformer
+:TEST-CONTEXT monadc.context.reader.programmable-blocks
+:TEST-PURPOSE A Monad Syntax transformer owns an indented source language block.
+:TEST-TIER regression
+:TEST-EXPECT compile, run
+:TEST-MENU-PATH reader/programmable-blocks
+:TEST-CLI-TARGET reader programmable-blocks
+
+reader-block decree_ expand-decree
+
+module Reader.Block.Transformer []
+
+
+define expand-decree :: Syntax -> Syntax -> Syntax -> Syntax -> Syntax
+  name separator expected-type body -> (syntax-list-append
+                                         (syntax-list (syntax-symbol "define") name)
+                                         (syntax-list (syntax-list-ref (syntax-list-ref body 1) 2)))
+
+
+decree answer :: Int
+  42
+
+
+tests
+  assert-eq answer 42 "a user transformer owns and expands an indented block"

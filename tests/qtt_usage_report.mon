@@ -1,0 +1,19 @@
+:TEST-ID tests.qtt.usage-report
+:TEST-CONTEXT monadc.context.type-theory
+:TEST-PURPOSE Full QTT quantities remain source-visible through the proof trace.
+:TEST-EXPECT compile, run
+:TEST-TIER regression
+;; Full QTT quantities remain source-visible through --trace=qtt-proof.
+(module Main)
+
+(define choose
+  (lambda ([x : Int] [condition : Bool] [unused : Int] -> Int)
+    (if condition x (+ x x))))
+
+(define local-use
+  (lambda ([x : Int] -> Int)
+    (with [local x]
+      (+ local local))))
+
+(show (choose 5 True 0))
+(show (local-use 7))

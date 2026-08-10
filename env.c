@@ -1,5 +1,8 @@
 #include "env.h"
+#include "qtt/pipeline.h"
+#include "qtt/compiler.h"
 #include "infer.h"
+#include "effects/effect.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -39,6 +42,18 @@ static bool adt_type_application_compatible(Type *a, Type *b) {
     }
 
     return false;
+}
+
+static bool text_path_byte_pointer_compatible(Type *a, Type *b) {
+    Type *pointer = a && a->kind == TYPE_PTR ? a
+                  : b && b->kind == TYPE_PTR ? b : NULL;
+    Type *addressable = a && (a->kind == TYPE_STRING || a->kind == TYPE_PATH) ? a
+                      : b && (b->kind == TYPE_STRING || b->kind == TYPE_PATH) ? b
+                      : NULL;
+    return pointer && addressable && pointer->element_type &&
+        (pointer->element_type->kind == TYPE_U8 ||
+         pointer->element_type->kind == TYPE_BYTE ||
+         pointer->element_type->kind == TYPE_CHAR);
 }
 
 Env *env_create(void) {
@@ -580,6 +595,90 @@ void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
         e->scheme = NULL;
     }
     e->scheme = scheme ? scheme_clone(scheme) : NULL;
+    e->scheme_codegen_evidence_only = false;
+}
+
+bool env_install_hm_scheme(
+    Env *env, const char *name, const char *portable_hm_scheme) {
+    InferEnv *ienv = env_get_infer(env);
+    EnvEntry *entry = env_lookup(env, name);
+    if (!ienv || !entry || entry->kind != ENV_FUNC || !portable_hm_scheme)
+        return false;
+
+    TypeScheme *scheme = infer_type_scheme_deserialize(portable_hm_scheme);
+    if (!scheme)
+        return false;
+    infer_env_insert(ienv, name, scheme);
+    env_set_scheme(env, name, scheme);
+    return true;
+}
+
+bool env_set_portable_scheme(
+    Env *env, const char *name, const char *portable_hm_scheme) {
+    if (!env_lookup(env, name) || !portable_hm_scheme)
+        return false;
+    TypeScheme *scheme = infer_type_scheme_deserialize(portable_hm_scheme);
+    if (!scheme)
+        return false;
+    env_set_scheme(env, name, scheme);
+    EnvEntry *entry = env_lookup(env, name);
+    if (entry) entry->scheme_codegen_evidence_only = true;
+    scheme_free(scheme);
+    return true;
+}
+
+bool env_install_callable_contract(
+    Env *env, const char *name, const char *portable_contract,
+    uint64_t expected_fingerprint, const char *portable_hm_scheme) {
+    InferEnv *ienv = env_get_infer(env);
+    EnvEntry *entry = env_lookup(env, name);
+    if (!ienv || !entry || entry->kind != ENV_FUNC ||
+        !entry->return_type || !portable_contract || !expected_fingerprint)
+        return false;
+    InferCallableContract contract = {0};
+    if (!infer_callable_contract_deserialize(&contract, portable_contract) ||
+        infer_callable_contract_fingerprint(&contract) !=
+            expected_fingerprint) {
+        infer_callable_contract_free(&contract);
+        return false;
+    }
+    TypeScheme *scheme = portable_hm_scheme
+        ? infer_type_scheme_deserialize(portable_hm_scheme) : NULL;
+    if (portable_hm_scheme && !scheme) {
+        infer_callable_contract_free(&contract);
+        return false;
+    }
+    if (scheme) {
+        Type *cursor = scheme->type;
+        int arity = 0;
+        while (cursor && cursor->kind == TYPE_ARROW) {
+            arity++;
+            cursor = cursor->arrow_ret;
+        }
+        if (arity != entry->param_count || !cursor) {
+            scheme_free(scheme);
+            infer_callable_contract_free(&contract);
+            return false;
+        }
+    } else {
+        Type *type = type_clone(entry->return_type);
+        for (int i = entry->param_count - 1; type && i >= 0; i--) {
+            Type *parameter = entry->params[i].type
+                ? type_clone(entry->params[i].type) : type_unknown();
+            type = parameter ? type_arrow(parameter, type) : NULL;
+        }
+        scheme = type ? scheme_mono(type) : NULL;
+        if (scheme) scheme->owns_type = true;
+    }
+    bool installed = scheme && scheme_set_callable_contract(scheme, &contract);
+    infer_callable_contract_free(&contract);
+    if (!installed) {
+        scheme_free(scheme);
+        return false;
+    }
+    infer_env_insert(ienv, name, scheme);
+    env_set_scheme(env, name, scheme);
+    return true;
 }
 
 static Type *hm_signature_from_lambda(InferCtx *ctx, AST *lambda_ast) {
@@ -601,10 +700,26 @@ static Type *hm_signature_from_lambda(InferCtx *ctx, AST *lambda_ast) {
         }
         if (!p) p = type_unknown();
         p = infer_freshen_annotation_vars(ctx, p, ann_from, ann_to, &ann_count);
-        sig = type_arrow(p, sig);
+        Type *arrow = type_arrow(p, sig);
+        arrow->arrow_effect_name =
+            lambda_ast->lambda.has_effect_arrows &&
+                lambda_ast->lambda.params[i].effect_name
+                ? strdup(lambda_ast->lambda.params[i].effect_name) : NULL;
+        sig = arrow;
     }
 
     return sig;
+}
+
+static bool compact_effect_label_is_trait(const char *label) {
+    if (!label || !*label || strchr(label, '.')) return false;
+    bool ambiguous = false;
+    if (qtt_effect_declaration_resolve(label, &ambiguous) || ambiguous)
+        return false;
+    /* One-letter labels are the concise lexical row-variable convention
+     * (`e`, `f`, ...). Descriptive labels denote open Core-owned traits even
+     * before the module declaring their operations is imported. */
+    return label[1] != '\0' || qtt_effect_trait_is_declared(label);
 }
 
 static void normalize_vars(Type *t, int *map, int *next_id) {
@@ -662,9 +777,15 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     }
 
     infer_env_insert(child, name, scheme_mono(self_t));
-    Type *inferred = infer_toplevel(ctx, lambda_ast);
+    InferExpressionJudgment inferred_judgment = {0};
+    (void)infer_toplevel_judgment(
+        ctx, lambda_ast, &inferred_judgment);
+    Type *inferred = inferred_judgment.type;
 
     TypeScheme *scheme = NULL;
+    QttSourceGradeResult source_grades = {
+        .status = QTT_SOURCE_GRADES_UNSUPPORTED,
+    };
 
     if (ctx->had_error) {
         Type *sig = hm_signature_from_lambda(ctx, lambda_ast);
@@ -681,6 +802,7 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
             scheme = infer_generalise(ctx, sig, ienv);
             infer_env_insert(ienv, name, scheme);
             env_set_scheme(env, name, scheme_clone(scheme));
+            infer_expression_judgment_free(&inferred_judgment);
             infer_ctx_free(ctx);
             infer_env_free(child);
             return scheme;
@@ -725,7 +847,12 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
     } else {
         infer_unify_one(ctx, self_t, inferred, lambda_ast->line, lambda_ast->column);
 
-        EnvEntry *ee = env_lookup(env, name);
+        /* A source signature belongs to the definition currently being
+         * checked.  A same-named imported value may still occupy the runtime
+         * environment until code generation installs the new binding; it is
+         * not the declaration of this function and must not constrain it. */
+        Type *declared_t = hm_signature_from_lambda(ctx, lambda_ast);
+        EnvEntry *ee = declared_t ? NULL : env_lookup(env, name);
         if (ee) {
             /* Skip signature check for instance method implementations.
              * Instance methods are registered with params that have no
@@ -772,13 +899,15 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
             }
         }
 
-        Type *declared_t = hm_signature_from_lambda(ctx, lambda_ast);
         if (declared_t)
             inferred = declared_t;
 
         /* Fully apply substitution so the scheme's type nodes are concrete
          * ground types — no TYPE_VAR nodes that reference the now-dead ctx */
-        scheme = infer_generalise(ctx, inferred, ienv);
+        /* Let-rec generalisation is relative to Γ without the provisional
+         * self binding. Otherwise an earlier discovery placeholder can make
+         * an unused polymorphic export accidentally monomorphic. */
+        scheme = infer_generalise_excluding(ctx, inferred, ienv, name);
         scheme->type = subst_apply(ctx->subst, scheme->type);
         {
             Type *t = scheme->type;
@@ -786,6 +915,213 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                 t->arrow_param = subst_apply(ctx->subst, t->arrow_param);
                 t->arrow_ret   = subst_apply(ctx->subst, t->arrow_ret);
                 t = t->arrow_ret;
+            }
+        }
+
+        {
+            bool effects_complete =
+                inferred_judgment.effects_complete;
+            QttEffectScheme *effects = inferred_judgment.effects;
+            if (effects) {
+                scheme_set_effect_scheme(
+                    scheme, effects, effects_complete);
+                size_t arrow_count = 0;
+                for (Type *t = scheme->type;
+                     t && t->kind == TYPE_ARROW; t = t->arrow_ret)
+                    arrow_count++;
+                if (arrow_count) {
+                    if (inferred_judgment.arrow_effect_count == arrow_count) {
+                        InferCallableContract contract = {0};
+                        if (infer_callable_contract_from_judgment(
+                                &contract, &inferred_judgment))
+                            (void)scheme_set_callable_contract(
+                                scheme, &contract);
+                        infer_callable_contract_free(&contract);
+                    } else {
+                        QttEffectScheme *pure = qtt_effect_generalize(
+                            ctx->effect_arena, ctx->effect_solver,
+                            qtt_effect_empty(ctx->effect_arena));
+                        QttEffectScheme **stages = calloc(
+                            arrow_count, sizeof(*stages));
+                        bool *stage_complete = malloc(
+                            arrow_count * sizeof(*stage_complete));
+                        if (pure && stages && stage_complete) {
+                            for (size_t i = 0; i < arrow_count; i++) {
+                                stages[i] = i + 1 == arrow_count
+                                    ? effects : pure;
+                                stage_complete[i] = i + 1 == arrow_count
+                                    ? effects_complete : true;
+                            }
+                            (void)scheme_set_arrow_effect_schemes(
+                                scheme, stages, stage_complete, arrow_count);
+                        }
+                        free(stages);
+                        free(stage_complete);
+                        qtt_effect_scheme_free(pure);
+                    }
+                }
+            }
+        }
+
+        if (scheme && !infer_elaborate_effect_row_binders(ctx, scheme))
+            READER_ERROR(lambda_ast->line, lambda_ast->column,
+                "failed to elaborate lexical effect row binders");
+
+        if (scheme && lambda_ast->lambda.effect_qualifier_count) {
+            size_t arrow_count = 0;
+            for (Type *arrow = scheme->type;
+                 arrow && arrow->kind == TYPE_ARROW;
+                 arrow = arrow->arrow_ret)
+                arrow_count++;
+            if (lambda_ast->lambda.effect_qualifier_count &&
+                    arrow_count > SIZE_MAX /
+                        lambda_ast->lambda.effect_qualifier_count)
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "too many effect qualifications");
+            size_t capacity = arrow_count *
+                lambda_ast->lambda.effect_qualifier_count;
+            size_t *stages = capacity
+                ? malloc(capacity * sizeof(*stages)) : NULL;
+            const char **traits = capacity
+                ? malloc(capacity * sizeof(*traits)) : NULL;
+            if (capacity && (!stages || !traits)) {
+                free(stages);
+                free(traits);
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "out of memory elaborating effect qualifications");
+            }
+            size_t predicate_count = 0;
+            for (size_t q = 0;
+                 q < lambda_ast->lambda.effect_qualifier_count; q++) {
+                const char *row_name =
+                    lambda_ast->lambda.effect_qualifier_rows[q];
+                bool bound = false;
+                Type *arrow = scheme->type;
+                for (size_t stage = 0;
+                     arrow && arrow->kind == TYPE_ARROW;
+                     stage++, arrow = arrow->arrow_ret) {
+                    if (!arrow->arrow_effect_name ||
+                            strcmp(arrow->arrow_effect_name, row_name) != 0)
+                        continue;
+                    stages[predicate_count] = stage;
+                    traits[predicate_count] =
+                        lambda_ast->lambda.effect_qualifier_traits[q];
+                    predicate_count++;
+                    bound = true;
+                }
+                if (!bound) {
+                    free(stages);
+                    free(traits);
+                    READER_ERROR(lambda_ast->line, lambda_ast->column,
+                        "effect qualification has missing row binder '%s'",
+                        row_name);
+                }
+            }
+            bool predicates_ok = scheme_set_effect_trait_predicates(
+                scheme, stages, traits, predicate_count);
+            free(stages);
+            free(traits);
+            if (!predicates_ok)
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "invalid effect qualification context");
+        }
+
+        /* A compact arrow labelled with a Core-declared trait is shorthand
+         * for a fresh row constrained by that trait:
+         *
+         *     A -io-> B  ==  A -e-> B where e has io
+         *
+         * Unknown simple labels remain lexical row binders. Exact effect
+         * declarations and trait.operation shorthands retain their nominal
+         * interpretation in infer_source_constrain_stage_label. */
+        if (scheme) {
+            size_t existing = scheme_effect_trait_predicate_count(scheme);
+            size_t shorthand = 0;
+            for (Type *arrow = scheme->type;
+                 arrow && arrow->kind == TYPE_ARROW;
+                 arrow = arrow->arrow_ret)
+                if (compact_effect_label_is_trait(
+                        arrow->arrow_effect_name))
+                    shorthand++;
+            size_t total = existing + shorthand;
+            size_t *stages = total ? malloc(total * sizeof(*stages)) : NULL;
+            const char **traits = total ? malloc(total * sizeof(*traits)) : NULL;
+            if (total && (!stages || !traits)) {
+                free(stages);
+                free(traits);
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "out of memory elaborating compact effect trait");
+            }
+            for (size_t i = 0; i < existing; i++) {
+                stages[i] = scheme_effect_trait_predicate_stage(scheme, i);
+                traits[i] = scheme_effect_trait_predicate_name(scheme, i);
+            }
+            size_t at = existing;
+            size_t stage = 0;
+            for (Type *arrow = scheme->type;
+                 arrow && arrow->kind == TYPE_ARROW;
+                 arrow = arrow->arrow_ret, stage++) {
+                if (!compact_effect_label_is_trait(
+                        arrow->arrow_effect_name))
+                    continue;
+                stages[at] = stage;
+                traits[at++] = arrow->arrow_effect_name;
+            }
+            bool predicates_ok = !shorthand ||
+                scheme_set_effect_trait_predicates(
+                    scheme, stages, traits, total);
+            free(stages);
+            free(traits);
+            if (!predicates_ok)
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "invalid compact effect trait context");
+        }
+
+        size_t failing_effect_stage = SIZE_MAX;
+        const char *failing_effect_label = NULL;
+        if (scheme && !infer_validate_effect_annotations(
+                ctx, scheme, &failing_effect_stage,
+                &failing_effect_label)) {
+            READER_ERROR(lambda_ast->line, lambda_ast->column,
+                "\n"
+                "    • Effect contract%s for definition ‘%s’\n"
+                "    • Arrow stage: %zu\n"
+                "    • Declared effect: %s\n"
+                "   - Hint: make the body effect match the declared row",
+                lambda_ast->lambda.effect_qualifier_count
+                    ? " does not satisfy trait" : " mismatch",
+                name,
+                failing_effect_stage == SIZE_MAX
+                    ? 0 : failing_effect_stage + 1,
+                failing_effect_label ? failing_effect_label : "<unknown>");
+        }
+
+        if (qtt_compiler_analysis_enabled()) {
+            source_grades =
+                qtt_source_grade_scheme(
+                    lambda_ast, ctx,
+                    qtt_compiler_module_id(filename));
+            if (source_grades.status == QTT_SOURCE_GRADES_OK) {
+                scheme_set_grade_scheme(scheme, source_grades.scheme);
+            }
+            qtt_compiler_register_definition(
+                filename, name, lambda_ast);
+            char *portable_hm = infer_type_scheme_serialize(scheme);
+            if (portable_hm) {
+                (void)qtt_compiler_register_hm_scheme(
+                    filename, name, portable_hm);
+                free(portable_hm);
+            }
+            InferCallableContract portable = {0};
+            if (infer_callable_contract_from_scheme(&portable, scheme)) {
+                char *encoded = infer_callable_contract_serialize(&portable);
+                uint64_t fingerprint =
+                    infer_callable_contract_fingerprint(&portable);
+                if (encoded && fingerprint)
+                    (void)qtt_compiler_register_callable_contract(
+                        filename, name, encoded, fingerprint);
+                free(encoded);
+                infer_callable_contract_free(&portable);
             }
         }
 
@@ -824,6 +1160,89 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
         env_set_scheme(env, name, scheme_clone(scheme));
     }
 
+    if (!ctx->had_error && qtt_compiler_diagnostics_enabled()) {
+        uint64_t module_id = qtt_compiler_module_id(filename);
+        QttShadowEvidence evidence =
+            qtt_shadow_collect_lambda_in_env(
+                lambda_ast, module_id,
+                qtt_compiler_signatures(filename));
+        QttShadowResult shadow = evidence.summary;
+        fprintf(stderr, "[qtt-shadow] %s: %s",
+                name, qtt_shadow_status_name(shadow.status));
+        if (shadow.status == QTT_SHADOW_VERIFIED)
+            fprintf(stderr, " (%zu blocks, %zu instructions, %zu types, grades=%zu, erased=%zu, hm-scheme=%zu, applications=%zu)",
+                    shadow.block_count, shadow.instruction_count,
+                    shadow.canonical_type_count,
+                    shadow.graded_parameter_count,
+                    shadow.erased_parameter_count,
+                    scheme_grade_count(scheme),
+                    infer_grade_application_count(ctx));
+        else
+            fprintf(stderr, " (params=%zu body=%zu core=%d validation=%d lower=%d verify=%d, applications=%zu)",
+                    shadow.parameter_count, shadow.body_count,
+                    shadow.core_error, shadow.core_validation,
+                    shadow.lower_error, shadow.verification_error,
+                    infer_grade_application_count(ctx));
+        if (source_grades.status == QTT_SOURCE_GRADES_OK) {
+            fputs(" source-grades=", stderr);
+            for (size_t i = 0; i < source_grades.count; i++) {
+                if (i) fputc(',', stderr);
+                if (source_grades.solved[i].is_omega)
+                    fputs("omega", stderr);
+                else
+                    fprintf(stderr, "%llu",
+                            (unsigned long long)
+                                source_grades.solved[i].finite);
+            }
+            fprintf(stderr, " closure-entries=%zu",
+                    source_grades.closure_count);
+            fprintf(stderr, " closure-param-entries=%zu",
+                    source_grades.substitutable_closure_count);
+            fprintf(stderr, " closure-domains=%zu",
+                    source_grades.closure_domain_count);
+            fprintf(stderr, " invoked-closure-instances=%zu",
+                    source_grades.invoked_closure_instance_count);
+            fprintf(stderr, " callable-parameters=%zu",
+                    source_grades.callable_parameter_count);
+            fprintf(stderr, " callable-domains=%zu",
+                    source_grades.callable_domain_count);
+            if (source_grades.closure_count) {
+                fputs(" closure-latent=", stderr);
+                for (size_t i = 0; i < source_grades.closure_count; i++) {
+                    if (i) fputc(',', stderr);
+                    if (source_grades.closure_solved[i].is_omega)
+                        fputs("omega", stderr);
+                    else
+                        fprintf(stderr, "%llu",
+                                (unsigned long long)
+                                    source_grades.closure_solved[i].finite);
+                }
+            }
+            fprintf(stderr, " result-closures=%zu",
+                    source_grades.result_closure_count);
+        }
+        const QttEffectScheme *effect_evidence = scheme->effect_scheme;
+        if (effect_evidence &&
+            qtt_effect_scheme_evidence_fingerprint(effect_evidence)) {
+            char *coverage = qtt_effect_coverage_format(
+                qtt_effect_scheme_coverage_gaps(effect_evidence));
+            fprintf(stderr,
+                    " effect-constraints=%zu effect-certificate=#%016llx effect-status=%s effect-coverage=%s",
+                    qtt_effect_scheme_evidence_count(effect_evidence),
+                    (unsigned long long)
+                        qtt_effect_scheme_evidence_fingerprint(effect_evidence),
+                    qtt_effect_scheme_evidence_status(effect_evidence) ==
+                            QTT_EFFECT_EVIDENCE_RESIDUAL
+                        ? "residual" : "solved",
+                    coverage ? coverage : "unavailable");
+            free(coverage);
+        }
+        fputc('\n', stderr);
+        qtt_shadow_evidence_free(&evidence);
+    }
+
+    qtt_source_grade_result_free(&source_grades);
+    infer_expression_judgment_free(&inferred_judgment);
     infer_ctx_free(ctx);
     infer_env_free(child);
     return scheme;
@@ -850,6 +1269,7 @@ static bool call_types_compatible(Type *param, Type *arg) {
     if ((arg->kind == TYPE_NIL && param->kind == TYPE_OPTIONAL) ||
         (arg->kind == TYPE_OPTIONAL && param->kind == TYPE_NIL))
         return true;
+    if (text_path_byte_pointer_compatible(param, arg)) return true;
 
     bool arg_is_int   = (arg->kind == TYPE_INT || arg->kind == TYPE_HEX ||
                          arg->kind == TYPE_BIN || arg->kind == TYPE_OCT ||
@@ -1071,6 +1491,8 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                 if ((arg->kind == TYPE_NIL && param->kind == TYPE_OPTIONAL) ||
                     (arg->kind == TYPE_OPTIONAL && param->kind == TYPE_NIL)) {
                     /* nil is perfectly compatible with any Optional argument */
+                } else if (text_path_byte_pointer_compatible(arg, param)) {
+                    /* Core String is byte-addressable at the FFI boundary. */
                 } else if (adt_type_application_compatible(arg, param)) {
                     /* Nullary ADT constructors such as Nothing have the bare
                      * layout type, while polymorphic APIs expect Maybe a. */

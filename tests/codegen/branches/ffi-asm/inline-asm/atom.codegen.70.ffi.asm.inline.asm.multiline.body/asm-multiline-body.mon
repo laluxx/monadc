@@ -1,0 +1,27 @@
+:TEST-ID tests.codegen.asm.multiline-body
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-08-10
+:TEST-CODEGEN-ATOM atom.codegen.70.ffi.asm.inline.asm.multiline.body
+:TEST-QUALITY branch-regression
+:TEST-SUBSET inline-asm
+:TEST-CATEGORY 70-ffi-asm
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.reader.sugar.inline-assembly, monadc.context.language.inline-asm
+:TEST-PURPOSE An indented asm program is one function-body expression.
+:TEST-ATOM Multiline mov/ret returns 42 without an injected undefined expression.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE wisp.c multiline typed-function body lowering
+:TEST-MENU branches/ffi-asm/inline-asm/multiline-body
+:TEST-MENU-PATH codegen/branches/ffi-asm/inline-asm/multiline-body
+:TEST-CLI-TARGET codegen multiline inline asm
+
+module AsmMultilineBody
+
+
+define answer :: Int -foreign-> Int
+  ignored ->
+    asm mov 42 %rax
+        ret
+
+
+show answer 0

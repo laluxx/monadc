@@ -105,6 +105,20 @@ class TestRunnerFormattingTests(unittest.TestCase):
 
         self.assertIn("AST JSON did not match", mismatch)
 
+    def test_single_line_diagnostic_golden_ignores_terminal_newline(self):
+        runner_mod = load_runner()
+        case = runner_mod.TestCase(name="diagnostic.setbang", metadata={})
+        with tempfile.TemporaryDirectory() as td:
+            golden = Path(td) / "diagnostic.stdout"
+            golden.write_text("set!\n", encoding="utf-8")
+
+            mismatch = runner_mod.check_expected_diagnostics(
+                case, "source.mon:1:1: error: 'set!' requires 2 arguments\n",
+                golden,
+            )
+
+        self.assertIsNone(mismatch)
+
 
 if __name__ == "__main__":
     unittest.main()

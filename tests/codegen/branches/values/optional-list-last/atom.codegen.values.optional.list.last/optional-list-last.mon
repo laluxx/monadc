@@ -1,0 +1,28 @@
+:TEST-ID tests.codegen.values.optional-list-last
+:TEST-TIER regression
+:TEST-STATUS active-2026-08-10
+:TEST-CODEGEN-ATOM atom.codegen.values.optional.list.last
+:TEST-QUALITY branch-regression
+:TEST-SUBSET optional-values
+:TEST-CATEGORY 00-values
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.infer, monadc.context.style
+:TEST-PURPOSE Ordinary absence uses first-class optional syntax and nil.
+:TEST-ATOM A polymorphic recursive list function returns a? across nil and present branches.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE reader.c, infer.c, codegen.c optional polymorphic return path
+:TEST-MENU branches/values/optional-list-last
+:TEST-MENU-PATH codegen/branches/values/optional-list-last
+:TEST-CLI-TARGET codegen optional list last
+
+module OptionalListLast
+
+
+define last :: [a] -> a?
+  []     -> nil
+  [x]    -> x
+  [_|xs] -> last xs
+
+
+show last []
+show last [1 2 3]

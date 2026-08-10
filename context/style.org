@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-08-10
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -34,7 +34,7 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
 :CONTEXT_DESCRIPTION: Code style taxonomy — naming conventions and formatting rules
-:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-07-28
 :CONTEXT_STATUS: active
 :SOURCE: context/style.org
 :CONFIDENCE: high
@@ -132,7 +132,7 @@
 :CONTEXT_MAINTAINER: codex
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-12
-:CONTEXT_UPDATED: 2026-06-12
+:CONTEXT_UPDATED: 2026-07-28
 :CONTEXT_STATUS: active
 :SOURCE: core/prelude/Coll.mon
 :CONFIDENCE: high
@@ -150,6 +150,78 @@
   rewrite. Tests and declaration bodies remain compact according to their local
   structure.
 
+[DEC id:dec.style.core-must-read-well-2026-08-04 date:2026-08-04 by:human src:user-request conf:high]
+  Core Monad code must be visually excellent as well as semantically correct.
+  Prefer small concepts with honest names, ordinary public combinators over
+  =__rt_*= calls, vertically readable matches, and separate declarations over
+  clever alignment of unrelated types. Do not expose compiler workarounds as
+  public abstractions. Respect the reader's real continuation grammar: a
+  beautiful layout that parses incorrectly is not valid style.
+
+  The desired standard is majestic rather than merely tidy: a Core module
+  should present a small number of visible conceptual movements, with calm
+  whitespace and names that let the reader understand the design before the
+  implementation details. Avoid undifferentiated helper walls and accidental
+  vertical noise. When a module is a flagship example, retain mechanical
+  source-shape coverage for its section structure, excessive blank runs, raw
+  runtime escape hatches, and unreasonable line width.
+
+[DEC id:dec.style.receiver-relative-guards-2026-07-28 date:2026-07-28 by:human src:user-request conf:high]
+  Guards on a single matched subject use receiver-relative Wisp predicates.
+  When a guarded definition has exactly one subject, place that subject and the
+  first guard pipe on the same line; align continuation pipes beneath the first
+  pipe. Omit the unary subject from receiver-relative comparisons. Compose
+  predicates with readable infix =and= or =or=; do not encode these guards as
+  parenthesized Lisp calls or repeat the subject in every comparison.
+
+#+BEGIN_SRC monad
+define ascii-byte? :: Int -> Bool
+  byte | >= 0 and <= 0x7f -> True
+       | otherwise        -> False
+#+END_SRC
+
+#+BEGIN_SRC monad
+define ascii-space? :: Int -> Bool
+  c | = 0x20    -> True
+    | = 0x09    -> True
+    | = 0x0a    -> True
+    | = 0x0d    -> True
+    | otherwise -> False
+#+END_SRC
+
+  This notation means =byte >= 0 and byte <= 0x7f=.  It is the canonical style
+  for range tables, character properties, classifiers, and other unary guarded
+  definitions throughout core code.
+
+[DEC id:dec.style.receiver-relative-field-guards-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  A unary guard may access a field of its sole matched subject with =.field=.
+  The dot form is field projection, not closure creation: the reader rewrites
+  it to =subject.field= before ordinary guard and infix elaboration. It applies
+  only when exactly one guard subject is available; explicit receivers remain
+  required for multi-argument clauses.
+
+#+BEGIN_SRC monad
+define visible? :: Sample -> Bool
+  sample | .xp < 0              -> False
+         | .xp >= screen-width  -> False
+         | .yp < 0              -> False
+         | .yp >= screen-height -> False
+         | .luminance <= 0.0    -> False
+         | otherwise            -> True
+#+END_SRC
+
+[DEC id:dec.style.unconditional-block-arrows-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  An unconditional function clause uses an ordinary arrow even when its body
+  contains several indented definitions. Never add =| otherwise= merely to
+  make the reader recognize a block. The arrow owns every deeper expression,
+  and the final expression is the result.
+
+  Multi-argument guarded definitions put their subjects once on a separate
+  line, because preserving the complete argument pattern is clearer than
+  forcing it beside every branch. Guard bodies use ordinary Wisp application,
+  such as =id count= and =null? values=, instead of =(id count)= and
+  =(null? values)=.
+
 #+BEGIN_SRC monad
 define take :: Int -> [a] -> [a]
   _ []            -> []
@@ -162,3 +234,209 @@ define take :: Int -> [a] -> [a]
   connects-to -> =monadc.context.wisp.architecture=. Pure Wisp style is a
   source-level style that expands into ordinary S-expressions before reader and
   codegen phases.
+
+* Direct Case Style
+:PROPERTIES:
+:ID: monadc.context.style.direct-case-style
+:CUSTOM_ID: direct-case-style
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.direct-constructor-cases-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  A function must not introduce a parameter and immediately wrap its whole body
+  in =match= on that parameter. Put constructor cases in the function clauses.
+  For a unary finite or nullary-constructor type, keep the receiver once and
+  write aligned constructor pipes:
+
+#+BEGIN_SRC monad
+define path-kind-is-regular-file? :: PathKind -> Bool
+  kind | RegularFile  -> True
+       | Directory    -> False
+       | SymbolicLink -> False
+       | Other        -> False
+#+END_SRC
+
+  Constructor payloads and multi-argument functions use direct patterns in the
+  relevant argument position. Keep an explicit =match= when the scrutinee is a
+  computed expression, when matching is genuinely nested, or when naming the
+  intermediate value improves the procedure.
+
+* Signature-Owned Parameters
+:PROPERTIES:
+:ID: monadc.context.style.signature-owned-parameters
+:CUSTOM_ID: signature-owned-parameters
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.signature-owned-parameters-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  A named parameter in the type signature is the function parameter. Do not
+  repeat it with an arrow before an ordinary body. A docstring may appear
+  between the signature and body expression:
+
+#+BEGIN_SRC monad
+define abs :: [x : Float] -> Float
+  "Return the absolute value of X."
+  (if (x < 0.0) (0.0 - x) x)
+#+END_SRC
+
+  Equation clauses remain appropriate when the definition performs pattern
+  case analysis; the signature-owned form is preferred for one ordinary body.
+
+* First-Class Optional Style
+:PROPERTIES:
+:ID: monadc.context.style.first-class-optionals
+:CUSTOM_ID: first-class-optionals
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.first-class-optionals-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Ordinary zero-or-one results use =T?= and =nil=. A present branch returns the
+  value directly; it is promoted into the optional result by the type system.
+
+#+BEGIN_SRC monad
+define last :: [a] -> a?
+  []     -> nil
+  [x]    -> x
+  [_|xs] -> last xs
+#+END_SRC
+
+  Keep =Maybe= for APIs intentionally exposing its algebraic
+  Functor/Applicative/Monad structure. Do not use =Maybe= merely because a
+  lookup, search, boundary, or partial observation may have no value.
+
+* Multiline Assembly
+:PROPERTIES:
+:ID: monadc.context.style.multiline-assembly
+:CUSTOM_ID: multiline-assembly
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.multiline-assembly-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Inline assembly in Core is a detached function-body expression. Put the
+  parameter arrow on its own completed line, begin =asm= on the next line,
+  and align operands by instruction. Do not compress an assembly program into
+  a parenthesized single line.
+
+#+BEGIN_SRC monad
+define sys-open :: *U8 -> Int -> Int -foreign-> Int
+  path flags mode ->
+    asm mov 2     %rax
+        mov path  %rdi
+        mov flags %rsi
+        mov mode  %rdx
+        syscall ret
+#+END_SRC
+
+  This form is one expression and one assembly program. Continuation lines
+  belong to =asm=; they are not additional procedural expressions.
+
+* Large Layouts
+:PROPERTIES:
+:ID: monadc.context.style.large-layouts
+:CUSTOM_ID: large-layouts
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.large-layout-groups-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  Large layouts may group closely related fields horizontally. Keep semantic
+  groups on separate lines and align field names and types. This is preferred
+  to both a dense undifferentiated wall and unnecessary one-field-per-line
+  vertical expansion.
+
+#+BEGIN_SRC monad
+layout PosixStatBuffer
+  [device           :: Int] [inode          :: Int] [links :: Int] [mode-owner :: Int]
+  [group-padding    :: Int] [device-type    :: Int]
+  [size             :: Int] [block-size     :: Int] [blocks :: Int]
+  [accessed-seconds :: Int] [accessed-nanos :: Int]
+  [mtime            :: Int] [mtime-nanos    :: Int]
+  [changed-seconds  :: Int] [changed-nanos  :: Int]
+  [reserved-a       :: Int] [reserved-b     :: Int] [reserved-c :: Int]
+#+END_SRC
+
+[DEC id:dec.style.vertical-layout-fields-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  A layout written with one field per line omits square brackets.  The
+  indentation already supplies the field boundary, so the unbracketed form is
+  the calm canonical spelling for ordinary vertical records.  Square brackets
+  remain valid and are useful when two or more related fields share a line, as
+  in the large-layout grouping style above.
+
+#+BEGIN_SRC monad
+layout ParseResult
+  ok     :: Bool
+  value  :: Int
+  offset :: Int
+  error  :: Int
+#+END_SRC
+
+[FIX id:fix.style.vertical-layout-arity-boundary-2026-08-10 date:2026-08-10 by:codex src:wisp.c,tests/wisp_unbracketed_layout_fields.mon conf:high]
+  Bracketless vertical fields support compound and nominal types, including
+  =[TableauEntry]= and =BranchStatus=. Arity prescanning stops at the next
+  sibling declaration and leaves that token for the outer scanner; a preceding
+  =data= declaration must not absorb a following layout or reinterpret later
+  uppercase constructor applications. The regression contains multiple layouts
+  and data declarations in one module because the isolated primitive-field case
+  was insufficient to expose the boundary bug.
+
+* Map Literals
+:PROPERTIES:
+:ID: monadc.context.style.map-literals
+:CUSTOM_ID: map-literals
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-08-10
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.style.arrow-map-literals-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
+  A brace literal containing top-level =key -> value= entries is a map. A
+  brace literal without entry arrows remains a set. The reader makes this
+  distinction and produces =AST_MAP= before inference; tools must never guess
+  map-ness from inferred element shapes.
+
+  The formatter supports three brace-placement policies. They are semantic
+  equivalents, and the chosen form is project policy rather than grammar:
+
+#+BEGIN_SRC monad
+define compact
+{ a -> b
+  c -> d }
+
+define hanging
+ { a -> b
+   c -> d }
+
+define expanded
+  {
+    a -> b
+    c -> d
+  }
+#+END_SRC
+
+  Formatter configuration also owns the number of blank lines between
+  top-level declarations, sections, and related definitions. Defaults must be
+  stable; projects may override them through the typed Monad tool-configuration
+  module.
+[IDEA id:idea.style.self-arrow-2026-08-10 date:2026-08-10 by:laluxx status:deferred]
+  In a method context where =Self= is uniquely bound, consider =:->= as exact
+  sugar for an initial receiver arrow. Thus =method underscore? :-> Bool=
+  elaborates to =method underscore? :: Self -> Bool=, while
+  =method lookup :-> Key -> Value= elaborates to
+  =method lookup :: Self -> Key -> Value=. Keep the sugar receiver-only and
+  reject it at top level or anywhere =Self= is ambiguous. This is a design
+  record, not currently accepted syntax.

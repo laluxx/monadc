@@ -1,0 +1,106 @@
+;;; Log.mon --- Structured append-only diagnostic values
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "log diagnostics severity accumulation structured"
+
+;;; Commentary:
+
+ Log is immutable diagnostic data, not an ambient printing side effect. Each
+ entry carries an explicit severity and a typed payload. Producers accumulate
+ logs deterministically; applications choose an IO sink at their boundary.
+ This keeps validation, testing, replay, filtering, and eventual telemetry
+ independent from a particular console or file.
+
+;;; Code:
+
+import Sequence
+
+module Data.Log
+  [LogLevel Debug Info Warning Error
+   LogEntry Entry Log EmptyLog LogValue AppendedLog
+   empty-log singleton-log debug-log info-log warning-log error-log
+   append-log log-entries log-values log-size log-empty?]
+
+
+data LogLevel
+  = Debug
+  | Info
+  | Warning
+  | Error
+
+
+data LogEntry
+  = Entry LogLevel String
+
+
+data Log
+  = EmptyLog
+  | LogValue LogEntry
+  | AppendedLog Log Log
+
+
+;;; Construction
+
+define empty-log :: () -> Log
+  _ -> EmptyLog
+
+
+define singleton-log :: LogLevel -> String -> Log
+  level value -> LogValue (Entry level value)
+
+
+define debug-log :: String -> Log
+  value -> singleton-log Debug value
+
+
+define info-log :: String -> Log
+  value -> singleton-log Info value
+
+
+define warning-log :: String -> Log
+  value -> singleton-log Warning value
+
+
+define error-log :: String -> Log
+  value -> singleton-log Error value
+
+
+;;; Accumulation and observation
+
+define append-log :: Log -> Log -> Log
+  [EmptyLog] right -> right
+  left [EmptyLog]  -> left
+  left right       -> AppendedLog left right
+
+
+define log-entries :: Log -> [LogEntry]
+  [EmptyLog]              -> []
+  [LogValue entry]        -> list entry
+  [AppendedLog left right] -> append (log-entries left) (log-entries right)
+
+
+define entry-value :: LogEntry -> String
+  [Entry _ value] -> value
+
+
+define log-values :: Log -> [String]
+  [EmptyLog]               -> []
+  [LogValue entry]         -> list (entry-value entry)
+  [AppendedLog left right] -> append (log-values left) (log-values right)
+
+
+define log-size :: Log -> Int
+  value -> length (log-entries value)
+
+
+define log-empty? :: Log -> Bool
+  [EmptyLog] -> True
+  _          -> False
+
+
+tests
+  assert-eq (log-empty? (empty-log ())) True "Log empty constructor"
+  assert-eq (log-size (warning-log "careful")) 1 "Log singleton size"
+  assert-eq (show (log-values (append-log (info-log "start") (error-log "stop")))) "(start stop)" "Log append preserves order"
+  assert-eq (log-empty? (append-log (empty-log ()) (debug-log "trace"))) False "Log append retains entries"

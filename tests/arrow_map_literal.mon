@@ -1,0 +1,24 @@
+:TEST-ID tests.reader.collections.arrow-map-literal
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION reader
+:TEST-CATEGORY collections
+
+define compact
+{ :a -> 1
+  :b -> 2 }
+
+define hanging
+ { :a -> 1
+   :b -> 2 }
+
+define expanded
+  {
+    :a -> 1
+    :b -> 2
+  }
+
+show Map? compact
+show Map? hanging
+show Map? expanded
+show (count compact) + (count hanging) + (count expanded)

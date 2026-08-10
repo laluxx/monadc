@@ -6,11 +6,11 @@
 
 ;;; Commentary:
 
-;; These classes describe structure-preserving changes to type parameters.
-;; Functor and Contravariant each have one primitive mapping operation.
-;; Bifunctor likewise requires only bimap: changing either side independently
-;; is derived here so every binary type constructor receives the same lawful
-;; implementation for free.
+ These classes describe structure-preserving changes to type parameters.
+ Functor and Contravariant each have one primitive mapping operation.
+ Bifunctor likewise requires only bimap: changing either side independently
+ is derived here so every binary type constructor receives the same lawful
+ implementation for free.
 
 ;;; Code:
 

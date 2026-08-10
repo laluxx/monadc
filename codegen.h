@@ -66,6 +66,9 @@ typedef struct CodegenContext {
     bool repl_host_globals;
     int optimization_level;
     int core_inline_depth;
+    struct QttCodegenReplacementScope *qtt_replacement_scope;
+    struct QttCodegenLifetimeScope *qtt_lifetime_scope;
+    struct QttBackendCleanup *qtt_materializing_closure;
 
     // Monomorphization cache
     MonoCache mono_cache;

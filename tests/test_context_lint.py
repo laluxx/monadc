@@ -212,7 +212,7 @@ class TestCheckTestContextRefs(unittest.TestCase):
             root = Path(tmp)
             test_dir = root / "tests"
             test_dir.mkdir()
-            (test_dir / "test.mon").write_text(";; TEST-CONTEXT: monadc.context.foo\n")
+            (test_dir / "test.mon").write_text(":TEST-CONTEXT monadc.context.foo\n")
             known = {"monadc.context.foo"}
             issues = lint.check_test_context_refs(root, known)
             self.assertEqual(issues, [])
@@ -223,7 +223,7 @@ class TestCheckTestContextRefs(unittest.TestCase):
             root = Path(tmp)
             test_dir = root / "tests"
             test_dir.mkdir()
-            (test_dir / "test.mon").write_text(";; TEST-CONTEXT: monadc.context.nonexistent\n")
+            (test_dir / "test.mon").write_text(":TEST-CONTEXT monadc.context.nonexistent\n")
             known = {"monadc.context.foo"}
             issues = lint.check_test_context_refs(root, known)
             self.assertEqual(len(issues), 1)

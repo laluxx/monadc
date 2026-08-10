@@ -5,27 +5,21 @@ module Math
    factorial fib prime?
    sum-range product-range pow]
 
-define [pi :: Float] 3.141592653589793
-define [tau :: Float] 6.283185307179586
-define [half-pi :: Float] 1.5707963267948966
-define [e :: Float] 2.718281828459045
-define [phi :: Float] 1.6180339887498949
-
-define [pi      :: Float] 3.141592653589793
-define [tau     :: Float] 6.283185307179586
-define [half-pi :: Float] 1.5707963267948966
-define [e       :: Float] 2.718281828459045
-define [phi     :: Float] 1.6180339887498949
+define [pi      :: Float] 3.141592653589793  :alias π
+define [tau     :: Float] 6.283185307179586  :alias τ
+define [half-pi :: Float] 1.5707963267948966 :alias π/2
+define [e       :: Float] 2.718281828459045  :alias ℯ
+define [phi     :: Float] 1.6180339887498949 :alias φ
 
 
 define factorial :: Int -> Int
-  n | n <= 1    -> 1
+  n | <= 1      -> 1
     | otherwise -> n * (factorial (n - 1))
 
 define fib :: Int -> Int
-  n | n <= 0    -> 0
-    | n = 1     -> 1
-    | otherwise -> fib (n - 1) + fib (n - 2)
+  n | <= 0      -> 0
+    | <= 1      -> 1
+    | otherwise -> (fib (n - 1)) + (fib (n - 2))
 
 define prime-check? :: Int -> Int -> Bool
   n divisor | divisor * divisor > n -> True
@@ -33,7 +27,7 @@ define prime-check? :: Int -> Int -> Bool
             | otherwise             -> prime-check? n (divisor + 1)
 
 define prime? :: Int -> Bool
-  n | n < 2     -> False
+  n | < 2       -> False
     | otherwise -> prime-check? n 2
 
 define sum-range :: Int -> Int -> Int

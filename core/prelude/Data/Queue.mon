@@ -1,0 +1,93 @@
+;;; Queue.mon --- Persistent first-in first-out queues
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "queue fifo persistent amortized"
+
+;;; Commentary:
+
+ Queue is a persistent two-list FIFO. Front values are consumed directly;
+ newly enqueued values accumulate in reverse order and are rotated only when
+ the front becomes empty. This gives O(1) amortized enqueue and dequeue while
+ keeping the representation immutable.
+
+;;; Code:
+
+import Sequence
+
+module Data.Queue
+  [QueueChain EmptyChain ChainNode
+   Queue EmptyQueue QueueValue empty-queue singleton-queue
+   queue-empty? enqueue dequeue queue-to-list]
+
+
+data QueueChain a
+  = EmptyChain
+  | ChainNode a (QueueChain a)
+
+
+data Queue a
+  = EmptyQueue
+  | QueueValue (QueueChain a) (QueueChain a)
+
+
+;;; Representation normalization
+
+define reverse-chain-onto :: QueueChain a -> QueueChain a -> QueueChain a
+  [EmptyChain]       result -> result
+  [ChainNode x rest] result -> reverse-chain-onto rest (ChainNode x result)
+
+
+define chain-to-list :: QueueChain a -> [a]
+  [EmptyChain]       -> []
+  [ChainNode x rest] -> prepend x (chain-to-list rest)
+
+
+define normalize-queue :: QueueChain a -> QueueChain a -> Queue a
+  [EmptyChain] [EmptyChain] -> EmptyQueue
+  [EmptyChain] back         -> QueueValue (reverse-chain-onto back EmptyChain) EmptyChain
+  front        back         -> QueueValue front back
+
+
+;;; Construction and observation
+
+define empty-queue :: () -> Queue a
+  _ -> EmptyQueue
+
+
+define singleton-queue :: a -> Queue a
+  value -> QueueValue (ChainNode value EmptyChain) EmptyChain
+
+
+define queue-empty? :: Queue a -> Bool
+  [EmptyQueue] -> True
+  _            -> False
+
+
+define queue-to-list :: Queue a -> [a]
+  [EmptyQueue] -> []
+  [QueueValue front back] -> append (chain-to-list front) (chain-to-list (reverse-chain-onto back EmptyChain))
+
+
+;;; FIFO updates
+
+define enqueue :: Queue a -> a -> Queue a
+  [EmptyQueue] value -> singleton-queue value
+  [QueueValue front back] value -> QueueValue front (ChainNode value back)
+
+
+define dequeue-front :: QueueChain a -> QueueChain a -> Queue a
+  [EmptyChain]         back -> normalize-queue EmptyChain back
+  [ChainNode _ rest] back -> normalize-queue rest back
+
+
+define dequeue :: Queue a -> Queue a
+  [EmptyQueue]            -> EmptyQueue
+  [QueueValue front back] -> dequeue-front front back
+
+
+tests
+  assert-eq (queue-empty? (empty-queue ())) True "Queue empty constructor"
+  assert-eq (show (queue-to-list (enqueue (enqueue (empty-queue ()) 1) 2))) "(1 2)" "Queue observes FIFO order"
+  assert-eq (show (queue-to-list (dequeue (enqueue (enqueue (empty-queue ()) 1) 2)))) "(2)" "Queue dequeue removes the oldest value"
+  assert-eq (queue-empty? (dequeue (empty-queue ()))) True "Queue dequeue is total on empty input"

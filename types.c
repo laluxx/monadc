@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 static Type *make_type(TypeKind kind);
 
@@ -15,7 +16,10 @@ static char *type_trim_copy(const char *s) {
     return strndup(s, (size_t)(end - s));
 }
 
-static const char *type_find_top_level_arrow(const char *s) {
+static const char *type_find_top_level_arrow(
+    const char *s, const char **after, char **effect_name) {
+    if (after) *after = NULL;
+    if (effect_name) *effect_name = NULL;
     int depth = 0;
     for (const char *p = s; p && *p; p++) {
         if (*p == '(' || *p == '[' || *p == '{') {
@@ -23,6 +27,22 @@ static const char *type_find_top_level_arrow(const char *s) {
         } else if (*p == ')' || *p == ']' || *p == '}') {
             if (depth > 0) depth--;
         } else if (depth == 0 && p[0] == '-' && p[1] == '>') {
+            if (after) *after = p + 2;
+            return p;
+        } else if (depth == 0 && p[0] == '-') {
+            const char *end = strstr(p + 1, "->");
+            if (!end || end == p + 1) continue;
+            bool valid = true;
+            for (const char *q = p + 1; q < end; q++)
+                if (!(isalnum((unsigned char)*q) || *q == '_' ||
+                      *q == '.' || *q == '-')) {
+                    valid = false;
+                    break;
+                }
+            if (!valid) continue;
+            if (effect_name)
+                *effect_name = strndup(p + 1, (size_t)(end - p - 1));
+            if (after) *after = end + 2;
             return p;
         }
     }
@@ -30,13 +50,16 @@ static const char *type_find_top_level_arrow(const char *s) {
 }
 
 static Type *type_parse_arrow_chain(const char *name) {
-    const char *arrow = type_find_top_level_arrow(name);
+    const char *after = NULL;
+    char *effect_name = NULL;
+    const char *arrow = type_find_top_level_arrow(
+        name, &after, &effect_name);
     if (!arrow) return NULL;
 
     char *left_s = strndup(name, (size_t)(arrow - name));
     char *left = type_trim_copy(left_s);
     free(left_s);
-    char *right = type_trim_copy(arrow + 2);
+    char *right = type_trim_copy(after);
 
     Type *ret = type_from_name(right);
     free(right);
@@ -46,7 +69,9 @@ static Type *type_parse_arrow_chain(const char *name) {
     free(left);
     if (!param) param = type_unknown();
 
-    return type_arrow(param, ret);
+    Type *result = type_arrow(param, ret);
+    result->arrow_effect_name = effect_name;
+    return result;
 }
 
 static bool type_has_top_level_comma(const char *name) {
@@ -239,6 +264,34 @@ static Type *type_parse_type_application(const char *name) {
 
 TypeAlias *g_aliases = NULL;
 
+typedef struct NominalTypeName {
+    char *name;
+    struct NominalTypeName *next;
+} NominalTypeName;
+
+static NominalTypeName *g_nominal_type_names;
+
+bool type_nominal_register(const char *name) {
+    if (!name || name[0] < 'A' || name[0] > 'Z') return false;
+    for (NominalTypeName *item = g_nominal_type_names;
+         item; item = item->next)
+        if (!strcmp(item->name, name)) return true;
+    NominalTypeName *item = calloc(1, sizeof(*item));
+    if (!item) return false;
+    item->name = strdup(name);
+    if (!item->name) { free(item); return false; }
+    item->next = g_nominal_type_names;
+    g_nominal_type_names = item;
+    return true;
+}
+
+static bool type_nominal_is_registered(const char *name) {
+    for (NominalTypeName *item = g_nominal_type_names;
+         item; item = item->next)
+        if (!strcmp(item->name, name)) return true;
+    return false;
+}
+
 void type_alias_register(const char *alias_name, const char *target_name) {
     // Replace if already exists
     for (TypeAlias *a = g_aliases; a; a = a->next) {
@@ -265,6 +318,12 @@ void type_alias_free_all(void) {
         a = next;
     }
     g_aliases = NULL;
+    while (g_nominal_type_names) {
+        NominalTypeName *next = g_nominal_type_names->next;
+        free(g_nominal_type_names->name);
+        free(g_nominal_type_names);
+        g_nominal_type_names = next;
+    }
 }
 
 /// Refinement type
@@ -978,18 +1037,27 @@ Type *type_from_name(const char *name) {
     const FiniteTypeSetEntry *finite = finite_type_set_lookup(name);
     if (finite) return type_finite_set(finite->name, finite->member_count);
 
-    // Check alias registry before legacy representation fallbacks.  Public
-    // core declarations must own their names; built-ins below are bootstrap
-    // representations used only when core has not registered an override.
-    for (TypeAlias *a = g_aliases; a; a = a->next) {
-        if (strcmp(a->alias_name, name) == 0) {
-            static int alias_resolution_depth = 0;
-            if (alias_resolution_depth >= 32) return NULL;
-            alias_resolution_depth++;
-            Type *t = type_from_name(a->target_name);
-            alias_resolution_depth--;
-            if (t) return t;
-            break;
+    /*
+     * Refinement annotations use their representation type during HM
+     * inference. Bootstrap types such as String and Coll keep their concrete
+     * runtime representation even when core supplies a refinement predicate
+     * for the public type.
+     */
+    if (!type_name_is_builtin_constructor(name)) {
+        const char *refinement_base = refinement_base_name(name);
+        if (refinement_base && strcmp(refinement_base, name) != 0)
+            return type_from_name(refinement_base);
+
+        for (TypeAlias *a = g_aliases; a; a = a->next) {
+            if (strcmp(a->alias_name, name) == 0) {
+                static int alias_resolution_depth = 0;
+                if (alias_resolution_depth >= 32) return NULL;
+                alias_resolution_depth++;
+                Type *t = type_from_name(a->target_name);
+                alias_resolution_depth--;
+                if (t) return t;
+                break;
+            }
         }
     }
 
@@ -1027,6 +1095,11 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Escape")  == 0) return type_escape();
     if (strcmp(name, "Unit")    == 0) return type_unit();
     if (strcmp(name, "Heap")    == 0) return type_arr_heap(NULL);
+
+    /* ADT declarations are parsed before their function signatures but their
+     * concrete LLVM layouts are emitted later. Preserve the nominal identity
+     * during HM/QTT elaboration instead of degrading it to TYPE_UNKNOWN. */
+    if (type_nominal_is_registered(name)) return type_layout_ref(name);
 
     /* Arbitrary-width integers: I<n> and U<n> */
     {
@@ -1240,7 +1313,16 @@ bool types_equal(Type *a, Type *b) {
     case TYPE_VAR:
         return a->var_id == b->var_id;
     case TYPE_ARROW:
-        return types_equal(a->arrow_param, b->arrow_param)
+        return a->arrow_effect_complete == b->arrow_effect_complete
+            && ((!a->arrow_effect_name && !b->arrow_effect_name) ||
+                (a->arrow_effect_name && b->arrow_effect_name &&
+                 strcmp(a->arrow_effect_name,
+                        b->arrow_effect_name) == 0))
+            && ((!a->arrow_effect_scheme && !b->arrow_effect_scheme) ||
+                (a->arrow_effect_scheme && b->arrow_effect_scheme &&
+                 strcmp(a->arrow_effect_scheme,
+                        b->arrow_effect_scheme) == 0))
+            && types_equal(a->arrow_param, b->arrow_param)
             && types_equal(a->arrow_ret,   b->arrow_ret);
     case TYPE_LIST:
         if (a->list_count != b->list_count) return false;
@@ -1391,7 +1473,19 @@ Type *type_clone(Type *t) {
         case TYPE_F80:          return type_f80();
         case TYPE_INT_ARBITRARY: return type_int_arbitrary(t->numeric_width, t->numeric_signed);
         case TYPE_VAR:     return type_var(t->var_id);
-        case TYPE_ARROW:   return type_arrow(type_clone(t->arrow_param), type_clone(t->arrow_ret));
+        case TYPE_ARROW: {
+            Type *c = type_arrow(
+                type_clone(t->arrow_param), type_clone(t->arrow_ret));
+            c->arrow_effect_complete = t->arrow_effect_complete;
+            if (t->arrow_effect_scheme) {
+                c->arrow_effect_scheme = strdup(t->arrow_effect_scheme);
+                c->arrow_effect_scheme_owned =
+                    c->arrow_effect_scheme != NULL;
+            }
+            c->arrow_effect_name = t->arrow_effect_name
+                ? strdup(t->arrow_effect_name) : NULL;
+            return c;
+        }
         case TYPE_LAYOUT: {
             Type *c = calloc(1, sizeof(Type));
             c->kind                = TYPE_LAYOUT;
@@ -1446,6 +1540,9 @@ void type_free(Type *t) {
     if (t->kind == TYPE_ARROW) {
         type_free(t->arrow_param);
         type_free(t->arrow_ret);
+        if (t->arrow_effect_scheme_owned)
+            free(t->arrow_effect_scheme);
+        free(t->arrow_effect_name);
     }
     if (t->kind == TYPE_APP) {
         free(t->app_constructor);
@@ -1530,7 +1627,14 @@ const char *type_to_string(Type *t) {
         snprintf(buf, 512, "%c", 'a' + (t->var_id % 26));
         return buf;
     case TYPE_ARROW:
-        snprintf(buf, 512, "%s -> %s", type_to_string(t->arrow_param), type_to_string(t->arrow_ret));
+        if (t->arrow_effect_name)
+            snprintf(buf, 512, "%s -%s-> %s",
+                     type_to_string(t->arrow_param), t->arrow_effect_name,
+                     type_to_string(t->arrow_ret));
+        else
+            snprintf(buf, 512, "%s -> %s",
+                     type_to_string(t->arrow_param),
+                     type_to_string(t->arrow_ret));
         return buf;
         case TYPE_LIST: {
             if (t->list_count == 0) {

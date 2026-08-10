@@ -14,6 +14,9 @@
 #include "infer.h"
 #include "typeclass.h"
 #include "pmatch.h"
+#include "qtt/backend.h"
+#include "qtt/compiler.h"
+#include "effects/effect.h"
 #include <ctype.h>
 #include <math.h>
 #include <llvm-c/Core.h>
@@ -380,6 +383,9 @@ static void mono_unify_formal_actual(Type *formal, Type *actual, TypeSubst *ts) 
         mono_unify_formal_actual(formal->arr_element_type, actual->arr_element_type, ts);
 }
 
+static Type *codegen_instantiated_call_result(
+    CodegenContext *ctx, EnvEntry *entry, AST *call);
+
 static Type *codegen_call_arg_static_type(CodegenContext *ctx, AST *arg_ast) {
     if (!arg_ast) return type_unknown();
 
@@ -413,7 +419,78 @@ static Type *codegen_call_arg_static_type(CodegenContext *ctx, AST *arg_ast) {
             return ae->scheme->type;
     }
 
+    /* Application nodes frequently carry only a dependent-checker placeholder
+     * even though their callee has a precise imported HM contract.  Recover
+     * that result here so an outer polymorphic call can use evidence supplied
+     * by a nested constructor/function application.  This is deliberately
+     * structural: no constructor or library function is privileged. */
+    if (arg_ast->type == AST_LIST && arg_ast->list.count > 0 &&
+        arg_ast->list.items[0] &&
+        arg_ast->list.items[0]->type == AST_SYMBOL) {
+        EnvEntry *callee =
+            env_lookup(ctx->env, arg_ast->list.items[0]->symbol);
+        Type *layout = env_lookup_layout(
+            ctx->env, arg_ast->list.items[0]->symbol);
+        if (layout)
+            return layout;
+        if (callee) {
+            Type *instantiated =
+                codegen_instantiated_call_result(ctx, callee, arg_ast);
+            if (instantiated && instantiated->kind != TYPE_UNKNOWN &&
+                instantiated->kind != TYPE_VAR)
+                return instantiated;
+            type_free(instantiated);
+            if (callee->return_type &&
+                callee->return_type->kind != TYPE_UNKNOWN &&
+                callee->return_type->kind != TYPE_VAR)
+                return callee->return_type;
+        }
+    }
+
     return arg_ast->inferred_type ? arg_ast->inferred_type : type_unknown();
+}
+
+static Type *codegen_instantiated_call_result(
+    CodegenContext *ctx, EnvEntry *entry, AST *call) {
+    if (!ctx || !entry || !entry->scheme || !entry->scheme->type ||
+        !call || call->type != AST_LIST || call->list.count < 1 ||
+        entry->scheme->quantified_count <= 0)
+        return NULL;
+
+    int count = entry->scheme->quantified_count;
+    TypeSubst substitution = {
+        .count = count,
+        .from = malloc(sizeof(int) * count),
+        .to = malloc(sizeof(Type *) * count),
+    };
+    if (!substitution.from || !substitution.to) {
+        free(substitution.from);
+        free(substitution.to);
+        return NULL;
+    }
+    for (int i = 0; i < count; i++) {
+        substitution.from[i] = entry->scheme->quantified[i];
+        substitution.to[i] = type_unknown();
+    }
+
+    size_t supplied = call->list.count - 1;
+    Type *cursor = entry->scheme->type;
+    for (size_t i = 0; i < supplied && cursor &&
+         cursor->kind == TYPE_ARROW; i++) {
+        Type *actual = codegen_call_arg_static_type(
+            ctx, call->list.items[i + 1]);
+        mono_unify_formal_actual(cursor->arrow_param, actual, &substitution);
+        cursor = cursor->arrow_ret;
+    }
+
+    Type *result = cursor
+        ? infer_substitute_type_vars(cursor, substitution.from,
+                                     substitution.to, count)
+        : NULL;
+    for (int i = 0; i < count; i++) type_free(substitution.to[i]);
+    free(substitution.from);
+    free(substitution.to);
+    return result;
 }
 
 static Type *arrow_param_at(Type *t, int index) {
@@ -714,6 +791,14 @@ static CodegenResult codegen_project_field_value(CodegenContext *ctx,
         snprintf(sname, sizeof(sname), "data.%s", layout_type->layout_name);
         struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
     }
+    if (!struct_llvm && layout_type->layout_field_count > 0) {
+        /* Imported nominal data carries portable layout metadata but no local
+         * defining AST. Materialize that shape before consumer-side field
+         * projection (pattern matching, rendering, and generated accessors). */
+        (void)type_to_llvm(ctx, layout_type);
+        snprintf(sname, sizeof(sname), "layout.%s", layout_type->layout_name);
+        struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+    }
     if (!struct_llvm) {
         CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
                       parser_get_filename(), ast ? ast->line : 0,
@@ -918,8 +1003,33 @@ static Type *codegen_entry_result_type(CodegenContext *ctx, EnvEntry *entry) {
         Type *layout = env_lookup_layout(ctx->env, name);
         if (layout)
             return layout;
+        Type *annotated = type_from_name(name);
+        if (annotated)
+            return annotated;
     }
     return entry->type;
+}
+
+static void codegen_preserve_callable_metadata(
+    CodegenContext *ctx, EnvEntry *destination, AST *value) {
+    if (!ctx || !destination || !value) return;
+    if (value->type == AST_LAMBDA) {
+        destination->source_ast = ast_clone(value);
+        if (value->lambda.return_type)
+            destination->return_type = type_from_name(
+                value->lambda.return_type);
+        return;
+    }
+    if (value->type != AST_SYMBOL) return;
+    EnvEntry *source = env_lookup(ctx->env, value->symbol);
+    if (!source || source == destination) return;
+    if (source->return_type)
+        destination->return_type = type_clone(source->return_type);
+    if (source->source_ast)
+        destination->source_ast = ast_clone(source->source_ast);
+    destination->func_ref = source->func_ref;
+    destination->is_closure_abi = source->is_closure_abi;
+    destination->param_count = source->param_count;
 }
 
 static const char *codegen_projection_symbol(AST *expr) {
@@ -1475,6 +1585,7 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
         return LLVMDoubleTypeInContext(ctx->context);
     case TYPE_CHAR:
     case TYPE_BYTE:
+    case TYPE_UNIT:
         return LLVMInt8TypeInContext(ctx->context);
     case TYPE_STRING:
     case TYPE_PATH:
@@ -2174,6 +2285,8 @@ static EnvEntry *resolve_symbol_with_modules(CodegenContext *ctx, const char *sy
               strncmp(symbol_name, short_module, prefix_len) == 0));
         EnvEntry *entry = is_current_module
             ? env_lookup(ctx->env, symbol_name) : NULL;
+        if (!entry && is_current_module)
+            entry = env_lookup(ctx->env, dot + 1);
         if (entry) {
             return entry;
         }
@@ -2780,6 +2893,133 @@ static LLVMValueRef get_or_declare_strdup(CodegenContext *ctx) {
     return fn;
 }
 
+/*
+ * First authoritative production-memory slice.  The backend accepts only
+ * dead owned String literal bindings after Semantic IR independently
+ * verifies their ordered lexical alloc/drop plan and destructor descriptors.
+ */
+static bool codegen_qtt_certifies_string_drops(
+    AST *with_ast, QttBackendCleanupPlan *cleanups) {
+    if (!qtt_compiler_memory_enabled())
+        return false;
+    return qtt_backend_certify_string_cleanups_in_env(
+        with_ast,
+        qtt_compiler_signatures(parser_get_filename()),
+        qtt_compiler_module_id(parser_get_filename()),
+        cleanups);
+}
+
+static bool codegen_qtt_certifies_string_replacements(
+    AST *with_ast, QttBackendReplacementPlan *replacements) {
+    if (!qtt_compiler_memory_enabled())
+        return false;
+    return qtt_backend_certify_string_replacements_in_env(
+        with_ast,
+        qtt_compiler_signatures(parser_get_filename()),
+        qtt_compiler_module_id(parser_get_filename()),
+        replacements);
+}
+
+static LLVMValueRef codegen_qtt_free_function(
+    CodegenContext *ctx) {
+    LLVMValueRef function =
+        LLVMGetNamedFunction(ctx->module, "free");
+    if (!function) {
+        LLVMTypeRef ptr =
+            LLVMPointerType(
+                LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef type =
+            LLVMFunctionType(
+                LLVMVoidTypeInContext(ctx->context),
+                &ptr, 1, 0);
+        function = LLVMAddFunction(ctx->module, "free", type);
+    }
+    return function;
+}
+
+static LLVMValueRef codegen_qtt_unique_closure_destructor(
+    CodegenContext *ctx) {
+    LLVMValueRef function = LLVMGetNamedFunction(
+        ctx->module, "rt_closure_destroy_unique");
+    if (!function) {
+        LLVMTypeRef parameters[] = {
+            LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0),
+            LLVMInt64TypeInContext(ctx->context),
+        };
+        function = LLVMAddFunction(
+            ctx->module, "rt_closure_destroy_unique",
+            LLVMFunctionType(
+                LLVMVoidTypeInContext(ctx->context), parameters, 2, 0));
+    }
+    return function;
+}
+
+typedef struct QttCodegenReplacementScope {
+    QttBackendReplacementPlan *plan;
+    LLVMValueRef *binding_slots;
+    size_t binding_count;
+    bool *consumed;
+    struct QttCodegenReplacementScope *parent;
+} QttCodegenReplacementScope;
+
+typedef struct QttCodegenLifetimeScope {
+    QttBackendCleanupPlan *plan;
+    struct QttCodegenLifetimeScope *parent;
+} QttCodegenLifetimeScope;
+
+static QttBackendCleanup *codegen_qtt_lifetime(
+    CodegenContext *ctx, const AST *name) {
+    if (!ctx || !name || name->type != AST_SYMBOL ||
+        !name->resolved_binder_id)
+        return NULL;
+    QttCoreVar wanted = {
+        qtt_compiler_module_id(parser_get_filename()),
+        name->resolved_binder_id,
+    };
+    for (QttCodegenLifetimeScope *scope = ctx->qtt_lifetime_scope;
+         scope; scope = scope->parent)
+        if (scope->plan)
+            for (size_t i = 0; i < scope->plan->count; i++)
+                if (qtt_core_var_equal(
+                        scope->plan->items[i].resource, wanted))
+                    return &scope->plan->items[i];
+    return NULL;
+}
+
+static QttBackendReplacement *codegen_qtt_take_replacement(
+    CodegenContext *ctx, const AST *target, LLVMValueRef target_slot) {
+    if (!ctx || !target || target->type != AST_SYMBOL ||
+        !target->resolved_binder_id || !target_slot)
+        return NULL;
+    for (QttCodegenReplacementScope *scope =
+             ctx->qtt_replacement_scope;
+         scope; scope = scope->parent) {
+        if (!scope->plan || !scope->binding_slots ||
+            !scope->consumed)
+            continue;
+        for (size_t i = 0; i < scope->plan->count; i++) {
+            QttBackendReplacement *item =
+                &scope->plan->items[i];
+            if (scope->consumed[i] ||
+                item->resource.binder_id !=
+                    target->resolved_binder_id ||
+                item->resource.module_id !=
+                    qtt_compiler_module_id(
+                        parser_get_filename()) ||
+                item->binding_index >= scope->binding_count ||
+                scope->binding_slots[item->binding_index] !=
+                    target_slot ||
+                item->representation != QTT_REP_OWNED_HEAP ||
+                !item->destructor.type_fingerprint ||
+                !item->destructor.plan_fingerprint)
+                continue;
+            scope->consumed[i] = true;
+            return item;
+        }
+    }
+    return NULL;
+}
+
 static void build_br_if_no_terminator(LLVMBuilderRef builder, LLVMBasicBlockRef dest) {
     LLVMBasicBlockRef cur = LLVMGetInsertBlock(builder);
     if (cur && !LLVMGetBasicBlockTerminator(cur))
@@ -2851,8 +3091,17 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
         case TYPE_ARR: {
             LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
             LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
-
-            LLVMValueRef len = arr_fat_size(ctx, val);
+            bool fixed_storage = LLVMGetTypeKind(LLVMTypeOf(val)) ==
+                                 LLVMArrayTypeKind;
+            LLVMValueRef len = fixed_storage
+                ? LLVMConstInt(i64_t, type->arr_size, 0)
+                : arr_fat_size(ctx, val);
+            LLVMValueRef fixed_address = NULL;
+            if (fixed_storage) {
+                fixed_address = LLVMBuildAlloca(ctx->builder, LLVMTypeOf(val),
+                                                "boxed_fixed_array");
+                LLVMBuildStore(ctx->builder, val, fixed_address);
+            }
 
             // Allocate the RuntimeValue* Array wrapper
             LLVMValueRef alloc_fn = LLVMGetNamedFunction(ctx->module, "rt_value_array");
@@ -2879,9 +3128,20 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
             LLVMBuildCondBr(ctx->builder, cond, body_bb, exit_bb);
 
             LLVMPositionBuilderAtEnd(ctx->builder, body_bb);
-            LLVMValueRef data = arr_fat_data(ctx, val, type->arr_element_type);
             LLVMTypeRef elem_llvm = type_to_llvm(ctx, type->arr_element_type);
-            LLVMValueRef ep = LLVMBuildGEP2(ctx->builder, elem_llvm, data, &phi_i, 1, "ep");
+            LLVMValueRef ep;
+            if (fixed_storage) {
+                LLVMValueRef zero = LLVMConstInt(
+                    LLVMInt32TypeInContext(ctx->context), 0, 0);
+                LLVMValueRef indices[] = {zero, phi_i};
+                ep = LLVMBuildGEP2(ctx->builder, LLVMTypeOf(val),
+                                   fixed_address, indices, 2, "ep");
+            } else {
+                LLVMValueRef data = arr_fat_data(
+                    ctx, val, type->arr_element_type);
+                ep = LLVMBuildGEP2(ctx->builder, elem_llvm, data, &phi_i, 1,
+                                   "ep");
+            }
             LLVMValueRef ev = LLVMBuildLoad2(ctx->builder, elem_llvm, ep, "ev");
 
             // Recursively box the inner element
@@ -3303,6 +3563,11 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
 
         for (int fi = 0; fi < nfields; fi++) {
             Type *ft = type_from_name(ctor->field_types[fi]);
+            bool quantified_payload =
+                ctor->field_types[fi] &&
+                strlen(ctor->field_types[fi]) == 1 &&
+                ctor->field_types[fi][0] >= 'a' &&
+                ctor->field_types[fi][0] <= 'z';
             /* User-defined ADTs are registered as layouts before their
              * constructors are emitted.  Resolve constructor fields through
              * that registry as well as the builtin type parser; otherwise a
@@ -3315,6 +3580,10 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
                     type_free(ft);
                     ft = type_clone(layout_ft);
                 }
+            }
+            if ((!ft || ft->kind == TYPE_UNKNOWN) && quantified_payload) {
+                type_free(ft);
+                ft = type_ptr(type_unknown());
             }
             if (!ft || ft->kind == TYPE_UNKNOWN) ft = type_int();
             field_type_objs[fi]  = ft;
@@ -3375,8 +3644,9 @@ void codegen_data(CodegenContext *ctx, AST *ast) {
                 to_store = LLVMBuildBitCast(ctx->builder, param_v, i64, "f_to_i64");
             } else if (ft->kind == TYPE_CHAR) {
                 to_store = LLVMBuildZExt(ctx->builder, param_v, i64, "c_to_i64");
-            } else if (ft->kind == TYPE_LAYOUT) {
-                /* ADT/layout pointer — store as i64 via ptrtoint */
+            } else if (ft->kind == TYPE_LAYOUT || ft->kind == TYPE_PTR) {
+                /* Nominal and quantified payloads use the stable pointer
+                 * representation inside the uniform i64 ADT slot. */
                 to_store = LLVMBuildPtrToInt(ctx->builder, param_v, i64, "ptr_to_i64");
             } else if (type_is_integer(ft) && LLVMTypeOf(param_v) != i64) {
                 to_store = LLVMBuildSExt(ctx->builder, param_v, i64, "i_to_i64");
@@ -3986,6 +4256,15 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
 
     LLVMValueRef fn_to_wrap = e->func_ref;
 
+    /* Effects are erased from the runtime calling convention.  Recover the
+     * concrete value arity here just as ordinary direct calls do; otherwise
+     * `A -io-> B` can be wrapped as a nullary closure and silently discard A. */
+    if (!e->is_closure_abi && fn_to_wrap) {
+        int abi_declared = (int)LLVMCountParams(fn_to_wrap) - e->lifted_count;
+        if (abi_declared > declared)
+            declared = abi_declared;
+    }
+
     if (e->is_closure_abi) {
         /* Closure-ABI function — wrap directly without typed trampoline.
          * The function already expects (ptr env, i32 n, ptr args).     */
@@ -4045,6 +4324,11 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
                 LLVMTypeRef uft = LLVMFunctionType(dbl, &ptr_t, 1, 0);
                 real_args[i] = LLVMBuildCall2(ctx->builder, uft,
                                    get_rt_unbox_float(ctx), &boxed, 1, "ua");
+            } else if (pt && pt->kind == TYPE_LAYOUT) {
+                LLVMTypeRef uft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
+                real_args[i] = LLVMBuildCall2(ctx->builder, uft,
+                                   get_rt_unbox_opaque(ctx), &boxed, 1,
+                                   "ua_layout");
             } else if (LLVMGetTypeKind(native) == LLVMIntegerTypeKind && native != LLVMInt1TypeInContext(ctx->context)) {
                 LLVMTypeRef i8 = LLVMInt8TypeInContext(ctx->context);
                 if (native == i8) {
@@ -5030,6 +5314,11 @@ static LLVMValueRef codegen_dot_chain(CodegenContext *ctx, const char *symbol, T
             snprintf(sname, sizeof(sname), "data.%s", current_lay->layout_name);
             struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
         }
+        if (!struct_llvm && current_lay->layout_field_count > 0) {
+            (void)type_to_llvm(ctx, current_lay);
+            snprintf(sname, sizeof(sname), "layout.%s", current_lay->layout_name);
+            struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+        }
         if (!struct_llvm) {
             CODEGEN_ERROR(ctx, "%s:%d:%d: error: LLVM struct type for '%s' not found",
                           parser_get_filename(), ast->line, ast->column, current_lay->layout_name);
@@ -5312,9 +5601,31 @@ void codegen_predeclare_toplevel_functions(CodegenContext *ctx, AST **exprs,
         if (!codegen_define_lambda_parts(exprs[i], &name, &lambda))
             continue;
 
-        if (env_lookup(ctx->env, name) &&
-            env_lookup(ctx->env, name)->module_name == NULL)
+        EnvEntry *existing = env_lookup(ctx->env, name);
+        if (existing && existing->module_name == NULL) {
+            /*
+             * A dependency/type-discovery pass may already have installed a
+             * local entry even though this unused polymorphic definition will
+             * never reach ordinary expression codegen.  Its principal HM
+             * scheme is still module-interface metadata, so infer or publish
+             * it before honoring the predeclaration fast path.
+             */
+            TypeScheme *known = existing->scheme;
+            char *portable = qtt_compiler_analysis_enabled() && known
+                ? infer_type_scheme_serialize(known) : NULL;
+            if (!portable) {
+                known = env_hm_infer_define(
+                    ctx->env, name, lambda, parser_get_filename());
+                portable = qtt_compiler_analysis_enabled() && known
+                    ? infer_type_scheme_serialize(known) : NULL;
+            }
+            if (portable) {
+                (void)qtt_compiler_register_hm_scheme(
+                    parser_get_filename(), name, portable);
+                free(portable);
+            }
             continue;
+        }
 
         TypeScheme *hm_scheme =
             env_hm_infer_define(ctx->env, name, lambda, parser_get_filename());
@@ -6193,6 +6504,12 @@ static bool codegen_inline_imported(CodegenContext *ctx, AST *call,
 
     ctx->core_inline_depth--;
     ctx->env = saved_env;
+
+    /* HM has already solved the application even when a payload accessor in
+     * the imported polymorphic body still carries TYPE_VAR locally.  The ADT
+     * accessor's stable ABI represents such payload bits as a pointer.  At
+     * the inlining boundary, reinterpret those bits as the proven scalar;
+     * pointer-shaped values need no representation change. */
     *out = body;
     return body.value != NULL;
 }
@@ -6958,6 +7275,297 @@ static CodegenResult codegen_check_laws(CodegenContext *ctx, AST *ast) {
         .value = LLVMConstInt(LLVMInt64TypeInContext(ctx->context), 0, 0),
         .type = type_int(),
     };
+    return result;
+}
+
+static const char *effect_declaration_text(AST *ast) {
+    if (!ast) return NULL;
+    if (ast->type == AST_SYMBOL) return ast->symbol;
+    if (ast->type == AST_STRING) return ast->string;
+    return NULL;
+}
+
+static bool effect_declaration_kind(
+    const char *name, QttEffectKind *kind) {
+    static const struct { const char *name; QttEffectKind kind; } kinds[] = {
+        {"effect", QTT_EFFECT_CUSTOM},
+        {"io", QTT_EFFECT_IO},
+        {"exception", QTT_EFFECT_EXCEPTION},
+        {"state", QTT_EFFECT_STATE},
+        {"read", QTT_EFFECT_READ},
+        {"write", QTT_EFFECT_WRITE},
+        {"allocate", QTT_EFFECT_ALLOCATE},
+        {"foreign", QTT_EFFECT_FOREIGN},
+        {"diverge", QTT_EFFECT_DIVERGE},
+        {"async", QTT_EFFECT_ASYNC},
+        {"control", QTT_EFFECT_CONTROL},
+    };
+    if (!name || !kind) return false;
+    for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++)
+        if (strcmp(name, kinds[i].name) == 0) {
+            *kind = kinds[i].kind;
+            return true;
+        }
+    return false;
+}
+
+static CodegenResult codegen_effect_declaration(
+    CodegenContext *ctx, AST *ast) {
+    if (ast->list.count != 6 && ast->list.count != 8)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: effect declaration requires name, trait, "
+            "operation, resumption, scoped flag, and optional payload/result "
+            "types",
+            parser_get_filename(), ast->line, ast->column);
+    const char *name = effect_declaration_text(ast->list.items[1]);
+    const char *kind_name = effect_declaration_text(ast->list.items[2]);
+    const char *operation = effect_declaration_text(ast->list.items[3]);
+    AST *resumption_ast = ast->list.items[4];
+    const char *scoped_name = effect_declaration_text(ast->list.items[5]);
+    const char *payload_type = ast->list.count == 8
+        ? effect_declaration_text(ast->list.items[6]) : NULL;
+    const char *result_type = ast->list.count == 8
+        ? effect_declaration_text(ast->list.items[7]) : NULL;
+    QttEffectKind kind = QTT_EFFECT_CUSTOM;
+    QttQuantity resumption = qtt_quantity_finite(0);
+    bool scoped = scoped_name && strcmp(scoped_name, "True") == 0;
+    bool scoped_valid = scoped_name &&
+        (strcmp(scoped_name, "True") == 0 ||
+         strcmp(scoped_name, "False") == 0);
+    if (kind_name) (void)effect_declaration_kind(kind_name, &kind);
+    if (!name || !kind_name || !operation || !scoped_valid ||
+        (ast->list.count == 8 &&
+         (!payload_type || !result_type || !type_from_name(payload_type) ||
+          !type_from_name(result_type))))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: malformed effect declaration",
+            parser_get_filename(), ast->line, ast->column);
+    if (resumption_ast->type == AST_SYMBOL &&
+        strcmp(resumption_ast->symbol, "omega") == 0) {
+        resumption = qtt_quantity_omega();
+    } else if (resumption_ast->type == AST_NUMBER &&
+               resumption_ast->number >= 0 &&
+               resumption_ast->number ==
+                   (double)(uint64_t)resumption_ast->number) {
+        resumption = qtt_quantity_finite(
+            (uint64_t)resumption_ast->number);
+    } else {
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: effect resumption must be a natural number "
+            "or omega",
+            parser_get_filename(), ast->line, ast->column);
+    }
+    char *operation_scheme = payload_type && result_type
+        ? infer_operation_scheme_serialize(payload_type, result_type) : NULL;
+    if (payload_type && !operation_scheme)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: cannot canonicalize effect operation scheme",
+            parser_get_filename(), ast->line, ast->column);
+    QttEffectDeclaration declaration = {
+        .name = name,
+        .traits = kind_name,
+        .kind = kind,
+        .operation = operation,
+        .payload_type = payload_type,
+        .result_type = result_type,
+        .operation_scheme = operation_scheme,
+        .resumption = resumption,
+        .scoped = scoped,
+    };
+    if (!qtt_effect_declaration_register(&declaration))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: conflicting effect declaration '%s'",
+            parser_get_filename(), ast->line, ast->column, name);
+    free(operation_scheme);
+    const QttEffectDeclaration *registered =
+        qtt_effect_declaration_lookup(name);
+    if (!registered || !qtt_compiler_register_effect_declaration(
+            parser_get_filename(), registered))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: cannot export effect declaration '%s'",
+            parser_get_filename(), ast->line, ast->column, name);
+    return (CodegenResult){
+        .type = type_unit(),
+        .value = LLVMConstInt(
+            LLVMInt64TypeInContext(ctx->context), 0, false),
+    };
+}
+
+static CodegenResult codegen_effect_trait_implication(
+    CodegenContext *ctx, AST *ast) {
+    const char *premise = ast->list.count == 3
+        ? effect_declaration_text(ast->list.items[1]) : NULL;
+    const char *consequence = ast->list.count == 3
+        ? effect_declaration_text(ast->list.items[2]) : NULL;
+    if (!premise || !consequence ||
+        !qtt_effect_trait_implication_register(premise, consequence) ||
+        !qtt_compiler_register_trait_implication(
+            parser_get_filename(), premise, consequence))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: malformed effect-trait implication",
+            parser_get_filename(), ast->line, ast->column);
+    return (CodegenResult){
+        .type = type_unit(),
+        .value = LLVMConstInt(
+            LLVMInt64TypeInContext(ctx->context), 0, false),
+    };
+}
+
+static CodegenResult codegen_effect_handler_profile(
+    CodegenContext *ctx, AST *ast) {
+    if (ast->list.count != 5)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: effect-handler requires name, handled effect, "
+            "continuation usage, and deep flag",
+            parser_get_filename(), ast->line, ast->column);
+    const char *name = effect_declaration_text(ast->list.items[1]);
+    const char *effect_name = effect_declaration_text(ast->list.items[2]);
+    AST *usage_ast = ast->list.items[3];
+    const char *deep_name = effect_declaration_text(ast->list.items[4]);
+    const QttEffectDeclaration *effect = effect_name
+        ? qtt_effect_declaration_lookup(effect_name) : NULL;
+    if (!effect)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: unknown handled effect '%s'",
+            parser_get_filename(), ast->line, ast->column,
+            effect_name ? effect_name : "<invalid>");
+    QttQuantity usage;
+    if (usage_ast->type == AST_SYMBOL &&
+        strcmp(usage_ast->symbol, "omega") == 0) {
+        usage = qtt_quantity_omega();
+    } else if (usage_ast->type == AST_NUMBER && usage_ast->number >= 0 &&
+               usage_ast->number == (double)(uint64_t)usage_ast->number) {
+        usage = qtt_quantity_finite((uint64_t)usage_ast->number);
+    } else {
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: handler continuation usage must be a natural "
+            "number or omega",
+            parser_get_filename(), ast->line, ast->column);
+    }
+    if (!qtt_quantity_leq(usage, effect->resumption))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: handler continuation usage exceeds operation "
+            "resumption for '%s'",
+            parser_get_filename(), ast->line, ast->column, effect_name);
+    bool deep = deep_name && strcmp(deep_name, "True") == 0;
+    if (!deep_name || (!deep && strcmp(deep_name, "False") != 0))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: effect-handler deep flag must be True or False",
+            parser_get_filename(), ast->line, ast->column);
+    QttEffectHandlerProfile profile = {
+        .name = name,
+        .effect_name = effect_name,
+        .continuation_usage = usage,
+        .deep = deep,
+    };
+    if (!qtt_effect_handler_profile_register(&profile))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: conflicting effect-handler profile '%s'",
+            parser_get_filename(), ast->line, ast->column,
+            name ? name : "<invalid>");
+    const QttEffectHandlerProfile *registered =
+        qtt_effect_handler_profile_lookup(name);
+    if (!registered || !qtt_compiler_register_handler_profile(
+            parser_get_filename(), registered))
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: cannot export effect-handler profile '%s'",
+            parser_get_filename(), ast->line, ast->column, name);
+    return (CodegenResult){
+        .type = type_unit(),
+        .value = LLVMConstInt(
+            LLVMInt64TypeInContext(ctx->context), 0, false),
+    };
+}
+
+static CodegenResult codegen_abortive_handle(
+    CodegenContext *ctx, AST *ast) {
+    if (ast->list.count != 4 ||
+        ast->list.items[1]->type != AST_SYMBOL)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: handle expects a profile, computation, and clause",
+            parser_get_filename(), ast->line, ast->column);
+    QttCoreError core_error = QTT_CORE_OK;
+    QttCoreNode *core = qtt_core_lower(
+        ast, qtt_compiler_module_id(parser_get_filename()), &core_error);
+    if (!core || core_error != QTT_CORE_OK)
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: cannot elaborate handler into typed Core",
+            parser_get_filename(), ast->line, ast->column);
+    QttCoreEffectResult effects = qtt_core_effect_elaborate(
+        core, qtt_quantity_finite(0));
+    if (effects.status != QTT_CORE_EFFECT_OK) {
+        QttCoreEffectStatus status = effects.status;
+        qtt_core_effect_result_free(&effects);
+        qtt_core_free(core);
+        if (status == QTT_CORE_EFFECT_GRADE_VIOLATION)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: one-shot handler lowering is not implemented; "
+                "this backend accepts only abortive profiles",
+                parser_get_filename(), ast->line, ast->column);
+        if (status == QTT_CORE_EFFECT_OPERATION_TYPE_MISMATCH)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: handler clause does not match the "
+                "Core-owned operation payload/result signature",
+                parser_get_filename(), ast->line, ast->column);
+        if (status == QTT_CORE_EFFECT_MULTIPLE_OPERATIONS)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: abortive handler contains multiple "
+                "matching operations; this context is not uniquely reducible",
+                parser_get_filename(), ast->line, ast->column);
+        if (status == QTT_CORE_EFFECT_UNSUPPORTED_CONTEXT)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: abortive operation occurs in a conditional "
+                "handler context; branch-sensitive lowering is not implemented",
+                parser_get_filename(), ast->line, ast->column);
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: handler effect elaboration failed (%d)",
+            parser_get_filename(), ast->line, ast->column, (int)status);
+    }
+    QttBackendAbortiveHandlerPlan plan = {0};
+    QttBackendEffectStatus backend = qtt_backend_certify_abortive_handler(
+        core, &effects, &plan);
+    if (backend != QTT_BACKEND_EFFECT_OK) {
+        qtt_core_effect_result_free(&effects);
+        qtt_core_free(core);
+        if (backend == QTT_BACKEND_EFFECT_UNSUPPORTED_POLICY)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: one-shot handler lowering is not implemented; "
+                "this backend accepts only abortive profiles",
+                parser_get_filename(), ast->line, ast->column);
+        if (backend == QTT_BACKEND_EFFECT_EFFECTFUL_CONTEXT)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: abortive direct lowering cannot discard a "
+                "residual effectful context",
+                parser_get_filename(), ast->line, ast->column);
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: abortive handler proof was rejected",
+            parser_get_filename(), ast->line, ast->column);
+    }
+
+    /* q=0 means there is no continuation. For the initial homogeneous ABI,
+     * direct lowering is exactly clause(payload); plan certification above is
+     * the authority permitting this reduction. */
+    const AST *payload = plan.operation && plan.operation->perform.argument
+        ? plan.operation->perform.argument->source : NULL;
+    if (!payload) {
+        qtt_core_effect_result_free(&effects);
+        qtt_core_free(core);
+        CODEGEN_ERROR(ctx,
+            "%s:%d:%d: error: certified abortive operation lost its source "
+            "payload during lowering",
+            parser_get_filename(), ast->line, ast->column);
+    }
+    AST *call_items[] = {ast->list.items[3], (AST *)payload};
+    AST direct = {0};
+    direct.type = AST_LIST;
+    direct.list.items = call_items;
+    direct.list.count = 2;
+    direct.inferred_type = ast->inferred_type;
+    direct.line = ast->line;
+    direct.column = ast->column;
+    CodegenResult result = codegen_expr(ctx, &direct);
+    qtt_core_effect_result_free(&effects);
+    qtt_core_free(core);
     return result;
 }
 
@@ -7759,11 +8367,182 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
     case AST_LIST: {
         if (ast->list.count == 0) {
-            CODEGEN_ERROR(ctx, "%s:%d:%d: error: empty list not supported",
-                    parser_get_filename(), ast->line, ast->column);
+            /* Unit is a proper value, not LLVM void: it may be passed to a
+             * function, stored in a polymorphic container, or returned.  Its
+             * unique inhabitant has the stable ABI representation i8 0. */
+            result.type = type_unit();
+            result.value = LLVMConstInt(
+                LLVMInt8TypeInContext(ctx->context), 0, 0);
+            return result;
         }
 
         AST *head = ast->list.items[0];
+        /* Wisp may preserve explicit application grouping as a singleton
+         * symbolic head: ((Constructor) argument). Parenthesizing a name does
+         * not change what is called, so normalize that head before dispatch.
+         * Without this, a layout constructor is first evaluated as the
+         * zero-initializing value (Constructor), and its real arguments are
+         * subsequently treated as a higher-order call. */
+        if (ast->list.count > 1 && head->type == AST_LIST &&
+            head->list.count == 1 && head->list.items[0] &&
+            head->list.items[0]->type == AST_SYMBOL)
+            head = head->list.items[0];
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "effect") == 0)
+            return codegen_effect_declaration(ctx, ast);
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "effect-trait") == 0)
+            return codegen_effect_trait_implication(ctx, ast);
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "effect-handler") == 0)
+            return codegen_effect_handler_profile(ctx, ast);
+        if (head->type == AST_SYMBOL && strcmp(head->symbol, "handle") == 0)
+            return codegen_abortive_handle(ctx, ast);
+        if (head->type == AST_SYMBOL && strcmp(head->symbol, "perform") == 0)
+            CODEGEN_ERROR(ctx,
+                "%s:%d:%d: error: unhandled effect operation '%s'",
+                parser_get_filename(), ast->line, ast->column,
+                ast->list.count > 1 && ast->list.items[1]->type == AST_SYMBOL
+                    ? ast->list.items[1]->symbol : "<invalid>");
+
+        /* Public collection operations are implemented by core modules and
+         * lowered to private intrinsics only after their arguments have been
+         * recognized.  A malformed call used to miss that lowering and fall
+         * through generic application, silently compiling instead of
+         * reporting its source-level arity error.  Validate the recognized
+         * public operation before generic application. */
+        if (head->type == AST_SYMBOL) {
+            EnvEntry *public_binding = env_lookup(ctx->env, head->symbol);
+            bool locally_shadowed =
+                public_binding && public_binding->source_ast &&
+                !public_binding->module_name;
+            struct { const char *name; int arity; } public_arities[] = {
+                {"count", 1}, {"head", 1}, {"tail", 1}, {"keys", 1},
+                {"assoc", 3}, {"dissoc", 2}, {"contains?", 2},
+                {"starts-with?", 2}, {"ends-with?", 2}, {"append", 2},
+                {NULL, 0}
+            };
+            for (int i = 0; public_arities[i].name; i++) {
+                if (!locally_shadowed &&
+                    strcmp(head->symbol, public_arities[i].name) == 0 &&
+                    ast->list.count != (size_t)public_arities[i].arity + 1) {
+                    if (strcmp(head->symbol, "starts-with?") == 0 ||
+                        strcmp(head->symbol, "ends-with?") == 0) {
+                        CODEGEN_ERROR(ctx,
+                            "%s:%d:%d: error: ‘%s’ requires %d arguments",
+                            parser_get_filename(), ast->line, ast->column,
+                            head->symbol, public_arities[i].arity);
+                    }
+                    CODEGEN_ERROR(ctx,
+                        "%s:%d:%d: error: '%s' requires %d argument%s",
+                        parser_get_filename(), ast->line, ast->column,
+                        strcmp(head->symbol, "append") == 0
+                            ? "++" : head->symbol,
+                        public_arities[i].arity,
+                        public_arities[i].arity == 1 ? "" : "s");
+                }
+            }
+
+            if (!locally_shadowed && ast->list.count == 2 &&
+                strcmp(head->symbol, "count") == 0 &&
+                ast->list.items[1]->type == AST_NUMBER) {
+                CODEGEN_ERROR(ctx,
+                    "%s:%d:%d: error: 'count' not supported for type Int",
+                    parser_get_filename(), ast->line, ast->column);
+            }
+
+            if (!locally_shadowed && ast->list.count == 3 &&
+                (strcmp(head->symbol, "starts-with?") == 0 ||
+                 strcmp(head->symbol, "ends-with?") == 0) &&
+                ast->list.items[1]->type == AST_STRING &&
+                ast->list.items[2]->type != AST_STRING &&
+                ast->list.items[2]->type != AST_CHAR &&
+                !(ast->list.items[2]->type == AST_LIST &&
+                  ast->list.items[2]->list.count > 0 &&
+                  ast->list.items[2]->list.items[0]->type == AST_SYMBOL &&
+                  strcmp(ast->list.items[2]->list.items[0]->symbol,
+                         "Char") == 0)) {
+                CODEGEN_ERROR(ctx,
+                    "%s:%d:%d: error: '%s' String suffix must be String or Char",
+                    parser_get_filename(), ast->line, ast->column,
+                    head->symbol);
+            }
+        }
+
+        /* Nominal layout construction precedes generic function application.
+         * A layout name denotes its constructor in call position; it is not a
+         * closure-producing expression. Dispatching it late lets generic
+         * application evaluate the head independently as a zero initializer. */
+        if (head->type == AST_SYMBOL && ast->list.count > 1) {
+            Type *early_layout = env_lookup_layout(ctx->env, head->symbol);
+            if (early_layout && early_layout->kind == TYPE_LAYOUT) {
+                char struct_name[256];
+                snprintf(struct_name, sizeof(struct_name), "layout.%s",
+                         early_layout->layout_name);
+                LLVMTypeRef struct_type = LLVMGetTypeByName2(ctx->context,
+                                                              struct_name);
+                if (!struct_type) {
+                    type_to_llvm(ctx, early_layout);
+                    struct_type = LLVMGetTypeByName2(ctx->context, struct_name);
+                }
+
+                int argument_count = (int)ast->list.count - 1;
+                if (argument_count == early_layout->layout_field_count) {
+                    LLVMTypeRef i64_type = LLVMInt64TypeInContext(ctx->context);
+                    LLVMTypeRef ptr_type = LLVMPointerType(
+                        LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMValueRef malloc_function = LLVMGetNamedFunction(
+                        ctx->module, "malloc");
+                    if (!malloc_function) {
+                        LLVMTypeRef malloc_type = LLVMFunctionType(
+                            ptr_type, &i64_type, 1, 0);
+                        malloc_function = LLVMAddFunction(
+                            ctx->module, "malloc", malloc_type);
+                        LLVMSetLinkage(malloc_function, LLVMExternalLinkage);
+                    }
+                    LLVMValueRef size = LLVMSizeOf(struct_type);
+                    LLVMValueRef value = LLVMBuildCall2(
+                        ctx->builder,
+                        LLVMFunctionType(ptr_type, &i64_type, 1, 0),
+                        malloc_function, &size, 1, "layout_value");
+
+                    for (int i = 0; i < argument_count; i++) {
+                        CodegenResult field = codegen_expr(
+                            ctx, ast->list.items[i + 1]);
+                        Type *field_type = early_layout->layout_fields[i].type;
+                        LLVMTypeRef expected = type_to_llvm(ctx, field_type);
+                        LLVMValueRef stored;
+                        if (field_type->kind == TYPE_LAYOUT &&
+                            LLVMGetTypeKind(expected) == LLVMStructTypeKind &&
+                            LLVMGetTypeKind(LLVMTypeOf(field.value)) ==
+                                LLVMPointerTypeKind) {
+                            /* Nested layouts are inline fields, while a
+                             * constructor expression yields the owning heap
+                             * pointer. Copy the pointee value into the parent
+                             * rather than attempting ptr -> struct bitcast. */
+                            stored = LLVMBuildLoad2(ctx->builder, expected,
+                                                    field.value,
+                                                    "nested_layout_value");
+                        } else {
+                            stored = emit_type_cast(ctx, field.value, expected);
+                        }
+                        LLVMValueRef indices[] = {
+                            LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0),
+                            LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0)
+                        };
+                        LLVMValueRef address = LLVMBuildGEP2(
+                            ctx->builder, struct_type, value, indices, 2,
+                            "layout_field");
+                        LLVMBuildStore(ctx->builder, stored, address);
+                    }
+
+                    result.value = value;
+                    result.type = type_clone(early_layout);
+                    return result;
+                }
+            }
+        }
         if (getenv("MONAD_CODEGEN_AST_DEBUG")) {
             fprintf(stderr, "[codegen-ast] ");
             codegen_print_ast(ctx, ast);
@@ -9057,22 +9836,11 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
 
                         if (captured_count > 0) {
                             LLVMTypeRef  arr_t = LLVMArrayType(ptr_t, captured_count);
-                            /* Heap-allocate the env array so it survives across
-                             * module boundaries and dlopen'd .so calls          */
-                            LLVMValueRef malloc_fn = LLVMGetNamedFunction(ctx->module, "malloc");
-                            if (!malloc_fn) {
-                                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
-                                LLVMTypeRef mft = LLVMFunctionType(ptr_t, &i64_t, 1, 0);
-                                malloc_fn = LLVMAddFunction(ctx->module, "malloc", mft);
-                                LLVMSetLinkage(malloc_fn, LLVMExternalLinkage);
-                            }
-                            LLVMTypeRef  i64_t    = LLVMInt64TypeInContext(ctx->context);
-                            LLVMValueRef arr_size = LLVMSizeOf(arr_t);
-                            LLVMValueRef heap_ptr = LLVMBuildCall2(ctx->builder,
-                                LLVMFunctionType(ptr_t, &i64_t, 1, 0),
-                                malloc_fn, &arr_size, 1, "clo_env_heap");
-                            LLVMValueRef arr = LLVMBuildBitCast(ctx->builder,
-                                heap_ptr, LLVMPointerType(arr_t, 0), "clo_env");
+                            /* rt_value_closure copies this capture vector
+                             * synchronously.  Lexical staging avoids leaking
+                             * a redundant heap array per closure. */
+                            LLVMValueRef arr = LLVMBuildAlloca(
+                                ctx->builder, arr_t, "clo_env_staging");
                             for (int i = 0; i < captured_count; i++) {
                                 EnvEntry    *cap_e   = env_lookup(ctx->env, captured_vars[i]);
                                 LLVMValueRef cap_val = LLVMConstPointerNull(ptr_t);
@@ -9080,7 +9848,22 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                     LLVMTypeRef  cap_llvm = type_to_llvm(ctx, cap_e->type);
                                     LLVMValueRef loaded   = LLVMBuildLoad2(ctx->builder, cap_llvm,
                                                                 cap_e->value, captured_vars[i]);
-                                    cap_val = codegen_box(ctx, loaded, cap_e->type);
+                                    bool move_string =
+                                        ctx->qtt_materializing_closure &&
+                                        i < 64 &&
+                                        (ctx->qtt_materializing_closure
+                                             ->closure_moved_mask &
+                                         (UINT64_C(1) << i)) &&
+                                        cap_e->type &&
+                                        cap_e->type->kind == TYPE_STRING;
+                                    cap_val = move_string
+                                        ? emit_call_1(
+                                              ctx,
+                                              get_rt_value_string_take(ctx),
+                                              ptr_t, loaded,
+                                              "qtt_capture_move")
+                                        : codegen_box(
+                                              ctx, loaded, cap_e->type);
                                 }
                                 LLVMValueRef zero   = LLVMConstInt(i32, 0, 0);
                                 LLVMValueRef idx    = LLVMConstInt(i32, i, 0);
@@ -9467,6 +10250,8 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 EnvEntry *evar = env_lookup(ctx->env, var_name);
                 if (evar) {
                     evar->llvm_name = strdup(LLVMGetValueName(var));
+                    codegen_preserve_callable_metadata(
+                        ctx, evar, value_expr);
                     /* Store the literal AST for compile-time refinement checks */
                     if (value_expr->type == AST_STRING ||
                         value_expr->type == AST_NUMBER)
@@ -9574,7 +10359,11 @@ if (ast->list.count >= 5) {
                     REQUIRE_ARGS(1);
                     CodegenResult arg = codegen_expr(ctx, ast->list.items[1]);
                     LLVMTypeRef i32 = LLVMInt32TypeInContext(ctx->context), i1 = LLVMInt1TypeInContext(ctx->context), ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                    if (arg.type && arg.type->kind != TYPE_UNKNOWN) {
+                    /* TYPE_COLL is an abstract union (List | Set | Arr), not
+                     * enough evidence to fold a concrete predicate.  Preserve
+                     * runtime tag dispatch for abstract collection values. */
+                    if (arg.type && arg.type->kind != TYPE_UNKNOWN &&
+                        arg.type->kind != TYPE_COLL) {
                         bool m = false; int t = type_preds[_pi].tag, t2 = type_preds[_pi].tag2;
                         if (t == RT_INT) m = type_is_integer(arg.type) || type_is_bool(arg.type) || (t2 == RT_FLOAT && type_is_float(arg.type));
                         else if (t == RT_FLOAT) m = type_is_float(arg.type);
@@ -10793,12 +11582,15 @@ if (ast->list.count >= 5) {
 
             if (strcmp(head->symbol, "undefined") == 0) {
                 // Guard: only valid inside a function body
-                LLVMValueRef cur_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
+                LLVMValueRef cur_fn =
+                    LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
                 /* Inline asm can terminate a generated function before its
                  * unreachable pattern fallback is emitted, at which point
-                 * the diagnostic name has already been restored. The LLVM
-                 * insertion block is the authoritative scope check. */
-                if (!cur_fn) {
+                 * unreachable pattern fallback is emitted.  The insertion
+                 * block identifies the owning function, while init_fn
+                 * distinguishes the generated top-level entry point from a
+                 * user function. */
+                if (!cur_fn || (is_at_top_level(ctx) && ast->line > 0)) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'undefined' is only valid inside a function body",
                             parser_get_filename(), ast->line, ast->column);
                 }
@@ -11172,9 +11964,18 @@ if (ast->list.count >= 5) {
                  * (TYPE_UNKNOWN), even though the value has an ADT payload.
                  * Peeling RT_OPAQUE is safe for every other RuntimeValue: the
                  * helper returns non-opaque boxes unchanged. */
-                LLVMValueRef head_value = emit_call_1(
-                    ctx, get_rt_unbox_opaque(ctx), ptr_t,
-                    boxed_head, "pattern_head_value");
+                LLVMValueRef head_value;
+                if (result.type &&
+                    (result.type->kind == TYPE_STRING ||
+                     result.type->kind == TYPE_PATH)) {
+                    head_value = emit_call_1(
+                        ctx, get_rt_unbox_string(ctx), ptr_t,
+                        boxed_head, "pattern_head_string");
+                } else {
+                    head_value = emit_call_1(
+                        ctx, get_rt_unbox_opaque(ctx), ptr_t,
+                        boxed_head, "pattern_head_value");
+                }
                 result.value = emit_type_cast(ctx, head_value, native_type);
                 return result;
             }
@@ -11249,9 +12050,14 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
 
                 if (ref.type && ref.type->kind == TYPE_ARR) {
-                    result.value = type_arr_runtime_sized(ref.type)
-                        ? arr_fat_size(ctx, ref.value)
-                        : LLVMConstInt(i64_t, ref.type->arr_size, 0);
+                    /* Storage is authoritative here.  Sized declarations such
+                     * as [16kb] can retain the heap-capability type flag while
+                     * being materialized as a fixed LLVM array.  Treating that
+                     * value as arr.fat* produces invalid GEPs. */
+                    result.value = LLVMGetTypeKind(LLVMTypeOf(ref.value)) ==
+                                   LLVMArrayTypeKind
+                        ? LLVMConstInt(i64_t, ref.type->arr_size, 0)
+                        : arr_fat_size(ctx, ref.value);
                     result.type = type_int();
                     return result;
                 }
@@ -11307,19 +12113,46 @@ if (ast->list.count >= 5) {
                 return result;
             }
 
-            if (strcmp(head->symbol, "__rt_utf8_width") == 0) {
-                REQUIRE_ARGS(1);
-                CodegenResult ref = codegen_expr(ctx, ast->list.items[1]);
-                LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+            if ((strcmp(head->symbol, "__rt_string_take") == 0 ||
+                 strcmp(head->symbol, "__rt_string_drop") == 0) &&
+                ast->list.count == 3) {
+                LLVMTypeRef ptr_t = LLVMPointerType(
+                    LLVMInt8TypeInContext(ctx->context), 0);
                 LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
-                LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_utf8_width");
-                if (!fn) fn = LLVMAddFunction(ctx->module, "rt_utf8_width",
-                    LLVMFunctionType(i64_t, &ptr_t, 1, 0));
-                result.value = emit_call_1(ctx, fn, i64_t, ref.value, "utf8_width");
-                result.type = type_int(); return result;
+                CodegenResult text_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult count_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef count = emit_type_cast(ctx, count_r.value, i64_t);
+                LLVMValueRef fn = strcmp(head->symbol, "__rt_string_take") == 0
+                                ? get_rt_string_take(ctx)
+                                : get_rt_string_drop(ctx);
+                result.value = LLVMBuildCall2(
+                    ctx->builder,
+                    LLVMFunctionType(ptr_t,
+                                     (LLVMTypeRef[]){ptr_t, i64_t}, 2, 0),
+                    fn, (LLVMValueRef[]){text_r.value, count}, 2,
+                    "string_slice");
+                result.type = type_string();
+                return result;
             }
 
-
+            if (strcmp(head->symbol, "__rt_string_byte") == 0 &&
+                ast->list.count == 3) {
+                LLVMTypeRef ptr_t = LLVMPointerType(
+                    LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                CodegenResult text_r = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult index_r = codegen_expr(ctx, ast->list.items[2]);
+                LLVMValueRef index = emit_type_cast(ctx, index_r.value, i64_t);
+                result.value = LLVMBuildCall2(
+                    ctx->builder,
+                    LLVMFunctionType(i64_t,
+                                     (LLVMTypeRef[]){ptr_t, i64_t}, 2, 0),
+                    get_rt_string_byte(ctx),
+                    (LLVMValueRef[]){text_r.value, index}, 2,
+                    "string_byte");
+                result.type = type_int();
+                return result;
+            }
 
             if (strcmp(head->symbol, "__rt_prepend") == 0 ||
                 strcmp(head->symbol, "__rt_concat") == 0) {
@@ -11660,6 +12493,40 @@ if (ast->list.count >= 5) {
                     }
                 }
 
+                QttBackendReplacement *replacement =
+                    codegen_qtt_take_replacement(
+                        ctx, ast->list.items[1], target_ptr);
+                if (replacement) {
+                    LLVMTypeRef ptr_t =
+                        LLVMPointerType(
+                            LLVMInt8TypeInContext(ctx->context), 0);
+                    if (replacement->replacement_materialization ==
+                            QTT_BACKEND_MATERIALIZE_STATIC_COPY)
+                        stored = emit_call_1(
+                            ctx, get_or_declare_strdup(ctx),
+                            ptr_t, stored, "qtt_replacement_string");
+                    LLVMValueRef displaced = LLVMBuildLoad2(
+                        ctx->builder, ptr_t, target_ptr,
+                        "qtt_displaced_value");
+                    LLVMValueRef free_fn =
+                        codegen_qtt_free_function(ctx);
+                    LLVMBuildCall2(
+                        ctx->builder,
+                        LLVMFunctionType(
+                            LLVMVoidTypeInContext(ctx->context),
+                            &ptr_t, 1, 0),
+                        free_fn, &displaced, 1, "");
+                    if (qtt_compiler_trace_detailed()) {
+                        AST *target = ast->list.items[1];
+                        printf("[qtt] replace %s#%llu "
+                               "transition=owned→owned "
+                               "destructor=free\n",
+                               target && target->type == AST_SYMBOL
+                                   ? target->symbol : "<binding>",
+                               (unsigned long long)
+                                   replacement->resource.binder_id);
+                    }
+                }
                 LLVMBuildStore(ctx->builder, stored, target_ptr);
 
                 result.value = stored;
@@ -11711,6 +12578,50 @@ if (ast->list.count >= 5) {
                 LLVMValueRef bv = LLVMTypeOf(b.value) != i64 ? LLVMBuildZExt(ctx->builder, b.value, i64, "bv") : b.value;
                 result.value = is_shl ? LLVMBuildShl(ctx->builder, av, bv, "res") : (is_ashr ? LLVMBuildAShr(ctx->builder, av, bv, "res") : LLVMBuildLShr(ctx->builder, av, bv, "res"));
                 result.type = type_int(); return result;
+            }
+
+            if (strcmp(head->symbol, "__rt_directory_names") == 0) {
+                REQUIRE_ARGS(2);
+                CodegenResult path = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult status = codegen_expr(ctx, ast->list.items[2]);
+                LLVMTypeRef ptr_t = LLVMPointerType(
+                    LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef fn = LLVMGetNamedFunction(
+                    ctx->module, "__rt_directory_names");
+                LLVMTypeRef params[] = {ptr_t, ptr_t};
+                LLVMValueRef args[] = {path.value, status.value};
+                result.value = LLVMBuildCall2(
+                    ctx->builder, LLVMFunctionType(ptr_t, params, 2, 0),
+                    fn, args, 2, "directory_names");
+                result.type = type_coll();
+                result.type->element_type = type_string();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "__rt_join_path") == 0) {
+                REQUIRE_ARGS(2);
+                CodegenResult parent = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult child = codegen_expr(ctx, ast->list.items[2]);
+                LLVMTypeRef ptr_t = LLVMPointerType(
+                    LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMValueRef fn = LLVMGetNamedFunction(
+                    ctx->module, "__rt_join_path");
+                LLVMTypeRef params[] = {ptr_t, ptr_t};
+                LLVMValueRef args[] = {parent.value, child.value};
+                result.value = LLVMBuildCall2(
+                    ctx->builder, LLVMFunctionType(ptr_t, params, 2, 0),
+                    fn, args, 2, "joined_path");
+                result.type = type_path();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "__rt_path_text") == 0 ||
+                strcmp(head->symbol, "__rt_text_path") == 0) {
+                REQUIRE_ARGS(1);
+                result = codegen_expr(ctx, ast->list.items[1]);
+                result.type = strcmp(head->symbol, "__rt_path_text") == 0
+                    ? type_string() : type_path();
+                return result;
             }
 
             bool is_and = strcmp(head->symbol, "and") == 0, is_or = strcmp(head->symbol, "or") == 0;
@@ -12073,6 +12984,72 @@ if (ast->list.count >= 5) {
                                   parser_get_filename(), ast->line, ast->column);
                 }
 
+                QttBackendCleanupPlan qtt_cleanups = {0};
+                QttBackendCleanupPlan qtt_lifetimes = {0};
+                bool qtt_lifetime_owner = !ctx->qtt_lifetime_scope &&
+                    qtt_compiler_memory_enabled() &&
+                    qtt_backend_certify_string_lifetimes_in_env(
+                        ast,
+                        qtt_compiler_signatures(parser_get_filename()),
+                        qtt_compiler_module_id(parser_get_filename()),
+                        &qtt_lifetimes);
+                QttCodegenLifetimeScope lifetime_scope = {
+                    .plan = &qtt_lifetimes,
+                    .parent = ctx->qtt_lifetime_scope,
+                };
+                if (qtt_lifetime_owner)
+                    ctx->qtt_lifetime_scope = &lifetime_scope;
+                bool qtt_verified_drops =
+                    !ctx->qtt_lifetime_scope &&
+                    codegen_qtt_certifies_string_drops(
+                        ast, &qtt_cleanups);
+                if (qtt_verified_drops && qtt_compiler_trace_detailed())
+                    printf("[qtt] backend authority: certified %scleanup "
+                           "bindings=%zu\n",
+                           qtt_cleanups.ownership_anf_certified
+                               ? "ownership " : "semantic ",
+                           qtt_cleanups.count);
+                QttBackendReplacementPlan qtt_replacements = {0};
+                bool qtt_verified_replacements =
+                    codegen_qtt_certifies_string_replacements(
+                        ast, &qtt_replacements);
+                size_t qtt_binding_count =
+                    binding->array.element_count / 2;
+                LLVMValueRef *qtt_owned_slots =
+                    qtt_verified_drops
+                    ? calloc(qtt_binding_count,
+                             sizeof(*qtt_owned_slots))
+                    : NULL;
+                LLVMValueRef *qtt_lifetime_slots =
+                    ctx->qtt_lifetime_scope
+                    ? calloc(qtt_binding_count,
+                             sizeof(*qtt_lifetime_slots))
+                    : NULL;
+                if (qtt_verified_drops && !qtt_owned_slots) {
+                    qtt_backend_cleanup_plan_free(&qtt_cleanups);
+                    qtt_verified_drops = false;
+                }
+                LLVMValueRef *qtt_replacement_slots =
+                    qtt_verified_replacements
+                    ? calloc(qtt_binding_count,
+                             sizeof(*qtt_replacement_slots))
+                    : NULL;
+                bool *qtt_replacements_consumed =
+                    qtt_verified_replacements
+                    ? calloc(qtt_replacements.count,
+                             sizeof(*qtt_replacements_consumed))
+                    : NULL;
+                if (qtt_verified_replacements &&
+                    (!qtt_replacement_slots ||
+                     !qtt_replacements_consumed)) {
+                    free(qtt_replacement_slots);
+                    free(qtt_replacements_consumed);
+                    qtt_replacement_slots = NULL;
+                    qtt_replacements_consumed = NULL;
+                    qtt_backend_replacement_plan_free(
+                        &qtt_replacements);
+                    qtt_verified_replacements = false;
+                }
                 Env *saved_env = ctx->env;
                 ctx->env = env_create_child(saved_env);
 
@@ -12082,19 +13059,294 @@ if (ast->list.count >= 5) {
                         CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'with' binding name must be a symbol",
                                       parser_get_filename(), name_ast->line, name_ast->column);
                     }
-                    CodegenResult value_r = codegen_expr(ctx, binding->array.elements[i + 1]);
+                    QttBackendCleanup *lifetime =
+                        codegen_qtt_lifetime(ctx, name_ast);
+                    QttBackendCleanup *saved_materializing_closure =
+                        ctx->qtt_materializing_closure;
+                    ctx->qtt_materializing_closure = lifetime &&
+                            lifetime->materialization ==
+                                QTT_BACKEND_MATERIALIZE_UNIQUE_CLOSURE
+                        ? lifetime : NULL;
+                    CodegenResult value_r = codegen_expr(
+                        ctx, binding->array.elements[i + 1]);
+                    ctx->qtt_materializing_closure =
+                        saved_materializing_closure;
+                    bool qtt_owned_binding = false;
+                    QttBackendMaterialization materialization =
+                        QTT_BACKEND_MATERIALIZE_OWNED_RESULT;
+                    if (lifetime) {
+                        materialization = lifetime->materialization;
+                        qtt_owned_binding = true;
+                    }
+                    if (qtt_verified_drops) {
+                        for (size_t ci = 0;
+                             ci < qtt_cleanups.count; ci++)
+                            if (qtt_cleanups.items[ci].binding_index ==
+                                    i / 2) {
+                                materialization =
+                                    qtt_cleanups.items[ci].materialization;
+                                qtt_owned_binding = true;
+                                break;
+                            }
+                    }
+                    if (qtt_verified_replacements) {
+                        for (size_t ri = 0;
+                             ri < qtt_replacements.count; ri++)
+                            if (qtt_replacements.items[ri].binding_index ==
+                                    i / 2) {
+                                materialization =
+                                    qtt_replacements.items[ri]
+                                        .initializer_materialization;
+                                qtt_owned_binding = true;
+                                break;
+                            }
+                    }
+                    if (qtt_owned_binding) {
+                        if (materialization ==
+                                QTT_BACKEND_MATERIALIZE_STATIC_COPY)
+                            value_r.value = emit_call_1(
+                                ctx, get_or_declare_strdup(ctx),
+                                LLVMPointerType(
+                                    LLVMInt8TypeInContext(ctx->context), 0),
+                                value_r.value, "qtt_owned_string");
+                        else if (materialization ==
+                                     QTT_BACKEND_MATERIALIZE_LAYOUT_LITERAL &&
+                                 value_r.type &&
+                                 value_r.type->kind == TYPE_LAYOUT) {
+                            char layout_name[256];
+                            snprintf(layout_name, sizeof(layout_name),
+                                     "layout.%s",
+                                     value_r.type->layout_name);
+                            LLVMTypeRef layout_llvm = LLVMGetTypeByName2(
+                                ctx->context, layout_name);
+                            for (int field = 0;
+                                 layout_llvm &&
+                                 field < value_r.type->layout_field_count;
+                                 field++) {
+                                Type *field_type =
+                                    value_r.type->layout_fields[field].type;
+                                if (!field_type ||
+                                    field_type->kind != TYPE_STRING)
+                                    continue;
+                                LLVMValueRef field_ptr = LLVMBuildStructGEP2(
+                                    ctx->builder, layout_llvm,
+                                    value_r.value, (unsigned)field,
+                                    "qtt_own_field_ptr");
+                                LLVMTypeRef ptr_t = LLVMPointerType(
+                                    LLVMInt8TypeInContext(ctx->context), 0);
+                                LLVMValueRef borrowed = LLVMBuildLoad2(
+                                    ctx->builder, ptr_t, field_ptr,
+                                    "qtt_borrowed_field");
+                                LLVMValueRef owned = emit_call_1(
+                                    ctx, get_or_declare_strdup(ctx), ptr_t,
+                                    borrowed, "qtt_owned_field");
+                                LLVMBuildStore(ctx->builder, owned,
+                                               field_ptr);
+                            }
+                        }
+                    }
                     LLVMTypeRef value_t = type_to_llvm(ctx, value_r.type);
                     LLVMValueRef slot = LLVMBuildAlloca(ctx->builder, value_t, name_ast->symbol);
                     LLVMBuildStore(ctx->builder, value_r.value, slot);
+                    if (qtt_verified_drops)
+                        qtt_owned_slots[i / 2] = slot;
+                    if (qtt_lifetime_slots && lifetime)
+                        qtt_lifetime_slots[i / 2] = slot;
+                    if (qtt_verified_replacements)
+                        qtt_replacement_slots[i / 2] = slot;
                     env_insert(ctx->env, name_ast->symbol,
                                value_r.type ? type_clone(value_r.type) : type_unknown(),
                                slot);
+                    EnvEntry *bound_entry = env_lookup(
+                        ctx->env, name_ast->symbol);
+                    AST *value_ast = binding->array.elements[i + 1];
+                    codegen_preserve_callable_metadata(
+                        ctx, bound_entry, value_ast);
                 }
 
+                QttCodegenReplacementScope replacement_scope = {
+                    .plan = &qtt_replacements,
+                    .binding_slots = qtt_replacement_slots,
+                    .binding_count = qtt_binding_count,
+                    .consumed = qtt_replacements_consumed,
+                    .parent = ctx->qtt_replacement_scope,
+                };
+                if (qtt_verified_replacements)
+                    ctx->qtt_replacement_scope =
+                        &replacement_scope;
                 CodegenResult last = {0};
                 for (size_t bi = 2; bi < ast->list.count; bi++)
                     last = codegen_body_expr_after(ctx, last, ast->list.items[bi]);
+                if (qtt_verified_replacements)
+                    ctx->qtt_replacement_scope =
+                        replacement_scope.parent;
 
+                for (size_t i = 0; qtt_lifetime_slots &&
+                     i < qtt_binding_count; i++) {
+                    AST *name = binding->array.elements[i * 2];
+                    QttBackendCleanup *lifetime =
+                        codegen_qtt_lifetime(ctx, name);
+                    if (!lifetime || !lifetime->destroy ||
+                        !qtt_lifetime_slots[i])
+                        continue;
+                    LLVMTypeRef ptr_t = LLVMPointerType(
+                        LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMValueRef owned = LLVMBuildLoad2(
+                        ctx->builder, ptr_t, qtt_lifetime_slots[i],
+                        "qtt_drop_value");
+                    if (lifetime->materialization ==
+                            QTT_BACKEND_MATERIALIZE_UNIQUE_CLOSURE) {
+                        LLVMTypeRef parameters[] = {
+                            ptr_t,
+                            LLVMInt64TypeInContext(ctx->context),
+                        };
+                        LLVMValueRef arguments[] = {
+                            owned,
+                            LLVMConstInt(parameters[1],
+                                         lifetime->closure_moved_mask, 0),
+                        };
+                        LLVMBuildCall2(
+                            ctx->builder,
+                            LLVMFunctionType(
+                                LLVMVoidTypeInContext(ctx->context),
+                                parameters, 2, 0),
+                            codegen_qtt_unique_closure_destructor(ctx),
+                            arguments, 2, "");
+                        if (qtt_compiler_trace_detailed())
+                            printf("[qtt] reclaim %s#%llu materialization="
+                                   "unique-closure moved-mask=#%llx\n",
+                                   name->symbol,
+                                   (unsigned long long)
+                                       lifetime->resource.binder_id,
+                                   (unsigned long long)
+                                       lifetime->closure_moved_mask);
+                        continue;
+                    }
+                    if (lifetime->representation != QTT_REP_OWNED_HEAP ||
+                        !lifetime->destructor.type_fingerprint ||
+                        !lifetime->destructor.plan_fingerprint)
+                        continue;
+                    LLVMValueRef free_fn =
+                        codegen_qtt_free_function(ctx);
+                    LLVMBuildCall2(
+                        ctx->builder,
+                        LLVMFunctionType(
+                            LLVMVoidTypeInContext(ctx->context),
+                            &ptr_t, 1, 0),
+                        free_fn, &owned, 1, "");
+                    if (qtt_compiler_trace_detailed())
+                        printf("[qtt] reclaim %s#%llu "
+                               "materialization=%s destructor=free mask=0\n",
+                               name->symbol,
+                               (unsigned long long)
+                                   lifetime->resource.binder_id,
+                               lifetime->materialization ==
+                                       QTT_BACKEND_MATERIALIZE_STATIC_COPY
+                                   ? "static-copy" : "owned-result");
+                }
+
+                for (size_t ci = 0;
+                     qtt_verified_drops &&
+                     ci < qtt_cleanups.count; ci++) {
+                    QttBackendCleanup *cleanup =
+                        &qtt_cleanups.items[ci];
+                    if (!cleanup->resource.module_id ||
+                        !cleanup->resource.binder_id ||
+                        !cleanup->destructor.type_fingerprint ||
+                        !cleanup->destructor.plan_fingerprint ||
+                        cleanup->representation !=
+                            QTT_REP_OWNED_HEAP ||
+                        cleanup->binding_index >= qtt_binding_count ||
+                        !qtt_owned_slots[cleanup->binding_index])
+                        continue;
+                    LLVMTypeRef ptr_t =
+                        LLVMPointerType(
+                            LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMValueRef owned = LLVMBuildLoad2(
+                        ctx->builder, ptr_t,
+                        qtt_owned_slots[cleanup->binding_index],
+                        "qtt_drop_value");
+                    LLVMValueRef free_fn =
+                        codegen_qtt_free_function(ctx);
+                    if (cleanup->materialization ==
+                            QTT_BACKEND_MATERIALIZE_LAYOUT_LITERAL) {
+                        AST *name = binding->array.elements[
+                            cleanup->binding_index * 2];
+                        EnvEntry *entry = name && name->type == AST_SYMBOL
+                            ? env_lookup(ctx->env, name->symbol) : NULL;
+                        Type *layout = entry ? entry->type : NULL;
+                        char llvm_name[256];
+                        snprintf(llvm_name, sizeof(llvm_name), "layout.%s",
+                                 layout && layout->layout_name
+                                     ? layout->layout_name : "");
+                        LLVMTypeRef layout_llvm = LLVMGetTypeByName2(
+                            ctx->context, llvm_name);
+                        for (int field = 0;
+                             layout && layout_llvm &&
+                             field < layout->layout_field_count; field++) {
+                            bool evacuated = false;
+                            for (size_t mi = 0;
+                                 mi < cleanup->evacuated_count; mi++)
+                                if (cleanup->evacuated[mi]
+                                        .projection_depth == 1 &&
+                                    cleanup->evacuated[mi]
+                                        .projection_path[0] ==
+                                            (uint32_t)field + 1)
+                                    evacuated = true;
+                            Type *field_type =
+                                layout->layout_fields[field].type;
+                            if (evacuated || !field_type ||
+                                field_type->kind != TYPE_STRING)
+                                continue;
+                            LLVMValueRef field_ptr = LLVMBuildStructGEP2(
+                                ctx->builder, layout_llvm, owned,
+                                (unsigned)field, "qtt_drop_field_ptr");
+                            LLVMValueRef field_value = LLVMBuildLoad2(
+                                ctx->builder, ptr_t, field_ptr,
+                                "qtt_drop_field");
+                            LLVMBuildCall2(
+                                ctx->builder,
+                                LLVMFunctionType(
+                                    LLVMVoidTypeInContext(ctx->context),
+                                    &ptr_t, 1, 0),
+                                free_fn, &field_value, 1, "");
+                        }
+                    }
+                    LLVMBuildCall2(
+                        ctx->builder,
+                        LLVMFunctionType(
+                            LLVMVoidTypeInContext(ctx->context),
+                            &ptr_t, 1, 0),
+                        free_fn, &owned, 1, "");
+                    if (qtt_compiler_trace_detailed()) {
+                        AST *name = binding->array.elements[
+                            cleanup->binding_index * 2];
+                        printf("[qtt] reclaim %s#%llu "
+                               "materialization=%s destructor=free mask=%zu\n",
+                               name && name->type == AST_SYMBOL
+                                   ? name->symbol : "<binding>",
+                               (unsigned long long)
+                                   cleanup->resource.binder_id,
+                               cleanup->materialization ==
+                                       QTT_BACKEND_MATERIALIZE_STATIC_COPY
+                                   ? "static-copy"
+                                   : cleanup->materialization ==
+                                             QTT_BACKEND_MATERIALIZE_LAYOUT_LITERAL
+                                       ? "layout-literal" : "owned-result",
+                               cleanup->evacuated_count);
+                    }
+                }
+                free(qtt_owned_slots);
+                free(qtt_lifetime_slots);
+                free(qtt_replacement_slots);
+                free(qtt_replacements_consumed);
+                qtt_backend_cleanup_plan_free(&qtt_cleanups);
+                qtt_backend_replacement_plan_free(
+                    &qtt_replacements);
+                if (qtt_lifetime_owner) {
+                    ctx->qtt_lifetime_scope = lifetime_scope.parent;
+                    qtt_backend_cleanup_plan_free(&qtt_lifetimes);
+                }
                 env_free(ctx->env);
                 ctx->env = saved_env;
                 return last;
@@ -13556,9 +14808,13 @@ if (ast->list.count >= 5) {
                     unsigned lw = LLVMGetIntTypeWidth(LLVMTypeOf(lv));
                     unsigned rw = LLVMGetIntTypeWidth(LLVMTypeOf(rv));
                     if (lw > rw) {
-                        rv = LLVMBuildSExt(ctx->builder, rv, LLVMTypeOf(lv), "sext");
+                        rv = type_is_unsigned(rhs.type)
+                            ? LLVMBuildZExt(ctx->builder, rv, LLVMTypeOf(lv), "zext")
+                            : LLVMBuildSExt(ctx->builder, rv, LLVMTypeOf(lv), "sext");
                     } else if (rw > lw) {
-                        lv = LLVMBuildSExt(ctx->builder, lv, LLVMTypeOf(rv), "sext");
+                        lv = type_is_unsigned(lhs.type)
+                            ? LLVMBuildZExt(ctx->builder, lv, LLVMTypeOf(rv), "zext")
+                            : LLVMBuildSExt(ctx->builder, lv, LLVMTypeOf(rv), "sext");
                     }
 
                     LLVMIntPredicate pred =
@@ -13967,10 +15223,14 @@ if (ast->list.count >= 5) {
 
                         if (lhs_bits > rhs_bits) {
                             new_result_type = result_type;
-                            rhs_val = LLVMBuildSExt(ctx->builder, rhs_val, LLVMTypeOf(lhs_val), "sext");
+                            rhs_val = type_is_unsigned(rhs.type)
+                                ? LLVMBuildZExt(ctx->builder, rhs_val, LLVMTypeOf(lhs_val), "zext")
+                                : LLVMBuildSExt(ctx->builder, rhs_val, LLVMTypeOf(lhs_val), "sext");
                         } else if (rhs_bits > lhs_bits) {
                             new_result_type = rhs.type;
-                            lhs_val = LLVMBuildSExt(ctx->builder, lhs_val, LLVMTypeOf(rhs_val), "sext");
+                            lhs_val = type_is_unsigned(result_type)
+                                ? LLVMBuildZExt(ctx->builder, lhs_val, LLVMTypeOf(rhs_val), "zext")
+                                : LLVMBuildSExt(ctx->builder, lhs_val, LLVMTypeOf(rhs_val), "sext");
                         } else {
                             new_result_type = result_type; // Same size
                         }
@@ -14719,6 +15979,17 @@ if (ast->list.count >= 5) {
                 };
                 result.value = LLVMBuildCall2(ctx->builder, calln_ft,
                                               calln_fn, calln_a, 3, "clo_calln");
+                Type *closure_result =
+                    codegen_entry_result_type(ctx, entry);
+                if (closure_result &&
+                    (closure_result->kind == TYPE_STRING ||
+                     closure_result->kind == TYPE_PATH)) {
+                    result.value = emit_call_1(
+                        ctx, get_rt_unbox_string(ctx), ptr,
+                        result.value, "clo_string");
+                    result.type = type_clone(closure_result);
+                    return result;
+                }
                 result.type  = type_unknown();
                 return result;
             }
@@ -15128,6 +16399,20 @@ if (ast->list.count >= 5) {
                 int    declared_params = entry->param_count - entry->lifted_count;
                 size_t arg_count       = ast->list.count - 1;
 
+                /* Effect arrows are erased from the runtime ABI. Older
+                 * environment metadata may count only the arguments before
+                 * the final effectful arrow, even though the materialized
+                 * typed function contains every value parameter. Trust that
+                 * concrete ABI for ordinary direct calls; otherwise a valid
+                 * final argument is applied a second time as an auto-curried
+                 * closure call. */
+                if (entry->func_ref && !entry->is_closure_abi) {
+                    int llvm_params = (int)LLVMCountParams(entry->func_ref);
+                    int abi_declared = llvm_params - entry->lifted_count;
+                    if (abi_declared > declared_params)
+                        declared_params = abi_declared;
+                }
+
                 // Find if last param is a rest param
                 bool has_rest                             = (entry->param_count > 0 &&
                                  entry->source_ast &&
@@ -15495,7 +16780,8 @@ if (ast->list.count >= 5) {
                     }
                 }
                 if (!has_rest && !has_arr_param &&
-                    entry->scheme && entry->scheme->quantified_count > 0
+                    entry->scheme && !entry->scheme_codegen_evidence_only &&
+                    entry->scheme->quantified_count > 0
                     && entry->source_ast) {
                     // Collect concrete argument types from call site and
                     // structurally unify them with the polymorphic parameter
@@ -16461,7 +17747,9 @@ if (ast->list.count >= 5) {
                         if (type_is_integer(expected_type) && type_is_integer(actual_type) &&
                             LLVMTypeOf(arg_result.value) != expected_llvm) {
                             converted_arg = LLVMBuildIntCast2(ctx->builder, arg_result.value,
-                                                              expected_llvm, 1, "int_cast");
+                                                              expected_llvm,
+                                                              type_is_unsigned(actual_type) ? 0 : 1,
+                                                              "int_cast");
                         } else if (type_is_integer(expected_type) && type_is_float(actual_type)) {
                             converted_arg = LLVMBuildFPToSI(ctx->builder, arg_result.value,
                                                             expected_llvm, "arg_conv");
@@ -16492,7 +17780,9 @@ if (ast->list.count >= 5) {
                             LLVMTypeRef actual_llvm   = LLVMTypeOf(arg_result.value);
                             if (actual_llvm != expected_llvm)
                                 converted_arg = LLVMBuildIntCast2(ctx->builder, arg_result.value,
-                                                                  expected_llvm, 1, "int_cast");
+                                                                  expected_llvm,
+                                                                  type_is_unsigned(actual_type) ? 0 : 1,
+                                                                  "int_cast");
                             else
                                 converted_arg = arg_result.value;
                         } else if (type_is_integer(expected_type) && actual_type->kind == TYPE_BOOL) {
@@ -16612,6 +17902,21 @@ if (ast->list.count >= 5) {
                                                   args, total_args, "calltmp");
                     result.type  = entry->return_type
                         ? type_clone(entry->return_type) : NULL;
+                    Type *instantiated_result =
+                        codegen_instantiated_call_result(ctx, entry, ast);
+                    /* Nominal aggregates and pointer-backed collections share
+                     * the stable imported payload ABI. Recover their semantic
+                     * result shape so subsequent field/list operations do not
+                     * re-box the already-native pointer as opaque data. */
+                    if (instantiated_result &&
+                        (instantiated_result->kind == TYPE_LAYOUT ||
+                         instantiated_result->kind == TYPE_COLL ||
+                         instantiated_result->kind == TYPE_LIST)) {
+                        type_free(result.type);
+                        result.type = instantiated_result;
+                    } else {
+                        type_free(instantiated_result);
+                    }
                     if (strcmp(head->symbol, "color-to-string") == 0) {
                         LLVMValueRef _dbg_fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(ctx->builder));
                         /* if (_dbg_fn) { fprintf(stderr, "DEBUG call site IR:\n"); LLVMDumpValue(_dbg_fn); } */
@@ -17114,7 +18419,6 @@ if (ast->list.count >= 5) {
             {
                 Type *lay = env_lookup_layout(ctx->env, head->symbol);
                 if (lay && lay->kind == TYPE_LAYOUT) {
-
                     // Get the bare struct type (NOT the pointer wrapper from type_to_llvm)
                     char sname[256];
                     snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
@@ -17529,6 +18833,16 @@ if (ast->list.count >= 5) {
                 char sname[256];
                 snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
                 LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                if (!struct_llvm && lay->layout_field_count > 0) {
+                    (void)type_to_llvm(ctx, lay);
+                    struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                }
+                if (!struct_llvm) {
+                    CODEGEN_ERROR(ctx,
+                                  "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                                  parser_get_filename(), ast->line, ast->column,
+                                  lay->layout_name ? lay->layout_name : "?");
+                }
                 LLVMValueRef ptr = base.value;
                 if (LLVMGetTypeKind(LLVMTypeOf(ptr)) != LLVMPointerTypeKind) {
                     LLVMTypeRef ptr_t = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -17569,6 +18883,18 @@ if (ast->list.count >= 5) {
                         char sname[256];
                         snprintf(sname, sizeof(sname), "layout.%s", lay->layout_name);
                         LLVMTypeRef struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                        if (!struct_llvm && lay->layout_field_count > 0) {
+                            (void)type_to_llvm(ctx, lay);
+                            struct_llvm = LLVMGetTypeByName2(ctx->context, sname);
+                        }
+                        if (!struct_llvm) {
+                            CODEGEN_ERROR(ctx,
+                                          "%s:%d:%d: error: LLVM struct type for '%s' not found",
+                                          parser_get_filename(), ast->line,
+                                          ast->column,
+                                          lay->layout_name
+                                              ? lay->layout_name : "?");
+                        }
                         LLVMValueRef ptr = base.value;
                         if (LLVMGetTypeKind(LLVMTypeOf(ptr)) != LLVMPointerTypeKind) {
                             LLVMValueRef tmp =
@@ -17896,7 +19222,7 @@ if (ast->list.count >= 5) {
             type_alias_register(alias_sym, rname);
             /* fprintf(stderr, "DEBUG alias registered: ‘%s’ -> ‘%s’\n", alias_sym, rname); */
         }
-        if (pred) {
+        if (pred && !refinement_pred_name(rname)) {
             char pred_name_buf[256];
             snprintf(pred_name_buf, sizeof(pred_name_buf), "%s?", rname);
             refinement_register(rname, pred_name_buf, base, pred, var);
@@ -18182,7 +19508,10 @@ static void register_legacy_collection_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "__rt_prepend", 2, 0, "Private typed Sequence prepend primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_concat",  2, 0, "Private typed Sequence concatenation primitive", NULL);
     env_insert_builtin(ctx->env, "__rt_count",   1, 0, "Private collection cardinality primitive", NULL);
-    env_insert_builtin(ctx->env, "__rt_utf8_width", 1, 0, "Private UTF-8 width primitive", NULL);
+    env_insert_builtin(ctx->env, "__rt_directory_names", 2, 0, "Private host directory iteration primitive", NULL);
+    env_insert_builtin(ctx->env, "__rt_join_path", 2, 0, "Private portable path composition primitive", NULL);
+    env_insert_builtin(ctx->env, "__rt_path_text", 1, 0, "Private erased Path carrier projection", NULL);
+    env_insert_builtin(ctx->env, "__rt_text_path", 1, 0, "Private erased Path carrier injection", NULL);
     env_insert_builtin(ctx->env, "__rt_set_singleton", 1, 0, "Private Set singleton predicate", NULL);
     env_insert_builtin(ctx->env, "__rt_set_intersection", 2, 0, "Private Set intersection primitive", NULL);
     env_insert_builtin(ctx->env, "rt_coll_head", 1, 0, "Private collection pattern projection", NULL);
@@ -18244,6 +19573,12 @@ void register_builtins(CodegenContext *ctx) {
     env_insert_builtin(ctx->env, "include",   -1, -1, "Include a C header via FFI", NULL);
     env_insert_builtin(ctx->env, "import",     1,  0, "Import a module", NULL);
     env_insert_builtin(ctx->env, "module",     1, -1, "Declare a module", NULL);
+    env_insert_builtin(ctx->env, "effect-handler", 4, 0,
+                       "Declare a Core-owned effect handler profile", NULL);
+    env_insert_builtin(ctx->env, "perform", 2, 0,
+                       "Perform a Core-owned effect operation", NULL);
+    env_insert_builtin(ctx->env, "handle", 3, 0,
+                       "Handle an effect computation with a Core profile", NULL);
     env_insert_builtin(ctx->env, "type",       1, -1, "Define a refinement type", NULL);
     env_insert_builtin(ctx->env, "lambda",     2, -1, "Create anonymous function", NULL);
     env_insert_builtin(ctx->env, "quote",      1,  0, "Quote expression without evaluation", NULL);

@@ -1,2 +1,2 @@
-(module Main)
+(module Main [])
 (show 20)

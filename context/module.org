@@ -602,3 +602,60 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   pass, while definition-site phase imports are captured separately from the
   client's activation scope. This distinguishes lexical helper access from
   public importability.
+
+[FIX id:fix.module.qtt-interface-sidecar-2026-07-31 date:2026-07-31 by:codex src:qtt/interface.c,qtt/interface.h,qtt/compiler_module.c,main.c conf:high]
+  Object emission now produces a versioned =.mqti= quantitative ownership
+  sidecar. The provider reloads that sidecar and consumers register the
+  deserialized contract rather than relying on retained provider AST metadata.
+  Version 1 accepts only closed flat ABI types and omits unsupported contracts
+  conservatively.
+
+[TEST id:test.module.qtt-interface-roundtrip-2026-07-31 date:2026-07-31 src:tests/test_qtt_interface.py,tests/test_qtt_production_memory.py conf:high]
+  A standalone strict parser round-trips grades, ownership modes, result
+  origin, representation, and structural fingerprints, then rejects a changed
+  result contract whose digest was not updated. A two-module compiler test
+  requires the emitted provider sidecar and proves its reloaded fresh-result
+  contract reaches consumer LLVM reclamation.
+
+[FIX id:fix.module.cached-qtti-authority-2026-07-31 date:2026-07-31 by:codex src:main.c,qtt/interface.c conf:high]
+  Both cold and up-to-date object paths load the same =.mqti= sidecar. The
+  sidecar carries a content fingerprint of the emitted object and is accepted
+  only when it matches the exact linked object bytes. A cached object with
+  missing, malformed, or mismatched quantitative metadata cannot recover
+  ownership authority from provider AST metadata; it falls back to legacy
+  code generation without speculative reclamation.
+
+[TEST id:test.module.cached-qtti-cold-valid-stale-2026-07-31 date:2026-07-31 src:tests/test_qtt_production_memory.py conf:high]
+  One two-module regression executes three compiler processes: cold emission,
+  an explicitly forced up-to-date-object import, and an import whose artifact
+  fingerprint is altered. Cold and valid-cache consumers free the imported
+  fresh result; the stale-cache consumer emits no free and still links and
+  executes correctly.
+
+[FIX id:fix.module.core-object-cache-survives-link-2026-07-31 date:2026-07-31 by:codex src:main.c,tests/test_checkout_local_paths.py conf:high]
+  Objects emitted beneath =$HOME/.cache/monad/core= are persistent cache
+  artifacts, not per-link temporaries. Successful executable linking preserves
+  them while continuing to remove ordinary transient objects. This keeps each
+  =.mqti= fingerprint bound to existing object bytes and prevents later
+  compilations from handing Clang stale, missing =*.module.o= paths.
+
+[TEST id:test.module.core-object-cache-warm-reuse-2026-07-31 date:2026-07-31 src:tests/test_checkout_local_paths.py conf:high]
+  From =core/prelude/Data=, compile =Bool.mon= twice against an initially empty
+  temporary home. The cold link must leave nonempty cached module objects and
+  the warm compile must link successfully from the same cache.
+
+* fix.module.transitive-runtime-initialization-2026-08-04
+:PROPERTIES:
+:ID: fix.module.transitive-runtime-initialization-2026-08-04
+:END:
+
+Runtime module initialization follows the import graph. Every library
+initializer calls its direct runtime dependencies before evaluating its own
+top-level stores; initialization is guarded per module, making diamonds and
+direct-plus-transitive imports idempotent. Restricting dependency calls to the
+main module leaves transitive constants uninitialized and can silently alter
+foreign behavior—for example, POSIX create/write flags becoming zero.
+
+Regression coverage is provided by =tests.test_core_io_files=: =IO.File=
+depends transitively on =System.Posix.FileDescriptor=, and real create/write
+operations require its flag globals to be initialized before use.

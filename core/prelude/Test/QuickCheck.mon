@@ -6,31 +6,31 @@
 
 ;;; Commentary:
 
-;; Property predicates belong to their classes; this module supplies evidence
-;; for types whose inhabitants cannot be enumerated exhaustively. Arbitrary
-;; receives an explicit deterministic seed and a non-negative size. Keeping
-;; both inputs visible makes every generated case replayable and lets recursive
-;; instances bound their output structurally.
-;;
-;; Finite type sets do not need Arbitrary instances: check-laws enumerates them
-;; completely in source order and reports EXHAUSTIVE. Infinite and opaque types
-;; opt into sampled checking by implementing arbitrary. Shrinking has a lawful,
-;; allocation-free empty default, so the minimal definition is arbitrary;
-;; useful instances should override shrink with strictly simpler candidates.
-;;
-;; Seed splitting and output mixing use SplitMix64's Weyl increment and
-;; Stafford variant-13 finalizer with deliberate two's-complement wrapping.
-;; Logical right shifts make the bit-level specification independent of signed
-;; comparison. Bounded generation uses rejection sampling rather than `%`
-;; alone, avoiding modulo bias.
-;;
-;; The compiler owns seed scheduling, exact 64-bit replay coordinates, and the
-;; bounded greedy traversal of shrink candidates. It specializes the property
-;; once, keeps generated arguments in native slots, ignores candidates equal
-;; to the current value, and stops after a defensive global budget if an
-;; instance supplies a cycle. This module owns candidate order: Int proposes
-;; zero first and then approaches the original in logarithmically many steps.
-;; A shrink list is therefore an ordered search strategy, not an unordered bag.
+ Property predicates belong to their classes; this module supplies evidence
+ for types whose inhabitants cannot be enumerated exhaustively. Arbitrary
+ receives an explicit deterministic seed and a non-negative size. Keeping
+ both inputs visible makes every generated case replayable and lets recursive
+ instances bound their output structurally.
+
+ Finite type sets do not need Arbitrary instances: check-laws enumerates them
+ completely in source order and reports EXHAUSTIVE. Infinite and opaque types
+ opt into sampled checking by implementing arbitrary. Shrinking has a lawful,
+ allocation-free empty default, so the minimal definition is arbitrary;
+ useful instances should override shrink with strictly simpler candidates.
+
+ Seed splitting and output mixing use SplitMix64's Weyl increment and
+ Stafford variant-13 finalizer with deliberate two's-complement wrapping.
+ Logical right shifts make the bit-level specification independent of signed
+ comparison. Bounded generation uses rejection sampling rather than `%`
+ alone, avoiding modulo bias.
+
+ The compiler owns seed scheduling, exact 64-bit replay coordinates, and the
+ bounded greedy traversal of shrink candidates. It specializes the property
+ once, keeps generated arguments in native slots, ignores candidates equal
+ to the current value, and stops after a defensive global budget if an
+ instance supplies a cycle. This module owns candidate order: Int proposes
+ zero first and then approaches the original in logarithmically many steps.
+ A shrink list is therefore an ordered search strategy, not an unordered bag.
 
 ;;; Code:
 

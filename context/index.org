@@ -310,6 +310,8 @@ Rules:
 - [[file:wisp.org][Wisp syntax expander context]]
 - [[file:source-map.org][Source file map — every file's purpose and connections]]
 - [[file:style.org][MonadC code-style taxonomy]]
+- [[file:concurrency.org][Structured concurrency calculus, POSIX substrate, and tooling laws]]
+- [[file:configuration.org][Typed, language-owned project configuration]]
 - [[file:navigation.org][ID prefix→file routing table for quick LLM navigation]]
 - [[file:references.org][Research references — 7 PDF papers as first-class DOC objects with implementation traces]]
 - [[file:source-map.org::* Research PDFs][PDF library index (etc/pdfs/) — each paper linked to source decisions]]
@@ -317,6 +319,8 @@ Rules:
 - [[file:dep.org][Dependent type checker — ITT kernel with NbE]]
 - [[file:bytecode.org][Bytecode VM substrate — verifier, register VM, disassembler]]
 - [[file:infer.org][HM type inference engine — constraint gen, unification, zonking]]
+- [[file:type-theory.org][Unified QTT, inferred effects, and layered contextual modal type theory]]
+- [[file:ir.org][Monad semantic intermediate representation]]
 - [[file:runtime.org][Runtime library — values, collections, printing, bignum]]
 - [[file:codegen-ops.org][Codegen operation dispatch — 83+ strcmp handlers, 94 builtins]]
 - [[file:arena.org][Arena bump allocator — init, alloc, strings, stats]]
@@ -573,3 +577,5 @@ Compiling =tests/path_heap_literals.mon= defines =path :: Path= and
 
 [DOC id:doc.index.round3-category-directory src:context/index.org conf:high]
   The formal category implementation is indexed at [[file:category/index.org][category/index.org]].
+[[file:web-html.org][Web HTML Context]]
+[[file:memory.org][Automatic Resource and Memory Semantics]]

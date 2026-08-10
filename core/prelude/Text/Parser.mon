@@ -6,9 +6,9 @@
 
 ;;; Commentary:
 
-;; This is the executable parser substrate for future JSON work.  It keeps
-;; xs lists in function arguments and returns scalar ParseResult layouts,
-;; avoiding current runtime instability around list fields inside layouts.
+ This is the executable parser substrate for future JSON work.  It keeps
+ xs lists in function arguments and returns scalar ParseResult layouts,
+ avoiding current runtime instability around list fields inside layouts.
 
 ;;; Code:
 
@@ -26,10 +26,10 @@ module Text.Parser
 
 
 layout ParseResult
-  [ok     :: Bool]
-  [value  :: Int]
-  [offset :: Int]
-  [error  :: Int]
+  ok     :: Bool
+  value  :: Int
+  offset :: Int
+  error  :: Int
 
 
 define parse-result :: Bool -> Int -> Int -> Int -> ParseResult
@@ -90,16 +90,16 @@ define choice :: ParseResult -> ParseResult -> ParseResult
 
 
 define ascii-space? :: Int -> Bool
-  c | c = 0x20   -> True
-  c | c = 0x09   -> True
-  c | c = 0x0a   -> True
-  c | c = 0x0d   -> True
-  c | otherwise  -> False
+  c | = 0x20    -> True
+    | = 0x09    -> True
+    | = 0x0a    -> True
+    | = 0x0d    -> True
+    | otherwise -> False
 
 
 define ascii-digit? :: Int -> Bool
-  c | (and (>= c 0x30) (<= c 0x39)) -> True
-  c | otherwise                     -> False
+  c | >= 0x30 and <= 0x39 -> True
+    | otherwise           -> False
 
 
 define digit-value :: Int -> Int
