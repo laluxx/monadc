@@ -26,6 +26,32 @@ class HowToExampleTests(unittest.TestCase):
         "how_to/FirstOrderModalLogic.mon",
     )
 
+    def test_donut_executable_renders_terminal_cells(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-donut-") as td:
+            temp = Path(td)
+            output = temp / "Donut"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(ROOT / "how_to/Donut.mon"),
+                 "-o", str(output)],
+                cwd=ROOT, env=env, text=True, encoding="utf-8",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertTrue(run.stdout.startswith(b"\n"), run.stdout[:80])
+            self.assertGreaterEqual(len(run.stdout), 500)
+            self.assertRegex(run.stdout, rb"[.,~:;=!*#$@]")
+
     def test_unicode_public_api_preserves_imported_value_abi(self):
         with tempfile.TemporaryDirectory(prefix="monadc-unicode-public-") as td:
             temp = Path(td)

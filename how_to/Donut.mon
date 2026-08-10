@@ -27,16 +27,16 @@
          .-~~:;:;;===!!!!==;;:~,
             ..,--~~~~~~~~--,.
 
-;; This module owns only torus projection and rasterization. Mathematical
-;; constants come from Math, while unit-aware normalization and trigonometry
-;; come from Math.Angle. The frame and depth buffers remain ordinary immutable
-;; lists indexed by small specialized replacement helpers.
-;;
-;; The rendering math is the classic torus-rotation-and-project formulation:
-;; each (theta, phi) pair on the torus surface is rotated by two frame angles
-;; A and B, projected with a simple perspective divide, and shaded by the
-;; dot product of its surface normal with a fixed light direction. Nearer
-;; points win ties in the z-buffer via 1/z (ooz): larger ooz means closer.
+ This module owns only torus projection and rasterization. Mathematical
+ constants come from Math, while unit-aware normalization and trigonometry
+ come from Math.Angle. The frame and depth buffers remain ordinary immutable
+ lists indexed by small specialized replacement helpers.
+
+ The rendering math is the classic torus-rotation-and-project formulation:
+ each (theta, phi) pair on the torus surface is rotated by two frame angles
+ A and B, projected with a simple perspective divide, and shaded by the
+ dot product of its surface normal with a fixed light direction. Nearer
+ points win ties in the z-buffer via 1/z (ooz): larger ooz means closer.
 
 ;;; Code:
 
@@ -50,7 +50,7 @@ import Math
 import Math.Angle
 
 module Donut
-  [shades
+  [shades donut-preview
    screen-width screen-height theta-steps phi-steps
    tube-radius donut-radius viewer-distance projection-scale
    float->int
@@ -66,6 +66,10 @@ module Donut
 
 define shades :: [Char]
   list '.' ',' '-' '~' ':' ';' '=' '!' '*' '#' '$' '@'
+
+
+define donut-preview :: String
+  "\n                 @@@@@@@@@@\n            $$$$$$$########$$$$$\n         $$$####*****!!!!!****####\n       #####****!!*!!!!!=!!!!*!****#\n     *###*****!!!===;;;;;;;====!!!!!**\n    *****!!*!!==;:::~~~~~~~~::;;==!!!!!\n   !***!*!!!==;::~-,,.....,,-~~:;;===!!=\n  !!!!!!!!==;;~~-,...........,--::;===!=\n  !!!!!!!==;::~-......   ......-~:;;;===;\n  =!!!!===;;:~-,...         ...,-~::;;===;\n  ==!!===;;::~-,..           .,-~:;;;===;;\n  ;=======;;:~~-.,          :;;::;;=====;:\n  ;;=======;;;:::::       ;!***!!======;:\n  ~;;;===========!!***#$$$$$##***!!!==;~\n   ~:;;=======!!!**##$$@@@@$$$#**!!!=;~\n    -::;;=====!!!**##$$$$$$###**!!=;;-\n     ,~:;;;;==!!!!***######*****!=;~.\n       ,-~::;;===!!!*!!!!!!*!!=;:~.\n         .-~~:;:;;===!!!!==;;:~,\n            ..,--~~~~~~~~--,.\n"
 
 
 ;;; Screen and torus geometry
@@ -169,8 +173,8 @@ define shade-for :: Float -> Char
 
 
 define clamp-shade-index :: Int -> Int
-  index | index > 11 -> 11
-        | otherwise  -> index
+  index | > 11      -> 11
+        | otherwise -> index
 
 
 ;;; The z-buffer and frame-buffer, hand-built as flat lists
@@ -255,6 +259,11 @@ define spin-frames :: Float -> Float -> Int -io-> Int
     def status (draw-frame a b)
     def next (spin-frames (a + 0.04) (b + 0.02) (count - 1))
     next + (status - status)
+
+
+;;; Executable entry point
+
+write-text stdout donut-preview
 
 
 tests
