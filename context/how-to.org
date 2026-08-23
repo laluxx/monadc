@@ -64,6 +64,50 @@
   ordinary how-to compilation regression includes it, and the example is also
   executed with =monad test= during focused verification.
 
+[FIX id:fix.how-to.rule-101-example-2026-08-21 date:2026-08-21 by:codex src:how_to/101.mon,tests/test_how_to_examples.py conf:high]
+  =how_to/101.mon= is an executable Rule 101 cellular-automaton example. Its
+  public regression compiles and runs the file, requires exactly 40 rows of
+  width 79 with the initial live cell centered, and checks the complete output
+  digest. The demo must call =render-generations= over =seed-row=; a copied
+  output literal is not an implementation and is explicitly rejected by the
+  regression. Wisp function types use one =->= per argument, guarded
+  comparisons name their left operand explicitly, and continued calls remain
+  grouped. Refinement declaration code generation is silent during a normal
+  compile, so the public command prints only the automaton when it runs.
+  Rule 101 maps both an all-dead =000= neighbourhood and an all-live =111=
+  neighbourhood into an alternating infinite background. The demo renders a
+  cell as =#= only when it differs from that generation's background, keeping
+  empty visual space blank while preserving the exact Rule 101 evolution.
+  Public example functions use =:doc= metadata for API documentation rather
+  than decorative comments that merely resemble documentation.
+  The source uses literal =" "= cells, public =++= concatenation, direct list
+  patterns, and early boundary clauses; it contains no =__rt_*= escape hatch
+  or concatenation wrapper.
+
+[FIX id:fix.how-to.scheme-example-2026-08-21 date:2026-08-21 by:codex src:how_to/Scheme.mon,tests/test_how_to_examples.py conf:high]
+  =how_to/Scheme.mon= is a deliberately small end-to-end Scheme interpreter.
+  Its recursive =Text.Parser= grammar recognizes signed integers, booleans,
+  symbols, proper lists, whitespace, and quote sugar into one =SchemeValue=
+  syntax tree. Evaluation provides lexical lookup, =quote=, =if=, =+=, =*=,
+  and =>=; rendering turns values back into Scheme notation. The public
+  regression compiles silently, executes nested arithmetic, conditionals, and
+  quotation, rejects runtime escape hatches, and keeps every source line at or
+  below 120 columns. The module's own tests also retain a structured missing
+  parenthesis failure, so the example exercises both successful and failing
+  =Text.Parser= paths.
+  Scheme booleans and the demonstration environment are typed constants, not
+  functions padded with ignored arguments. Parser-specific sequencing remains
+  confined to honestly named reply and delimiter continuations, and boolean
+  reply conversion reuses the semantic constants rather than reconstructing
+  them.
+  The tutorial is organized as Scheme values, reading, evaluation, and a small
+  session, with local landmarks for atoms, recursive lists, names, primitives,
+  special forms, and printing. Symbol input is named as Unicode scalars rather
+  than bytes: =decode-utf8= can produce values outside the =Byte= range, so a
+  =[Byte]= annotation would be attractive but false. The source-shape
+  regression preserves this organization, rejects the former
+  =scm-bytes->text= name, and caps helper growth.
+
 * AlgebraicDataTypes.mon — ADT Examples
 :PROPERTIES:
 :ID: monadc.context.how-to.adt
@@ -710,3 +754,15 @@
   =seeded law Additive Int= demonstrates deterministic defaults without a
   duplicate check. Installed-topology compilation and execution remain part of
   the how-to regression contract.
+[FIX id:fix.how-to.scheme-repl-2026-08-22 date:2026-08-22 by:codex src:how_to/Scheme.mon,tests/test_how_to_examples.py conf:high]
+  =Scheme.mon= now ends in an interactive =scm> = session backed by
+  =IO.Readline=. The example keeps parsing and evaluation pure and confines
+  terminal effects to the small =scheme-repl-line=/=scheme-repl= boundary.
+  Pipe input and a PTY editing session are both regression-tested.
+
+[FIX id:fix.how-to.tcp-server-2026-08-23 date:2026-08-23 by:codex src:how_to/TcpServer.mon,core/Network/Socket.mon,tests/test_tcp_server.py conf:high]
+  =TcpServer.mon= presents one honest connection lifetime—listen, accept,
+  echo, close—in 50 lines of application-level Monad. It contains no syscall,
+  address-layout, byte-order, or inline-assembly plumbing. Its loopback test
+  compiles a fresh executable, connects through the host TCP stack, verifies
+  the exact payload, and requires a clean zero exit status.

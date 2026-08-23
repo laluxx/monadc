@@ -21,20 +21,260 @@
 import IO
 import System.Posix.Term
 import Text.LineEditor
+import Text.Unicode
 
 module IO.Readline
-  [read-key-fd read-line-bytes-fd read-line]
+  [readline-status read-key-fd read-line-bytes-fd read-line read-line-with-prompt]
 
 
-define read-bracket-escape :: Int -> Int -io-> Int
-  second fd -> def third (read-byte fd)
-               LineEditor.decode-escape2 second third
+;;; Linux termios is a byte-level ABI, so keep the saved snapshot opaque. This
+;;; avoids pretending its control-character array is an ordinary Monad Int.
+
+define readline-saved-termios  :: [64]
+define readline-active-termios :: [64]
+define readline-history-bytes  :: [16kb]
+define readline-history-lengths :: [64 Int]
+define readline-history-total :: Int 0
+define readline-history-position :: Int 0
+define readline-kill-bytes :: [4kb]
+define readline-kill-lengths :: [16 Int]
+define readline-kill-total :: Int 0
+define readline-status :: Int 0
+
+
+define history-slot-offset :: Int -> Int -> Int
+  slot index -> (slot * 256) + index
+
+
+define readline-prepend :: Int -> [Int] -> [Int]
+  scalar scalars -> prepend scalar scalars
+
+
+define history-write :: Int -> Int -> [Int] -> Int
+  _ index [] -> index
+  slot index _ | (>= index 256) -> index
+  slot index [byte|rest] ->
+    def written (set! (readline-history-bytes (history-slot-offset slot index)) byte)
+    history-write slot (index + 1) rest
+
+
+define history-read :: Int -> Int -> Int -> [Int]
+  _ index count | (>= index count) -> []
+  slot index count ->
+    readline-prepend (readline-history-bytes (history-slot-offset slot index)) (history-read slot (index + 1) count)
+
+
+define history-line :: Int -> [Int]
+  position ->
+    def slot (rem position 64)
+    history-read slot 0 (readline-history-lengths slot)
+
+
+define history-add :: [Int] -> Int
+  [] -> readline-history-total
+  text ->
+    def slot (rem readline-history-total 64)
+    def count (history-write slot 0 text)
+    def saved-length (set! (readline-history-lengths slot) count)
+    def next-total (readline-history-total + 1)
+    def saved-total (set! readline-history-total next-total)
+    set! readline-history-position next-total
+
+
+define history-oldest :: Int -> Int
+  total -> (if (> total 64) (- total 64) 0)
+
+
+define previous-history-position :: Int -> Int -> Int
+  total current | (<= current (history-oldest total)) -> history-oldest total
+  total current -> (- current 1)
+
+
+define history-move-previous :: Int -> Int
+  total -> (set! readline-history-position
+             (previous-history-position total readline-history-position))
+
+
+define history-previous :: Int -> [Int]
+  total -> history-line (history-move-previous total)
+
+
+define history-move-next :: Int -> Int
+  total ->
+    def next (readline-history-position + 1)
+    set! readline-history-position next
+
+
+define history-next :: Int -> [Int]
+  total | (>= readline-history-position total) -> []
+  total -> history-line (history-move-next total)
+
+
+define history-reset-position :: Int -> Int
+  total -> set! readline-history-position total
+
+
+define kill-write :: Int -> Int -> Int -> [Int] -> Int
+  _ _ index [] -> index
+  _ _ index _ | (>= index 256) -> index
+  slot base index [byte|rest] ->
+    def written (set! (readline-kill-bytes (base + index)) byte)
+    kill-write slot base (index + 1) rest
+
+
+define kill-save :: [Int] -> Int
+  [] -> readline-kill-total
+  text ->
+    def slot (rem readline-kill-total 16)
+    def base (slot * 256)
+    def count (kill-write slot base 0 text)
+    def saved-length (set! (readline-kill-lengths slot) count)
+    set! readline-kill-total (readline-kill-total + 1)
+
+
+define kill-read :: Int -> Int -> Int -> [Int]
+  _ index count | (>= index count) -> []
+  base index count ->
+    readline-prepend (readline-kill-bytes (base + index)) (kill-read base (index + 1) count)
+
+
+define kill-latest :: Int -> [Int]
+  total | (<= total 0) -> []
+  total ->
+    def slot (rem (total - 1) 16)
+    def base (slot * 256)
+    kill-read base 0 (readline-kill-lengths slot)
+
+
+define kill-key? :: Int -> Bool
+  key | (= key LineEditor.key-ctrl-k)         -> True
+      | (= key LineEditor.key-ctrl-u)         -> True
+      | (= key LineEditor.key-ctrl-backspace) -> True
+      | (= key LineEditor.key-meta-d)         -> True
+      | otherwise                             -> False
+
+
+define killed-text :: Int -> Int -> [Int] -> [Int]
+  key cursor text | (= key LineEditor.key-ctrl-k) -> drop text cursor
+  key cursor text | (= key LineEditor.key-ctrl-u) -> take text cursor
+  key cursor text | (= key LineEditor.key-ctrl-backspace) ->
+    drop (take text cursor) (LineEditor.apply-key-cursor key cursor text)
+  key cursor text | (= key LineEditor.key-meta-d) ->
+    def remaining (- (length text) (length (LineEditor.apply-key-text key cursor text)))
+    take (drop text cursor) remaining
+  _ _ _ -> []
+
+
+define yank-text :: Int -> [Int] -> [Int] -> [Int]
+  cursor text yank ->
+    concat (take text cursor) (concat yank (drop text cursor))
+
+
+define begins-with-text? :: [Int] -> [Int] -> Bool
+  [] _ -> True
+  _ [] -> False
+  [query|queries] [character|characters] | (= query character) ->
+    begins-with-text? queries characters
+  _ _ -> False
+  _ _ -> False
+
+
+define contains-text? :: [Int] -> [Int] -> Bool
+  [] _ -> True
+  _ [] -> False
+  query text | begins-with-text? query text -> True
+  query [_|rest] -> contains-text? query rest
+
+
+define history-search-from :: Int -> Int -> [Int] -> [Int]
+  position oldest _ | (< position oldest) -> []
+  position oldest query | contains-text? query (history-line position) ->
+    history-line position
+  position oldest query -> history-search-from (- position 1) oldest query
+  _ _ _ -> []
+
+
+define history-search :: [Int] -> [Int]
+  _ | (<= readline-history-total 0) -> []
+  query -> history-search-from (- readline-history-total 1)
+             (history-oldest readline-history-total) query
+
+
+define editor-key-kind :: Int -> Int
+  key | (= key LineEditor.key-arrow-up)   -> 1
+      | (= key LineEditor.key-arrow-down) -> 2
+      | (= key LineEditor.key-ctrl-y)     -> 3
+      | otherwise                         -> 4
+
+
+define editor-next-text :: Int -> Int -> Int -> [Int] -> [Int]
+  1 _ _ _ -> history-previous readline-history-total
+  2 _ _ _ -> history-next readline-history-total
+  3 _ cursor text ->
+    yank-text cursor text (kill-latest readline-kill-total)
+  4 key cursor text -> LineEditor.apply-key-text key cursor text
+  _ key cursor text -> LineEditor.apply-key-text key cursor text
+
+
+define editor-next-cursor :: Int -> Int -> Int -> [Int] -> [Int] -> Int
+  1 _ _ _ next-text -> length next-text
+  2 _ _ _ next-text -> length next-text
+  3 _ cursor _ _ ->
+    + cursor (length (kill-latest readline-kill-total))
+  4 key cursor text _ -> LineEditor.apply-key-cursor key cursor text
+  _ key cursor text _ -> LineEditor.apply-key-cursor key cursor text
+
+
+define record-kill-kind :: Int -> Int
+  key | kill-key? -> 1
+      | otherwise -> 0
+
+
+define record-kill-from :: Int -> Int -> Int -> [Int] -> Int
+  1 key cursor text -> kill-save (killed-text key cursor text)
+  0 _ _ _ -> readline-kill-total
+
+
+define record-kill :: Int -> Int -> [Int] -> Int
+  key cursor text -> record-kill-from (record-kill-kind key) key cursor text
+
+
+define begin-line-editing :: Int -io-> Int
+  fd ->
+    def saved (sys-ioctl fd TCGETS &readline-saved-termios)
+    def copied (sys-ioctl fd TCGETS &readline-active-termios)
+    def local-flags (readline-active-termios 12)
+    def changed (set! (readline-active-termios 12) (local-flags & 0xf5))
+    sys-ioctl fd TCSETS &readline-active-termios
+
+
+define finish-line-editing :: Int -io-> Int
+  fd -> sys-ioctl fd TCSETS &readline-saved-termios
+
+
+define csi-key :: Int -> Int -> Int
+  _ 0x41 -> LineEditor.key-arrow-up
+  _ 0x42 -> LineEditor.key-arrow-down
+  _ 0x43 -> LineEditor.key-arrow-right
+  _ 0x44 -> LineEditor.key-arrow-left
+  _ 0x48 -> LineEditor.key-home
+  _ 0x46 -> LineEditor.key-end
+  3 0x7e -> LineEditor.key-delete
+  _ _ -> LineEditor.key-function
+
+
+define read-csi-fd :: Int -> Int -> Int -io-> Int
+  fd number byte
+    | (< byte 0) -> LineEditor.key-escape
+    | (and (>= byte 0x30) (<= byte 0x39)) ->
+        read-csi-fd fd (+ (* number 10) (- byte 0x30)) (read-byte fd)
+    | otherwise -> csi-key number byte
 
 
 define read-escape-after :: Int -> Int -io-> Int
   second fd -> (if (< second 0) LineEditor.key-escape
                    (if (= second 0x5b)
-                       (read-bracket-escape second fd)
+                       (read-csi-fd fd 0 (read-byte fd))
                        (LineEditor.decode-escape2 second 0)))
 
 
@@ -52,7 +292,7 @@ define read-key-fd :: Int -io-> Int
 define read-line-loop :: Int -> Int -> [Int] -io-> [Int]
   fd cursor text -> (with [key (read-key-fd fd)]
                       (if (LineEditor.line-complete? key)
-                          text
+                          (with [status (record-line-status key text)] text)
                           (read-line-loop fd
                             (LineEditor.apply-key-cursor key cursor text)
                             (LineEditor.apply-key-text key cursor text))))
@@ -62,8 +302,90 @@ define read-line-bytes-fd :: Int -io-> [Int]
   fd -> read-line-loop fd 0 []
 
 
+define write-line-bytes :: Int -> [Int] -io-> Int
+  fd [] -> 0
+  fd [byte|rest] ->
+    (with [written (write-byte fd byte)]
+      (write-line-bytes fd rest))
+
+
+define cursor-left :: Int -> Int -io-> Int
+  fd count | count <= 0 -> 0
+  fd count -> def escape (write-text fd "\x1b[D")
+              cursor-left fd (count - 1)
+
+
+define refresh-line :: String -> Int -> [Int] -io-> Int
+  prompt cursor text ->
+    (with [carriage (write-byte stdout 0x0d)]
+      (with [shown-prompt (write-text stdout prompt)]
+        (with [shown-text (write-line-bytes stdout text)]
+          (with [cleared (write-text stdout "\x1b[K")]
+            (cursor-left stdout (- (length text) cursor))))))
+
+
+define search-prompt :: [Int] -> String
+  query -> "(reverse-i-search)'" ++ (scalars->text query) ++ "': "
+
+
+define search-loop :: String -> [Int] -io-> [Int]
+  prompt query ->
+    def shown (refresh-line (search-prompt query) 0 [])
+    def entered (read-line-loop stdin 0 query)
+    history-search entered
+
+
+define submitted-text :: String -> Int -> [Int] -io-> [Int]
+  prompt 18 _ -> search-loop prompt []
+  _ _ text -> text
+
+
+define read-line-prompt-loop :: String -> Int -> [Int] -io-> [Int]
+  prompt cursor text -> (with [key (read-key-fd stdin)]
+                          (if (or (LineEditor.line-complete? key)
+                                  (= key LineEditor.key-ctrl-r)
+                                  (and (= key LineEditor.key-ctrl-d)
+                                       (empty? text)))
+                              (with [status (record-line-status key text)]
+                                (with [submitted (submitted-text prompt key text)]
+                                  (with [added (history-add submitted)]
+                                    (with [ignored (write-byte stdout 0x0a)] submitted))))
+                              (with [saved-kill (record-kill key cursor text)]
+                                (with [kind (editor-key-kind key)]
+                                  (with [next-text (editor-next-text kind key cursor text)]
+                                    (with [next-cursor (editor-next-cursor kind key cursor text next-text)]
+                                  (with [ignored (refresh-line prompt next-cursor next-text)]
+                                    (read-line-prompt-loop prompt next-cursor next-text))))))))
+
+
+define record-line-status :: Int -> [Int] -> Int
+  key _ | (< key 0) -> set! readline-status 1
+  key [] | (= key LineEditor.key-ctrl-d) -> set! readline-status 1
+  _ _ -> set! readline-status 0
+
+
+define read-line-result-after-start :: String -> Int -io-> [Int]
+  _ status | (< status 0) -> read-line-loop stdin 0 []
+  prompt _ ->
+    def reset (history-reset-position readline-history-total)
+    def result (read-line-prompt-loop prompt 0 [])
+    def restored (finish-line-editing stdin)
+    result
+
+
+define read-line-result-with-prompt :: String -io-> [Int]
+  prompt ->
+    def ignored (write-text stdout prompt)
+    def started (begin-line-editing stdin)
+    read-line-result-after-start prompt started
+
+
+define read-line-with-prompt :: String -io-> [Int]
+  prompt -> read-line-result-with-prompt prompt
+
+
 define read-line-with-saved :: a -io-> [Int]
-  saved -> def text (read-line-bytes-fd stdin)
+  saved -> def text    (read-line-bytes-fd stdin)
            def ignored (tty-set-attr stdin saved)
            text
 

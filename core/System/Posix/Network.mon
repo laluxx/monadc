@@ -1,0 +1,105 @@
+;;; Network.mon --- Linux network syscall seam
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "system posix sockets tcp foreign effects"
+
+;;; Commentary:
+
+ This module is the Linux ABI boundary beneath Network.Socket. It preserves
+ raw syscall results and owns no application error policy.
+
+;;; Code:
+
+module System.Posix.Network
+  [SockAddrIn
+   AF_INET SOCK_STREAM SOL_SOCKET SO_REUSEADDR
+   sys-socket sys-bind sys-listen sys-accept sys-reuse-address
+   sys-recv sys-send]
+
+
+define AF_INET      2
+define SOCK_STREAM  1
+define SOL_SOCKET   1
+define SO_REUSEADDR 2
+
+
+layout SockAddrIn
+  [family  :: U16]
+  [port    :: U16]
+  [address :: U32]
+  [zero    :: U64]
+
+
+define sys-socket :: Int -> Int -> Int -foreign-> Int
+  domain kind protocol ->
+    asm mov 41       %rax
+        mov domain   %rdi
+        mov kind     %rsi
+        mov protocol %rdx
+        syscall ret
+
+
+define sys-bind :: Int -> *SockAddrIn -> Int -foreign-> Int
+  socket address size ->
+    asm mov 49      %rax
+        mov socket  %rdi
+        mov address %rsi
+        mov size    %rdx
+        syscall ret
+
+
+define sys-listen :: Int -> Int -foreign-> Int
+  socket backlog ->
+    asm mov 50      %rax
+        mov socket  %rdi
+        mov backlog %rsi
+        syscall ret
+
+
+define sys-accept :: Int -foreign-> Int
+  socket ->
+    asm mov 43     %rax
+        mov socket %rdi
+        mov 0      %rsi
+        mov 0      %rdx
+        syscall ret
+
+
+define sys-reuse-address :: Int -foreign-> Int
+  socket ->
+    asm mov 1      %rcx
+        push %rcx
+        mov 54     %rax
+        mov socket %rdi
+        mov 1      %rsi
+        mov 2      %rdx
+        mov %rsp   %r10
+        mov 4      %r8
+        syscall
+        add 8      %rsp
+        ret
+
+
+define sys-recv :: Int -> *U8 -> Int -foreign-> Int
+  socket buffer size ->
+    asm mov 45     %rax
+        mov socket %rdi
+        mov buffer %rsi
+        mov size   %rdx
+        mov 0      %r10
+        mov 0      %r8
+        mov 0      %r9
+        syscall ret
+
+
+define sys-send :: Int -> *U8 -> Int -foreign-> Int
+  socket buffer size ->
+    asm mov 44     %rax
+        mov socket %rdi
+        mov buffer %rsi
+        mov size   %rdx
+        mov 0      %r10
+        mov 0      %r8
+        mov 0      %r9
+        syscall ret

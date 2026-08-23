@@ -780,6 +780,24 @@ static char *path_to_module_name(const char *path) {
         }
     }
 
+    /* Core namespaces may intentionally reuse a leaf name: for example,
+     * System.Posix.Socket is the raw ABI seam beneath Network.Socket.  Using
+     * only the final capitalized path component aliases both registry keys to
+     * "Socket" and silently suppresses the second dependency.  Preserve the
+     * declared namespace for non-prelude System and Network modules. */
+    const char *core_system = strstr(start, "core/System/");
+    const char *core_network = strstr(start, "core/Network/");
+    if (core_system || core_network) {
+        char *namespaced = core_system
+            ? (char *)core_system + strlen("core/")
+            : (char *)core_network + strlen("core/");
+        for (char *p = namespaced; *p; p++)
+            if (*p == '/') *p = '.';
+        char *result = strdup(namespaced);
+        free(b);
+        return result;
+    }
+
     for (char *p = start; *p; p++) if (*p == '/') *p = '.';
 
     /* If the result contains dots (path components like "src.Int"),
@@ -1125,7 +1143,8 @@ static bool declare_externals(CodegenContext *ctx,
     return true;
 }
 
-static char *get_obj_path(const char *source_path, bool is_main_module) {
+static char *get_obj_path(const char *source_path, bool is_main_module,
+                          bool test_mode) {
     const char *home = getenv("HOME");
 
     char *core_prefix = monad_core_dir();
@@ -1152,9 +1171,11 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
 
         char obj[1024];
         if (is_main_module) {
-            snprintf(obj, sizeof(obj), "%s/%s.o", cache_dir, base);
+            snprintf(obj, sizeof(obj), "%s/%s%s.o", cache_dir, base,
+                     test_mode ? ".test" : "");
         } else {
-            snprintf(obj, sizeof(obj), "%s/%s.module.o", cache_dir, base);
+            snprintf(obj, sizeof(obj), "%s/%s%s.module.o", cache_dir, base,
+                     test_mode ? ".test" : "");
         }
         free(base);
         free(core_prefix);
@@ -1164,7 +1185,9 @@ static char *get_obj_path(const char *source_path, bool is_main_module) {
 
     // Normal case
     char *base = base_no_ext(source_path);
-    const char *suffix = is_main_module ? ".o" : ".module.o";
+    const char *suffix = is_main_module
+        ? (test_mode ? ".test.o" : ".o")
+        : (test_mode ? ".test.module.o" : ".module.o");
     char *obj = malloc(strlen(base) + strlen(suffix) + 1);
     sprintf(obj, "%s%s", base, suffix);
     free(base);
@@ -1185,6 +1208,28 @@ static bool is_persistent_core_object(const char *path) {
         prefix, sizeof(prefix), "%s/.cache/monad/core/", home);
     return length > 0 && (size_t)length < sizeof(prefix) &&
            strncmp(path, prefix, (size_t)length) == 0;
+}
+
+static bool object_has_matching_interface(const char *object_path) {
+    if (!object_path) return false;
+    size_t length = strlen(object_path);
+    char *interface_path = malloc(length + 6);
+    if (!interface_path) return false;
+    memcpy(interface_path, object_path, length + 1);
+    char *extension = strrchr(interface_path, '.');
+    if (extension && strcmp(extension, ".o") == 0)
+        strcpy(extension, ".mqti");
+    else
+        strcat(interface_path, ".mqti");
+
+    QttInterfaceError error = QTT_INTERFACE_OK;
+    QttInterface *interface = qtt_interface_read(interface_path, &error);
+    uint64_t fingerprint = file_content_fingerprint(object_path);
+    bool matches = interface && fingerprint &&
+        qtt_interface_artifact_fingerprint(interface) == fingerprint;
+    qtt_interface_free(interface);
+    free(interface_path);
+    return matches;
 }
 
 /* Load the certified callable fragment of a dependency without its source.
@@ -1467,10 +1512,28 @@ static CompiledModule *compile_one(const char *source_path,
      * build/monad while explicit imports inside that prelude still search the
      * package working directory. */
     if (!getenv("MONAD_CORE")) {
-        char *resolved_core = monad_core_dir();
-        if (resolved_core && dir_exists(resolved_core))
-            monad_setenv("MONAD_CORE", resolved_core);
-        free(resolved_core);
+        char source_real[1024];
+        char source_core[1024];
+        bool source_owns_core = false;
+        if (host_realpath(source_path, source_real)) {
+            char *prelude = strstr(source_real, "/prelude/");
+            if (prelude) {
+                size_t length = (size_t)(prelude - source_real);
+                if (length > 0 && length < sizeof(source_core)) {
+                    memcpy(source_core, source_real, length);
+                    source_core[length] = '\0';
+                    source_owns_core = dir_exists(source_core);
+                }
+            }
+        }
+        if (source_owns_core) {
+            monad_setenv("MONAD_CORE", source_core);
+        } else {
+            char *resolved_core = monad_core_dir();
+            if (resolved_core && dir_exists(resolved_core))
+                monad_setenv("MONAD_CORE", resolved_core);
+            free(resolved_core);
+        }
     }
 
     struct timespec _phase_t0, _phase_t1;
@@ -1503,7 +1566,8 @@ static CompiledModule *compile_one(const char *source_path,
     char *base     = base_no_ext(my_source_path);
     /* char *obj_path = malloc(strlen(base) + 3); */
     /* sprintf(obj_path, "%s.o", base); */
-    char *obj_path = get_obj_path(my_source_path, is_main_module);
+    char *obj_path = get_obj_path(my_source_path, is_main_module,
+                                  flags->test_mode);
 
 
     // Incremental check for library modules
@@ -1545,7 +1609,8 @@ static CompiledModule *compile_one(const char *source_path,
     time_t src_t = file_mtime(my_source_path);
 
     time_t obj_t = file_mtime(obj_path);
-    bool skip_emit = !is_main_module && (obj_t > 0 && obj_t > src_t);
+    bool skip_emit = !is_main_module && (obj_t > 0 && obj_t > src_t) &&
+                     object_has_matching_interface(obj_path);
 
     if (flags->verbose_level > 0 || flags->trace_codegen) {
         if (skip_emit)

@@ -1,0 +1,88 @@
+;;; Socket.mon --- small owned TCP socket interface
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "network sockets tcp ownership io"
+
+;;; Commentary:
+
+ Network.Socket turns the POSIX status protocol into explicit values and keeps
+ address layout out of applications. The first API is intentionally small: a
+ loopback listener, one accepted client, one bounded echo, and explicit close.
+
+;;; Code:
+
+import System.Posix.Network
+import System.Posix.FileDescriptor
+
+module Network.Socket
+  [Socket SocketResult SocketFailure SocketReady
+   listen-loopback accept-client echo-once close-socket]
+
+
+layout Socket
+  [descriptor :: Int]
+
+
+data SocketResult
+  = SocketFailure Int
+  | SocketReady Socket
+
+
+define echo-buffer :: [4kb]
+
+define network-port :: Int -> Int
+  :doc "Encode a host-order TCP port in network byte order."
+  port -> ((port & 0xff) * 256) + ((div port 256) & 0xff)
+
+
+define close-socket :: Socket -io-> Int
+  :doc "Close SOCKET and return the operating-system status."
+  socket -> sys-close socket.descriptor
+
+
+define listener-failure :: Int -> Int -io-> SocketResult
+  descriptor status ->
+    def closed (sys-close descriptor)
+    SocketFailure status
+
+
+define listener-result :: Int -> Int -> Int -> Int -io-> SocketResult
+  descriptor configured bind-status listen-status
+    | (< configured 0)    -> listener-failure descriptor configured
+    | (< bind-status 0)   -> listener-failure descriptor bind-status
+    | (< listen-status 0) -> listener-failure descriptor listen-status
+    | otherwise           -> SocketReady (Socket descriptor)
+
+
+define listen-loopback :: Int -io-> SocketResult
+  :doc "Listen for TCP connections on 127.0.0.1 at PORT."
+  port ->
+    def descriptor (sys-socket AF_INET SOCK_STREAM 0)
+    def configured (sys-reuse-address descriptor)
+    def address (SockAddrIn AF_INET (network-port port) 0x0100007f 0)
+    def bound (sys-bind descriptor &address 16)
+    def listening (sys-listen descriptor 16)
+    listener-result descriptor configured bound listening
+
+
+define accept-result :: Int -> SocketResult
+  descriptor | < 0       -> SocketFailure descriptor
+             | otherwise -> SocketReady (Socket descriptor)
+
+
+define accept-client :: Socket -io-> SocketResult
+  :doc "Block until LISTENER accepts one client."
+  listener -> accept-result (sys-accept listener.descriptor)
+
+
+define echo-count :: Socket -> Int -io-> Int
+  client count | <= count 0 -> count
+               | otherwise  -> sys-send client.descriptor &echo-buffer count
+
+
+define echo-once :: Socket -io-> Int
+  :doc "Receive at most four KiB from CLIENT and send the received bytes back."
+  client ->
+    def count (sys-recv client.descriptor &echo-buffer 4096)
+    echo-count client count

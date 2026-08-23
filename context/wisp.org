@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-08-21
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -159,10 +159,55 @@
 [OBS id:obs.wisp.at-sugar src:wisp.c conf:high]
   =@-sugar= (indexing shorthand): array/list indexing via =@= syntax.
 
+[FIX id:fix.wisp.guard-postfix-index-2026-08-11 date:2026-08-11 by:codex src:wisp.c,tests/core_json_scalars.mon conf:high]
+  Postfix =collection[index]= remains a typed indexing operation while Wisp
+  elaborates grouped guards. Guard elaboration previously erased the postfix
+  distinction and emitted a call-shaped =(collection index)= inside its
+  generated lambda, where parameter shadowing made type-directed recovery
+  impossible. Expression snippets now lower simple constant postfix indices
+  through the generic =nth= contract, retaining the collection-to-element type
+  relation through inference. Ordinary expressions continue to use the
+  reader's explicit =__index= primitive.
+
 [OBS id:obs.wisp.infix-sugar src:wisp.c conf:high]
   Infix detection: =3 + 4= transforms to =(+ 3 4)=. Standard arithmetic and
   comparison operators are recognized as infix when they appear between two
   expressions on the same line.
+
+[FIX id:fix.wisp.whitespace-string-clause-body-2026-08-21 date:2026-08-21 by:codex src:wisp.c,tests/test_wisp_grouped_infix.py conf:high]
+  A quoted string is one expression even when its payload contains only
+  whitespace. Pattern-clause lowering now classifies complete quoted strings
+  and character literals as single-token forms before applying the bare
+  multi-token call wrapper. Consequently =0 -> " "= reaches the reader as the
+  literal =" "= rather than the invalid call-shaped form =(" ")=.
+
+[FIX id:fix.wisp.multi-subject-pointfree-guards-2026-08-21 date:2026-08-21 by:codex src:wisp.c,tests/wisp_receiver_relative_guards.mon conf:high]
+  Receiver-relative guard operators work uniformly with multiple simple clause
+  subjects. The expander gathers explicit guard operands, marks any clause
+  subjects already present, prepends the omitted subjects in clause order, and
+  then emits the explicit operands. Thus =left right | == lowers to
+  =(= left right)=, while =left right | = left= lowers to =(= right left)=.
+  Wildcards remain excluded because they never bind a receiver.
+  A bare bound subject used as the complete guard remains a value rather than
+  becoming a call with every other subject. This distinction preserves guard
+  tables such as =... [Rejected failure item-consumed] | item-consumed= while
+  operator-headed guards continue to fill their omitted operand slots.
+
+[FIX id:fix.wisp.unary-method-char-guards-2026-08-21 date:2026-08-21 by:codex src:wisp.c,tests/wisp_receiver_relative_guards.mon,how_to/Scheme.mon conf:high]
+  Unary guard tables recognize a bare predicate or method ending in =?= as a
+  point-free call and supply their sole subject. Top-level arrow scanning now
+  treats character literals as opaque, so literals such as ='('= and =')'=
+  cannot alter grouping depth. Operator operand parsing consumes one complete
+  Wisp expression, preserving =Char 0x27= as a cast rather than flattening it
+  into an extra equality argument. The Scheme lexer predicate is the public
+  end-to-end regression for all three rules.
+
+[FIX id:fix.codegen.silent-layout-declarations-2026-08-21 date:2026-08-21 by:codex src:codegen.c,tests/test_how_to_examples.py conf:high]
+  Successful layout code generation is silent during ordinary compilation.
+  The unconditional size-and-field =printf= was debugging output, not a
+  diagnostic or program result; importing =Text.Parser= otherwise printed its
+  internal layout inventory before user-facing examples could run. The Scheme
+  how-to regression requires an empty compiler stdout stream.
 
 [OBS id:obs.wisp.pipe-sugar src:wisp.c conf:high]
   Pipe sugar: =x |> f= transforms to =(f x)=. Pipe chains are handled by the
@@ -959,6 +1004,14 @@ Test-driven observations and failure records for the corresponding subsystem.
   token stream must preserve them so old-core pattern clauses with guards
   compile.
 
+[FIX id:fix.wisp.grouped-structured-guard-head-2026-08-11 date:2026-08-11 by:codex src:wisp.c,core/Text/Parser.mon,tests/core_text_parser_combinators.mon conf:high]
+  A subject-only line containing a bracketed constructor or collection pattern
+  and followed by indented guards is a grouped function-clause head, not an
+  equation-style expression scrutinee. Scrutinee desugaring now rejects square-
+  bracketed candidates, leaving ordinary Wisp pattern lowering to preserve the
+  complete multi-argument head. This makes formatter-produced forms such as
+  =code [Expected item name rest]= unambiguous and executable.
+
 [FIX id:fix.wisp.ignored-signature-param-contract-2026-06-27 src:wisp.c,reader.c,pmatch.c,tests/codegen/errors/reader/signature/atom.reader.error.signature.ignored-param-bound/signature-ignored-param-bound.mon,tests/codegen/branches/wisp-codegen/define-and-types/atom.codegen.80.wisp.codegen.define.and.types.rt.wisp.ignored.signature.param/rt_wisp_ignored_signature_param.mon conf:high]
   A function signature parameter written as =_= is a semantic ignored-argument
   contract. Reader/pmatch validation requires every pattern clause at that
@@ -996,3 +1049,70 @@ Test-driven observations and failure records for the corresponding subsystem.
   ordinary reader. Inline and indented qualifications therefore generate the
   same AST and portable evidence; the Core Effect module exercises the
   indented form as a proof of availability.
+[FIX id:fix.wisp.pmatch-arity-boundary-2026-08-11 date:2026-08-11 by:codex src:pmatch.c,wisp.c,tests/parser_recursive_higher_order_collection_reply.mon conf:high]
+  Pattern-clause lookahead counts top-level pattern groups and accepts an arrow
+  or guard only when that count matches the function arity. Parenthesized Wisp
+  declarations and =#line= directives are explicit definition boundaries.
+  Consequently an arrow in the next =define= can no longer make that definition
+  part of the preceding pattern matrix.
+
+  Subject-only guarded clause lines never enter the simple inline-body expander:
+  that path requires a real top-level body arrow. This closes a compiler null
+  dereference while keeping grouped guard syntax owned by its dedicated
+  expansion path.
+[FIX id:fix.wisp.partial-parameter-arity-prescan-2026-08-11 date:2026-08-11 by:codex src:wisp.c,how_to/Parse.mon conf:high]
+  The advisory Wisp arity prescan now tolerates an empty recovered parameter
+  name slot. It must never dereference partial recovery evidence: the real
+  reader/type checker owns the diagnostic. The installed compiler previously
+  segfaulted in =build_token_stream= while recursively compiling
+  =how_to/Parse.mon= and =Text.Parser=; the exact installed command
+  =monad Parse.mon && ./Parse= is now the deployment-topology regression.
+
+[FIX id:fix.wisp.guard-equality-context-2026-08-11 date:2026-08-11 by:codex src:wisp.c,tests/wisp_adjacent_same_arity_guards.mon conf:high]
+  A complete =lhs = rhs= inside a guard is equality, including beside complex
+  list patterns that provide no implicit receiver. Guard expansion normalizes
+  that condition before statement tokenization can reinterpret it as mutable
+  =var= syntax. Top-level =x = value= remains a binding. The regression also
+  proves adjacent guarded definitions of equal arity remain separate matrices.
+[FIX id:fix.wisp.declaration-grouped-infix-fence-2026-08-13 date:2026-08-13 by:codex src:wisp.c,tests/test_wisp_grouped_infix.py conf:high]
+  Grouped-infix normalization must not promote grammar separators inside
+  declaration transport forms.  In particular, the equals sign in a multiline
+  Wisp data declaration remains part of =data T = C1 | C2= rather than becoming
+  an equality call.  This keeps constructors registered before inference and is
+  covered by =python3 tests/test_wisp_grouped_infix.py= and the full
+  =python3 tests/run_core.py --no-color= core-library run.
+[FIX id:fix.wisp.subject-guards-and-reserved-infix-2026-08-13 date:2026-08-13 by:codex src:wisp.c,codegen.c,tests/test_wisp_grouped_infix.py conf:high]
+  Reserved Wisp infix spellings such as =++= remain binary during early
+  rewriting even before imported arity metadata is available, so chained
+  expressions associate correctly while compiling core modules in isolation.
+
+  A subject-only method head followed by indented guards owns those guards at
+  both top level and inside class defaults.  Each guard inherits the head's
+  subjects, and class defaults retain the expanded conditional body rather than
+  constructing and immediately applying a closure.  Recursive calls made while
+  a default implementation is being materialized resolve to that concrete
+  =__impl_*= function, before the public typeclass dispatch entry exists.  The
+  focused regression covers all three shapes; =Data/Enum.mon= and
+  =Logic/FirstOrder/Modal.mon= exercise them in the full core run.
+[FIX id:fix.wisp.wildcard-relative-multiline-guard-2026-08-14 date:2026-08-14 by:codex src:wisp.c,tests/codegen/branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.wildcard.relative.multiline/rt_wisp_guard_wildcard_relative_multiline.mon conf:high]
+  In a multi-argument clause, wildcard patterns do not count as implicit guard
+  receivers.  Therefore =_ _ value | >= limit= applies the receiver-relative
+  comparison to =value=.  When the following fallback uses an arrow with an
+  indented body, every deeper statement belongs to that clause and lowers as
+  one explicit =begin= sequence.  Treating each =def= line as a new pattern
+  clause executed only the first mutation and silently stopped recursive
+  render loops such as Donut's =scan-phi=.
+
+  The dedicated deep codegen atom covers mixed argument types, wildcard
+  receiver selection, multiline local definitions, native-buffer mutation,
+  recursion, expected stdout, full first-class metadata, and its recursive
+  menu target.  User-facing examples may use the compact wildcard form; they
+  do not need to repeat ignored parameter names merely to preserve sequencing.
+
+[FIX id:fix.wisp.multiline-clause-resume-2026-08-23 date:2026-08-23 by:codex src:wisp.c,how_to/TcpServer.mon,tests/test_tcp_server.py conf:high]
+  After collecting an indented multiline clause body, Wisp resumes at the
+  beginning of the first line whose indentation returns to the clause level.
+  The scanner previously retained the end of that line, so the immediately
+  following constructor clause vanished and authors had to duplicate it.
+  =TcpServer.accept-one= is the executable regression: its failure branch has
+  a multiline close sequence immediately followed by the successful pattern.

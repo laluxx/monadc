@@ -1,0 +1,50 @@
+;;; TcpServer.mon --- the smallest honest TCP server
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "how-to network tcp server io"
+
+;;; Commentary:
+
+ A server has three visible moments: listen, accept, and serve. Socket layout,
+ byte order, and operating-system calls belong to Network.Socket, leaving this
+ example to describe the lifetime of one connection.
+
+;;; Code:
+
+import Network.Socket
+
+
+define server-port :: Int
+  39127
+
+
+define serve-client :: Socket -> Socket -io-> Int
+  :doc "Echo one message, then close CLIENT and LISTENER."
+  listener client ->
+    def echoed (echo-once client)
+    def client-closed (close-socket client)
+    def listener-closed (close-socket listener)
+    if echoed < 0 then echoed else 0
+
+
+define accept-one :: Socket -> SocketResult -io-> Int
+  :doc "Serve one accepted connection or close LISTENER after failure."
+  listener [SocketFailure status] ->
+    def closed (close-socket listener)
+    status
+  listener [SocketReady client] -> serve-client listener client
+
+
+define serve-one :: SocketResult -io-> Int
+  :doc "Accept and serve one client when listener setup succeeds."
+  [SocketFailure status] -> status
+  [SocketReady listener] -> accept-one listener (accept-client listener)
+
+
+define main :: Int -io-> Int
+  :doc "Run the one-client loopback server."
+  _ -> serve-one (listen-loopback server-port)
+
+
+main 0

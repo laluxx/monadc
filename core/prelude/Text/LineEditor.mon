@@ -23,12 +23,15 @@ import Sequence
 
 module Text.LineEditor
   [key-ctrl-a key-ctrl-b key-ctrl-d key-ctrl-e key-ctrl-f
-   key-ctrl-k key-ctrl-u key-backspace key-ctrl-backspace key-meta-d
-   key-escape key-arrow-left key-arrow-right key-home key-end
+   key-ctrl-k key-ctrl-r key-ctrl-t key-ctrl-u key-ctrl-y
+   key-backspace key-ctrl-h key-ctrl-backspace
+   key-meta-b key-meta-d key-meta-f
+   key-escape key-arrow-left key-arrow-right key-home key-end key-delete
+   key-arrow-up key-arrow-down key-function
    move-begin move-end move-forward move-backward
    insert-char delete-forward delete-backward
    kill-line-backward kill-line-forward
-   kill-word-backward kill-word-forward
+   kill-word-backward kill-word-forward transpose-characters
    decode-escape2 line-complete?
    apply-key-text apply-key-cursor]
 
@@ -39,15 +42,25 @@ define key-ctrl-d 4
 define key-ctrl-e 5
 define key-ctrl-f 6
 define key-ctrl-k 11
+define key-ctrl-r 18
+define key-ctrl-t 20
 define key-ctrl-u 21
+define key-ctrl-y 25
 define key-backspace 127
+define key-ctrl-h 8
 define key-ctrl-backspace 23
 define key-meta-d 1000
+define key-meta-b 1005
+define key-meta-f 1006
 define key-escape 27
 define key-arrow-left 1001
 define key-arrow-right 1002
 define key-home 1003
 define key-end 1004
+define key-delete 1007
+define key-arrow-up 1008
+define key-arrow-down 1009
+define key-function 1010
 
 
 define insert-at :: Int -> Int -> [Int] -> [Int]
@@ -77,19 +90,41 @@ define word-char? :: Int -> Bool
 
 define drop-forward-word :: [Int] -> [Int]
   []                     -> []
-  [x|xs] | word-char? x  -> drop-forward-word xs
-  [x|xs]                 -> prepend x xs
+  [x|xs]
+    | word-char? x -> drop-forward-word xs
+    | otherwise    -> prepend x xs
 
 
 define word-start-loop :: Int -> Int -> Int -> [Int] -> Int
   target index boundary _      | (>= index target) -> boundary
   target index boundary []                         -> boundary
-  target index boundary [x|xs] | word-char? x      -> word-start-loop target (+ index 1) boundary xs
-  target index boundary [x|xs]                     -> word-start-loop target (+ index 1) (+ index 1) xs
+  target index boundary [x|xs]
+    | word-char? x -> word-start-loop target (+ index 1) boundary xs
+    | otherwise    -> word-start-loop target (+ index 1) (+ index 1) xs
 
 
 define word-start :: Int -> [Int] -> Int
   cursor text -> word-start-loop cursor 0 0 text
+
+
+define word-end-skip :: Int -> [Int] -> Int
+  cursor [] -> cursor
+  cursor [character|rest]
+    | word-char? character -> cursor
+    | otherwise            -> word-end-skip (cursor + 1) rest
+
+
+define word-end-take :: Int -> [Int] -> Int
+  cursor [] -> cursor
+  cursor [character|rest]
+    | word-char? character -> word-end-take (cursor + 1) rest
+    | otherwise            -> cursor
+
+
+define word-end :: Int -> [Int] -> Int
+  cursor text ->
+    def start (word-end-skip cursor (drop text cursor))
+    word-end-take start (drop text start)
 
 
 define move-begin :: Int -> [Int] -> Int
@@ -101,13 +136,15 @@ define move-end :: Int -> [Int] -> Int
 
 
 define move-forward :: Int -> [Int] -> Int
-  cursor text | (< cursor (length text)) -> (+ cursor 1)
-  cursor text                           -> cursor
+  cursor text
+    | (< cursor (length text)) -> (+ cursor 1)
+    | otherwise                -> cursor
 
 
 define move-backward :: Int -> [Int] -> Int
-  cursor _ | (> cursor 0) -> (- cursor 1)
-  cursor _                -> cursor
+  cursor _
+    | (> cursor 0) -> (- cursor 1)
+    | otherwise    -> cursor
 
 
 define insert-char :: Int -> Int -> [Int] -> [Int]
@@ -119,8 +156,9 @@ define delete-forward :: Int -> [Int] -> [Int]
 
 
 define delete-backward :: Int -> [Int] -> [Int]
-  cursor text | (<= cursor 0) -> text
-  cursor text                 -> delete-at (- cursor 1) text
+  cursor text
+    | (<= cursor 0) -> text
+    | otherwise     -> delete-at (- cursor 1) text
 
 
 define kill-word-forward :: Int -> [Int] -> [Int]
@@ -139,49 +177,93 @@ define kill-line-forward :: Int -> [Int] -> [Int]
   cursor text -> take text cursor
 
 
+define transpose-position :: Int -> [Int] -> Int
+  _ text | (< (length text) 2) -> 0
+  cursor text | (>= cursor (length text)) -> (- (length text) 2)
+  cursor _ | (<= cursor 0) -> 0
+  cursor _ -> (- cursor 1)
+
+
+define transpose-characters :: Int -> [Int] -> [Int]
+  _ text | (< (length text) 2) -> text
+  cursor text ->
+    def position (transpose-position cursor text)
+    def before (take text position)
+    def after (drop text (+ position 2))
+    def swapped (prepend (nth text (+ position 1)) (prepend (nth text position) after))
+    concat before swapped
+
+
 define apply-key-text :: Int -> Int -> [Int] -> [Int]
-  key cursor text | (= key key-ctrl-d)         -> delete-forward cursor text
-  key cursor text | (= key key-backspace)      -> delete-backward cursor text
-  key cursor text | (= key key-ctrl-backspace) -> kill-word-backward cursor text
-  key cursor text | (= key key-meta-d)         -> kill-word-forward cursor text
-  key cursor text | (= key key-ctrl-u)         -> kill-line-backward cursor text
-  key cursor text | (= key key-ctrl-k)         -> kill-line-forward cursor text
-  key cursor text | (= key key-ctrl-a)         -> text
-  key cursor text | (= key key-ctrl-e)         -> text
-  key cursor text | (= key key-ctrl-f)         -> text
-  key cursor text | (= key key-ctrl-b)         -> text
-  key cursor text | (= key key-arrow-left)     -> text
-  key cursor text | (= key key-arrow-right)    -> text
-  key cursor text | (= key key-home)           -> text
-  key cursor text | (= key key-end)            -> text
-  key cursor text                              -> insert-char cursor key text
+  key cursor text
+    | (= key key-ctrl-d)         -> delete-forward cursor text
+    | (= key key-backspace)      -> delete-backward cursor text
+    | (= key key-ctrl-h)         -> delete-backward cursor text
+    | (= key key-ctrl-backspace) -> kill-word-backward cursor text
+    | (= key key-meta-d)         -> kill-word-forward cursor text
+    | (= key key-ctrl-u)         -> kill-line-backward cursor text
+    | (= key key-ctrl-k)         -> kill-line-forward cursor text
+    | (= key key-ctrl-t)         -> transpose-characters cursor text
+    | (= key key-ctrl-r)         -> text
+    | (= key key-ctrl-y)         -> text
+    | (= key key-ctrl-a)         -> text
+    | (= key key-ctrl-e)         -> text
+    | (= key key-ctrl-f)         -> text
+    | (= key key-ctrl-b)         -> text
+    | (= key key-arrow-left)     -> text
+    | (= key key-arrow-right)    -> text
+    | (= key key-home)           -> text
+    | (= key key-end)            -> text
+    | (= key key-delete)         -> delete-forward cursor text
+    | (= key key-arrow-up)       -> text
+    | (= key key-arrow-down)     -> text
+    | (= key key-function)       -> text
+    | (= key key-meta-b)         -> text
+    | (= key key-meta-f)         -> text
+    | otherwise                  -> insert-char cursor key text
 
 
 define apply-key-cursor :: Int -> Int -> [Int] -> Int
-  key cursor text | (= key key-ctrl-a)         -> move-begin cursor text
-  key cursor text | (= key key-ctrl-e)         -> move-end cursor text
-  key cursor text | (= key key-ctrl-f)         -> move-forward cursor text
-  key cursor text | (= key key-ctrl-b)         -> move-backward cursor text
-  key cursor text | (= key key-arrow-left)     -> move-backward cursor text
-  key cursor text | (= key key-arrow-right)    -> move-forward cursor text
-  key cursor text | (= key key-home)           -> move-begin cursor text
-  key cursor text | (= key key-end)            -> move-end cursor text
-  key cursor text | (= key key-ctrl-d)         -> cursor
-  key cursor text | (= key key-backspace)      -> move-backward cursor text
-  key cursor text | (= key key-ctrl-backspace) -> word-start cursor text
-  key cursor text | (= key key-meta-d)         -> cursor
-  key cursor text | (= key key-ctrl-u)         -> move-begin cursor text
-  key cursor text | (= key key-ctrl-k)         -> cursor
-  key cursor text                              -> (+ cursor 1)
+  key cursor text
+    | (= key key-ctrl-a)         -> move-begin cursor text
+    | (= key key-ctrl-e)         -> move-end cursor text
+    | (= key key-ctrl-f)         -> move-forward cursor text
+    | (= key key-ctrl-b)         -> move-backward cursor text
+    | (= key key-arrow-left)     -> move-backward cursor text
+    | (= key key-arrow-right)    -> move-forward cursor text
+    | (= key key-home)           -> move-begin cursor text
+    | (= key key-end)            -> move-end cursor text
+    | (= key key-delete)         -> cursor
+    | (= key key-arrow-up)       -> cursor
+    | (= key key-arrow-down)     -> cursor
+    | (= key key-function)       -> cursor
+    | (= key key-meta-b)         -> word-start cursor text
+    | (= key key-meta-f)         -> word-end cursor text
+    | (= key key-ctrl-d)         -> cursor
+    | (= key key-backspace)      -> move-backward cursor text
+    | (= key key-ctrl-h)         -> move-backward cursor text
+    | (= key key-ctrl-backspace) -> word-start cursor text
+    | (= key key-meta-d)         -> cursor
+    | (= key key-ctrl-u)         -> move-begin cursor text
+    | (= key key-ctrl-k)         -> cursor
+    | (= key key-ctrl-t)         -> (if (< cursor (length text)) (+ cursor 1) cursor)
+    | (= key key-ctrl-r)         -> cursor
+    | (= key key-ctrl-y)         -> cursor
+    | otherwise                  -> (+ cursor 1)
 
 
 define decode-escape2 :: Int -> Int -> Int
-  second third | (and (= second 0x5b) (= third 0x44)) -> key-arrow-left
-  second third | (and (= second 0x5b) (= third 0x43)) -> key-arrow-right
-  second third | (and (= second 0x5b) (= third 0x48)) -> key-home
-  second third | (and (= second 0x5b) (= third 0x46)) -> key-end
-  second third | (= second 0x64)                      -> key-meta-d
-  second third                                        -> key-escape
+  second third
+    | (and (= second 0x5b) (= third 0x44)) -> key-arrow-left
+    | (and (= second 0x5b) (= third 0x43)) -> key-arrow-right
+    | (and (= second 0x5b) (= third 0x48)) -> key-home
+    | (and (= second 0x5b) (= third 0x46)) -> key-end
+    | (and (= second 0x5b) (= third 0x41)) -> key-arrow-up
+    | (and (= second 0x5b) (= third 0x42)) -> key-arrow-down
+    | (= second 0x64)                      -> key-meta-d
+    | (= second 0x62)                      -> key-meta-b
+    | (= second 0x66)                      -> key-meta-f
+    | otherwise                            -> key-escape
 
 
 define line-complete? :: Int -> Bool
@@ -211,7 +293,11 @@ tests
   assert-eq (apply-key-cursor key-home 2 (list 0x61 0x62)) 0 "Readline home"
   assert-eq (decode-escape2 0x5b 0x44) key-arrow-left "Readline decodes left arrow"
   assert-eq (decode-escape2 0x5b 0x43) key-arrow-right "Readline decodes right arrow"
+  assert-eq (decode-escape2 0x5b 0x41) key-arrow-up "Readline decodes up arrow"
+  assert-eq (decode-escape2 0x5b 0x42) key-arrow-down "Readline decodes down arrow"
   assert-eq (decode-escape2 0x64 0) key-meta-d "Readline decodes M-d"
+  assert-eq (decode-escape2 0x62 0) key-meta-b "Readline decodes M-b"
+  assert-eq (decode-escape2 0x66 0) key-meta-f "Readline decodes M-f"
   :movement:
 
   :word-cursor:
@@ -219,13 +305,21 @@ tests
   assert-eq (apply-key-cursor key-meta-d 0 []) 0 "Readline M-d cursor"
   assert-eq (apply-key-cursor key-ctrl-u 3 (list 0x61 0x62 0x63)) 0 "Readline C-u cursor"
   assert-eq (apply-key-cursor key-ctrl-k 3 (list 0x61 0x62 0x63)) 3 "Readline C-k cursor"
+  assert-eq (apply-key-cursor key-meta-b 7 ⌜0x6f 0x6e 0x65 0x20 0x74 0x77 0x6f⌝) 4 "Readline M-b moves by one word"
+  assert-eq (apply-key-cursor key-meta-f 0 ⌜0x6f 0x6e 0x65 0x20 0x74 0x77 0x6f⌝) 3 "Readline M-f moves by one word"
   :word-cursor:
 
   :text-edit:
   assert-eq (show (insert-char 0 0x61 (list 0x62))) "(97 98)" "Readline insert at start"
   assert-eq (show (insert-char 1 0x62 (list 0x61 0x63))) "(97 98 99)" "Readline insert at cursor"
   assert-eq (show (apply-key-text key-backspace 2 (list 0x61 0x62))) "(97)" "Readline Backspace"
+  assert-eq (show (apply-key-text key-ctrl-h 2 (list 0x61 0x62))) "(97)" "Readline C-h is Backspace"
+  assert-eq (apply-key-cursor key-ctrl-h 2 (list 0x61 0x62)) 1 "Readline C-h moves back once"
   assert-eq (show (apply-key-text key-ctrl-d 0 (list 0x61 0x62))) "(98)" "Readline C-d"
+  assert-eq (show (apply-key-text key-delete 0 (list 0x61 0x62))) "(98)" "Readline Delete"
+  assert-eq (apply-key-cursor key-ctrl-a 1 (apply-key-text key-delete 1 ⌜0x61 0x62⌝)) 0 "Delete followed by C-a stays at column zero"
+  assert-eq (show (apply-key-text key-function 1 ⌜0x61 0x62⌝)) "(97 98)" "Function keys do not enter text"
   assert-eq (show (apply-key-text key-ctrl-backspace 3 (list 0x61 0x62 0x63))) "()" "Readline C-Backspace"
   assert-eq (show (apply-key-text key-meta-d 0 (list 0x61 0x62 0x63))) "()" "Readline M-d"
+  assert-eq (show (apply-key-text key-ctrl-t 2 ⌜0x61 0x62 0x63⌝)) "(98 97 99)" "Readline C-t transposes characters"
   :text-edit:

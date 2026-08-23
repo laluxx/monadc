@@ -245,28 +245,29 @@
 :ID: monadc.context.core-libs.text-parser
 :CUSTOM_ID: core-libs-text-parser
 :CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: core/prelude/Text/Parser.mon — executable byte-list parser substrate for future JSON and text parsers.
+:CONTEXT_DESCRIPTION: core/Text/Parser.mon — executable byte-list parser substrate for JSON and text parsers.
 :CONTEXT_VERSION: 1
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_CREATED: 2026-06-26
-:CONTEXT_UPDATED: 2026-06-27
+:CONTEXT_UPDATED: 2026-08-11
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: core/prelude/Text/Parser.mon
+:SOURCE: core/Text/Parser.mon
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.text-parser.scalar-result src:core/prelude/Text/Parser.mon conf:high]
+[OBS id:obs.text-parser.scalar-result src:core/Text/Parser.mon conf:high]
   =Text.Parser= returns scalar =ParseResult= layouts with =ok=, =value=,
   =offset=, and =error=. Parser input remains a =[Int]= function argument
   instead of a layout field because active runtime tests exposed instability
   around list fields inside layouts.
 
-[OBS id:obs.text-parser.primitives src:core/prelude/Text/Parser.mon conf:high]
-  Active primitives include =byte=, =choice=, =ascii-space?=, =ascii-digit?=,
-  =skip-space-offset=, =skip-space-xs=, =signed-int=, and =token-byte=.
-  These are intentionally first-order and byte-list based until higher-order
-  parser continuations and list-bearing layout fields are stable in core tests.
+[OBS id:obs.text-parser.primitives src:core/Text/Parser.mon conf:high]
+  The typed kernel now includes =parser-pure=, =parser-fail=,
+  =parser-satisfy=, =parser-map=, =parser-bind=, consumption-aware
+  =parser-or=, =parser-attempt=, =parser-cut=, =parser-label=, =parser-eof=,
+  and =parser-literal=. Character classification is imported from =Data.Char=;
+  the parser no longer owns duplicate ASCII whitespace or digit tables.
 
 [FIX id:fix.text-parser-data-list-empty-2026-06-27 date:2026-06-27 by:codex]
   =parser-empty?= now imports =Data.List= and delegates to =list-null?= instead
@@ -286,10 +287,129 @@
   =Text.Parser=, then extend the parser substrate only when JSON needs a
   genuinely reusable abstraction.
 
-[OBS id:obs.text-parser.tests src:core/prelude/Text/Parser.mon conf:high]
+[OBS id:obs.text-parser.tests src:core/Text/Parser.mon conf:high]
   =Text.Parser= carries 20 active assertions under =tests/run_core.py= covering
   empty input, byte success/failure, choice, whitespace tokenization, digit
   classification/conversion, and signed integer parsing.
+
+[DEC id:dec.text-parser.consumption-algebra-2026-08-11 date:2026-08-11 by:codex]
+  The production parser API uses =ParseReply a= with explicit consumed versus
+  empty success/failure. This follows Parsec's operational distinction: an
+  alternative may run after an empty failure, while a consumed failure is
+  committed unless the grammar explicitly requests backtracking. The first
+  executable basis includes sequencing, explicit backtracking, explicit cuts,
+  labels, EOF, reusable literals, and farthest-offset failure selection;
+  compatibility =ParseResult= operations remain while existing first-order
+  clients migrate.
+
+[FIX id:fix.text-parser-char-ownership-2026-08-11 date:2026-08-11 by:codex]
+  Removed parser-local ASCII whitespace, digit, and digit-conversion logic.
+  =Text.Parser= now imports =Data.Char=, converts raw integer bytes through
+  =chr= at the boundary, composes =blank?= with =linebreak?= for the exact RFC
+  8259 whitespace set, and uses =digit?= plus =digit->int= for numbers.
+
+[FIX id:fix.text-parser-import-boundary-2026-08-11 date:2026-08-11 by:codex]
+  Added =tests/parser_imported_reply_recursive_adt.mon= to prove that imported
+  polymorphic =ParseReply= values remain valid beside recursive client ADTs.
+  The earlier JSON failure was an inference-order interaction around overloaded
+  =Data.Char= methods after a generic reply consumer, not an imported-ADT ABI
+  failure. =Data.Char.byte-digit?= now provides a monomorphic byte seam, scalar
+  predicates are inferred before generic decoder helpers, and JSON literals
+  consume =parser-literal= replies directly.
+
+[DEC id:dec.text-parser-expectation-semilattice-2026-08-11 date:2026-08-11 by:codex]
+  Parser expectations form a canonical finite join-semilattice. Expectations
+  are maintained in stable code order; union is idempotent; farther failures
+  dominate nearer failures; and equal-offset alternatives join their labeled
+  expectations. This gives parser choice an associative diagnostic summary
+  independent of incidental evaluation order.
+
+[DEC id:dec.text-parser-reply-laws-2026-08-11 date:2026-08-11 by:codex]
+  Consumption is the two-point join semilattice =False ⊑ True= and bind
+  combines observations with =∨=. =attempt= and =cut= are idempotent
+  projections to =False= and =True= on failure. Literal chunks automatically
+  backtrack for ordered choice while retaining their furthest mismatch;
+  labels rewrite only empty failures. Equal-offset failure codes use a
+  canonical minimum while expectation sets join, so diagnostic choice is
+  commutative and deterministic at a fixed source position. These laws are
+  checked in =tests/core_text_parser_combinators.mon=.
+
+[FIX id:fix.text-parser-pretty-diagnostics-2026-08-11 date:2026-08-11 by:codex]
+  =render-parser-error= now renders a stable filename/line/column header,
+  merged human expectation labels, the source line, and a caret. Multiline
+  positions and deterministic merged messages have exact executable contracts
+  in =tests/core_text_parser_combinators.mon=. =Data.Json.render-json-error=
+  consumes the same structured =ParserFailure= path, establishing one value
+  for terminal and future LSP diagnostics rather than two prose protocols.
+
+[FIX id:fix.text-format-char-boundary-2026-08-11 date:2026-08-11 by:codex]
+  Added =Text.Format= for pure =int->text= and =char->text= conversion. The
+  compiler and runtime now expose a typed =Char -> String= primitive so source
+  excerpts are real strings; effectful =show= is not misused as conversion and
+  =[Char]= list wrappers are not passed to the C-string ABI.
+
+[DEC id:dec.text-parser.incremental-reply-2026-08-11 date:2026-08-11 by:codex]
+  Incremental parsing will extend the reply algebra with an explicit partial
+  continuation rather than treating strict =[Int]= input as streaming. This
+  follows Attoparsec's =Done | Fail | Partial= boundary while retaining
+  Parsec-style commitment and richer diagnostic expectations.
+
+[DEC id:dec.data-json.strict-profiles-2026-08-11 date:2026-08-11 by:codex]
+  =Data.Json= targets RFC 8259 by default. I-JSON duplicate-name, Unicode, and
+  binary64 interoperability constraints belong to an explicit strict profile;
+  RFC 8785 canonicalization is a later encoder policy, not an incidental
+  compact-printing mode. Resource budgets and duplicate-name behavior must be
+  represented by options rather than hidden implementation choices.
+
+[FIX id:fix.data-json.scalar-foundation-2026-08-11 date:2026-08-11 by:codex]
+  Added active =Data.Json= with the complete recursive semantic shape and a
+  strict scalar decoder for null, booleans, and signed integers. The decoder
+  rejects leading zeros and trailing data, consumes RFC whitespace, and
+  retains the furthest literal mismatch offset. Executable contracts live in
+  =tests/core_json_scalars.mon=; generic reply contracts live in
+  =tests/core_text_parser_combinators.mon=.
+
+[FIX id:fix.data-json-recursive-arrays-2026-08-11 date:2026-08-11 by:codex]
+  Extended the active RFC 8259 grammar with empty, heterogeneous, and nested
+  arrays. Array decoding carries typed =ParseReply Json= values, commits after
+  the opening bracket, preserves exact offsets across whitespace, and rejects
+  trailing commas. Fresh typed singleton construction at the polymorphic
+  reply boundary preserves nominal JSON elements in runtime collections.
+  Regression coverage lives in =tests/core_json_scalars.mon=.
+
+[FIX id:fix.data-json-unicode-strings-2026-08-11 date:2026-08-11 by:codex]
+  Implemented RFC 8259 strings with all short escapes, four-digit Unicode
+  escapes, strict UTF-16 surrogate pairing, and immediate scalar-to-UTF-8
+  encoding. Raw octets are checked against Unicode 17 Table 3-7: lone
+  continuations, truncation, overlong forms, UTF-8 encoded surrogates, and
+  values above U+10FFFF are rejected with structured parser failures.
+  =tests/core_json_scalars.mon= is the executable regression contract.
+
+[DEC id:dec.text-unicode-octet-boundary-2026-08-11 date:2026-08-11 by:codex]
+  =Text.Unicode.utf8-prefix-width= owns canonical octet-sequence recognition;
+  =Data.Json= owns only JSON quoting and escape policy. Invalid protocol bytes
+  never become =String=. This keeps Unicode Table 3-7 centralized and reusable
+  by future network, filesystem, and serialization modules.
+
+[FIX id:fix.data-json-objects-2026-08-11 date:2026-08-11 by:codex]
+  Added strict recursive object decoding with string-only keys, mandatory
+  colons, whitespace-aware delimiters, multiple members, trailing-comma
+  rejection, and structured key/colon/delimiter failures. =JsonMember= owns
+  the semantic key/value product. A nominal =JsonMemberBuffer= protects the
+  recursive accumulator at the compiler's polymorphic collection ABI boundary.
+
+[FIX id:fix.how-to-parser-2026-08-11 date:2026-08-11 by:codex]
+  Added =how_to/Parse.mon= as an executable, first-principles introduction to
+  parser combinators. It grows from one token through sequencing and bounded
+  repetition, explains commitment in plain language, and renders the same
+  structured diagnostic consumed by Data.Json and future LSP publication.
+  The public command is =monad test Parse.mon= from =how_to/=.
+
+[THINK id:think.data-json.optimized-backend-2026-08-11 date:2026-08-11 by:codex]
+  The declarative combinator grammar and optimized scanning backend should be
+  separate layers. A future SIMD structural/UTF-8 stage may follow the
+  simdjson two-stage architecture without changing =Data.Json='s semantic API
+  or making other =Text.Parser= clients pay JSON-specific complexity.
 
 * Test.mon — Test Framework (MOVED TO old-core)
 :PROPERTIES:
@@ -1012,7 +1132,7 @@
 
 [FIX id:fix.core-libs.data-list-restored-2026-06-30 date:2026-06-30 by:codex]
   Restored =core/prelude/Data/List.mon= after it was absent from the active
-  core tree while =core/prelude/Text/Parser.mon= still imported =Data.List=.
+  core tree while =core/Text/Parser.mon= still imported =Data.List=.
   The active surface is intentionally list-prefixed
   (=list-null?=, =list-length=, =list-drop=, =list-take=, =list-append=,
   =list-reverse=) to avoid conflicts with always-available builtins and other
@@ -1020,7 +1140,7 @@
   existing =$MONAD_CORE/prelude/Data/List.mon= path rule. Verified by
   =./monad test tests/wisp_data_list_import.mon=,
   =./monad test core/prelude/Data/List.mon=,
-  =./monad test core/prelude/Text/Parser.mon=, and
+  =./monad test core/Text/Parser.mon=, and
   =python3 tests/run_core.py= (29 modules, 555 assertions).
 
 [FIX id:fix.core-libs.length-moved-to-data-list-2026-06-30 date:2026-06-30 by:codex]
@@ -1033,7 +1153,7 @@
   count/length codegen dispatch. Verified by
   =./monad test core/prelude/Data/List.mon=,
   =./monad test tests/wisp_data_list_import.mon=,
-  =./monad test core/prelude/Text/Parser.mon=,
+  =./monad test core/Text/Parser.mon=,
   =python3 tests/run_core.py= (29 modules, 556 assertions), and a negative
   temporary compile check where bare =length= fails as an unknown function.
 
@@ -2371,3 +2491,258 @@ filesystem objects.
   readable or silently choose an element type. Design it with =Buffer a=,
   explicit capacity units, scoped allocation, and checked indexing before the
   donut migrates away from its persistent-list framebuffer.
+
+[FIX id:fix.how-to.donut-updating-animation-2026-08-14 date:2026-08-14 by:codex src:how_to/Donut.mon,tests/test_how_to_examples.py conf:high]
+  The Donut executable must render computed frames; a hardcoded preview is not
+  an executable or testing fallback.  Its entry point emits 120 full 80-by-22
+  frames, homes the terminal before each write, and advances both rotation
+  angles.  The renderer uses fixed-size mutable depth and byte buffers so the
+  documented 90-by-314 sampling density does not copy persistent lists for
+  every winning sample.
+
+  Terminal rows are explicit: each frame contains 22 records of 80 cells plus
+  a newline, so rendering is independent of the user's terminal width and does
+  not rely on automatic wrapping.  The animation hides the cursor before its
+  first frame, restores it afterward, and leaves the shell prompt on a fresh
+  line.
+
+  Projection follows the canonical =donut.c= viewport: center column 40,
+  center row 12, horizontal scale 30, and vertical scale 15.  Together with
+  the standard =.,-~:;=!*#$@= luminance ramp, 90-by-314 surface sampling, and
+  =0.04=/=0.02= angle increments, this fills the 80-by-22 display with the
+  familiar proportions instead of shrinking the torus merely to preserve a
+  decorative blank border.
+
+  The example now uses the language's native sized-array surface directly:
+  =[2kb]= is 2048 mutable =U8= elements, =[14kb Float]= is 1792 mutable
+  =Float= elements, indexing is =(buffer index)=, and mutation is
+  =set! (buffer index) value=.  Byte-size suffixes denote storage capacity, so
+  typed forms divide the requested bytes by the element width; =Float= is an
+  eight-byte element just like =F64=.  Bulk output belongs to =IO.write-buffer=
+  and terminal control belongs to =System.Terminal.ANSI=, leaving
+  =how_to/Donut.mon= with no C include, allocation, memory, or terminal FFI.
+
+  The executable regression rejects =donut-preview= in the source, splits the
+  captured stream at =ESC [ H=, and proves that the first two complete frames
+  contain shading and differ.  It also checks all 22 row widths and the final
+  cursor-restoration sequence.  =tests/core_buffer_ansi.mon= separately pins
+  byte and typed-capacity counts, indexed mutation (including fractional
+  =Float= values), and the named ANSI byte sequences.  This supersedes both the
+  earlier crash observation and the rejected nominal buffer-wrapper proposal:
+  sized mutable storage is language syntax, not a =Data.Buffer= object API.
+
+  The public =cd how_to && monad Donut.mon && ./Donut= path is an installed
+  compiler/Core contract.  =Math.Angle= is a required shipped dependency and
+  the regression may not silently recover it from a second installed Core
+  tree.  Private compiler primitives such as =__rt_write_array= also require a
+  compiler and Core from the same installation; after changing either side,
+  =make install PREFIX=$HOME/.local= updates the pair atomically.
+
+  Examples should use primitive syntax directly when it is already clear:
+  =Int value=, =index + 1=, and =0= do not justify local aliases such as
+  =float->int=, =increment-int=, or =int-zero=.  The Donut source regression
+  rejects those ceremonial definitions so they cannot quietly return.
+
+[FIX id:fix.core-libs.parameterized-result-specialization-2026-08-11 date:2026-08-11 by:codex src:codegen.c,tests/parser_imported_reply_recursive_adt.mon conf:high]
+  Imported polymorphic specialization now instantiates parameterized result
+  types from the principal HM scheme rather than an independently reconstructed
+  return annotation. Substitution also traverses =TYPE_FN= parameters and does
+  not let a higher-order annotation containing type variables overwrite its
+  concrete scheme instantiation. Static call-result recovery follows concrete
+  arrow types stored on higher-order environment variables.
+
+  These are compiler-wide invariants, although =Text.Parser= exposed them:
+  =ParseReply a= must become =ParseReply Int= everywhere in a specialization,
+  including inside parser-valued parameters. The independent recursive-ADT
+  importer remains the executable boundary regression. A deeper =-O0= closure
+  return issue still blocks shipping generic =lexeme= and =spanned=
+  combinators; those APIs were withheld rather than given Parser-specific ABI
+  workarounds.
+
+[FIX id:fix.core-libs.parser-lexemes-spans-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser.mon,tests/core_text_parser_combinators.mon,tests/parser_higher_order_parameterized_reply.mon conf:high]
+  =Text.Parser= now exposes grammar lexemes and half-open source spans as
+  ordinary combinators. =parser-lexeme= preserves the parsed value and failure
+  evidence while consuming trailing =Data.Char= grammar whitespace.
+  =parser-spanned= returns =WithSpan value start end= without changing the
+  underlying parser's consumption commitment. Span coordinates use the
+  conventional =[start,end)= interval, making lengths compositional and
+  directly suitable for compiler and LSP source ranges.
+
+  Their implementation deliberately composes the existing bind algebra rather
+  than duplicating =ParseReply= pattern machinery. The independent
+  higher-order regression proves direct and reconstructed parameterized ADT
+  returns at the closure boundary. This cycle also established that generic
+  helpers referenced by exported specialization source must be interface
+  visible until module artifacts carry a private specialization dependency
+  closure; that compiler-interface refinement remains open.
+
+[FIX id:fix.core-libs.parser-symbol-complete-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser.mon,tests/core_text_parser_combinators.mon conf:high]
+  The first grammar-facing layer now includes =parser-symbol= and
+  =parser-complete=. A symbol is an atomic literal followed by the shared
+  lexeme whitespace policy; mismatch positions remain the literal parser's
+  farthest evidence. Complete execution sequences an arbitrary parser with
+  end-of-input while returning the original semantic value, so top-level
+  grammars reject trailing input without hand-written reply inspection.
+
+[OBS id:obs.core-libs.parser-repetition-type-blocker-2026-08-11 date:2026-08-11 by:codex src:tests/parser_higher_order_nested_collection_result.mon,infer.c conf:high]
+  A test-first bounded-repetition implementation exposed a general inference
+  defect before it entered Core. Composing a higher-order parser
+  =Parser a= through =parser-map= and =parser-or= into =ParseReply [a]= causes
+  the dependent/HM bridge to expand the parser domain correctly but then
+  conflate the input =[Int]= collection with the nested result collection.
+  The minimized known-fail regression retains the intended valid program.
+
+  Do not ship monomorphic repetition or Parser-specific compiler branches.
+  Repair higher-order nested type-application inference, promote the regression
+  to passing, and then implement bounded =many=/=some=/=sep-by=. Repetition
+  must reject a nullable parser that makes no offset progress and must carry an
+  explicit item budget, following the termination lesson shared by production
+  combinator libraries and grammar-analysis systems.
+[FIX id:fix.core-libs.parser-guard-fallback-lint-2026-08-11 date:2026-08-11 by:codex src:tooling/lint.c,tests/test_lint.py,core/Text/Parser.mon conf:high]
+  The repeated-pattern guard lint now recognizes the minimal constructor
+  decision table: one guarded constructor row followed by the same unguarded
+  row. Its machine-applicable rewrite groups the pattern and spells the final
+  branch =otherwise=. Running the fixer over =Text.Parser= repaired all three
+  source-position walkers and four additional two-row constructor tables.
+
+[OBS id:obs.core-libs.parser-generic-repetition-blocker-2026-08-11 date:2026-08-11 by:codex src:tests/parser_higher_order_nested_collection_result.mon conf:high]
+  Generic bounded repetition remains blocked by a compiler boundary. A
+  higher-order result nested as =ParseReply [a]= still creates =a ~ [a]=, and
+  recursive reply processing exposes disagreement between dependent ADT-field
+  evidence and HM for the Bool consumption field. Do not ship a monomorphic or
+  unchecked substitute; promote the minimized regression before =many-up-to=.
+
+[FIX id:fix.core-libs.parser-nested-collection-evidence-2026-08-11 date:2026-08-11 by:codex src:infer.c,codegen.c,tests/parser_higher_order_nested_collection_result.mon,tests/parser_generic_adt_collection_field.mon conf:high]
+  The higher-order =ParseReply [a]= blocker is resolved and its quarantined
+  regression is promoted. Imported schemes remain immutable across repeated
+  instantiation, and code generation respects the inferred type of bracket
+  literals instead of assigning =Arr= from the AST node alone. This matters for
+  representationless =[]= arguments: stronger evidence from another argument
+  now selects the linked collection ABI rather than producing an array/list
+  mismatch and a runtime crash.
+
+[OBS id:obs.core-libs.parser-recursive-repetition-evidence-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser/README.org conf:high]
+  Test-first bounded repetition now reaches a narrower compiler boundary.
+  Non-recursive generic construction of =ParseReply [a]= passes, as does nested
+  higher-order composition. A recursive function that carries =Parser a=,
+  accumulated =[a]=, and =ParseReply a= simultaneously still lets dependent
+  constructor evidence disagree with HM collection representation. The public
+  repetition API was withheld, keeping Core green. The next cycle must minimize
+  this exact recursive judgment and repair the general evidence bridge before
+  restoring the five recorded repetition laws.
+
+[FIX id:fix.core-libs.parser-progress-safe-repetition-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser.mon,tests/core_text_parser_combinators.mon,tests/parser_recursive_higher_order_collection_reply.mon,how_to/Parse.mon conf:high]
+  =Text.Parser= now provides bounded =many-up-to= and =some-up-to=. Repetition
+  collects in reverse and restores source order at the observation boundary,
+  stops on empty failure, propagates consumed failure, carries an explicit item
+  budget, and converts non-progress success into a committed structured failure.
+  The Parser how-to demonstrates a bounded decimal run.
+
+  The compiler blocker was partly reader-level: pattern lookahead scanned until
+  any later arrow and could consume the next top-level Wisp definition as an
+  extra clause. Arity-aware clause recognition and declaration boundaries now
+  protect high-arity recursive matchers. The executable regression places a
+  following definition immediately after such a matcher.
+
+[OBS id:obs.core-libs.parser-separated-repetition-freshening-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser/README.org conf:high]
+  A fully polymorphic =sep-by-up-to= remains withheld. Its signature carries
+  independent separator and item parsers plus =ParseReply [a]=; the inferred and
+  declared signatures print alpha-equivalently but unification reports an
+  occurs check. Do not constrain separator payloads to =Int=. Repair annotation
+  freshening for multiple higher-order parameters, then restore the recorded
+  empty, delimiter, trailing-separator, commitment, budget, and progress tests.
+
+[FIX id:fix.core-libs.parser-separated-delimited-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser.mon,tests/core_text_parser_combinators.mon,tests/parser_two_higher_order_nested_result.mon conf:high]
+  Fully polymorphic =sep-by-up-to=, =sep-by1-up-to=, and =between= are now
+  production APIs. Their executable laws cover empty input, required first
+  elements, delimiter consumption, committed trailing separators, item
+  budgets, and nullable-parser progress. Separator and delimiter payload types
+  remain independent from the element type.
+
+  The preceding apparent freshening blocker was superseded: its alpha-equivalent
+  signatures were produced by an ungrouped multiline higher-order application,
+  not by HM variable capture. Parenthesizing that argument gives the reader an
+  unambiguous boundary and the independent two-parser regression passes.
+
+[FIX id:fix.core-libs.unicode-scalar-sequence-text-2026-08-22 date:2026-08-22 by:codex src:core/Text/Unicode.mon,how_to/Scheme.mon conf:high]
+  =Text.Unicode.scalars->text= is the public inverse-shaped companion to
+  =decode-utf8=: it encodes a sequence of Unicode scalar values with the
+  existing validated =encode-scalar= boundary. Grammar examples no longer need
+  to reproduce recursive character/string plumbing, and Scheme symbols retain
+  correct non-ASCII UTF-8 encoding.
+
+[FIX id:fix.core-libs.empty-collection-codegen-2026-08-11 date:2026-08-11 by:codex src:codegen.c,how_to/Parse.mon,tests/parser_two_higher_order_nested_result.mon conf:high]
+  Code generation now honors the inferred linked-collection ABI for plain
+  =[]= instead of materializing an empty fat array. This completes the syntax
+  contract: =[]= is the canonical empty list-like collection, while =#[]=
+  explicitly requests contiguous array storage. Parser repetition exposed the
+  defect because its polymorphic empty accumulator crossed a specialization
+  boundary; the public Parse tutorial is an executable runtime regression.
+[FIX id:fix.core-libs.parser-exact-decimal-2026-08-11 date:2026-08-11 by:codex src:core/Text/Parser.mon,core/Data/Json.mon,tests/core_text_parser_numbers.mon,tests/core_json_scalars.mon conf:high]
+  =parser-decimal-lexeme-up-to= implements the RFC decimal token language as an
+  explicit finite-state machine. It preserves the exact lexeme, commits after
+  consumption, rejects leading zeroes and incomplete fraction/exponent parts,
+  and enforces separate coefficient and exponent budgets. Parsing remains
+  distinct from numeric conversion.
+
+  =Data.Json= stores fractional or exponent-bearing numbers as =JsonNumber
+  String=, so =1E400= remains valid syntax without Float range or rounding
+  policy. Plain integral tokens retain =JsonInteger= compatibility.
+[FIX id:fix.core-libs.parser-budget-foundation-2026-08-12 date:2026-08-12 by:codex src:core/Text/Parser.mon,core/Data/Json.mon,tests/core_parser_budget.mon,tests/core_json_scalars.mon conf:high]
+  Added immutable =ParserBudget= policy for input bytes, nesting, tokens,
+  string bytes, number digits, and collection items. Tightening is the
+  pointwise minimum, forming a meet operation that is commutative and
+  idempotent; independently supplied limits therefore cannot relax one
+  another. Limits are inclusive capacities and identify their zero-based first
+  prohibited unit directly.
+
+  =decode-json-with-budget= now enforces whole-document input capacity before
+  grammar entry and reports structured code 60 at the exact prohibited byte.
+  =decode-json= delegates through a documented default policy. Recursive
+  enforcement of the other five fields remains the next explicit cycle rather
+  than being simulated by a duplicate pre-scan.
+[FIX id:fix.core-libs.readline-live-editor-2026-08-22 date:2026-08-22 by:codex src:core/prelude/Text/LineEditor.mon,core/IO/Readline.mon,tests/test_how_to_examples.py conf:high]
+  =Text.LineEditor= now covers Emacs transpose and Meta word motion in its pure
+  transition algebra. =IO.Readline= owns prompt redraw, cursor repositioning,
+  escape acquisition, and terminal restoration. Linux termios snapshots used
+  by the live editor remain opaque byte buffers so the kernel's =c_cc= array is
+  preserved instead of being misrepresented as one Monad =Int=. Non-terminal
+  input deliberately falls back to the quiet byte reader.
+
+[FIX id:fix.core-libs.readline-state-2026-08-22 date:2026-08-22 by:codex src:core/IO/Readline.mon,core/prelude/Text/LineEditor.mon,how_to/Scheme.mon,tests/test_how_to_examples.py conf:high]
+  Readline keeps bounded per-process history and kill-ring storage, supports
+  Up/Down history recall, C-k/C-u/Meta-d/C-w kills, C-y yank, and reverse
+  history lookup. CSI decoding consumes complete terminal sequences: Delete
+  is forward deletion, while unsupported function keys are inert and cannot
+  leak their suffix bytes into the edit buffer. Empty Return is a submitted
+  line; only EOF or C-d on an empty line sets =readline-status= to terminate a
+  REPL.
+
+[FIX id:fix.core-libs.readline-ctrl-h-2026-08-23 date:2026-08-23 by:codex src:core/prelude/Text/LineEditor.mon,tests/test_how_to_examples.py conf:high]
+  Terminals may encode Backspace as DEL (=0x7f=) or C-h (=0x08=).
+  =Text.LineEditor= treats both as one backward deletion and one backward
+  cursor movement. Inserting byte 8 as text lets the terminal move visually
+  across the prompt while leaving the logical buffer unchanged, so the PTY
+  regression exercises C-h through the complete Scheme REPL.
+
+[DEC id:dec.core-libs.network-socket-boundary-2026-08-23 date:2026-08-23 by:codex src:core/Network/Socket.mon,core/System/Posix/Network.mon conf:high]
+  TCP support is split at the useful boundary. =System.Posix.Network= owns the
+  Linux syscall numbers, register ABI, and =sockaddr_in= layout.
+  =Network.Socket= owns typed sockets, explicit success/failure values, network
+  byte order, loopback listener construction, acceptance, bounded echo, and
+  close-on-setup-failure policy. Applications import only =Network.Socket=;
+  operating-system representation details do not leak into tutorials.
+
+[FIX id:fix.core-libs.network-complete-syscall-arguments-2026-08-23 date:2026-08-23 by:codex src:core/System/Posix/Network.mon,tests/test_tcp_server.py conf:high]
+  Linux =recvfrom= and =sendto= receive all six syscall arguments, including
+  zero source/destination address registers. =SO_REUSEADDR= uses a dedicated
+  ABI helper whose option value has a real address for the duration of the
+  syscall. The executable loopback regression proves exact bytes rather than
+  accepting a connection as a proxy for working I/O.
+
+[FIX id:fix.core-libs.readline-meta-d-take-arity-2026-08-23 date:2026-08-23 by:codex src:core/IO/Readline.mon,tests/test_how_to_examples.py conf:high]
+  Meta-d kill extraction names the remaining killed-text length before calling
+  =take=. A visually continued higher-order application had been lowered as a
+  one-argument =Sequence.take= call and produced invalid LLVM. The named value
+  makes the two-argument boundary explicit and keeps the Readline source calm;
+  the full Scheme pipe and PTY regression compiles and executes it.

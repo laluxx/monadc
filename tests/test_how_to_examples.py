@@ -1,9 +1,14 @@
+import hashlib
 import json
 import os
+import pty
 import re
+import select
+import signal
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -17,6 +22,8 @@ RUNTIME = resolve_runtime_archive(MONAD)
 
 class HowToExampleTests(unittest.TestCase):
     EXAMPLES = (
+        "how_to/101.mon",
+        "how_to/Scheme.mon",
         "how_to/Syntax.mon",
         "how_to/AlgebraicDataTypes.mon",
         "how_to/Macros.mon",
@@ -27,13 +34,30 @@ class HowToExampleTests(unittest.TestCase):
     )
 
     def test_donut_executable_renders_terminal_cells(self):
+        source_text = (ROOT / "how_to/Donut.mon").read_text()
+        self.assertNotIn("donut-preview", source_text)
+        self.assertNotIn("include <", source_text)
+        self.assertNotIn("calloc", source_text)
+        self.assertNotIn("import Data.Buffer", source_text)
+        self.assertNotIn("define increment-int", source_text)
+        self.assertNotIn("define int-zero", source_text)
+        self.assertNotIn("define float->int", source_text)
+        self.assertIn("import System.Terminal.ANSI", source_text)
+        self.assertIn("define depth-buffer :: [14kb Float]", source_text)
+        self.assertIn("define char-buffer :: [2kb]", source_text)
         with tempfile.TemporaryDirectory(prefix="monadc-donut-") as td:
             temp = Path(td)
             output = temp / "Donut"
+            core = temp / "core"
+            shutil.copytree(ROOT / "core", core)
+            self.assertTrue(
+                (core / "Math" / "Angle.mon").exists(),
+                "Donut's Math.Angle dependency must ship in the checkout Core",
+            )
             env = os.environ.copy()
             env["HOME"] = str(temp / "home")
             Path(env["HOME"]).mkdir()
-            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_CORE"] = str(core)
             env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
             compiled = subprocess.run(
                 [str(MONAD), str(ROOT / "how_to/Donut.mon"),
@@ -48,9 +72,34 @@ class HowToExampleTests(unittest.TestCase):
                 check=False, timeout=30,
             )
             self.assertEqual(run.returncode, 0, run.stdout[-4000:])
-            self.assertTrue(run.stdout.startswith(b"\n"), run.stdout[:80])
-            self.assertGreaterEqual(len(run.stdout), 500)
-            self.assertRegex(run.stdout, rb"[.,~:;=!*#$@]")
+            cursor_home = b"\x1b[H"
+            frames = run.stdout.split(cursor_home)
+            self.assertGreaterEqual(len(frames), 3, run.stdout[:80])
+            self.assertTrue(frames[0].endswith(b"\x1b[?25l"), frames[0])
+            self.assertEqual(len(frames[1]), (80 + 1) * 22)
+            self.assertEqual(len(frames[2]), (80 + 1) * 22)
+            self.assertEqual([len(row) for row in frames[1].splitlines(keepends=True)], [81] * 22)
+            self.assertTrue(all(row.endswith(b"\n") for row in frames[1].splitlines(keepends=True)))
+            self.assertNotEqual(frames[1], frames[2])
+            self.assertRegex(frames[1], rb"[.,~:;=!*#$@]")
+            widths = []
+            heights = []
+            used_shades = set()
+            for frame in frames[1:121]:
+                rows = frame[: (80 + 1) * 22].splitlines()
+                points = [
+                    (x, y, value)
+                    for y, row in enumerate(rows)
+                    for x, value in enumerate(row)
+                    if value != 32
+                ]
+                widths.append(max(x for x, _, _ in points) - min(x for x, _, _ in points) + 1)
+                heights.append(max(y for _, y, _ in points) - min(y for _, y, _ in points) + 1)
+                used_shades.update(value for _, _, value in points)
+            self.assertGreaterEqual(max(widths), 45, "donut projection is too small")
+            self.assertGreaterEqual(max(heights), 20, "donut projection is too short")
+            self.assertEqual(used_shades, set(b".,-~:;=!*#$@"))
+            self.assertTrue(run.stdout.endswith(b"\x1b[?25h\n"), run.stdout[-20:])
 
     def test_unicode_public_api_preserves_imported_value_abi(self):
         with tempfile.TemporaryDirectory(prefix="monadc-unicode-public-") as td:
@@ -289,6 +338,177 @@ class HowToExampleTests(unittest.TestCase):
                     0,
                     msg=f"{example} failed with {MONAD}\n{result.stdout[-4000:]}",
                 )
+
+    def test_rule_101_example_renders_the_exact_automaton(self):
+        source = ROOT / "how_to/101.mon"
+        source_text = source.read_text()
+        self.assertIn(
+            "define demo :: String\n  render-generations (seed-row 79) 40",
+            source_text,
+        )
+        self.assertIn(
+            ':doc "Return the Rule 101 value for the cell at INDEX in the next generation."',
+            source_text,
+        )
+        self.assertNotIn("__rt_", source_text)
+        self.assertNotIn("join-text", source_text)
+        self.assertIn('define cell-char :: Int -> String\n  0 -> " "\n  _ -> "#"', source_text)
+        self.assertIn('[cell|cells] background ->', source_text)
+        self.assertIn('cell background | = -> " "', source_text)
+        self.assertIn('++ (render-relative-row cells background)', source_text)
+        self.assertIn('width index | index >= width -> []', source_text)
+        self.assertNotIn("######################################", source_text)
+        with tempfile.TemporaryDirectory(prefix="monadc-rule-101-") as td:
+            temp = Path(td)
+            output = temp / "Rule101"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)], cwd=ROOT,
+                env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            self.assertEqual(compiled.stdout, "")
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            rows = run.stdout.splitlines()
+            self.assertEqual(len(rows), 40)
+            self.assertTrue(all(len(row) == 79 for row in rows))
+            self.assertEqual(rows[0], " " * 39 + "#" + " " * 39)
+            self.assertEqual(rows[1], " " * 38 + "# #" + " " * 38)
+            self.assertTrue(all(row.count("#") <= 40 for row in rows))
+            self.assertEqual(
+                hashlib.sha256(run.stdout.encode()).hexdigest(),
+                "d59bf67d2e2264b16b5275a4c219ee7741cccdecad2119b3e3277f49a2fae58d",
+            )
+
+    def test_scheme_example_parses_and_evaluates_a_small_program(self):
+        source = ROOT / "how_to/Scheme.mon"
+        source_text = source.read_text()
+        self.assertIn("import Text.Parser", source_text)
+        self.assertIn("import IO.Readline", source_text)
+        self.assertIn("data ScmValue", source_text)
+        self.assertIn("define scm-expression", source_text)
+        self.assertIn("define evaluate", source_text)
+        self.assertIn("define scheme-repl", source_text)
+        self.assertIn(
+            "define scm-symbol-character? :: Char -> Bool\n"
+            "  character | blank?      -> False\n"
+            "            | linebreak?  -> False\n"
+            "            | = '('       -> False\n"
+            "            | = ')'       -> False\n"
+            "            | = Char 0x27 -> False\n"
+            "            | otherwise    -> True",
+            source_text,
+        )
+        self.assertIn("define scm-true :: ScmValue\n  ScmBoolean True", source_text)
+        self.assertIn("define scm-false :: ScmValue\n  ScmBoolean False", source_text)
+        sections = [
+            ";;; Scheme values",
+            ";;; Reading Scheme",
+            ";;; Evaluating Scheme",
+            ";;; Interactive use",
+        ]
+        self.assertEqual(
+            [source_text.index(section) for section in sections],
+            sorted(source_text.index(section) for section in sections),
+        )
+        self.assertIn("scalars->text scalars", source_text)
+        self.assertNotIn("define scm-scalars->text", source_text)
+        self.assertNotIn("scm-bytes->text", source_text)
+        self.assertLessEqual(
+            source_text.count("\ndefine "), 50,
+            "Scheme.mon should teach four ideas, not present a wall of helpers",
+        )
+        self.assertNotIn("define scm-true :: Int", source_text)
+        self.assertNotIn("define scm-false :: Int", source_text)
+        self.assertNotIn("character = chr", source_text)
+        self.assertNotIn("__rt_", source_text)
+        self.assertFalse(
+            [line for line in source_text.splitlines() if len(line) > 120],
+            "Scheme.mon should remain calm and readable",
+        )
+
+        with tempfile.TemporaryDirectory(prefix="monadc-scheme-") as td:
+            temp = Path(td)
+            output = temp / "Scheme"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)], cwd=ROOT,
+                env=env,
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            self.assertEqual(compiled.stdout, "")
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                input="(+ 1 2)\n'\u03bb\n",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertIn("scm> ", run.stdout)
+            self.assertIn("scm> 3\n", run.stdout)
+            self.assertIn("scm> λ\n", run.stdout)
+
+            pid, descriptor = pty.fork()
+            if pid == 0:
+                os.execve(str(output), [str(output)], env)
+
+            transcript = b""
+
+            def read_for(seconds):
+                nonlocal transcript
+                deadline = time.monotonic() + seconds
+                while time.monotonic() < deadline:
+                    ready, _, _ = select.select([descriptor], [], [], 0.05)
+                    if ready:
+                        try:
+                            transcript += os.read(descriptor, 4096)
+                        except OSError:
+                            break
+
+            try:
+                read_for(0.2)
+                os.write(descriptor, b"\r")
+                read_for(0.2)
+                os.write(descriptor, b"\x1b[15~")
+                os.write(descriptor, b"(+ 1 2)9\x08\r")
+                read_for(0.3)
+                os.write(descriptor, b"(+ 1 9)\x02\x02\x04" b"2\r")
+                read_for(0.5)
+                os.write(descriptor, b"\x1b[A\r")
+                read_for(0.3)
+                os.write(descriptor, b"(+ 4 5)\x01\x0b\x19\r")
+                read_for(0.3)
+                os.write(descriptor, b"\x12\r")
+                read_for(0.3)
+                os.write(descriptor, b"\x04")
+                read_for(0.2)
+            finally:
+                waited, _ = os.waitpid(pid, os.WNOHANG)
+                if waited == 0:
+                    os.kill(pid, signal.SIGTERM)
+                    os.waitpid(pid, 0)
+                os.close(descriptor)
+
+            self.assertIn(b"scm> ", transcript)
+            self.assertGreaterEqual(transcript.count(b"scm> "), 7, transcript)
+            self.assertGreaterEqual(transcript.count(b"\r\n3\r\n"), 3, transcript)
+            self.assertGreaterEqual(transcript.count(b"\r\n9\r\n"), 2, transcript)
 
     def test_syntax_example_links_to_requested_output(self):
         with tempfile.TemporaryDirectory(prefix="monadc-syntax-example-") as td:
