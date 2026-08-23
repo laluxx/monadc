@@ -2746,3 +2746,15 @@ filesystem objects.
   one-argument =Sequence.take= call and produced invalid LLVM. The named value
   makes the two-argument boundary explicit and keeps the Readline source calm;
   the full Scheme pipe and PTY regression compiles and executes it.
+
+[FIX id:fix.core-libs.network-stream-reliability-2026-08-23 date:2026-08-23 by:codex src:core/Network/Socket.mon,core/System/Posix/Network.mon,tests/test_tcp_server.py conf:high]
+  Blocking TCP operations now implement stream semantics rather than message
+  assumptions. Accept, receive, and send retry =EINTR=; =send-all= advances a
+  checked buffer offset until every byte is written; zero receive is orderly
+  EOF; and =MSG_NOSIGNAL= confines peer resets to an ordinary negative status.
+  The listener remains usable after a client reset. The host-network regression
+  verifies multiple sequential clients, an exact 200 KiB byte stream, reset
+  isolation, and continued service after both conditions. Receive processing
+  uses explicit mutable stream state beneath a native =while= loop, so one
+  stack frame serves an arbitrarily long connection rather than recursing once
+  per four-KiB chunk.

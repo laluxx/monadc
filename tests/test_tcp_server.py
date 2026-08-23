@@ -1,5 +1,6 @@
 import os
 import socket
+import struct
 import subprocess
 import tempfile
 import time
@@ -15,7 +16,7 @@ RUNTIME = resolve_runtime_archive(MONAD)
 
 
 class TcpServerExampleTests(unittest.TestCase):
-    def test_tcp_server_accepts_one_client_and_echoes_exact_bytes(self):
+    def test_tcp_server_serves_sequential_clients_and_large_streams(self):
         source = ROOT / "how_to/TcpServer.mon"
         source_text = source.read_text()
 
@@ -24,6 +25,8 @@ class TcpServerExampleTests(unittest.TestCase):
         self.assertNotIn("sys-bind", source_text)
         self.assertNotIn("sys-accept", source_text)
         self.assertNotIn("asm ", source_text)
+        self.assertIn("while running", source_text)
+        self.assertNotIn("echo-once", source_text)
         self.assertIn("define server-port :: Int\n  39127", source_text)
         self.assertFalse(
             [line for line in source_text.splitlines() if len(line) > 100],
@@ -70,14 +73,41 @@ class TcpServerExampleTests(unittest.TestCase):
                         "TCP server did not begin listening "
                         f"(process status: {status})"
                     )
+                def exchange(message):
+                    with socket.create_connection(
+                        ("127.0.0.1", 39127), timeout=2
+                    ) as client:
+                        client.settimeout(5)
+                        client.sendall(message)
+                        client.shutdown(socket.SHUT_WR)
+                        echoed = bytearray()
+                        while len(echoed) < len(message):
+                            chunk = client.recv(16384)
+                            if not chunk:
+                                break
+                            echoed.extend(chunk)
+                        self.assertEqual(bytes(echoed), message)
+
                 with connection:
                     connection.settimeout(2)
-                    message = b"Monad speaks TCP.\n"
-                    connection.sendall(message)
-                    self.assertEqual(connection.recv(4096), message)
+                    first = b"Monad speaks TCP.\n"
+                    connection.sendall(first)
+                    connection.shutdown(socket.SHUT_WR)
+                    self.assertEqual(connection.recv(4096), first)
 
-                stdout, _ = server.communicate(timeout=5)
-                self.assertEqual(server.returncode, 0, stdout[-4000:])
+                exchange(bytes(range(256)) * 800)
+
+                reset = socket.create_connection(("127.0.0.1", 39127), timeout=2)
+                reset.setsockopt(
+                    socket.SOL_SOCKET,
+                    socket.SO_LINGER,
+                    struct.pack("ii", 1, 0),
+                )
+                reset.sendall(b"disconnect while the server is writing" * 200)
+                reset.close()
+
+                exchange(b"still accepting after a large stream\n")
+                self.assertIsNone(server.poll(), "server stopped accepting clients")
             finally:
                 if server.poll() is None:
                     server.terminate()

@@ -765,4 +765,14 @@
   echo, close—in 50 lines of application-level Monad. It contains no syscall,
   address-layout, byte-order, or inline-assembly plumbing. Its loopback test
   compiles a fresh executable, connects through the host TCP stack, verifies
-  the exact payload, and requires a clean zero exit status.
+  the exact payload, and supervises the persistent process explicitly.
+
+[FIX id:fix.how-to.tcp-server-persistent-2026-08-23 date:2026-08-23 by:codex src:how_to/TcpServer.mon,tests/test_tcp_server.py conf:high]
+  =TcpServer.mon= is now a persistent sequential service: each accepted client
+  owns one complete byte stream, is closed on EOF or failure, and cannot end
+  the listener. The application remains limited to lifecycle policy; retry,
+  complete-write, reset-safety, and buffer-offset plumbing stay in
+  =Network.Socket=. Operators stop the intentionally unbounded server with the
+  normal process signal used by their supervisor. The accept lifetime is a
+  native =while= loop rather than recursive growth, so client count does not
+  consume process stack.

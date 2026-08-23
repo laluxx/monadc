@@ -7,8 +7,8 @@
 ;;; Commentary:
 
  Network.Socket turns the POSIX status protocol into explicit values and keeps
- address layout out of applications. The first API is intentionally small: a
- loopback listener, one accepted client, one bounded echo, and explicit close.
+ address layout out of applications. Blocking operations retry interruption,
+ writes are completed, and stream consumers distinguish EOF from failure.
 
 ;;; Code:
 
@@ -17,7 +17,7 @@ import System.Posix.FileDescriptor
 
 module Network.Socket
   [Socket SocketResult SocketFailure SocketReady
-   listen-loopback accept-client echo-once close-socket]
+   listen-loopback accept-client send-all echo-stream close-socket]
 
 
 layout Socket
@@ -27,6 +27,11 @@ layout Socket
 data SocketResult
   = SocketFailure Int
   | SocketReady Socket
+
+
+layout StreamState
+  [running :: Bool]
+  [status  :: Int]
 
 
 define echo-buffer :: [4kb]
@@ -66,23 +71,59 @@ define listen-loopback :: Int -io-> SocketResult
     listener-result descriptor configured bound listening
 
 
-define accept-result :: Int -> SocketResult
-  descriptor | < 0       -> SocketFailure descriptor
-             | otherwise -> SocketReady (Socket descriptor)
+define accept-result :: Socket -> Int -io-> SocketResult
+  listener descriptor | (= descriptor -4) -> accept-client listener
+  _ descriptor        | (< descriptor 0)  -> SocketFailure descriptor
+  _ descriptor                            -> SocketReady (Socket descriptor)
 
 
 define accept-client :: Socket -io-> SocketResult
-  :doc "Block until LISTENER accepts one client."
-  listener -> accept-result (sys-accept listener.descriptor)
+  :doc "Block until LISTENER accepts one client, retrying interruption."
+  listener -> accept-result listener (sys-accept listener.descriptor)
 
 
-define echo-count :: Socket -> Int -io-> Int
-  client count | <= count 0 -> count
-               | otherwise  -> sys-send client.descriptor &echo-buffer count
+define send-all-result :: Socket -> Int -> Int -> Int -io-> Int
+  client offset remaining sent | (= sent -4) ->
+    send-all-from client offset remaining
+  _ _ _ sent | (<= sent 0) -> sent
+  _ _ remaining sent | (>= sent remaining) -> 0
+  client offset remaining sent ->
+    send-all-from client (offset + sent) (remaining - sent)
 
 
-define echo-once :: Socket -io-> Int
-  :doc "Receive at most four KiB from CLIENT and send the received bytes back."
-  client ->
+define send-all-from :: Socket -> Int -> Int -io-> Int
+  client offset remaining ->
+    def sent (sys-send-from client.descriptor &echo-buffer offset remaining)
+    send-all-result client offset remaining sent
+
+
+define send-all :: Socket -> Int -io-> Int
+  :doc "Send COUNT buffered bytes to CLIENT, retrying until complete."
+  client count | (<= count 0) -> count
+  client count -> send-all-from client 0 count
+
+
+define echo-chunk :: Socket -> Int -io-> Int
+  _ count      | (= count -4) -> 1
+  _ count      | (< count 0)  -> count
+  _ 0                         -> 0
+  client count ->
+    def sent (send-all client count)
+    if sent < 0 then sent else 1
+
+
+define echo-step :: Socket -> StreamState -io-> Int
+  client state ->
     def count (sys-recv client.descriptor &echo-buffer 4096)
-    echo-count client count
+    def status (echo-chunk client count)
+    set! state.status status
+    set! state.running (= status 1)
+    status
+
+
+define echo-stream :: Socket -io-> Int
+  :doc "Echo CLIENT until orderly EOF, completing every write."
+  client ->
+    def state (StreamState True 0)
+    while state.running (echo-step client state)
+    state.status

@@ -15,7 +15,7 @@ module System.Posix.Network
   [SockAddrIn
    AF_INET SOCK_STREAM SOL_SOCKET SO_REUSEADDR
    sys-socket sys-bind sys-listen sys-accept sys-reuse-address
-   sys-recv sys-send]
+   sys-recv sys-send-from]
 
 
 define AF_INET      2
@@ -93,13 +93,15 @@ define sys-recv :: Int -> *U8 -> Int -foreign-> Int
         syscall ret
 
 
-define sys-send :: Int -> *U8 -> Int -foreign-> Int
-  socket buffer size ->
-    asm mov 44     %rax
+define sys-send-from :: Int -> *U8 -> Int -> Int -foreign-> Int
+  socket buffer offset size ->
+    asm mov size   %r9
+        add buffer offset
+        mov 44     %rax
         mov socket %rdi
         mov buffer %rsi
-        mov size   %rdx
-        mov 0      %r10
+        mov %r9    %rdx
+        mov 0x4000 %r10
         mov 0      %r8
         mov 0      %r9
         syscall ret
