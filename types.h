@@ -5,6 +5,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef MONAD_THREAD_LOCAL
+#if defined(_MSC_VER)
+#define MONAD_THREAD_LOCAL __declspec(thread)
+#else
+#define MONAD_THREAD_LOCAL __thread
+#endif
+#endif
+
 typedef enum {
     TYPE_INT,
     TYPE_FLOAT,
@@ -152,7 +160,7 @@ typedef struct RefinementEntry {
     struct RefinementEntry *next;
 } RefinementEntry;
 
-extern RefinementEntry *g_refinements;
+extern MONAD_THREAD_LOCAL RefinementEntry *g_refinements;
 
 
 typedef struct TypeAlias {
@@ -161,7 +169,7 @@ typedef struct TypeAlias {
     struct TypeAlias *next;
 } TypeAlias;
 
-extern TypeAlias *g_aliases;
+extern MONAD_THREAD_LOCAL TypeAlias *g_aliases;
 
 
 typedef enum {
@@ -186,7 +194,7 @@ typedef struct FiniteTypeSetEntry {
     struct FiniteTypeSetEntry *next;
 } FiniteTypeSetEntry;
 
-extern FiniteTypeSetEntry *g_finite_type_sets;
+extern MONAD_THREAD_LOCAL FiniteTypeSetEntry *g_finite_type_sets;
 
 bool finite_type_set_register(const char *name, const char **members,
                               size_t member_count);
@@ -300,6 +308,12 @@ void  type_alias_free_all(void);
 /* Register a source-owned algebraic type name before function signatures are
  * elaborated. The runtime layout is supplied later by code generation. */
 bool  type_nominal_register(const char *name);
+bool  type_nominal_is_registered(const char *name);
+typedef struct TypesPersistentState TypesPersistentState;
+TypesPersistentState *types_persistent_state_create(void);
+void types_persistent_state_destroy(TypesPersistentState *state);
+bool types_persistent_state_enter(TypesPersistentState *state);
+void types_persistent_state_leave(TypesPersistentState *state);
 
 
 /// Annotation parsing

@@ -345,8 +345,21 @@ static bool module_path_has_prefix(const char *path, const char *prefix)
 
 static bool module_context_is_prelude_file(ModuleContext *ctx)
 {
-    return ctx->current_file &&
-           module_path_has_component(ctx->current_file, "prelude");
+    if (!ctx || !ctx->current_file) return false;
+    if (module_path_has_component(ctx->current_file, "prelude")) return true;
+
+    /* Dependency paths are often relative to the importing module's
+       directory (for example Data/Bool.mon while cwd is core/prelude).
+       Classifying only the spelling of current_file then injects the whole
+       prelude into a prelude dependency and creates recursive bootstrap
+       cycles such as Functor -> Bool -> Sequence -> Functor. */
+    if (ctx->current_file[0] != '/' && ctx->current_file[0] != '\\') {
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) &&
+            module_path_has_component(cwd, "prelude"))
+            return true;
+    }
+    return false;
 }
 
 static bool module_context_is_core_library_file(ModuleContext *ctx)

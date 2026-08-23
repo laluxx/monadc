@@ -1,0 +1,1566 @@
+#+TITLE: Monad Native Embedding Subsystem
+#+AUTHOR: Monad contributors
+#+DATE: 2026-08-14
+#+STARTUP: showall
+#+OPTIONS: toc:2 num:t
+
+* Mission
+
+Monad embedding gives C and C++ hosts direct access to compiled Monad code and
+compiler capabilities without turning the language into an interpreter.
+
+The defining performance contract is simple: after checked lookup, a typed
+native call is the actual compiler-emitted function pointer. Its hot path has
+no boxing, allocation, signature dispatch, reflection, or wrapper frame. For a
+supported signature, generated machine code and call overhead must be
+competitive with equivalent hand-written C. Any abstraction remaining on that
+path needs measured justification.
+
+The API must stay small and DRY. One canonical descriptor supplies module,
+ABI, signature, ownership, and QTT identity. Conveniences compose the same
+primitives; they do not duplicate loaders, representations, errors, or rules.
+
+* End goal
+
+A C host can create isolated runtimes; compile source in memory or load
+certified modules; inspect structured diagnostics, inferred environments,
+effects, and QTT evidence; use dynamic values only when runtime polymorphism is
+needed; obtain validated native function pointers for closed signatures;
+exchange owned and borrowed data under explicit contracts; register callbacks;
+run concurrently; unload deterministically; and recover from failures without
+process termination.
+
+Runtime-only deployment does not link LLVM. Compiler embedding is a separate
+library with opaque sessions and immutable snapshots. The installed ABI is
+versioned, C++ compatible, and tested across supported release series.
+
+* Non-negotiable invariants
+
+1. Native fast calls contain no universal =RuntimeValue= representation.
+2. Validation and resolution occur before the hot call, never per call.
+3. No language failure aborts, exits, or longjmps through host C frames.
+4. Public headers never expose LLVM, AST, =EnvEntry=, or arena pointers.
+5. QTT authority fails closed when bytes, contracts, target, or ABI differ.
+6. Every C boundary names ownership: borrowed, transferred, retained, returned.
+7. Code cannot unload while a function, value, callback, or snapshot retains it.
+8. Performance-sensitive features have C integration tests and benchmarks.
+
+* Architecture
+
+** =libmonad-embed=
+
+Small runtime-only library. It owns runtime/thread/module/function lifecycles,
+module validation, protected calls, callbacks, and native entrypoint lookup.
+Its public header is =embed/include/monad/embed.h=.
+
+** =libmonad-compiler=
+
+Compiler service API. It owns in-memory compilation and immutable snapshots of
+diagnostics, environments, types, effects, QTT judgments, ownership
+transitions, destructor plans, and native descriptors. It may depend on LLVM;
+=libmonad-embed= may not.
+
+** Native module descriptor
+
+Each artifact exports one versioned constant descriptor containing target/ABI
+identity, initialization hooks, and a sorted export table. Each export names
+its native symbol, canonical signature fingerprint, and QTT fingerprint.
+Lookup validates once and returns the actual symbol address.
+
+* Mathematical contract
+
+For Cycle 2 the supported native type algebra is the finite set
+
+#+BEGIN_EXAMPLE
+T₁ = {i8,u8,i16,u16,i32,u32,i64,u64,f32,f64}
+R₁ = T₁ ∪ {void}
+Σ₁ = C × R₁ × T₁*
+#+END_EXAMPLE
+
+A signature is =σ = (cc, r, [p₀ … pₙ₋₁])=. Compatibility is structural:
+
+#+BEGIN_EXAMPLE
+σ ≡ τ  iff
+  ccσ = ccτ ∧ rσ = rτ ∧ |pσ| = |pτ|
+  ∧ ∀i ∈ [0, |pσ|). pσ[i] = pτ[i]
+#+END_EXAMPLE
+
+This relation is reflexive, symmetric, and transitive because it is the finite
+product of equality relations. Loader authorization uses =≡= directly, never
+hash equality. A future canonical fingerprint is an index/cache key only; an
+accidental collision cannot authorize a call. This matters because LLVM states
+that materially mismatched caller/callee signatures can have target-specific
+undefined behavior.
+
+The lookup judgment is:
+
+#+BEGIN_EXAMPLE
+artifact = certified-bytes    export(name) = (σ, q, address)    σ ≡ expected
+─────────────────────────────────────────────────────────────────────────────
+module ⊢ lookup(name, expected) ⇓ retain(module), address
+#+END_EXAMPLE
+
+=retain(module)= occurs once at lookup. Evaluation of =address(args)= contains
+no embedding transition, so its cost is precisely the platform's indirect C
+call cost plus the compiled function body.
+
+* Primary research
+
+- Guile initialization and VM entry:
+  https://www.gnu.org/software/guile/manual/html_node/Initialization.html
+- Lua state and protected calls: https://www.lua.org/manual/5.4/manual.html
+- CPython stable ABI: https://docs.python.org/3/c-api/stable.html
+- CPython thread attachment: https://docs.python.org/3/c-api/threads.html
+- Julia native entrypoints: https://docs.julialang.org/en/v1/manual/embedding/
+- LLVM ORCv2 resource tracking: https://llvm.org/docs/ORCv2.html
+- Guile foreign objects:
+  https://www.gnu.org/software/guile/manual/html_node/Foreign-Objects.html
+- Guile foreign-object type checking:
+  https://www.gnu.org/software/guile/manual/html_node/Type-Checking-of-Foreign-Objects.html
+
+* Cycle ledger
+
+** Usability checkpoint — executable C tutorial
+
+The installed public surface is demonstrated by =how_to/Embedding.c=. It is a
+commented host program rather than pseudocode and is compiled and executed
+against a staged =make install= tree by =tests.test_embedding_how_to= and the
+authoritative =make test-embedding= gate.
+
+The source prefers the installed =<monad/compiler.h>= and falls back to the
+checkout's public header directory when an editor opens it without compilation
+flags. A separate no-flags syntax test covers this LSP topology; =compiler.h=
+includes its sibling =embed.h= relatively so both installed and source-tree
+layouts resolve without private include paths.
+
+The tutorial covers runtime/thread lifetime, native registration and live
+redefinition, direct typed calls, variables and immutable snapshots, nominal
+foreign objects, certified module exports, foreign-type import into compiler
+QTT state, structured source diagnostics, and immutable inferred-environment
+introspection. It also records the present product boundary: analyzed Monad
+source cannot yet be emitted through LLVM/ORC and committed into the live image.
+Consequently the subsystem is a usable runtime/compiler SDK foundation, but it
+is not yet the complete Guile-like live source embedding experience described
+by the end goal.
+
+** Cycle 1 — stable host lifecycle
+
+Status: complete, 2026-08-14.
+
+Delivered ABI negotiation, opaque runtime/thread handles, allocator injection,
+thread affinity, non-aborting errors, busy destruction, hidden visibility,
+static/shared libraries, installation, and C integration coverage.
+
+Evidence: =make test-embedding=.
+
+** Cycle 2 — certified zero-wrapper native module call
+
+Status: active, 2026-08-14.
+
+Deliver a versioned module/export descriptor, exact artifact and QTT identity
+validation, idempotent initialization, retained-entrypoint unload protection,
+and direct invocation of a compiled =Int -> Int= export.
+
+Progress: the provisional hash-only signature check was replaced by the
+collision-independent structural relation over =Σ₁=. The in-memory descriptor
+path now proves exact pointer identity, mismatch rejection, retained lifetime,
+and direct invocation. Compiler emission and real artifact loading remain.
+
+Exit gate: metadata-complete C tests cover success, missing export, signature
+mismatch, ABI mismatch, stale certificate, one-time initialization, busy
+unload, and clean unload. Pointer identity or generated assembly proves the
+returned target is the compiled implementation, not a trampoline.
+
+** Cycle 3 — bidirectional zero-wrapper native interop
+
+Status: active, 2026-08-14.
+
+The first slice implements a runtime-scoped host symbol registry. C functions
+are registered with a structural =Σ₁= signature, resolved once to their exact
+address, and retained by an affine import token. Registration removal fails
+while any import retains the address. Thus C→Monad and Monad→C share the same
+ABI equality and lifetime machinery.
+
+The lifetime state is the relation
+
+#+BEGIN_EXAMPLE
+R ⊆ Registration × Import
+
+resolve(registration) = (import, address)  adds (registration, import) to R
+release(import)                         removes that edge from R
+unregister(registration) is defined iff outdegree_R(registration) = 0
+#+END_EXAMPLE
+
+Resolution and retention occur outside the hot path. A compiled foreign call
+is an ordinary call through the already-resolved address. LLVM ORC can later
+materialize this same registration as an absolute symbol in a runtime-specific
+=JITDylib=; it does not require a second registry or call mechanism.
+
+Remaining exit work: compiler-declared host imports, ORC/static relocation
+binding, QTT ownership/effect checks in both directions, callbacks, and an
+end-to-end real Monad module rather than the current compiler-body stand-in.
+
+** Cycle 4 — live image and editor reflection
+
+Status: active, 2026-08-14.
+
+The first slice introduces a stable live function cell. Redefinition requires
+the same structural ABI signature, atomically publishes the new address with
+release semantics, replaces its docstring, and advances a monotone generation.
+A retained import observes the new body through an acquire load without being
+resolved again. Frozen module exports remain available when redefinition is not
+needed and zero indirection is preferred.
+
+For a live binding =b=, state evolves as
+
+#+BEGIN_EXAMPLE
+bₙ = (name, σ, addressₙ, docₙ, generation=n)
+
+redefine(bₙ, σ, addressₙ₊₁, docₙ₊₁) = bₙ₊₁
+redefine(bₙ, τ, ...) is undefined when τ ≢ σ
+#+END_EXAMPLE
+
+Publication establishes a release/acquire happens-before edge. The irreducible
+live-call cost is one atomic address load followed by an ordinary indirect C
+call—the same mechanism required by a hand-written C hot-reload system. No
+boxing or embedding dispatcher is introduced.
+
+The editor-grade live image ultimately needs:
+
+- compile/evaluate source strings and files into isolated transactions;
+- atomic commit or complete rollback of a group of definitions;
+- stable module/symbol identities with monotonically increasing generations;
+- separate value and function cells, preserving Lisp-like redefinition;
+- immutable inventory snapshots of functions, variables, types, modules,
+  macros, classes, methods, effects, keymaps, commands, and hooks;
+- filters by binding kind, module, exact type, type constructor, effect row,
+  ownership mode, name prefix, source file, and generation;
+- docstrings, source locations/text, inferred schemes, native signatures, QTT
+  reports, references, and callers for editor navigation;
+- typed variable read/write, compare-and-set, watches, and change events;
+- live callbacks and hooks whose replacement is safe during dispatch;
+- safepoints/epochs so old machine code unloads only after executing threads
+  have left it;
+- cancellation, time budgets, structured diagnostics, and non-blocking compile
+  jobs suitable for an editor UI/render thread;
+- state migration hooks when a redefinition changes a managed representation;
+- deterministic replay and an image/change journal for debugging.
+
+For the Vulkan editor, compilation and reflection should run off the render
+thread. Committing a prepared transaction should be bounded and fast; render
+code may pin frozen native pointers, while commands and extension hooks normally
+use live cells.
+
+** Cycle 5 — immutable inventories and typed value cells
+
+Status: active, 2026-08-14.
+
+The first slice adds native =Int=/=i64= value cells with acquire reads,
+release writes, compare-and-set, and monotone generations. It also adds
+deterministically sorted, immutable binding snapshots with filters for binding
+kind, exact canonical value type, and name prefix.
+
+Snapshot construction uses an optimistic epoch protocol:
+
+#+BEGIN_EXAMPLE
+lock; (e₀, size) := measure(image); unlock
+slab := allocate(size)                    ; no host callback under lock
+lock
+  if epoch(image) ≠ e₀ then unlock; free(slab); retry
+  snapshot := copy(image, slab)
+unlock
+sort(snapshot, by-name)
+#+END_EXAMPLE
+
+Therefore each successful snapshot has a linearization point inside the second
+critical section. Every exposed string, docstring, signature, parameter vector,
+value, type, and generation belongs to one self-contained slab. Mutation after
+that point cannot alter or invalidate it. Indexed reads require no runtime lock,
+allocation, or compiler work, and release performs one deallocation.
+
+For an =i64= cell =v=:
+
+#+BEGIN_EXAMPLE
+get(vₙ) = valueₙ
+set(vₙ, x) = vₙ₊₁ where valueₙ₊₁ = x
+CAS(vₙ, expected, x) =
+  (vₙ₊₁, true)  when valueₙ = expected
+  (vₙ, false)   otherwise
+#+END_EXAMPLE
+
+Only successful mutation advances the cell and global image epochs. This keeps
+snapshot invalidation and editor change tracking semantically meaningful.
+
+** Cycle 6 — C-defined nominal foreign objects
+
+Status: active, 2026-08-14.
+
+The first slice lets a host register a named nominal type and place an exact C
+payload pointer in a typed foreign object. Equal C representation does not
+imply equal Monad type: access succeeds only when the expected type handle is
+identical to the object's registered type handle. This prevents accidental
+confusion of editor buffers, Vulkan images, windows, and other pointer-shaped
+resources.
+
+For an object =o = (T, p, r)= with nominal type =T=, payload =p=, and reference
+count =r=:
+
+#+BEGIN_EXAMPLE
+payload(o, U) = p          iff U = T
+retain(T, p, r) = (T, p, r + 1)
+release(T, p, r) = (T, p, r - 1)                    when r > 1
+release(T, p, 1) = destroy_T(p); dead               exactly once
+unregister(T) is defined iff |{o | type(o) = T}| = 0
+#+END_EXAMPLE
+
+A successful create transfers ownership of =p= to the object. A failed create
+does not. The final release invokes the registered destructor synchronously on
+the releasing thread, outside the runtime lock; =T='s live-object count stays
+nonzero throughout the callback and therefore pins its metadata and callback
+context. There is no collector, hidden finalizer thread, payload boxing, or
+dispatch wrapper.
+
+This intentionally makes destruction timing more predictable than Guile's GC
+finalizers. It does not yet solve executor affinity: Vulkan resources frequently
+must be destroyed on a host-selected device/render thread. Such types should
+not install an immediate destructor until the next slice supplies explicit
+destruction executors or queues.
+
+The public header, static library, and shared library remain part of the normal
+=sudo make install= graph. They install as =include/monad/embed.h=,
+=lib/libmonad-embed.a=, and =lib/libmonad-embed.so= under =PREFIX=.
+
+** Cycle 7 — QTT-aligned ownership and destruction executors
+
+Status: active, 2026-08-14.
+
+Foreign type descriptors now state either =unique= or =shared= ownership.
+These are storage capabilities, not quantitative binder grades: the distinction
+preserves QTT's separation between usage and ownership judgments. Retaining a
+unique object is rejected; shared objects retain the atomic reference-counted
+behavior from Cycle 6. A borrowed mode is intentionally absent until the ABI
+can carry a checked region/loan token—an unscoped borrowed C pointer would only
+rename a use-after-free hazard.
+
+Types may also provide a destruction executor. Final release transfers one
+opaque job to the executor, which must invoke it exactly once and may do so
+inline. The job itself owns the object until execution:
+
+#+BEGIN_EXAMPLE
+release(o=(T,p,1), immediate) = finalize(o)
+release(o=(T,p,1), executor)  = executor.submit(λ(). finalize(o))
+
+finalize(T,p) = destroy_T(p); live(T) := live(T) - 1; free(object-cell)
+unregister(T) requires live(T) = 0
+#+END_EXAMPLE
+
+Thus scheduling does not prematurely authorize type destruction. The host
+callback is never run under Monad's runtime lock, and finalization allocates no
+second wrapper: the dead object's own cell is the queued job context. This is a
+cold-path indirection only; payload projection and foreign calls remain exact
+pointer operations.
+
+This design follows the Vulkan specification's requirement that applications
+manage object lifetime and externally synchronize relevant host access:
+https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#fundamentals-objectmodel-lifetime
+It lets the editor enqueue destruction onto the render/device thread instead of
+assuming the last language reference happens to disappear there.
+
+** Cycle 8 — generative foreign type authority and reflection
+
+Status: active, 2026-08-14.
+
+Every registered foreign type now receives a process-local nominal authority
+=ν = (runtime-id, local-id)=. Equality is exact pair equality:
+
+#+BEGIN_EXAMPLE
+(r₁, n₁) ≡ (r₂, n₂)  iff  r₁ = r₂ ∧ n₁ = n₂ ∧ r₁ ≠ 0 ∧ n₁ ≠ 0
+
+register(runtime, "T") = ν₁
+unregister(ν₁); register(runtime, "T") = ν₂       where ν₁ ≢ ν₂
+#+END_EXAMPLE
+
+The textual name is documentation and lookup syntax, never type authority.
+This follows the generative-abstract-type property described by Dreyer: two
+runtime instances of an abstraction produce distinct types even when created
+from identical inputs:
+https://people.mpi-sws.org/~dreyer/courses/modules/dreyer03.pdf
+
+The identity is deliberately not =QttTypeId=. Monad's =QttTypeId= denotes a
+structural equivalence class inside a compiler arena; a foreign authority is
+nominal and runtime-generative. The compiler bridge must pair the structural
+foreign representation with =ν= rather than weakening either identity model.
+
+Foreign types now participate in the same immutable, sorted binding snapshots
+as functions and variables. A snapshot owns the type name and docstring and
+copies its authority, ownership mode, and executor-presence bit. Unregistering
+or recreating the live type cannot mutate an older editor snapshot. Snapshot
+creation uses the existing epoch protocol, and type registration/removal now
+advances that epoch.
+
+** Cycle 9 — compiler foreign environment and nominal call proofs
+
+Status: active, 2026-08-14.
+
+The compiler now owns a foreign-type import environment. Importing a reflected
+runtime type constructs
+
+#+BEGIN_EXAMPLE
+F = (name, ν, TypeId(representation), QTT_REP_FOREIGN, ownership)
+#+END_EXAMPLE
+
+Structural interning decides only =TypeId(representation)= and exact generative
+equality decides =ν=. Two pointer-shaped types may share one canonical
+structural identity without becoming substitutable. Duplicate names and
+duplicate authorities are rejected independently.
+
+The import accepts existing QTT =consumed= and =shared= modes. It rejects
+=borrowed= until a region/loan authority is present. Consumed foreign parameters
+now lower to =QTT_CALL_MOVE= like owned resources. Shared parameters remain
+scoped non-consuming =QTT_CALL_BORROW= calls; persistent duplication remains the
+explicit =DUP= operation in the ownership calculus.
+
+Nominal authority is carried through parameter/result contracts, high-level
+call arguments, ownership-ANF operands, and independently reconstructed
+Semantic-IR call evidence. Call validation requires
+
+#+BEGIN_EXAMPLE
+TypeId(actual) = TypeId(expected)
+∧ representation(actual) = QTT_REP_FOREIGN
+∧ ν(actual) = ν(expected)
+∧ transfer(actual) = transfer_QTT(expected)
+#+END_EXAMPLE
+
+Runtime authority participates in the in-memory contract fingerprint, avoiding
+live compiler-cache collisions. It is intentionally absent from portable
+interface fingerprints: a process-local stamp must never become authority in a
+different image.
+
+** Cycle 10 — installed compiler service and transactional foreign import
+
+Status: active, 2026-08-14.
+
+The separately installed =libmonad-compiler= now has its first stable facade in
+=monad/compiler.h=. A thread-affine opaque session owns the actual
+=QttTypeArena= and =QttForeignTypeEnv=; neither compiler structure appears in
+the public ABI. Runtime-only hosts still need only =libmonad-embed=.
+
+Import treats a binding snapshot as a complete foreign-type image. It stages a
+fresh canonical arena, foreign environment, copied names, and public inspection
+records before changing session state:
+
+#+BEGIN_EXAMPLE
+stage(snapshot) ⇓ (A', F', I')
+────────────────────────────────────────────────────────────── success
+(A,F,I)  --import(snapshot)-->  atomic-swap(A',F',I'); free(A,F,I)
+
+stage(snapshot) ⇑ error
+────────────────────────────────────────────────────────────── failure
+(A,F,I)  --import(snapshot)-->  (A,F,I)
+#+END_EXAMPLE
+
+Unique runtime types map to =QTT_OWNERSHIP_CONSUMED=; shared runtime types map
+to =QTT_OWNERSHIP_SHARED=. Every compiler record exposes the copied name,
+generative authority, canonical structural type ID, foreign representation, and
+ownership mode. Inspection pointers are borrowed until the next successful
+import or session destruction, a lifetime made race-free by session affinity.
+
+The ordinary =make install= graph now installs =libmonad-compiler.a=,
+=libmonad-compiler.so=, and =include/monad/compiler.h= alongside the embedding
+SDK. The shared compiler library depends on the runtime embedding library, while
+the static topology is linked explicitly as compiler then embed.
+
+** Cycle 11 — certified zero-wrapper foreign ownership lowering
+
+Status: active, 2026-08-14.
+
+Foreign capabilities are now admitted by the ownership resource verifier and
+execution model. The backend lowering gate re-verifies the complete resource
+block, reconstructs allocation/duplication provenance up to the selected
+operation, requires =QTT_REP_FOREIGN=, and emits exactly one of:
+
+#+BEGIN_EXAMPLE
+lower(MOVE foreign) = (NONE, null)                              cost 0 calls
+lower(DROP foreign) = (RELEASE, monad_foreign_object_release)   cost 1 call
+lower(DUP  foreign) = (RETAIN, monad_foreign_object_retain_shared) cost 1 call
+#+END_EXAMPLE
+
+The new shared-retain primitive is a compiler target, not a dynamic convenience:
+QTT has already proved that the object is live and shared, so it performs only
+the relaxed atomic increment. The checked host-facing retain API remains for
+uncertified C code. Move is representation-preserving SSA transfer and emits no
+reference-count operation.
+
+The regression compiles representative lowering bodies with optimization and
+inspects their assembly. It proves that move contains no call, drop names the
+release primitive exactly once, and duplication names the fast retain primitive
+exactly once. GCC may tail-call release with =jmp=; this is still precisely one
+runtime transition and no wrapper frame.
+
+** Cycle 12 — proof-gated LLVM ownership emission
+
+Status: active, 2026-08-14.
+
+The certified lowering result now crosses the LLVM construction boundary. For
+an unchanged opaque foreign pointer =o=, emission is the homomorphism
+
+#+BEGIN_EXAMPLE
+emit(MOVE, o) = o
+emit(DROP, o) = call void @monad_foreign_object_release(ptr o)
+emit(DUP,  o) = call void @monad_foreign_object_retain_shared(ptr o); o
+#+END_EXAMPLE
+
+The emitter first replays the complete QTT resource proof through the Cycle 11
+gate. It emits no dispatcher, box, universal value, ownership tag, or wrapper.
+Move creates no LLVM instruction. Drop and shared duplication create precisely
+one direct call and preserve the original SSA pointer as their value result.
+
+Runtime declarations are synthesized as =void (ptr)= only when absent. An
+existing declaration must match that exact non-variadic shape or compilation
+fails closed before an instruction is built. The regression verifies the whole
+module with LLVM's verifier and then inspects its IR for exact call counts. The
+implementation follows LLVM's specified [[https://llvm.org/docs/LangRef.html#call-instruction][call instruction]] and official
+[[https://llvm.org/doxygen/group__LLVMCCoreInstructionBuilder.html][C instruction-builder API]].
+
+** Cycle 13 — one authoritative embedding verification gate
+
+Status: active, 2026-08-14.
+
+=make test-embedding= is now the authoritative vertical embedding gate. It
+cannot stop at the runtime facade: one invocation covers lifecycle, native ABI,
+bidirectional calls, live cells, snapshots, foreign objects, compiler import,
+nominal QTT calls, certified ownership lowering, and verifier-clean LLVM
+emission. A regression asserts that all four executable test modules remain in
+the Make target, preventing a new proof layer from silently falling outside the
+advertised suite.
+
+Every C or C++ host atom in this vertical slice is audited for the repository's
+living metadata contract: unique identity, context, purpose, smallest atom,
+expectation, and menu path. These hosts intentionally use a dedicated native
+suite because the general =tests/run.py= runner executes Monad =.mon= fixtures;
+metadata alone is never mistaken for execution.
+
+Installation testing now goes beyond file presence. A temporary-prefix install
+is consumed from outside the source include tree by real C and C++ hosts, linked
+and executed against both =libmonad-embed.a= and =libmonad-embed.so=. The
+compiler import host likewise executes against both installed static and shared
+compiler/runtime library pairs. The
+runtime lifecycle also runs under AddressSanitizer and UndefinedBehaviorSanitizer
+according to the official [[https://clang.llvm.org/docs/AddressSanitizer.html][ASan]] and
+[[https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html][UBSan]] contracts. LeakSanitizer alone is disabled under ptrace; the lifecycle
+fixture independently proves zero live allocations with its injected allocator.
+
+** Cycle 14 — first continuous native foreign-object execution proof
+
+Status: active, 2026-08-14.
+
+The ownership pipeline is no longer supported only by adjacent unit proofs. A
+single C host now performs this complete transition:
+
+#+BEGIN_EXAMPLE
+C shared object o
+  -> immutable runtime type snapshot
+  -> transactional compiler/QTT nominal import
+  -> verified resource block [ALLOC o, DUP o o', DROP o, MOVE o']
+  -> certified LLVM emission
+  -> ORCv2 materialization and native call
+  -> unchanged moved pointer o'
+  -> final host release and exactly one payload destruction
+#+END_EXAMPLE
+
+The generated native function has type =ptr (ptr)=. Its verified IR contains
+exactly one direct fast retain, one direct release, and no instruction for the
+move. The returned pointer equals the input pointer bit-for-bit; there is no
+box, dynamic embedding call, or payload conversion. The object remains live
+after the JIT call, checked payload access still succeeds under the original
+nominal type, and the final C release runs the destructor exactly once.
+
+The test uses modern ORCv2 LLJIT rather than legacy MCJIT. Module ownership is
+transferred through a thread-safe context, process runtime symbols are imported
+through a JITDylib definition generator, and lookup eagerly materializes the
+entrypoint. These choices follow LLVM's primary [[https://llvm.org/docs/ORCv2.html][ORCv2 design]] and
+[[https://llvm.org/doxygen/group__LLVMCExecutionEngineLLJIT.html][LLJIT C API ownership contract]]. ORC remains behind compiler implementation
+boundaries; none of its experimental C types enter Monad's installed stable ABI.
+
+This cycle deliberately does not claim surface-language completion. The
+compiler facade can import foreign types but cannot yet compile an in-memory
+Monad source unit. The host therefore constructs the already-certified QTT
+resource block at the current backend seam.
+
+** Cycle 15 — immutable in-memory source-unit boundary
+
+Status: active, 2026-08-14.
+
+The stable compiler facade now owns opaque, immutable source units. A source
+descriptor carries its own structure size and ABI version plus a logical name,
+an explicit byte span, and a host-supplied monotonic document version. Creation
+copies both name and bytes; caller buffers may be stack-backed, non-terminated,
+or mutated immediately after success without changing the source unit.
+
+#+BEGIN_EXAMPLE
+S = Source(name, bytes[0..n), version)
+create(D) = owned copy S
+observe(S) = constant for lifetime(S)
+#+END_EXAMPLE
+
+The copied byte range receives one private trailing NUL for the current parser,
+but that terminator is not part of =byte_count=. Embedded NUL is rejected rather
+than silently truncating compiler input. Empty source is valid. Descriptor ABI
+mismatch, undersized structures, invalid pointer/length pairs, overflow, and
+allocation failure are explicit non-aborting statuses.
+
+This boundary follows LLVM's owned [[https://llvm.org/doxygen/classllvm_1_1MemoryBuffer.html][MemoryBuffer copy]] model and Clang's
+[[https://clang.llvm.org/doxygen/classclang_1_1SourceManager.html][source-manager ownership separation]], while exposing neither implementation.
+The object deliberately has no session pointer: an editor snapshot can outlive
+the compiler session that will eventually consume it. Static and shared
+installed compiler libraries both compile and execute the source-unit host.
+
+Cycle 15 does not route the source into the parser yet. The file-oriented
+=compile_one= path still owns global parsing, inference, code-generation, and
+CLI error recovery; those stages must be separated behind structured results
+before they are safe inside a host process.
+
+** Cycle 16 — immutable structured input diagnostics
+
+Status: active, 2026-08-14.
+
+Compiler checks now return an owned immutable diagnostic set rather than
+terminal text. A successful API call and a successful program are distinct:
+
+#+BEGIN_EXAMPLE
+check : Session × Source(version v) -> Status × DiagnosticSet(v)
+Status = OK             means the transaction produced a complete result
+count(DiagnosticSet)>0  may still mean the source is rejected
+#+END_EXAMPLE
+
+Each public diagnostic carries structure size, severity, compiler phase, stable
+code, copied source name, source version, half-open byte range, one-based line
+and column, and message. The set owns all source-dependent storage and remains
+valid after its source unit is destroyed. Empty sets are first-class successful
+results. Misuse, wrong-session thread, or inability to allocate the result uses
+the ordinary API status channel and never masquerades as a source diagnostic.
+
+The first real input judgment is strict UTF-8 scalar validity. =MONAD-C0001=
+rejects invalid leading bytes, malformed or truncated continuation sequences,
+overlong encodings, UTF-16 surrogate encodings, and values above U+10FFFF. Its
+range identifies the offending leading byte. The implementation follows
+[[https://www.rfc-editor.org/rfc/rfc3629#section-4][RFC 3629 section 4]]. Diagnostic objects follow the separation of stable
+identity, location, and severity from rendering described by Clang's
+[[https://clang.llvm.org/docs/InternalsManual.html#the-diagnostics-subsystem][diagnostics subsystem]]. No stderr capture or text parsing participates.
+
+The parser is intentionally not called yet. Its recovery state is currently one
+process-global =jmp_buf=, and reader/Wisp errors print before jumping. Using that
+inside =libmonad-compiler= would be non-reentrant and leak output into the host.
+Cycle 16 establishes the result algebra that parser diagnostics will feed after
+recovery becomes per-check state.
+
+** Cycle 17 — stack-scoped parser diagnostic recovery
+
+Status: active, 2026-08-14.
+
+Reader and Wisp central error paths now consult an explicit
+=ReaderDiagnosticContext= before printing or terminating. The context is a
+caller-owned stack object containing its recovery target, synchronous sink,
+sink state, armed bit, and link to an enclosing context. Because =longjmp= may
+only target a still-live =setjmp= invocation, the caller performs =setjmp= and
+arms the context only afterward. This lifetime rule follows the normative
+[[https://pubs.opengroup.org/onlinepubs/9799919799/functions/longjmp.html][POSIX longjmp contract]].
+
+Contexts form a thread-local stack:
+
+#+BEGIN_EXAMPLE
+TLS(t) = C_n -> ... -> C_1
+raise(d, C_n) = pop(C_n); sink_n(d); longjmp(C_n)
+#+END_EXAMPLE
+
+Popping out of order fails without corrupting the stack. Raising with no armed
+context returns control to the legacy renderer, preserving compiler and REPL
+behavior during migration. The sink borrows diagnostic strings only for the
+callback; Cycle 16's immutable set remains the owning public representation.
+
+The concurrency regression arms independent contexts on two host threads and
+proves that each diagnostic reaches only its own sink and jump target. It also
+checks nested push/pop discipline and exact stdout, so hidden diagnostic output
+would fail the test. Fourteen real reader-error compiler fixtures confirm that
+legacy CLI diagnostics remain unchanged after reader and Wisp routing.
+
+This cycle removes the process-global recovery requirement from the central
+parser error transport, but it does not yet make the full parser reentrant:
+lexer/parser source context, arity tables, hooks, and several specialized error
+exits remain global. Nor is =reader_diagnostic.h= installed; it is an internal
+mechanism that must be consumed by the compiler facade, not a second public API.
+
+** Cycle 18 — deterministic parser-resource unwinding
+
+Status: active, 2026-08-14.
+
+Auditing the real frontend dependency closure found only nine implementation
+objects, but also exposed an unsound edge: reader and Wisp allocate progressive
+state and a diagnostic =longjmp= bypasses their ordinary frees. Capturing syntax
+errors without first solving that edge would keep the host alive while leaking
+compiler memory and leaving borrowed hooks stale.
+
+Each =ReaderDiagnosticContext= therefore owns a LIFO chain of caller-supplied
+cleanup records. Acquisition defers one non-failing cleanup action; successful
+ownership transfer cancels that exact record. On failure, the context is popped
+and disarmed, every remaining action runs once in reverse acquisition order,
+and only then is the diagnostic sink invoked:
+
+#+BEGIN_EXAMPLE
+acquire(r1); defer(free r1)
+acquire(r2); defer(free r2)
+transfer(r2); cancel(free r2)
+raise(d) = free(r1); sink(d); longjmp
+#+END_EXAMPLE
+
+Cleanup records are caller-owned stack values, so registration allocates
+nothing and failure recovery cannot itself fail for lack of memory. Normal
+context pop refuses while cleanup records remain, turning forgotten ownership
+decisions into an immediate invariant failure instead of a silent leak. Cleanup
+callbacks are deliberately non-failing; recovery into an outer context from a
+cleanup would skip remaining destructors and is outside the contract. The
+recovery lifetime still follows the normative
+[[https://pubs.opengroup.org/onlinepubs/9799919799/functions/longjmp.html][POSIX longjmp rules]].
+
+The Cycle 18 atom proves cancellation as ownership transfer, exact-once LIFO
+destruction, cleanup-before-diagnostic ordering, and explicit final destruction
+of the transferred resource. This is the resource-safety substrate for the real
+frontend transaction; it is not presented as source parsing yet.
+
+** Cycle 19 — private PIC frontend capsule
+
+Status: complete, 2026-08-14.
+
+=libmonad-compiler.a= and =libmonad-compiler.so= now contain an independently
+compiled, position-independent closure of the real reader/Wisp frontend:
+=features=, =macro=, =pmatch=, =reader=, structured reader diagnostics,
+=reader_syntax=, =types=, =wisp=, and =wisp_syntax_policy=.  These objects are
+not borrowed from the compiler executable, so the installed SDK has a
+reproducible link topology and does not depend on executable symbol export.
+
+Every capsule object is compiled hidden-by-default.  This implements the
+visibility discipline described by GCC's
+[[https://gcc.gnu.org/onlinedocs/gcc/Code-Gen-Options.html#index-fvisibility][=-fvisibility= documentation]]:
+implementation names are linkable inside the library but are not an accidental
+installed ABI.  The Cycle 19 atom inspects both archive membership and the ELF
+dynamic symbol table; every exported definition must belong to the public
+=monad_*= namespace.
+
+This cycle deliberately does not invoke the parser from the public check call.
+The capsule gives the next ownership change an exact boundary, but PIC and
+symbol hiding do not make =longjmp= across partially constructed ASTs safe.
+Claiming source validation before that invariant is proved would turn a build
+property into a false resource-safety claim.
+
+** Cycle 20 — transactional partial-AST ownership
+
+Status: complete, 2026-08-14.
+
+The reader now has a thread-local, stack-nestable allocation ledger. Every AST
+constructor registers its zero-initialized node before parser ownership edges
+can be formed. A successful transaction discards only the ledger and transfers
+the graph to its returned roots. A failed transaction destroys ledger-owned
+nodes until the set is empty.
+
+The important rule is membership, not allocation order. Parser rewrites can
+create aliases and can allocate children before parents. During abort,
+=ast_free= therefore destructs a node iff that node still belongs to the active
+ledger. Recursive destruction unregisters descendants; a later aliased edge to
+an already destroyed descendant is inert. Formally, for ledger set =L= and
+destructor request =d(x)=:
+
+#+BEGIN_EXAMPLE
+x not-in L => d(x) = identity
+x in L     => L := L ∖ {x}; d(children(x)); release(x)
+#+END_EXAMPLE
+
+Thus the finite measure =|L|= decreases for every real destruction and each
+allocated node is released at most once. Parser shell-transfer sites now
+unregister explicitly instead of bypassing the ownership system with raw
+=free=. The Cycle 20 atom performs 32 partial-graph failures followed by a
+successful committed parse; the same proof runs under AddressSanitizer for
+use-after-free and double-free detection. LeakSanitizer cannot run under the
+current container ptrace policy, so whole-frontend leak certification remains
+an explicit open gate rather than an implied result.
+
+** Cycle 21 — protected reader/Wisp transaction
+
+Status: complete, 2026-08-14.
+
+The private frontend capsule now has one protected parse entry point. It owns a
+stack-scoped diagnostic context and AST ledger, calls the real Wisp frontend,
+and returns either an owned =ASTList= or a copied diagnostic. This follows the
+host-safety shape of Lua's
+[[https://www.lua.org/manual/5.4/manual.html#4.4][protected-call boundary]]:
+language rejection is ordinary result data rather than process termination or
+terminal output. Monad retains native AST representation and compilation; the
+reference concerns failure containment, not interpretation or boxing.
+
+Wisp installs one recovery scope below the diagnostic boundary. The scope owns
+reader expansions, stripped and transformed buffers, its string builder, token
+stream, and local arity table. It snapshots parser source pointers and callable
+classification hooks and restores them on success or failure. LIFO cleanup
+therefore releases Wisp state before the partial AST ledger and only then
+publishes the copied diagnostic.
+
+The Cycle 21 atom performs 32 malformed indented definitions through this sole
+entry point, requires silent structured recovery each time, and then parses,
+commits, and destroys a valid definition. The same path is clean under
+AddressSanitizer for invalid memory access.
+
+This remains internal. Reader-syntax registries, comment maps,
+pending-definition state, and the persistent FFI arity registry retain global
+components. The compiler facade must serialize access until those become
+session-owned; recoverability does not yet imply concurrent reentrancy.
+
+** Cycle 22 — public immutable parser diagnostics
+
+Status: complete, 2026-08-14.
+
+=monad_compiler_check_source= now invokes the protected frontend transaction
+after strict UTF-8 validation. UTF-8 rejection remains input-phase
+=MONAD-C0001=; reader/Wisp rejection becomes parse-phase =MONAD-C0002=. API
+success still means that an immutable judgment was produced, not that the
+source was accepted. This keeps expected source errors out of the transport
+status channel.
+
+The diagnostic set copies the parser message and source identity, retains the
+source version, and projects parser line/column locations into clamped byte
+ranges. Destroying the source unit cannot invalidate any diagnostic view.
+Successful parsing destroys its private AST immediately because this API is a
+check operation rather than an AST exposure mechanism.
+
+At the Cycle 22 boundary, a process-wide mutex enclosed the transaction.
+Its synchronization contract follows
+[[https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_mutex_lock.html][POSIX pthread mutex semantics]].
+This is correctness scaffolding for the remaining global registries, not the
+desired final concurrency architecture; Cycle 23 subsequently removed it.
+
+The Cycle 22 atom builds solely against a staged installed public SDK. It
+checks 32 sequential malformed versions, source-independent diagnostic
+lifetime, one valid empty result, and two simultaneous thread-owned sessions
+performing 16 malformed checks each. Exact stdout proves that no parser text
+escapes into the host process.
+
+** Cycle 23 — parallel thread-affine frontend state
+
+Status: complete, 2026-08-14.
+
+The process-wide parser mutex has been removed. Mutable reader state now has
+thread storage duration: source locations, recovery buffers, pending defines,
+layout and local-function tables, comment maps, parser counters and hooks,
+reader-syntax registries, macro registries and evaluation counters, nominal
+type names, feature detection, Wisp arities, pending types, and infix state.
+This follows GCC's documented
+[[https://gcc.gnu.org/onlinedocs/gcc/Thread-Local.html][thread-local storage model]]
+and matches the public rule that a compiler session is owned by one thread.
+
+Protected transactions additionally clear temporary reader-syntax and macro
+registries at their boundary. Independent host threads therefore neither race
+on parser working memory nor inherit one another's syntax declarations.
+
+The Cycle 23 atom installs an internal entry probe whose two workers meet at a
+condition-variable barrier inside =monad_frontend_parse=. A process-wide mutex
+would deadlock and fail the bounded test; successful completion proves actual
+overlap rather than two eventually successful serialized calls. Both workers
+then parse and independently destroy a valid AST.
+
+Thread locality is an intermediate ownership model, not the final one. Two
+compiler sessions used successively on the same thread still share persistent
+thread-local registries. Explicit compiler-owned frontend state is required
+for same-thread isolation, deterministic session destruction, migration to a
+worker executor, and bounded cleanup of every registry.
+
+** Cycle 24 — compiler-owned frontend-state spine
+
+Status: complete, 2026-08-14.
+
+Each =monad_compiler_session_t= now owns an opaque =MonadFrontendState= and
+destroys it with the session. The first migrated persistent subsystem is the
+Wisp arity environment: FFI and discovered callable arities no longer belong
+implicitly to the current host thread.
+
+Binding is a move, not a copy. Entering a protected transaction moves the
+state's arity graph into the thread's active frontend slot while preserving the
+previous slot; leaving moves the updated graph back and restores the prior
+thread environment. A cleanup record performs the same leave operation on
+parser rejection. This keeps individual arity lookups direct and wrapper-free.
+
+The Cycle 24 atom alternates two states 32 times on one host thread. Only the
+first knows that =paint= has arity two, so =paint 1= is incomplete there and
+complete in the second. Every iteration also rejects malformed Wisp through
+the first state before checking the distinction again, proving exceptional
+restoration rather than only normal-path swapping.
+
+This establishes the explicit ownership spine but not every registry has
+migrated. Layout knowledge, nominal type names, feature state, and some reader
+metadata remain thread-local working state. They must become owned module
+substates before same-thread sessions are fully isolated for compilation.
+
+** Cycle 25 — owned reader, type, and feature substates
+
+Status: complete, 2026-08-14.
+
+=MonadFrontendState= now owns three additional opaque module substates. The
+reader substate owns layout field and field-documentation graphs; the type
+substate owns nominal type names; the feature substate owns its detected and
+host-added feature strings. Session destruction walks every migrated graph and
+releases its nested strings and arrays deterministically.
+
+These substates use the same move-binding algebra established for Wisp:
+
+#+BEGIN_EXAMPLE
+enter(S) = save(TLS); TLS := move(S)
+leave(S) = S := move(TLS); TLS := restore()
+#+END_EXAMPLE
+
+All four substates enter as one transaction. A partial bind rolls previously
+entered modules back in reverse order; diagnostic cleanup leaves the complete
+state in reverse order. Individual parser lookups remain direct TLS accesses,
+so explicit ownership adds no wrapper to the hot path.
+
+The Cycle 25 atom gives only one of two same-thread states a nominal =Phoenix=,
+a =Point.x= layout field, and a =VULKAN= feature. Thirty-two alternations prove
+all three judgments remain disjoint, and every alternation crosses a malformed
+Wisp unwind before checking again.
+
+The remaining persistent type registries are aliases, refinements, and finite
+type sets. Code generation also consumes them directly, so their migration
+must preserve compilation-unit lifetime rather than treating them as
+parser-only scratch state.
+
+** Cycle 26 — compilation-unit semantic type state
+
+Status: complete, 2026-08-14.
+
+The owned type substate now contains the complete persistent semantic type
+vocabulary: nominal names, aliases, refinements (including cloned predicate
+ASTs), and finite type sets. The ownership boundary follows LLVM's
+[[https://llvm.org/doxygen/classllvm_1_1LLVMContext.html][per-compilation context model]], while Monad retains its own representation
+and stable embedding boundary.
+
+Binding still moves list roots into direct thread-local active slots. Existing
+inference and code-generation loops therefore traverse the lists they already
+used: there is no per-lookup dispatch, copying, boxing, or public wrapper.
+Leaving moves mutations back into the compilation-unit state, and session
+destruction releases every nested string, member array, and predicate AST.
+
+The Cycle 26 atom gives only one of two same-thread states an alias, a
+refinement, and a finite set. Thirty-two alternations check positive and
+negative judgments for all three, with a protected malformed parse between
+checks. This proves normal binding, exceptional restoration, and isolation of
+the registries shared by frontend inference and code generation.
+
+The state currently binds for protected parsing and targeted internal
+operations. A real embedded compile must keep one explicit compilation-unit
+transaction bound continuously across parse, inference, QTT, and emission so
+the returned AST cannot outlive the semantic vocabulary that gives it meaning.
+
+** Cycle 27 — continuous compilation-unit lifetime
+
+Status: complete, 2026-08-14.
+
+=MonadCompilationUnit= is now the internal lifetime boundary for compilation.
+Beginning a unit binds its compiler-owned frontend state once. Parsing places
+the AST under the unit's ownership without unbinding semantic registries;
+destroying the unit releases the AST first and restores the previous active
+state second. Parser rejection aborts partial AST allocations but deliberately
+keeps the unit binding alive until deterministic destruction, allowing later
+phases to report or inspect state under the same transaction contract.
+
+The design combines LLVM's
+[[https://llvm.org/doxygen/classllvm_1_1LLVMContext.html][isolated context ownership]] with ORCv2's
+[[https://llvm.org/docs/ORCv2.html#resource-trackers][resource-tracker lifetime principle]]: generated resources will be attached to
+the same unit rather than published piecemeal. Monad does not expose either
+LLVM object through its stable C ABI.
+
+The existing parser facade now executes through a short-lived compilation
+unit, preserving its API and AST-transfer behavior. The Cycle 27 atom proves a
+successful AST and its alias environment remain jointly active, another state
+cannot enter during that lifetime, destruction restores the ambient state,
+and parser rejection follows the same explicit cleanup rule.
+
+** Cycle 28 — unit-owned HM inference and type diagnostics
+
+Status: complete, 2026-08-14.
+
+The continuous compilation unit now owns a root =InferEnv= and retains one
+=InferCtx= for every inferred top-level expression. This is required because
+zonked AST annotations borrow substitution, grade, and effect structures from
+their inference contexts. Contexts therefore have an arena-like unit lifetime,
+following LLVM's documented
+[[https://llvm.org/doxygen/classllvm_1_1BumpPtrAllocatorImpl.html][allocate-together/free-together discipline]], rather than being freed between
+inference and code generation.
+
+The embedding compiler links the production HM inferencer and its quantitative
+grade/effect algebra as hidden PIC implementation objects. There is no second
+embedding-only type checker and no dynamic wrapper in the inference path. Its
+private tracing support is disabled without pulling the unrelated CLI
+dependent-checker globals into the installed library.
+
+Inference executes while frontend semantic state remains bound. A protected
+diagnostic context converts both ordinary unification failures and inference
+=READER_ERROR= paths into immutable public diagnostics. =MONAD-C0003= identifies
+the type phase; the source name, source version, byte range, and copied message
+remain valid after the source unit and compilation transaction are destroyed.
+
+The Cycle 28 installed-header atom submits a heterogeneous collection through
+=monad_compiler_check_source= and observes exactly one type-phase diagnostic.
+The root environment releases each distinct retained scheme once, including
+schemes shared by several builtin names.
+
+** Cycle 29 — atomic top-level inference commit
+
+Status: complete, 2026-08-14.
+
+Inference now has two structural layers. A stable base environment =Γ₀= owns
+builtin schemes; a child overlay =Δ= owns every definition generalized from
+the source unit. For top-level expressions =e₁ … eₙ=, production W-by-W
+inference computes:
+
+#+BEGIN_EXAMPLE
+Γᵢ₊₁ = Γᵢ ∪ generalize(Γᵢ, infer(Γᵢ, eᵢ))
+commit(Δ) ⇔ ∀ i ∈ [1,n]. infer(Γᵢ, eᵢ) succeeds
+#+END_EXAMPLE
+
+Later expressions therefore see earlier provisional schemes, including
+polymorphic generalized definitions, but the overlay is not publishable until
+the final judgment succeeds. Any failure leaves the commit bit false and unit
+destruction releases the complete overlay; no name-by-name inverse mutation or
+partially visible environment is needed.
+
+This follows ORCv2's
+[[https://llvm.org/docs/ORCv2.html#materialization-units-and-materialization-responsibility][all-or-fail materialization responsibility]] at the semantic phase: Monad will
+publish inferred bindings, QTT evidence, and native symbols together rather
+than allowing a failed suffix to expose a successful prefix.
+
+The Cycle 29 atom proves three properties: a later expression consumes a
+definition inferred earlier in the same unit; complete success marks that
+binding committed; and a definition preceding a type error is not committed
+or visible in a fresh unit after rollback.
+
+** Cycle 30 — immutable environment introspection snapshot
+
+Status: complete, 2026-08-14.
+
+The installed compiler library now exposes =monad_compiler_analyze_source=.
+It returns the existing immutable diagnostic set and, only after successful
+parsing and inference, an opaque =monad_compiler_environment_t=. The older
+=monad_compiler_check_source= is a compatibility wrapper over this operation
+and discards the environment result; there is one analysis pipeline.
+
+Snapshots enumerate only source definitions, in lexical source order rather
+than internal hash-table order. Each =monad_compiler_definition_t= contains a
+stable ID, value/function classification, owned name, alpha-canonical
+serialized principal scheme, source identity and version, and byte/line/column
+location. All borrowed fields belong to the snapshot, which remains valid
+after its source unit, compilation unit, and compiler session are destroyed.
+
+Definition identity is derived from =(source identity, binding name)= and
+deliberately excludes source version, body, and inferred scheme. Redefining a
+function therefore preserves the cell identity needed by a live host. The
+64-bit FNV-1a value follows the
+[[https://www.ietf.org/archive/id/draft-eastlake-fnv-25.html][published FNV specification]] but is only an index key: exact source/name data
+remains authoritative, just as fingerprints elsewhere in the embedding design
+never replace structural validation.
+
+The Cycle 30 atom compiles solely against a staged installed SDK. It proves
+source-order enumeration, function classification, nonempty portable schemes,
+stable IDs across source versions, exact locations, and snapshot independence
+from source and session lifetimes.
+
+** Cycle 31 — indexed editor queries and owned definition metadata
+
+Status: complete, 2026-08-15.
+
+Environment snapshots now carry immutable open-addressed indexes for exact
+name and stable-ID queries. Hashes select candidate slots only; exact names or
+IDs remain authoritative, and later same-name definitions occupy the query
+cell expected by live redefinition. This follows the dense lookup boundary of
+LLVM's [[https://llvm.org/doxygen/classllvm_1_1DenseMap.html][DenseMap]] without exposing LLVM or a mutable compiler table through the ABI.
+
+Definitions additionally own their language docstring and a complete half-open
+source interval. A definition ends where the next source definition begins, or
+at the source-unit byte count, so multiline bodies and documentation are not
+truncated to the parser's first-line token extent. Filter queries preserve
+lexical source order and can constrain definition kind, name prefix, and exact
+alpha-canonical principal scheme. Filter descriptors use =struct_size= so the
+installed ABI can grow without replacing this query boundary.
+
+The Cycle 31 metadata-backed atom compiles solely against a staged installed
+SDK. It proves indexed name/ID identity, missing-name behavior, owned docs,
+complete ranges, kind/prefix/scheme filtering, source ordering, and validity
+after source, diagnostics, and compiler-session destruction.
+
+** Surface direction — progressive disclosure without a slow path
+
+The installed API has three deliberate altitudes:
+
+1. =monad/monad.h= is the default application surface. One =monad_t= owns the
+   runtime, current-thread entry, compiler/live-image state as those arrive,
+   and resources acquired through the facade. Common intent is one operation:
+   open, load, bind, call, reload, close.
+2. =monad/embed.h= exposes explicit native cells, modules, variables, foreign
+   objects, ownership, concurrency, and lifetime control. It is opt-in, not a
+   prerequisite for the first program.
+3. =monad/compiler.h= and the future =monad/qtt.h= expose immutable compiler
+   evidence for tools and advanced hosts; compiler arenas never cross the ABI.
+
+The facade is ownership composition, not an interpreter or generic value
+wrapper. A typed lookup validates once and returns the same direct C ABI
+address as the advanced API. Generated module headers will ultimately provide
+the complete zero-boilerplate typed surface without a combinatorial family of
+handwritten signature helpers.
+
+The common source operation will be =monad_load_file/string=. It must perform
+=parse → infer → QTT → codegen → publish= as one transaction; failure returns
+owned diagnostics and leaves the previous live-image epoch unchanged. Until
+native publication exists, the facade does not claim that source analysis is
+loading.
+
+This direction follows Guile's
+[[https://www.gnu.org/software/guile/manual/html_node/Guile-Initialization-Functions.html][single initialization/entry experience]], while differing deliberately in the
+hot path: Monad exposes validated native signatures and direct pointers rather
+than requiring all values and calls to pass through a universal boxed object.
+
+** Cycle 32 — one-owner beginner facade
+
+Status: complete, 2026-08-15.
+
+The installed =monad/monad.h= now introduces one opaque =monad_t=.
+=monad_open= creates the isolated runtime and enters the calling thread;
+=monad_close= releases surface imports before registrations, detaches, and
+destroys the runtime. Applications using this layer cannot accidentally omit
+or reorder those mechanisms.
+
+The first typed binding pair, =monad_define_i64_function= and
+=monad_find_i64_function=, proves the surface model. Registration and signature
+validation happen once; calls through =monad_i64_function_t= contain no boxing,
+allocation, lookup, or facade dispatch. Surface-owned handles remain reachable
+until close without appearing in beginner code.
+
+=how_to/Embedding.c= is now a one-screen complete host. A metadata-backed
+installed-SDK atom compiles that exact tutorial, executes it, and constrains it
+to fewer than 70 lines without runtime, thread, compiler, or registration
+internals. The prior exhaustive example was intentionally retired as the
+default: reference coverage belongs in focused advanced examples and tests,
+not in the newcomer path.
+
+** Cycle 33 — honest prepared-source transaction boundary
+
+Status: complete, 2026-08-15.
+
+The surface now exposes =monad_prepare_string=. One call owns the source copy,
+creates and destroys the compiler session, performs production parsing and HM
+inference, and returns an opaque =monad_source_result_t=. The result reduces the
+ordinary host vocabulary to validity, diagnostic count/code/message, and
+definition count; callers do not construct source descriptors, compiler
+sessions, diagnostic sets, or environment snapshots.
+
+A successful API status means the transaction produced an immutable result.
+=monad_source_result_is_valid= separately states whether the language program
+passed semantic analysis. This preserves the compiler's established split
+between infrastructure failure and language diagnostics. Results own all
+views and remain independent of the caller's source buffer and short-lived
+compiler objects.
+
+Preparation is intentionally not named loading. It performs no QTT judgment,
+native emission, or live-image publication, and therefore produces no callable
+export. The prepared result is the stable front half of the eventual atomic
+load transaction; later cycles must extend its private representation rather
+than expose intermediate compiler machinery.
+
+The compiler-dependent surface entrypoint lives in =libmonad-compiler= while
+the lightweight open/bind/call/close path remains in =libmonad-embed=. This
+avoids a circular dependency and does not force runtime-only hosts to carry the
+compiler. A future installed aggregate package/link target should select both
+for source-embedding applications.
+
+The Cycle 33 staged installed-SDK atom proves valid-source preparation,
+inference rejection with owned =MONAD-C0003= data, definition counting, source
+buffer independence, and cleanup through the simple host owner.
+
+** Cycle 34 — staged per-definition QTT evidence
+
+Status: complete, 2026-08-15.
+
+The advanced installed =monad/qtt.h= surface introduces immutable QTT reports
+owned by a prepared source/environment snapshot. Evidence is indexed by the
+same stable definition ID used for live binding identity and preserves lexical
+definition order. The public record has a =struct_size= evolution boundary and
+distinguishes evidence stage and availability per judgment.
+
+The embedding compilation unit now runs production source-effect inference for
+each successfully inferred lambda and attaches the generalized effect scheme
+to its retained =TypeScheme=. Reports copy the resulting portable callable
+contract, completeness judgment, and structural fingerprint before compiler
+arenas are destroyed. This is real compiler evidence, not reconstructed source
+text or terminal tracing.
+
+Quantitative source-grade elaboration is not yet active in this frontend path,
+so =quantitative_usage_available= is false and the usage counts are zero.
+Likewise =resource_verified= and =destructor_plan_available= remain false until
+typed Core/resource elaboration runs. The evidence-stage enum prevents an
+inferred effect judgment from being presented as a resource certificate. This
+staging follows Atkey's
+[[https://bentnib.org/quantitative-type-theory.pdf][semiring usage judgment]] and Koka's
+[[https://arxiv.org/abs/1406.2061][row-polymorphic effect discipline]] while reporting implementation coverage
+separately from the mathematics.
+
+The Cycle 34 staged installed-SDK atom proves stable-ID lookup, owned portable
+effect evidence, completeness/fingerprint availability, and explicit absence
+of quantitative/resource/destructor claims. The report dies with its prepared
+source, giving every borrowed field one obvious owner.
+
+** Cycle 35 — production-solved quantitative snapshots
+
+Status: complete, 2026-08-15.
+
+The continuous embedding unit now assigns deterministic lexical binder and
+closure identities before HM inference, then runs the production
+=qtt_source_grade_scheme= solver for each inferred lambda. This is the same
+source-grade algorithm used by the main compiler path, built as a focused
+hidden compiler-library object rather than copied or approximated in the C
+facade.
+
+Successful grade results attach their generalized scheme to the retained
+=TypeScheme= and copy exact solved quantities for parameters and closure
+captures into the compilation unit. Environment construction converts those
+internal =QttQuantity= values into ABI-stable =monad_qtt_quantity_t= arrays;
+the QTT arena, solver, expressions, and schemes never cross the installed ABI.
+Finite natural quantities and omega remain structurally distinct.
+
+The public accessors are bounds checked and the evidence owner remains the
+prepared source/environment report. =quantitative_usage_available= advances
+only after the production solver succeeds; unsupported source leaves the field
+false rather than falling back to syntactic occurrence counting.
+
+The Cycle 35 staged installed-SDK atom proves the semiring distinction that
+matters for code generation: =first left right -> left= reports exact usage
+=1= for =left= and =0= for erased =right=. The QTT source cites Atkey's
+[[https://bentnib.org/quantitative-type-theory.pdf][quantitative typing formulation]] directly.
+
+** Cycle 36 — typed-Core resource certificates
+
+Status: complete, 2026-08-15.
+
+Prepared inferred lambdas now enter the production QTT shadow verifier. The
+pipeline lowers the supported fragment to typed Core, validates canonical type
+identity and graded signatures, lowers to resource-aware ANF, infers loan
+regions, and validates the resulting resource program. The compiler library
+links focused hidden copies of these implementation objects; none becomes an
+installed ABI dependency.
+
+Only =QTT_SHADOW_VERIFIED= advances public evidence to
+=MONAD_QTT_EVIDENCE_RESOURCE_VERIFIED=. A valid source function outside the
+current typed-Core fragment remains =MONAD_QTT_EVIDENCE_INFERRED= with false
+resource/destructor availability. Unsupported coverage is therefore ordinary
+staged evidence, while internal verifier failure remains distinct inside the
+compiler pipeline.
+
+Verified records expose the result representation, resource block/instruction
+counts, destructor-plan availability, and a deterministic fingerprint over the
+exact evidence summary: contract identity, result representation/type,
+parameter ownership/representation/quantities, and resource instruction kinds
+and identities. The fingerprint accelerates comparison but never substitutes
+for the verified stage or structural evidence.
+
+This follows the explicit structural dup/drop model of
+[[https://www.microsoft.com/en-us/research/publication/perceus-garbage-free-reference-counting-with-reuse/][Perceus]]. The research link is also adjacent to the public fingerprint field
+in =monad/qtt.h=.
+
+The Cycle 36 installed-SDK atom proves that =identity= obtains an immediate
+result representation, validated resource stage, destructor plan, block
+summary, and nonzero evidence fingerprint. In the same transaction, a valid
+multi-expression definition unsupported by the current verifier remains at
+the inferred stage with no fabricated certificate.
+
+** Guile facility map — compiled-language equivalents
+
+The embedding product targets the important capabilities of Guile, not a
+literal copy of its boxed-object ABI:
+
+| Guile facility                      | Monad equivalent/direction                                                                            |
+|-------------------------------------+-------------------------------------------------------------------------------------------------------|
+| =scm_with_guile= / initialization     | =monad_open/close= owns runtime and thread entry                                                        |
+| =scm_c_eval_string=                   | future atomic =monad_load_string= compiles, publishes, and returns a typed module; no interpreter       |
+| =scm_c_primitive_load= and load paths | =monad_prepare_file= now owns file input; future =monad_load_file/path= publishes native modules          |
+| module public/private lookup        | stable live-image cells plus generated typed module binders; private compiler lookup remains advanced |
+| =scm_c_catch=                         | status + owned structured diagnostics; no language failure unwinds through C                          |
+| C procedures exposed to Scheme      | native registration, certified signatures, direct addresses                                           |
+| Scheme procedures exposed to C      | compiled Monad exports as validated direct C pointers                                                 |
+| foreign objects                     | nominal foreign types with explicit ownership and deterministic destruction                           |
+| dynamic foreign libraries           | certified native module descriptors and future live JIT dylibs                                        |
+| runtime redefinition                | atomic live-image epoch commit preserving stable function identities                                  |
+
+Primary Guile references influencing this map are its
+[[https://www.gnu.org/software/guile/manual/html_node/Dia-Hook.html][C string evaluation hook]],
+[[https://www.gnu.org/software/guile/manual/html_node/Loading.html][file loading]],
+[[https://www.gnu.org/software/guile/manual/html_node/Accessing-Modules-from-C.html][module lookup]],
+[[https://www.gnu.org/software/guile/manual/html_node/Exceptions-and-C.html][protected C exception boundary]],
+[[https://www.gnu.org/software/guile/manual/html_node/Dynamic-FFI.html][bidirectional dynamic FFI]], and
+[[https://www.gnu.org/software/guile/manual/html_node/Foreign-Objects.html][foreign objects]].
+
+Monad deliberately differs in one decisive respect: successful lookup should
+produce a statically validated native representation and direct call, rather
+than route all operations through a universal =SCM= object.
+
+** Cycle 37 — owned C string, byte-view, and file hooks
+
+Status: complete, 2026-08-15.
+
+The simple surface now has three input forms over one preparation transaction:
+=monad_prepare_string= for ordinary null-terminated literals,
+=monad_prepare_source= for exact byte views, and =monad_prepare_file= for owned
+file loading. The string form delegates to the byte-view form; file loading
+uses a checked growing buffer and then delegates to the same boundary. There
+is one parse/infer/QTT implementation.
+
+Every form copies its input before analysis. A byte view ignores storage after
+=byte_count= and preserves the compiler's explicit embedded-NUL rejection.
+File open/read/close failures use the new =MONAD_ERROR_IO= status rather than
+stderr or process termination. Returned results remain independent of caller
+buffer and file lifetimes.
+
+This cycle intentionally does not introduce =monad_eval_string= or
+=monad_load_string=. Guile can evaluate immediately because it owns a general
+runtime evaluator; Monad must first complete native emission and atomic
+live-image publication. Naming analysis “evaluation” before then would make
+the simple API easy but false.
+
+The Cycle 37 staged installed-SDK atom prepares the same one-definition
+transaction from a mutable C string, a bounded view with trailing garbage, and
+a file path, then proves all three independently owned results.
+
+* What should be done next
+
+Build the first true =monad_load_string= vertical slice: a verified monomorphic
+=Int -> Int= definition must pass the existing prepare transaction, emit native
+LLVM through a reusable production codegen boundary, enter an ORCv2 resource
+tracker, publish atomically into the live image, and bind as a direct typed C
+pointer. Then add =monad_load_file= and load paths as thin input variants over
+that same transaction. Only that complete
+all-or-nothing operation may return a bindable export. Add an aggregate
+installed link target/pkg-config description so source hosts need one package
+name while runtime-only hosts retain the lightweight library. Then extend the
+diagnostic set to multiple entries. The QTT report must include:
+resolved representation, quantitative usage, ownership transitions, destructor
+placement, and rejection provenance must be queryable by the same stable
+definition ID. Then invoke the certified
+emitter from the main Monad code generator for a real foreign-typed definition;
+the Cycle 14 host should replace its constructed QTT resource block with that
+compiled module while preserving the same IR and lifetime assertions. Then expose
+structured compiler diagnostics for failed imports and add explicit region
+handles and loan identities before admitting borrowed C payloads.
+
+In parallel with that representation work, connect the live-image registry to
+compiler =Env= and REPL commits through one atomic transaction API. A prepared
+transaction must carry typed additions, redefinitions, removals, diagnostics,
+QTT contracts, and source metadata; commit publishes all changes under one
+image epoch or publishes none.
+* Cycle 38 — executable source strings and direct native calls
+
+Cycle 38 closes the first real source-to-execution vertical.  A host can call
+=monad_load_string= with an in-memory Monad definition, then resolve it with
+=monad_find_i64_function= and call the returned =int64_t (*)(int64_t)= directly.
+There is no interpreter, universal value box, subprocess compiler, or generic
+argument array on the hot path.
+
+The transaction is parse → HM inference → QTT typed-Core validation → LLVM
+native emission → publication.  Generated-code ownership is adopted by the
+one-owner =monad_t= facade, so a resolved pointer remains valid until
+=monad_close=.  Rejected source never reaches publication and therefore cannot
+disturb an earlier callable.  The implementation follows LLVM ORCv2's explicit
+resource-lifetime model and LLVM's documented calling conventions:
+
+- https://llvm.org/docs/ORCv2.html
+- https://llvm.org/docs/LangRef.html#calling-conventions
+
+The intentionally certified first ABI slice is one-argument =Int -> Int=
+definitions over the parameter, integer literals, and =+=, =-=, or =*=.  Code
+outside that slice fails closed; it is not interpreted as a fallback.  The
+metadata-backed regression is
+=atom.embedding.38.executable-source.native-string=.
+
+** What should be done next
+
+Make publication genuinely multi-definition and replacement-atomic: stage a
+complete native image, validate every ABI export and name conflict, then swap
+all live binding cells in one commit while active callers retain the preceding
+image.  That is the foundation for Lisp-like redefinition without sacrificing
+compiled C-ABI calls.
+
+* Cycle 39 — transactional native generations
+
+=monad_load_string= now treats every definition in a source unit as one native
+registry generation.  LLVM emission and copied registration metadata are
+prepared before publication.  Under one runtime critical section the complete
+name/signature set is revalidated, existing live cells are replaced, new cells
+are linked, and the global binding epoch advances once.  Any conflict publishes
+nothing.  This is the read-copy-publish shape described by the Linux RCU
+publish/subscribe requirements, while generated-code reclamation continues to
+follow LLVM ORCv2 ownership:
+
+- https://www.kernel.org/doc/html/latest/RCU/Design/Requirements/Requirements.html#publish-subscribe-guarantee
+- https://llvm.org/docs/ORCv2.html#how-to-remove-code
+
+The exact guarantee matters.  Name resolution and immutable binding snapshots
+are coherent at the generation boundary because they share the registry lock
+and epoch.  A retained live cell observes its own address replacement with
+release/acquire semantics.  Several independent direct calls do not magically
+form a read transaction; providing that stronger guarantee requires an explicit
+generation-read token, not hidden dispatch on every hot call.
+
+Cycle 39 adds two metadata-backed regressions under
+=atom.embedding.39.live-source.atomic-redefinition=: installed source reload
+proves two definitions move to the next generation, and the internal batch
+fixture proves a conflict in the second export leaves the first address and
+generation unchanged.
+
+** What should be done next
+
+Add an optional read-generation token for hosts such as the Vulkan editor.  A
+render/update phase should pin exactly one immutable native image, resolve many
+live functions against it, and release it at the phase boundary.  Publication
+can then retire old ORC images immediately and reclaim them after the last
+reader, while frozen direct function pointers remain the explicit zero-cost
+alternative.
+
+* Cycle 40 — coherent read-generation tokens
+
+Hosts can now opt into =monad_read_begin= / =monad_read_end= around a logical
+phase such as one editor render or update.  Begin captures every compatible
+=Int -> Int= name and native address at one binding epoch in a single immutable
+slab and pins the corresponding live cells.  Lookups through
+=monad_read_find_i64_function= are deterministic and logarithmic; the returned
+value is still the exact C function pointer, so calls themselves allocate
+nothing and cross no wrapper.
+
+A source reload can proceed while an earlier token exists.  The old token keeps
+calling its coherent old pair, while a token begun after commit observes the
+new pair.  =monad_close= returns =MONAD_ERROR_BUSY= while tokens remain active
+instead of invalidating their code.  This is the publication/reclamation split
+described by RCU, combined with LLVM ORCv2's explicit generated-resource
+lifetime:
+
+- https://www.kernel.org/doc/html/latest/RCU/whatisRCU.html
+- https://llvm.org/docs/ORCv2.html#how-to-remove-code
+
+The installed metadata-backed regression is
+=atom.embedding.40.live-source.read-generation=.  It proves old/new
+coexistence, monotonically increasing generation identity, missing-name
+behavior, and busy-close safety.
+
+** What should be done next
+
+Associate each published address with its owning ORC image and count image
+readers, not only cell readers.  Once no frozen import or read token references
+a retired image, remove its ORC resources and destroy it immediately.  Add
+observable lifetime counters and allocator-failure tests so reclamation is
+proved rather than inferred.
+
+* Cycle 41 — address-owned ORC reclamation
+
+Native code no longer accumulates until =monad_close=.  Every generated image
+has a small internal owner.  The current live registration retains the owner of
+its address; a frozen =monad_find_i64_function= import retains the owner it
+resolved; and each read-generation entry retains the owner of its captured
+address.  Atomic replacement transfers registration references to the new
+image and releases the old references only after the registry commit.
+
+When the last cell/import/token reference disappears, the owner synchronously
+destroys its LLJIT and thread-safe context.  This is the RCU removal/reclamation
+split applied to LLVM ORCv2 generated resources:
+
+- https://www.kernel.org/doc/html/latest/RCU/whatisRCU.html
+- https://llvm.org/docs/ORCv2.html#how-to-remove-code
+
+=monad_live_native_image_count= exposes lifecycle state for host diagnostics
+and tests; it is not consulted by native calls.  The installed
+=atom.embedding.41.live-source.orc-reclamation= regression proves three
+distinct cases: an old token delays destruction until =monad_read_end=,
+unobserved repeated reloads stay bounded at one image, and a frozen pointer
+keeps its exact old machine code alive across replacement.
+
+** What should be done next
+
+Make frozen imports individually releasable from the simple facade.  Introduce
+an opaque typed function handle whose address can be extracted once and whose
+release ends the image lifetime, while retaining the current convenience API
+as host-lifetime sugar.  Then add injected-allocation-failure coverage at every
+owner/publication boundary to prove rollback never leaks an image or cell.
+
+* Cycle 42 — releasable typed function handles
+
+The beginner facade now offers deterministic frozen-pointer ownership without
+changing the call ABI:
+
+#+begin_src c
+monad_i64_handle_t *handle = NULL;
+monad_find_i64_handle(monad, "step", &handle, &error);
+monad_i64_function_t step = monad_i64_handle_address(handle);
+int64_t result = step(41);       /* ordinary direct C call */
+monad_i64_handle_release(handle); /* pointer expires here */
+#+end_src
+
+The handle owns the exact native import and therefore the exact ORC image from
+which its address was resolved.  Reload does not change that frozen pointer.
+Release drops the import and synchronously reclaims a retired image when this
+was its final reference.  =monad_close= preflights active handles and returns
+=MONAD_ERROR_BUSY= before performing any teardown, so a failed close leaves
+the host and pointer usable.  This matches ORCv2's explicit removable-resource
+lifetime:
+
+- https://llvm.org/docs/ORCv2.html#how-to-remove-code
+
+=monad_find_i64_function= remains the terse host-lifetime convenience.  Both
+APIs share one structural-signature resolver; the convenience merely stores
+the same native import until close.  The installed metadata regression is
+=atom.embedding.42.live-source.releasable-function=.
+
+** What should be done next
+
+Add deterministic allocator-failure injection to the simple facade and native
+publication transaction.  Exercise every allocation boundary—handle creation,
+image owner creation, export staging, registry metadata, and read snapshots—
+and prove that each failure preserves the previous generation, releases the
+new ORC image exactly once, and leaves live-image/cell counters unchanged.
+
+* Cycle 43 — one production code generator
+
+Runtime source no longer has a private QTT-to-LLVM expression emitter.  That
+emitter recognized only one-argument =Int -> Int= lambdas and the operators
+=+=, =-=, and =*=, so every added language construct could silently acquire a
+second implementation.  =monad_load_string= now gives the checked definition
+ASTs to the same =codegen_predeclare_toplevel_functions= and =codegen_expr=
+entry points used by batch compilation.  The resulting LLVM module is moved,
+not copied, into ORCv2 through the explicit =codegen_take_module= ownership
+boundary.  ORC remains responsible only for materialization and lifetime.
+
+The code generator and its real dependency closure are built as hidden PIC
+objects in =libmonad-compiler=.  An ELF export map keeps that implementation
+private while preserving only the installed =monad_*= ABI.  The relevant
+primary design references are embedded beside the ownership API in
+=codegen.h= and beside ORC materialization in =embed/native_compile.c=:
+
+- https://llvm.org/docs/ORCv2.html#how-to-add-a-module
+- https://llvm.org/docs/LangRef.html#calling-conventions
+- https://gcc.gnu.org/onlinedocs/gcc/Code-Gen-Options.html#index-fvisibility
+
+The metadata-backed
+=atom.embedding.43.codegen-convergence.production-conditional= regression is
+deliberately outside the deleted emitter's language: it compiles and executes
+an =if= with comparison through the public string-loading API.  Existing image
+replacement, coherent-read, reclamation, and releasable-handle regressions
+continue to exercise the same production-generated images.
+
+** What should be done next
+
+Make the production unit boundary a first-class object shared by =main.c= and
+embedding, rather than having each caller assemble the init function and
+phase ordering.  The boundary should accept a checked compilation unit,
+perform layouts/predeclaration/body emission/verification exactly once, and
+return either an owned LLVM module or structured diagnostics.  Then add a
+differential regression that compiles one source through batch object output
+and ORC, compares exported ABI signatures, and executes identical input
+vectors against both artifacts.

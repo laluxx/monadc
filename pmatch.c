@@ -276,7 +276,43 @@ ASTPattern parse_pattern(Parser *p) {
     return parse_single_pattern(p);
 }
 
-static bool is_at_pmatch_clause(Parser *p) {
+static bool is_pmatch_definition_boundary(Parser *p) {
+    if (!p)
+        return false;
+
+    static const char *forms[] = {
+        "define", "data", "layout", "module", "import", "tests",
+        "class", "instance", "effect", "handler", "macro", "method", "#line"
+    };
+    const char *candidate = NULL;
+    Token peek = {0};
+    if (p->current.type == TOK_SYMBOL && p->current.value) {
+        candidate = p->current.value;
+    } else if (p->current.type == TOK_LPAREN) {
+        Lexer lookahead = *p->lexer;
+        peek = lexer_next_token(&lookahead);
+        if (peek.type == TOK_SYMBOL)
+            candidate = peek.value;
+    }
+
+    bool boundary = false;
+    for (size_t i = 0; candidate && i < sizeof(forms) / sizeof(forms[0]); i++)
+        if (strcmp(candidate, forms[i]) == 0) {
+            boundary = true;
+            break;
+        }
+    free(peek.value);
+    return boundary;
+}
+
+static bool is_at_pmatch_clause(Parser *p, int expected_patterns) {
+    /* Wisp top-level forms are layout-delimited rather than wrapped in an
+     * extra reader list.  A following `define ... -> ...` therefore contains
+     * an arrow in the token stream, but it is a declaration boundary, not
+     * another clause of the current function. */
+    if (is_pmatch_definition_boundary(p))
+        return false;
+
     Lexer peek_lex = *p->lexer;
     Token peek_cur = p->current;
     /* Do not free peek_cur.value on the very first token since it belongs to p->current! */
@@ -285,25 +321,41 @@ static bool is_at_pmatch_clause(Parser *p) {
                       (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
                        strcmp(peek_cur.value, "|") == 0));
     int depth = 0;
+    int patterns = 0;
+    bool range_bound = false;
             bool is_first = true;
             while (!has_arrow && !has_pipe &&
                    !(peek_cur.type == TOK_RPAREN && depth == 0) &&
                    peek_cur.type != TOK_EOF    &&
                    peek_cur.type != TOK_KEYWORD) {
-        if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) depth++;
-        if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) depth--;
         if (peek_cur.type == TOK_ARROW && depth == 0) { has_arrow = true; break; }
         if (peek_cur.type == TOK_PIPE  && depth == 0) { has_pipe = true; break; }
         if (peek_cur.type == TOK_SYMBOL && peek_cur.value &&
             strcmp(peek_cur.value, "|") == 0 && depth == 0) {
             has_pipe = true; break;
         }
+        if (peek_cur.type == TOK_LPAREN || peek_cur.type == TOK_LBRACKET) {
+            if (depth == 0) patterns++;
+            depth++;
+        } else if ((peek_cur.type == TOK_RPAREN || peek_cur.type == TOK_RBRACKET) && depth > 0) {
+            depth--;
+        } else if (depth == 0 && peek_cur.type == TOK_DOTDOT) {
+            /* `lower..upper` is one pattern.  The lookahead counts lexical
+             * pattern heads only; do not mistake the upper bound for a
+             * second function argument. */
+            range_bound = true;
+        } else if (depth == 0 && range_bound) {
+            range_bound = false;
+        } else if (depth == 0) {
+            patterns++;
+        }
         if (!is_first && peek_cur.value) free(peek_cur.value);
         is_first = false;
         peek_cur = lexer_next_token(&peek_lex);
     }
     if (!is_first && peek_cur.value) free(peek_cur.value);
-    return has_arrow || has_pipe;
+    return (has_arrow || has_pipe) &&
+           (has_pipe && patterns == 0 ? true : patterns == expected_patterns);
 }
 
 static AST *finish_expr_sequence(AST **exprs, int count, bool body_context) {
@@ -368,13 +420,14 @@ static AST *parse_guard_expr(Parser *p) {
     return finish_expr_sequence(exprs, count, false);
 }
 
-static AST *parse_clause_body(Parser *p) {
+static AST *parse_clause_body(Parser *p, int param_count) {
     AST **body_exprs = NULL;
     int body_count = 0;
     int body_cap = 0;
 
     while (!parser_at(p, TOK_RPAREN) && !parser_at(p, TOK_EOF) && !parser_at(p, TOK_KEYWORD)) {
-        if (body_count > 0 && is_at_pmatch_clause(p)) break;
+        if (body_count > 0 && is_pmatch_definition_boundary(p)) break;
+        if (body_count > 0 && is_at_pmatch_clause(p, param_count)) break;
 
         /* Skip #line directive nodes */
         if (p->current.type == TOK_LPAREN) {
@@ -460,7 +513,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
                 parser_advance(p);
             }
 
-            AST *body = parse_clause_body(p);
+            AST *body = parse_clause_body(p, param_count);
 
             if (guard_count >= guard_cap) {
                 guard_cap = guard_cap == 0 ? 4 : guard_cap * 2;
@@ -490,7 +543,7 @@ static ASTPMatchClause parse_one_clause(Parser *p, int param_count) {
         parser_advance(p);
     }
 
-    AST *body = parse_clause_body(p);
+    AST *body = parse_clause_body(p, param_count);
 
     clause.patterns      = patterns;
     clause.pattern_count = act_count;
@@ -512,7 +565,7 @@ AST *parse_pmatch_clauses(Parser *p, int param_count) {
            !parser_at(p, TOK_EOF)    &&
            !parser_at(p, TOK_KEYWORD)) {
 
-        if (!is_at_pmatch_clause(p)) {
+        if (!is_at_pmatch_clause(p, param_count)) {
             break;
         }
 
@@ -1426,14 +1479,20 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
             for (int gi = 0; gi < cl->guard_count; gi++) {
                 AST *gcond = ast_clone(cl->guard_conds[gi]);
                 AST *gbody = ast_clone(cl->guard_bodies[gi]);
+                bool is_otherwise = (gcond->type == AST_SYMBOL &&
+                                     strcmp(gcond->symbol, "otherwise") == 0);
 
                 if (bind_count > 0) {
-                    gcond = make_let(bind_names, bind_exprs, bind_count, gcond);
+                    /* `otherwise` is the fallback marker, not an expression
+                     * that needs field bindings in scope. Detect it before
+                     * wrapping ordinary guards in a let; otherwise the marker
+                     * becomes a let expression and the generated constructor
+                     * test can be inverted in the cond chain. */
+                    if (!is_otherwise)
+                        gcond = make_let(bind_names, bind_exprs, bind_count, gcond);
                     gbody = make_let(bind_names, bind_exprs, bind_count, gbody);
                 }
 
-                bool is_otherwise = (gcond->type == AST_SYMBOL &&
-                                     strcmp(gcond->symbol, "otherwise") == 0);
                 AST *combined;
                 if (is_otherwise) {
                     ast_free(gcond);

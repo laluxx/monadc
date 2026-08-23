@@ -7,13 +7,16 @@
 :TEST-EXPECT-IR-CONTAINS switch i64
 :TEST-MENU-PATH codegen/branches/semantic-analysis/pattern-match-jump-table
 
-(module Main)
-(data Choice A | B | C)
+module Main
 
-(define pick
-  (lambda ([m : Choice] -> Int)
-    (match m with
-      | A -> 1
-      | B -> 2
-      | C -> 3
-      | _ -> 0)))
+data Choice
+  = A
+  | B
+  | C
+
+define pick :: Choice -> Int
+  value -> (match value with
+    | A -> 1
+    | B -> 2
+    | C -> 3
+    | _ -> 0)

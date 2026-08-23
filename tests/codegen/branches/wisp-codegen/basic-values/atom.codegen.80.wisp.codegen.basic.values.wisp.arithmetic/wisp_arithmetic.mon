@@ -19,4 +19,4 @@
 :TEST-CLI-TARGET codegen branches wisp-codegen basic-values
 (module Main)
 define x 10
-show + 1 * 2 3
+show 1 + 2 * 3

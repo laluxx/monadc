@@ -97,9 +97,9 @@ method quickcheck-bounded :: Int -> Int -> Int
 define quickcheck-shrink-integral :: Int -> Int -> [Int]
   original 0     -> []
   original delta ->
-    __rt_prepend
+    (__rt_prepend
       (original - delta)
-      (quickcheck-shrink-integral original (div delta 2))
+      (quickcheck-shrink-integral original (div delta 2)))
 
 
 class Arbitrary a where

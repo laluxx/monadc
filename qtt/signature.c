@@ -20,6 +20,8 @@ uint64_t qtt_signature_contract_fingerprint(
         hash = contract_mix(hash, parameter->type_id.value);
         hash = contract_mix(hash, parameter->representation);
         hash = contract_mix(hash, parameter->mode);
+        hash = contract_mix(hash, parameter->nominal_authority.domain);
+        hash = contract_mix(hash, parameter->nominal_authority.identity);
         hash = contract_mix(hash, parameter->quantity.is_omega);
         hash = contract_mix(hash, parameter->quantity.finite);
         hash = contract_mix(hash, parameter->observed.is_omega);
@@ -29,6 +31,8 @@ uint64_t qtt_signature_contract_fingerprint(
     hash = contract_mix(hash, signature->result.representation);
     hash = contract_mix(hash, signature->result.mode);
     hash = contract_mix(hash, signature->result.origin);
+    hash = contract_mix(hash, signature->result.nominal_authority.domain);
+    hash = contract_mix(hash, signature->result.nominal_authority.identity);
     hash = contract_mix(hash, signature->effects_complete);
     hash = contract_mix(hash, signature->effects_environment_solved);
     hash = contract_mix(hash, signature->effect_fingerprint);

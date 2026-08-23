@@ -1,0 +1,37 @@
+:TEST-ID tests.parser.recursive-higher-order-collection-reply
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Recursive higher-order functions preserve nested ParseReply collection evidence.
+:TEST-EXPECT compile, run, recursive collection reply is preserved
+:TEST-TIER regression
+:TEST-SECTION inference
+:TEST-CATEGORY higher-order
+
+import Text.Parser
+
+module Parser.RecursiveHigherOrderCollectionReply []
+
+
+define stop-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail code offset bytes
+
+
+define reverse-values :: [a] -> [a] -> [a]
+  result []         -> result
+  result [value|xs] -> reverse-values (prepend value result) xs
+
+
+define collect-loop :: Int -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> [Int] -> [a] -> Bool -> ParseReply a -> ParseReply [a]
+  limit parser offset bytes values consumed reply | limit <= 0 ->
+    Parsed (reverse-values [] values) offset consumed
+  limit parser offset bytes values consumed [Rejected failure item-consumed] ->
+    Parsed (reverse-values [] values) offset consumed
+  limit parser offset bytes values consumed [Parsed value next item-consumed] ->
+    (collect-loop (limit - 1) parser next bytes (prepend value values) True (parser 70 next bytes))
+
+
+define collect :: (Int -> Int -> [Int] -> ParseReply a) -> ParseReply [a]
+  parser -> collect-loop 4 parser 0 [] [] False (parser 70 0 [])
+
+
+tests
+  assert-eq (count (reply-value-or [] (collect stop-parser))) 0 "Recursive higher-order collection replies retain their payload type"

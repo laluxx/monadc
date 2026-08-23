@@ -262,14 +262,82 @@ static Type *type_parse_type_application(const char *name) {
 
 /// Type alias
 
-TypeAlias *g_aliases = NULL;
+MONAD_THREAD_LOCAL TypeAlias *g_aliases;
+MONAD_THREAD_LOCAL RefinementEntry *g_refinements;
+MONAD_THREAD_LOCAL FiniteTypeSetEntry *g_finite_type_sets;
 
 typedef struct NominalTypeName {
     char *name;
     struct NominalTypeName *next;
 } NominalTypeName;
 
-static NominalTypeName *g_nominal_type_names;
+static MONAD_THREAD_LOCAL NominalTypeName *g_nominal_type_names;
+
+/* One state owns one compilation unit's semantic type vocabulary. This is the
+ * same isolation principle as LLVMContext, without exposing LLVM or adding a
+ * lookup wrapper to code generation:
+ * https://llvm.org/doxygen/classllvm_1_1LLVMContext.html
+ */
+struct TypesPersistentState {
+    NominalTypeName *nominals;
+    TypeAlias *aliases;
+    RefinementEntry *refinements;
+    FiniteTypeSetEntry *finite_type_sets;
+};
+static MONAD_THREAD_LOCAL TypesPersistentState *g_bound_types_state;
+static MONAD_THREAD_LOCAL NominalTypeName *g_saved_nominal_type_names;
+static MONAD_THREAD_LOCAL TypeAlias *g_saved_aliases;
+static MONAD_THREAD_LOCAL RefinementEntry *g_saved_refinements;
+static MONAD_THREAD_LOCAL FiniteTypeSetEntry *g_saved_finite_type_sets;
+
+TypesPersistentState *types_persistent_state_create(void) {
+    return calloc(1, sizeof(TypesPersistentState));
+}
+
+void types_persistent_state_destroy(TypesPersistentState *state) {
+    if (!state || state == g_bound_types_state) return;
+    if (!types_persistent_state_enter(state)) return;
+    type_alias_free_all();
+    refinement_free_all();
+    finite_type_set_free_all();
+    types_persistent_state_leave(state);
+    free(state);
+}
+
+bool types_persistent_state_enter(TypesPersistentState *state) {
+    if (!state || g_bound_types_state) return false;
+    g_saved_nominal_type_names = g_nominal_type_names;
+    g_saved_aliases = g_aliases;
+    g_saved_refinements = g_refinements;
+    g_saved_finite_type_sets = g_finite_type_sets;
+    g_nominal_type_names = state->nominals;
+    g_aliases = state->aliases;
+    g_refinements = state->refinements;
+    g_finite_type_sets = state->finite_type_sets;
+    state->nominals = NULL;
+    state->aliases = NULL;
+    state->refinements = NULL;
+    state->finite_type_sets = NULL;
+    g_bound_types_state = state;
+    return true;
+}
+
+void types_persistent_state_leave(TypesPersistentState *state) {
+    if (!state || g_bound_types_state != state) return;
+    state->nominals = g_nominal_type_names;
+    state->aliases = g_aliases;
+    state->refinements = g_refinements;
+    state->finite_type_sets = g_finite_type_sets;
+    g_nominal_type_names = g_saved_nominal_type_names;
+    g_aliases = g_saved_aliases;
+    g_refinements = g_saved_refinements;
+    g_finite_type_sets = g_saved_finite_type_sets;
+    g_saved_nominal_type_names = NULL;
+    g_saved_aliases = NULL;
+    g_saved_refinements = NULL;
+    g_saved_finite_type_sets = NULL;
+    g_bound_types_state = NULL;
+}
 
 bool type_nominal_register(const char *name) {
     if (!name || name[0] < 'A' || name[0] > 'Z') return false;
@@ -285,7 +353,7 @@ bool type_nominal_register(const char *name) {
     return true;
 }
 
-static bool type_nominal_is_registered(const char *name) {
+bool type_nominal_is_registered(const char *name) {
     for (NominalTypeName *item = g_nominal_type_names;
          item; item = item->next)
         if (!strcmp(item->name, name)) return true;
@@ -327,10 +395,6 @@ void type_alias_free_all(void) {
 }
 
 /// Refinement type
-
-RefinementEntry *g_refinements = NULL;
-
-FiniteTypeSetEntry *g_finite_type_sets = NULL;
 
 static bool finite_member_from_ast(const AST *ast, FiniteTypeMember *out) {
     memset(out, 0, sizeof(*out));

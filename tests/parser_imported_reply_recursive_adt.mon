@@ -1,0 +1,55 @@
+:TEST-ID tests.parser.imported-reply.recursive-adt
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Imported polymorphic ParseReply values remain usable beside recursive client ADTs.
+:TEST-EXPECT compile, run, imported reply and recursive ADT coexist
+:TEST-TIER regression
+:TEST-SECTION inference
+:TEST-CATEGORY parser-interface
+
+import Text.Parser
+
+module Parser.ImportedReplyRecursiveAdt []
+
+
+data ParseTree
+  = ParseLeaf Int
+  | ParseBranch [ParseTree]
+
+
+data TreeDecode
+  = TreeDecodeFailed Int
+  | TreeDecoded ParseTree
+
+
+define literal-count :: [Int] -> ParseReply Int
+  bytes -> parser-literal (list 0x6e 0x75 0x6c 0x6c) 30 0 bytes
+
+
+define parsed-count-or :: Int -> ParseReply Int -> Int
+  fallback reply | reply-ok? reply -> reply-value-or fallback reply
+  fallback reply                   -> fallback
+
+
+define decode-tree-reply :: ParseTree -> Int -> [Int] -> ParseReply Int -> TreeDecode
+  tree start bytes reply | reply-ok? reply -> TreeDecoded tree
+  tree start bytes reply                   -> TreeDecodeFailed (reply-error-offset reply)
+
+
+define decode-tree :: ParseTree -> [Int] -> TreeDecode
+  tree bytes -> decode-tree-reply tree 0 bytes (parser-literal (list 0x6e 0x75 0x6c 0x6c) 30 0 bytes)
+
+
+define first-tree-or :: ParseTree -> [ParseTree] -> ParseTree
+  fallback []          -> fallback
+  fallback [tree|rest] -> tree
+
+
+define branch-count-or :: Int -> ParseTree -> Int
+  fallback [ParseBranch values] -> count values
+  fallback tree                 -> fallback
+
+
+tests
+  assert-eq (parsed-count-or 0 (literal-count (list 0x6e 0x75 0x6c 0x6c))) 4 "Imported parser replies survive recursive client ADTs"
+  assert-eq (show (decode-tree (ParseLeaf 7) (list 0x6e 0x75 0x6c 0x6c))) "(TreeDecoded (ParseLeaf 7))" "Imported replies construct recursive client results"
+  assert-eq (branch-count-or 0 (first-tree-or (ParseLeaf 0) (list (ParseBranch (list (ParseLeaf 7)))))) 1 "Recursive ADTs survive typed list projection"

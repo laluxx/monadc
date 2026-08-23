@@ -74,6 +74,7 @@ bool wisp_syntax_is_infix_operator(const char *text) {
             strcmp(text, ">") == 0 ||
             strcmp(text, "<=") == 0 ||
             strcmp(text, ">=") == 0 ||
+            strcmp(text, "++") == 0 ||
             strcmp(text, "and") == 0 ||
             strcmp(text, "or") == 0 ||
             strcmp(text, "mod") == 0);

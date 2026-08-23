@@ -1,5 +1,8 @@
 :TEST-ID tests.reader.module.grouped-layout-exports
-:TEST-TIER core
+:TEST-CONTEXT monadc.context.module.codegen-import-resolution
+:TEST-PURPOSE Grouped module export sections preserve layout types and constructors.
+:TEST-EXPECT parse-json
+:TEST-TIER regression
 :TEST-SECTION reader
 :TEST-CATEGORY modules
 

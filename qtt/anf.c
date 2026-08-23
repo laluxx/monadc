@@ -726,7 +726,11 @@ static void verify_block(Verifier *v, size_t index, const LiveSet *input) {
                     !qtt_type_id_equal(actual->type_id,
                                        expected->type_id) ||
                     actual->representation !=
-                        expected->representation) {
+                        expected->representation ||
+                    (actual->representation == QTT_REP_FOREIGN &&
+                     !qtt_nominal_authority_equal(
+                         actual->nominal_authority,
+                         expected->nominal_authority))) {
                     v->result = (QttAnfVerification){
                         QTT_ANF_CALL_TYPE_MISMATCH, index, i};
                     break;
@@ -2100,9 +2104,8 @@ static QttAnfValue lower_direct_call(AnfLowering *lowering,
             .type = parameter->type,
             .type_id = parameter->type_id,
             .representation = parameter->representation,
-            .transfer = consumed &&
-                    parameter->representation == QTT_REP_OWNED_HEAP
-                ? QTT_CALL_MOVE : QTT_CALL_VALUE,
+            .transfer = qtt_call_transfer_for_parameter(parameter),
+            .nominal_authority = parameter->nominal_authority,
         };
         /*
          * Quantitative consumption is not itself an ownership capability.
@@ -2296,6 +2299,7 @@ static QttAnfValue lower_named_call(AnfLowering *lowering,
             .type_id = parameter->type_id,
             .representation = parameter->representation,
             .transfer = transfer,
+            .nominal_authority = parameter->nominal_authority,
         };
         operands[i] = (QttAnfCallOperand){
             .value = value,
@@ -2303,6 +2307,7 @@ static QttAnfValue lower_named_call(AnfLowering *lowering,
             .type_id = parameter->type_id,
             .representation = parameter->representation,
             .transfer = transfer,
+            .nominal_authority = parameter->nominal_authority,
             .source_resource = source_resource,
             .loan_id = loan_id,
         };

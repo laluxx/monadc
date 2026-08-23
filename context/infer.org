@@ -1513,7 +1513,7 @@
   follow the listed neighbors only when the local contract does not explain the
   issue.
 
-[FIX id:fix.infer.collection-head-tail-typed-builtins-2026-06-27 src:infer.c,core/prelude/Text/Parser.mon conf:high]
+[FIX id:fix.infer.collection-head-tail-typed-builtins-2026-06-27 src:infer.c,core/Text/Parser.mon conf:high]
   HM inference has explicit rules for =(head xs)= and =(tail xs)=. The element
   type is recovered from Coll, Arr, single-element List, list_elem, or String
   inputs, and unknown inputs are constrained to =Coll elem=. This keeps
@@ -1529,3 +1529,23 @@
   Branch inference recognizes the lawful injection =a <: a?=. Unifying a
   present branch with an optional branch no longer reports the false infinite
   type =a ~ Optional a=; =nil= remains restricted to optional results.
+
+[FIX id:fix.infer.char-string-primitive-2026-08-11 date:2026-08-11 src:infer.c,core/Text/Format.mon,tests/core_text_parser_combinators.mon conf:high]
+  =__rt_char_string= has the monomorphic inference contract =Char -> String=.
+  Parser source-excerpt construction uses the public =Text.Format.char->text=
+  wrapper, preventing Char values from being accepted as String results and
+  keeping the runtime C-string representation explicit at the compiler seam.
+
+[FIX id:fix.infer.immutable-principal-schemes-2026-08-11 date:2026-08-11 by:codex src:infer.c,codegen.c,tests/parser_higher_order_nested_collection_result.mon conf:high]
+  Substitution no longer path-compresses by mutating =TYPE_VAR= nodes. Imported
+  principal schemes are persistent interface data shared by inference
+  occurrences; rewriting a quantified node with a local union-find root made a
+  second instantiation depend on the first. Union-find still compresses its own
+  parent structure, while =subst_apply_shallow= returns a fresh variable view
+  when the representative differs.
+
+  Call validation now consumes the occurrence's instantiated inferred type (or
+  instantiates the scheme when no occurrence evidence exists) rather than
+  applying local substitutions directly to canonical schemes. The promoted
+  regression composes the same imported polymorphic parser mapper twice and
+  returns a nested collection payload.

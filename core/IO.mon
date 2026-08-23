@@ -25,7 +25,7 @@ import Data.Either
 module IO
   [IOError IOEndOfInput IOStatus
    stdin stdout stderr
-   read-byte write-byte write-text
+   read-byte write-byte write-text write-buffer
    read-byte-result write-byte-result write-text-result]
 
                     • The portable primitive currently distinguishes a byte from a negative
@@ -50,6 +50,10 @@ define write-byte :: Int -> Int -io-> Int
 
 define write-text :: Int -> String -io-> Int
   fd text -> write-str fd text (length text)
+
+
+define write-buffer :: Int -> [a] -> Int -io-> Int
+  fd buffer count -> __rt_write_array fd buffer count
 
 
 define read-byte-nonzero-result :: Int -> Int -> Either IOError Int

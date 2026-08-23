@@ -1271,6 +1271,12 @@ static bool call_types_compatible(Type *param, Type *arg) {
         return true;
     if (text_path_byte_pointer_compatible(param, arg)) return true;
 
+    if (param->kind == TYPE_FINITE_SET &&
+        (arg->kind == TYPE_INT || arg->kind == TYPE_INT_ARBITRARY ||
+         arg->kind == TYPE_FLOAT || arg->kind == TYPE_CHAR ||
+         arg->kind == TYPE_STRING || arg->kind == TYPE_KEYWORD))
+        return true;
+
     bool arg_is_int   = (arg->kind == TYPE_INT || arg->kind == TYPE_HEX ||
                          arg->kind == TYPE_BIN || arg->kind == TYPE_OCT ||
                          arg->kind == TYPE_INT_ARBITRARY);
@@ -1496,6 +1502,9 @@ bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                 } else if (adt_type_application_compatible(arg, param)) {
                     /* Nullary ADT constructors such as Nothing have the bare
                      * layout type, while polymorphic APIs expect Maybe a. */
+                } else if (call_types_compatible(param, arg)) {
+                    /* Literal inhabitants are validated against their finite
+                     * set before this representation-level call check. */
                 } else {
                     /* Allow numeric widening: any int kind satisfies Int param */
                     bool arg_is_int   = (arg->kind   == TYPE_INT || arg->kind == TYPE_HEX ||

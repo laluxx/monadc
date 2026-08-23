@@ -218,38 +218,39 @@ define render-predicate :: String -> [Term] -> String
 
 
 define render-negation :: Formula -> String
-  [Predicate name arguments] -> ("¬" ++ (render-predicate name arguments))
-  [Equality left right] -> ("¬" ++ (render-term left) ++ " = " ++ (render-term right))
-  [Negation nested] -> ("¬¬" ++ (render-formula nested))
-  [Conjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
-  [Disjunction left right] -> ("¬(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
-  [Implication left right] -> ("¬(" ++ (render-formula left) ++ " -> " ++ (render-formula right) ++ ")")
-  [Universal variable body] -> ("¬∀" ++ variable ++ ". " ++ (render-formula body))
-  [Existential variable body] -> ("¬∃" ++ variable ++ ". " ++ (render-formula body))
-  [Necessity body] -> ("¬□" ++ (render-formula body))
-  [Possibility body] -> ("¬◇" ++ (render-formula body))
+  [Predicate name arguments]  -> "¬"  ++ (render-predicate name arguments)
+  [Equality left right]       -> "¬"  ++ (render-term left)    ++ " = "  ++ (render-term right)
+  [Negation nested]           -> "¬¬" ++ (render-formula nested)
+  [Conjunction left right]    -> "¬(" ++ (render-formula left) ++ " ∧ "  ++ (render-formula right) ++ ")"
+  [Disjunction left right]    -> "¬(" ++ (render-formula left) ++ " ∨ "  ++ (render-formula right) ++ ")"
+  [Implication left right]    -> "¬(" ++ (render-formula left) ++ " -> " ++ (render-formula right) ++ ")"
+  [Universal variable body]   -> "¬∀" ++ variable ++ ". " ++ (render-formula body)
+  [Existential variable body] -> "¬∃" ++ variable ++ ". " ++ (render-formula body)
+  [Necessity body]            -> "¬□" ++ (render-formula body)
+  [Possibility body]          -> "¬◇" ++ (render-formula body)
 
 
 define render-formula :: Formula -> String
-  [Predicate name arguments] -> render-predicate name arguments
-  [Equality left right] -> ((render-term left) ++ " = " ++ (render-term right))
-  [Negation formula] -> render-negation formula
-  [Conjunction left right] -> ("(" ++ (render-formula left) ++ " ∧ " ++ (render-formula right) ++ ")")
-  [Disjunction left right] -> ("(" ++ (render-formula left) ++ " ∨ " ++ (render-formula right) ++ ")")
-  [Implication left right] -> ((render-formula left) ++ " -> " ++ (render-formula right))
-  [Universal variable body] -> ("∀" ++ variable ++ ". " ++ (render-formula body))
-  [Existential variable body] -> ("∃" ++ variable ++ ". " ++ (render-formula body))
-  [Necessity body] -> ("□" ++ (render-formula body))
-  [Possibility body] -> ("◇" ++ (render-formula body))
+  [Predicate name arguments]  -> render-predicate name arguments
+  [Equality left right]       -> (render-term left)           ++ " = "  ++ (render-term right)
+  [Negation formula]          -> render-negation formula
+  [Conjunction left right]    -> "(" ++ (render-formula left) ++ " ∧ "  ++ (render-formula right) ++ ")"
+  [Disjunction left right]    -> "(" ++ (render-formula left) ++ " ∨ "  ++ (render-formula right) ++ ")"
+  [Implication left right]    -> (render-formula left)        ++ " -> " ++ (render-formula right)
+  [Universal variable body]   -> "∀" ++ variable ++ ". "      ++ (render-formula body)
+  [Existential variable body] -> "∃" ++ variable ++ ". "      ++ (render-formula body)
+  [Necessity body]            -> "□" ++ (render-formula body)
+  [Possibility body]          -> "◇" ++ (render-formula body)
 
 
 define render-rule :: TableauRule -> String
   [Assumption] -> ""
-  [FromNegatedImplication premise] -> ("(" ++ (natural-text premise) ++ ")")
-  [FromNegatedNecessity premise] -> ("(" ++ (natural-text premise) ++ ")")
-  [FromNegatedUniversal premise] -> ("(" ++ (natural-text premise) ++ ")")
+  [FromNegatedImplication premise]  -> ("(" ++ (natural-text premise) ++ ")")
+  [FromNegatedNecessity premise]    -> ("(" ++ (natural-text premise) ++ ")")
+  [FromNegatedUniversal premise]    -> ("(" ++ (natural-text premise) ++ ")")
   [FromUniversal premise parameter] -> ("(" ++ (natural-text premise) ++ ")")
-  [FromNecessity formula-premise edge-premise] -> ("(" ++ (natural-text formula-premise) ++ "," ++ (natural-text edge-premise) ++ ")")
+  [FromNecessity formula-premise edge-premise] ->
+    ("(" ++ (natural-text formula-premise) ++ "," ++ (natural-text edge-premise) ++ ")")
 
 
 define render-entry :: TableauEntry -> String
@@ -300,16 +301,16 @@ define term-key :: Term -> String
   [Function name arguments] -> ("f" ++ (symbol-key name) ++ (term-list-key arguments))
 
 define formula-key :: Formula -> String
-  [Predicate name arguments] -> ("p" ++ (symbol-key name) ++ (term-list-key arguments))
-  [Equality left right] -> ("e" ++ (term-key left) ++ (term-key right))
-  [Negation body] -> ("n" ++ (formula-key body))
-  [Conjunction left right] -> ("a" ++ (formula-key left) ++ (formula-key right))
-  [Disjunction left right] -> ("o" ++ (formula-key left) ++ (formula-key right))
-  [Implication left right] -> ("i" ++ (formula-key left) ++ (formula-key right))
-  [Universal variable body] -> ("u" ++ (symbol-key variable) ++ (formula-key body))
-  [Existential variable body] -> ("x" ++ (symbol-key variable) ++ (formula-key body))
-  [Necessity body] -> ("b" ++ (formula-key body))
-  [Possibility body] -> ("d" ++ (formula-key body))
+  [Predicate name arguments]  -> "p" ++ (symbol-key name)     ++ (term-list-key arguments)
+  [Equality left right]       -> "e" ++ (term-key left)       ++ (term-key right)
+  [Negation body]             -> "n" ++ (formula-key body)
+  [Conjunction left right]    -> "a" ++ (formula-key left)    ++ (formula-key right)
+  [Disjunction left right]    -> "o" ++ (formula-key left)    ++ (formula-key right)
+  [Implication left right]    -> "i" ++ (formula-key left)    ++ (formula-key right)
+  [Universal variable body]   -> "u" ++ (symbol-key variable) ++ (formula-key body)
+  [Existential variable body] -> "x" ++ (symbol-key variable) ++ (formula-key body)
+  [Necessity body]            -> "b" ++ (formula-key body)
+  [Possibility body]          -> "d" ++ (formula-key body)
 
 define formula-same? :: Formula -> Formula -> Bool
   left right -> (formula-key left) = (formula-key right)

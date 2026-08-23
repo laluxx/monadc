@@ -40,6 +40,12 @@ void    wisp_clear_arities(void);
 void    wisp_set_trace(bool enabled);
 int     wisp_get_arity(const char *name);
 
+typedef struct WispPersistentState WispPersistentState;
+WispPersistentState *wisp_persistent_state_create(void);
+void wisp_persistent_state_destroy(WispPersistentState *state);
+bool wisp_persistent_state_enter(WispPersistentState *state);
+void wisp_persistent_state_leave(WispPersistentState *state);
+
 typedef enum {
     WISP_INPUT_COMPLETE,
     WISP_INPUT_INCOMPLETE,

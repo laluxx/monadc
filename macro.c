@@ -17,7 +17,7 @@ static char *xstrdup(const char *s) {
 
 /* Global gensym counter — never resets so every expansion site gets
  * a globally unique suffix even across multiple calls to macro_expand_all. */
-static unsigned long g_macro_gensym = 0;
+static MONAD_THREAD_LOCAL unsigned long g_macro_gensym = 0;
 
 static bool macro_debug(void) {
     const char *value = getenv("MONAD_MACRO_DEBUG");
@@ -232,7 +232,7 @@ typedef struct {
     int         lambda_cap;
 } MacroRegistry;
 
-static MacroRegistry g_reg = {0};
+static MONAD_THREAD_LOCAL MacroRegistry g_reg = {0};
 
 typedef struct MacroScope {
     char *owner_file;
@@ -242,7 +242,7 @@ typedef struct MacroScope {
     struct MacroScope *previous;
 } MacroScope;
 
-static MacroScope *g_macro_scope;
+static MONAD_THREAD_LOCAL MacroScope *g_macro_scope;
 
 static char *macro_absolute_path(const char *path) {
 #if defined(_WIN32)
@@ -550,8 +550,8 @@ static bool bind_args(MacroDef *def, AST **args, int argc, BindTable *bt);
 static AST *syntax_eval(AST *node);
 static AST *syntax_eval_impl(AST *node);
 static AST *syntax_quasiquote(AST *node, int depth);
-static size_t g_syntax_eval_steps = 0;
-static size_t g_syntax_eval_depth = 0;
+static MONAD_THREAD_LOCAL size_t g_syntax_eval_steps = 0;
+static MONAD_THREAD_LOCAL size_t g_syntax_eval_depth = 0;
 
 #define SYNTAX_EVAL_STEP_LIMIT 100000u
 #define SYNTAX_EVAL_DEPTH_LIMIT 512u
@@ -1366,7 +1366,7 @@ static AST *subst(AST *node, BindTable *bt, RenameTable *rt,
     /* ---- Lambda: rename introduced params, substitute body -------- */
     case AST_LAMBDA: {
         /* Shallow copy first so all scalar fields are right */
-        AST *lam = calloc(1, sizeof(AST));
+        AST *lam = ast_allocate();
         *lam = *node;
         lam->literal_str = node->literal_str ? xstrdup(node->literal_str) : NULL;
 
@@ -1451,7 +1451,7 @@ static AST *subst(AST *node, BindTable *bt, RenameTable *rt,
             node->range.is_array);
 
     case AST_REFINEMENT: {
-        AST *r = calloc(1, sizeof(AST));
+        AST *r = ast_allocate();
         *r = *node;
         r->refinement.name       = xstrdup(node->refinement.name);
         r->refinement.var        = xstrdup(node->refinement.var);
@@ -1495,6 +1495,14 @@ static bool bind_args(MacroDef *def, AST **args, int argc, BindTable *bt) {
         fprintf(stderr,
                 "[macro] '%s': expected exactly %d arg(s), got %d\n",
                 def->name, fixed, argc);
+        if (macro_debug()) {
+            for (int i = 0; i < argc; i++) {
+                char *json = ast_to_json(args[i]);
+                fprintf(stderr, "[macro] argument %d: %s\n", i + 1,
+                        json ? json : "<unavailable>");
+                free(json);
+            }
+        }
         return false;
     }
 

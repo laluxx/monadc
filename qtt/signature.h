@@ -14,6 +14,20 @@ typedef enum {
     QTT_OWNERSHIP_SHARED,
 } QttOwnershipMode;
 
+/* Generative nominal authority is orthogonal to structural QttTypeId. Zero is
+ * the absence of nominal authority; foreign representations require both
+ * components. Runtime authorities are intentionally not serialized. */
+typedef struct {
+    uint64_t domain;
+    uint64_t identity;
+} QttNominalAuthority;
+
+static inline bool qtt_nominal_authority_equal(
+    QttNominalAuthority left, QttNominalAuthority right) {
+    return left.domain != 0 && left.identity != 0 &&
+           left.domain == right.domain && left.identity == right.identity;
+}
+
 typedef struct {
     QttCoreVar var;
     /* Declared/inferred allowance checked by the graded judgment. */
@@ -24,6 +38,7 @@ typedef struct {
     const Type *type;
     QttTypeId type_id;
     QttRepresentation representation;
+    QttNominalAuthority nominal_authority;
 } QttParameterContract;
 
 typedef enum {
@@ -48,6 +63,7 @@ typedef struct {
     const Type *type;
     QttTypeId type_id;
     QttRepresentation representation;
+    QttNominalAuthority nominal_authority;
 } QttResultContract;
 
 typedef struct QttFunctionSignature {

@@ -7,9 +7,9 @@
 :TEST-CATEGORY 90-diagnostics
 :TEST-SECTION codegen
 :TEST-CONTEXT monadc.context.language.codegen-diagnostics
-:TEST-PURPOSE Codegen rejects empty list forms.
-:TEST-ATOM () must fail with empty list not supported.
-:TEST-EXPECT fail:compile
+:TEST-PURPOSE Codegen accepts Unit spelled as an empty list form.
+:TEST-ATOM () compiles and runs as Unit.
+:TEST-EXPECT compile, run
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

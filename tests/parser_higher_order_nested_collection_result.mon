@@ -1,0 +1,28 @@
+:TEST-ID tests.parser.higher-order-nested-collection-result
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Higher-order parser recursion preserves ParseReply [a] signatures.
+:TEST-EXPECT compile, run, nested collection result is preserved
+:TEST-TIER regression
+:TEST-SECTION inference
+:TEST-CATEGORY higher-order
+
+import Text.Parser
+import Data.Char
+
+module Parser.HigherOrderNestedCollectionResult []
+
+
+define singleton-value :: a -> [a]
+  value -> prepend value []
+
+
+define collect-or-empty :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
+  parser code offset bytes ->
+    (parser-or
+      (parser-map singleton-value parser)
+      (parser-map singleton-value parser)
+      code offset bytes)
+
+
+tests
+  assert-eq (count (reply-value-or [] (collect-or-empty (parser-satisfy digit?) 31 0 ⌜0x37⌝))) 1 "Higher-order parsers may return nested collection payloads"

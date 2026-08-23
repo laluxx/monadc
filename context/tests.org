@@ -79,6 +79,11 @@ context record.
   humans and LLM agents can recover the purpose, scope, and expected behavior of
   each fixture without guessing.
 
+[DEC id:dec.tests.native-metadata-is-not-execution date:2026-08-14 by:human+llm]
+  Metadata-bearing native C/C++ fixtures require an explicit executable suite
+  target. The Monad fixture runner discovers =.mon= programs only; placing a
+  native host in the metadata hierarchy does not by itself provide coverage.
+
 * Philosophy
 :PROPERTIES:
 :ID: monadc.context.tests.philosophy
@@ -1331,3 +1336,27 @@ Test-driven observations and failure records for the corresponding subsystem.
   for example =:TEST-ID tests.codegen.example=. Do not encode fixture metadata
   as =;; TEST-ID:= comments. Test discovery, context tooling, and generators
   consume the first-class form.
+
+[FIX id:fix.tests.test-production-artifact-isolation-2026-08-14 date:2026-08-14 by:codex src:main.c,tests/test_module_test_artifact_isolation.py conf:high]
+  Test-mode compilation and ordinary compilation must never share reusable
+  module filenames.  Test builds emit =.test.o=, =.test.module.o=, and
+  =.test.module.mqti=; production keeps =.o=, =.module.o=, and
+  =.module.mqti=.  This prevents a Core module compiled with embedded tests
+  from being accepted later as a production dependency merely because its
+  source timestamp still matches.  The regression compiles =Math.Angle= in
+  test mode, then imports it normally from the same cache and proves the
+  production program neither executes nor links the embedded test entrypoint.
+
+[FIX id:fix.tests.standalone-prelude-topology-2026-08-14 date:2026-08-14 by:codex src:main.c,module.c,tests/test_module_test_artifact_isolation.py conf:high]
+  A Core module passing under =tests/run_core.py= must also compile directly
+  from its checkout with the installed compiler.  Relative dependency paths
+  such as =Data/Bool.mon= inherit the working directory's =core/prelude=
+  identity; they must not trigger automatic injection of the entire prelude
+  and recursively compile =Sequence= before =Functor= registers its class.
+  Direct compilation of a checkout prelude derives =MONAD_CORE= from that
+  source tree, keeping checkout source, imports, objects, and interfaces in one
+  topology.  Reuse additionally requires an object's certified =.mqti= to
+  carry the matching object fingerprint.  The regression installs a compiler
+  beside a separate Core, places a newer orphan =Functor.module.o= in the
+  checkout, and proves standalone =Sequence.mon= compilation still succeeds
+  without consuming or overwriting the orphan.

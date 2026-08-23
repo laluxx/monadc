@@ -4654,12 +4654,27 @@ static int measure_indent(const char *s) {
 static const char *get_logical_line_end(const char *start) {
     const char *p = start;
     bool in_str = false;
+    bool in_char = false;
+    bool in_corner_quote = false;
     while (*p) {
         if (in_str) {
             if (*p == '\\' && *(p+1)) p++;
             else if (*p == '"') in_str = false;
+        } else if (in_char) {
+            if (*p == '\\' && *(p+1)) p++;
+            else if (*p == '\'') in_char = false;
+        } else if (in_corner_quote) {
+            if (strncmp(p, "⌝", strlen("⌝")) == 0) {
+                in_corner_quote = false;
+                p += strlen("⌝") - 1;
+            }
         } else {
             if (*p == '"') in_str = true;
+            else if (*p == '\'') in_char = true;
+            else if (strncmp(p, "⌜", strlen("⌜")) == 0) {
+                in_corner_quote = true;
+                p += strlen("⌜") - 1;
+            }
             else if (*p == ';') break;
             else if (*p == '\r') break;
             else if (*p == '\n') break;
@@ -10461,6 +10476,37 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             }
                         }
                         if (!inferred_function) {
+                            const char *value_start = p;
+                            const char *value_end = value_start;
+                            while (*value_end && *value_end != '\n') value_end++;
+                            const char *value_text = value_start;
+                            while (value_text < value_end &&
+                                   (*value_text == ' ' || *value_text == '\t'))
+                                value_text++;
+                            if (value_text < value_end &&
+                                measure_indent(value_start) > indent) {
+                                const char *logical_end =
+                                    get_logical_line_end(value_text);
+                                char *value_src = strndup(
+                                    value_text,
+                                    (size_t)(logical_end - value_text));
+                                char *value_tok =
+                                    wisp_expand_expr_snippet(at, value_src);
+                                free(value_src);
+                                wts_push(&s, "define", indent, lineno);
+                                wts_push(&s, fname,    indent, lineno);
+                                wts_push(&s, value_tok, indent, lineno);
+                                free(value_tok);
+                                free(fname);
+                                free(raw);
+                                int consumed_lines = 1;
+                                for (const char *q = p; q < logical_end; q++)
+                                    if (*q == '\n') consumed_lines++;
+                                p = *logical_end == '\n'
+                                  ? logical_end + 1 : logical_end;
+                                lineno += consumed_lines;
+                                continue;
+                            }
                             wts_push(&s, "define", indent, lineno);
                             wts_push(&s, fname,    indent, lineno);
                             free(fname);
@@ -11893,7 +11939,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                     int li2 = measure_indent(lraw2);
 
                     /* Same-indent 'then' keyword (Form 2) */
-                    if (li2 > indent &&
+                    if (li2 == indent &&
                         strncmp(lt2,"then",4)==0 &&
                         (lt2[4]==' '||lt2[4]=='\t'||lt2[4]=='\n'||
                          lt2[4]=='\r'||lt2[4]=='\0')) {

@@ -1,4 +1,7 @@
 :TEST-ID tests.reader.collections.arrow-map-literal
+:TEST-CONTEXT monadc.context.wisp.sugar.arrow-value-binding
+:TEST-PURPOSE Arrow-valued map literals retain compact and hanging layout forms.
+:TEST-EXPECT parse-json
 :TEST-TIER regression
 :TEST-STATUS active
 :TEST-SECTION reader

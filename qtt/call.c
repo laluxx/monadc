@@ -27,7 +27,8 @@ static bool call_type_equal(const Type *expected, const Type *actual) {
 QttCallTransfer qtt_call_transfer_for_parameter(
     const QttParameterContract *parameter) {
     if (!parameter ||
-        parameter->representation != QTT_REP_OWNED_HEAP)
+        (parameter->representation != QTT_REP_OWNED_HEAP &&
+         parameter->representation != QTT_REP_FOREIGN))
         return QTT_CALL_VALUE;
     if (parameter->mode == QTT_OWNERSHIP_CONSUMED)
         return QTT_CALL_MOVE;
@@ -61,6 +62,11 @@ QttCallValidation qtt_call_plan(
         }
         if (parameter->representation != arguments[i].representation)
             return QTT_CALL_REPRESENTATION_MISMATCH;
+        if (parameter->representation == QTT_REP_FOREIGN &&
+            !qtt_nominal_authority_equal(
+                parameter->nominal_authority,
+                arguments[i].nominal_authority))
+            return QTT_CALL_NOMINAL_MISMATCH;
         if (qtt_call_transfer_for_parameter(parameter) !=
             arguments[i].transfer)
             return QTT_CALL_TRANSFER_MISMATCH;
@@ -85,6 +91,7 @@ QttCallValidation qtt_call_plan(
             : plan->result_representation == QTT_REP_OWNED_HEAP
                 ? QTT_RESULT_OWNED
                 : QTT_RESULT_UNKNOWN;
+    plan->result_nominal_authority = signature->result.nominal_authority;
     return QTT_CALL_VALID;
 }
 

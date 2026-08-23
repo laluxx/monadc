@@ -1,0 +1,33 @@
+:TEST-ID tests.codegen.constructor-closure-bool
+:TEST-CONTEXT monadc.context.codegen.adt-constructors
+:TEST-PURPOSE First-class constructor trampolines unbox Bool arguments to their native ABI representation.
+:TEST-EXPECT compile, run, constructor closure preserves Bool field
+:TEST-TIER regression
+:TEST-SECTION codegen
+:TEST-CATEGORY closures
+
+module Codegen.ConstructorClosureBool
+  []
+
+
+data Flagged
+  = Disabled
+  | Flagged Int Bool
+
+
+define build-flagged :: (Int -> Bool -> Flagged) -> Flagged
+  constructor -> constructor 7 True
+
+
+define built? :: Flagged -> Bool
+  _ -> True
+
+
+define positive-value :: Int -io-> Int
+  value | value > 0 -> value
+
+
+tests
+  assert-eq (built? (build-flagged Flagged)) True "Constructor closures unbox Bool arguments"
+  assert-eq (positive-value 7) 7
+    "Pattern fallbacks remain inside effectful functions"

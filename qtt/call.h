@@ -14,6 +14,7 @@ typedef struct {
     QttTypeId type_id;
     QttRepresentation representation;
     QttCallTransfer transfer;
+    QttNominalAuthority nominal_authority;
 } QttCallArgument;
 
 typedef struct {
@@ -22,12 +23,14 @@ typedef struct {
     const Type *result_type;
     QttResultMode result_mode;
     QttRepresentation result_representation;
+    QttNominalAuthority result_nominal_authority;
 } QttCallPlan;
 
 typedef enum {
     QTT_CALL_VALID,
     QTT_CALL_ARITY_MISMATCH,
     QTT_CALL_TYPE_MISMATCH,
+    QTT_CALL_NOMINAL_MISMATCH,
     QTT_CALL_REPRESENTATION_MISMATCH,
     QTT_CALL_TRANSFER_MISMATCH,
     QTT_CALL_OUT_OF_MEMORY,

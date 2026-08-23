@@ -201,11 +201,14 @@ static bool collect_calls(
             arguments, sizeof(*call->argument_representations));
         call->argument_type_ids = calloc(
             arguments, sizeof(*call->argument_type_ids));
+        call->argument_nominal_authorities = calloc(
+            arguments, sizeof(*call->argument_nominal_authorities));
         call->source_vars = calloc(
             arguments, sizeof(*call->source_vars));
         if (!call->argument_transfers ||
             !call->argument_representations ||
-            !call->argument_type_ids || !call->source_vars)
+            !call->argument_type_ids ||
+            !call->argument_nominal_authorities || !call->source_vars)
             return false;
     }
     for (size_t i = 0; i < arguments; i++) {
@@ -216,6 +219,8 @@ static bool collect_calls(
         call->argument_representations[i] =
             parameter->representation;
         call->argument_type_ids[i] = parameter->type_id;
+        call->argument_nominal_authorities[i] =
+            parameter->nominal_authority;
         if (call->argument_transfers[i] != QTT_CALL_VALUE &&
             node->apply.arguments[i]->kind == QTT_CORE_VAR)
             call->source_vars[i] =
@@ -306,6 +311,7 @@ static void call_evidence_free(QttSemanticCallEvidence *call) {
     free(call->argument_transfers);
     free(call->argument_representations);
     free(call->argument_type_ids);
+    free(call->argument_nominal_authorities);
     free(call->source_vars);
     free(call->control_path);
 }
@@ -334,6 +340,11 @@ static bool call_evidence_equal(
             !qtt_type_id_equal(
                 left->argument_type_ids[i],
                 right->argument_type_ids[i]) ||
+            ((left->argument_representations[i] == QTT_REP_FOREIGN ||
+              right->argument_representations[i] == QTT_REP_FOREIGN) &&
+             !qtt_nominal_authority_equal(
+                 left->argument_nominal_authorities[i],
+                 right->argument_nominal_authorities[i])) ||
             !qtt_core_var_equal(
                 left->source_vars[i], right->source_vars[i]))
             return false;

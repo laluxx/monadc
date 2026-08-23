@@ -48,6 +48,7 @@ module Data.Char where
 
   :predicates
     ascii? non-ascii?
+    byte-digit?
     lower? upper? alpha? digit? decimal? alnum?
     space? whitespace? blank? newline? linebreak?
     control? printable? graph? punct? word?
@@ -149,6 +150,11 @@ method digit? :: Self -> Bool
   c | >= 0x30 and <= 0x39 -> True
     | otherwise         -> False
   :doc "Return True if C is an ASCII decimal digit."
+
+
+define byte-digit? :: Int -> Bool
+  byte -> digit? (chr byte)
+  :doc "Return True if BYTE encodes an ASCII decimal digit."
 
 
 method decimal? :: Self -> Bool
@@ -526,6 +532,7 @@ tests
 
   :DecimalDigits:
   assert-eq (digit? 0x30) True "digit accepts 0"
+  assert-eq (byte-digit? 0x30) True "byte-digit accepts an integer byte"
   assert-eq (digit? 0x35) True "digit accepts 5"
   assert-eq (digit? 0x39) True "digit accepts 9"
   assert-eq (digit? 0x2f) False "digit rejects before 0"

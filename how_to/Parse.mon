@@ -1,0 +1,105 @@
+;;; Parse.mon --- A friendly introduction to parser combinators
+
+:author "Laluxx"
+:version "1.1.0"
+:keywords "how-to parser combinator sequencing repetition diagnostics"
+
+;;; Commentary:
+
+ A parser turns input into either a value or a useful explanation of why no
+ value could be produced. A parser combinator is simply a function that builds
+ a larger parser from smaller parsers. Instead of writing one large procedural
+ loop, we describe a grammar by composing reusable pieces.
+
+ In Monad, the strict parser shape used by Text.Parser is:
+
+   Int -> Int -> [Int] -> ParseReply a
+
+ The first Int is a diagnostic code chosen by the grammar. The second Int is
+ the current source offset. The [Int] value is the unconsumed byte input. On
+ success, ParseReply carries a value of type =a=, the next offset, and whether
+ input was consumed. On failure it carries structured diagnostic evidence and
+ the same consumption fact.
+
+ This tutorial grows a parser in three small steps:
+
+  1. =letter-parser= recognizes one letter =a=.
+  2. =letter-then-digit= sequences that parser with a decimal digit.
+  3. =parse-digits= repeats the digit parser safely with an explicit budget.
+
+ The consumption bit matters when grammars branch. An empty failure allows an
+ alternative parser to run; a failure after consuming input is committed. This
+ is how the library avoids silently backtracking over evidence that already
+ belongs to the chosen grammar branch.
+
+ Try the tutorial from the =how_to= directory with:
+
+   monad test Parse.mon
+
+ Every example below is executable and the tests at the bottom explain the
+ behavior they protect. Changing an input byte is a good way to explore the
+ diagnostic renderer without needing to understand the implementation first.
+
+;;; Code:
+
+import Text.Parser
+import Data.Char
+
+module HowTo.Parse
+  [letter-a? decimal-digit?
+   letter-parser decimal-digit-parser
+   letter-then-digit parse-letter-digit parse-digits]
+
+
+;;; Recognizing one token
+
+define letter-a? :: Char -> Bool
+  character | = 0x61    -> True
+            | otherwise -> False
+
+
+define decimal-digit? :: Char -> Bool
+  character -> digit? character
+
+
+define letter-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-satisfy letter-a? code offset bytes
+
+
+define decimal-digit-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-satisfy decimal-digit? code offset bytes
+
+
+;;; Sequencing parsers
+
+define digit-after-letter :: Int -> Int -> Int -> [Int] -> ParseReply Int
+  letter code offset bytes -> decimal-digit-parser code offset bytes
+
+
+define letter-then-digit :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes ->
+    parser-bind letter-parser digit-after-letter code offset bytes
+
+
+define parse-letter-digit :: [Int] -> ParseReply Int
+  bytes -> letter-then-digit 100 0 bytes
+
+
+;;; Repeating safely
+
+define parse-digits :: [Int] -> ParseReply [Int]
+  bytes -> parser-many-up-to 64 102 (parser-satisfy digit?) 101 0 bytes
+
+
+;;; Inspecting replies
+
+define valid-input   :: [Int] ⌜0x61 0x37⌝
+define invalid-input :: [Int] ⌜0x61 0x78⌝
+
+
+tests
+  assert-eq (reply-value-or 0 (parse-letter-digit valid-input)) 0x37 "Sequencing returns the value produced by the second parser"
+  assert-eq (reply-consumed? (parse-letter-digit invalid-input)) True "Failure after recognizing the letter remains committed"
+  assert-eq (reply-error-offset (parse-letter-digit invalid-input)) 1 "A failed digit points at the second input byte"
+  assert-eq (count (reply-value-or [] (parse-digits ⌜0x31 0x32 0x33 0x78⌝))) 3 "Bounded repetition collects the decimal prefix"
+  assert-eq (render-parser-error "input.txt" invalid-input (parse-letter-digit invalid-input)) "input.txt:1:2: error: expected token 100\n  |\n1 | ax\n  |  ^" "Structured failures render a source location and caret"

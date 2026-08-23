@@ -1,0 +1,54 @@
+:TEST-ID tests.parser.two-higher-order-nested-result
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Independent separator and item parsers preserve a nested collection result.
+:TEST-EXPECT compile, run, both higher-order parsers preserve the result
+:TEST-TIER regression
+:TEST-SECTION inference
+:TEST-CATEGORY higher-order
+
+import Text.Parser
+import Data.Char
+
+module Parser.TwoHigherOrderNestedResult []
+
+
+define comma? :: Char -> Bool
+  character | = 0x2c    -> True
+            | otherwise -> False
+
+
+define separated-value :: (Int -> Int -> [Int] -> ParseReply a) -> s -> Int -> Int -> [Int] -> ParseReply a
+  parser separator code offset bytes -> parser code offset bytes
+
+
+define separated-item :: (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  separator parser code offset bytes ->
+    parser-bind separator (separated-value parser) code offset bytes
+
+
+define collect-after-first :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> a -> ParseReply [a]
+  limit progress-code separator parser code start bytes value ->
+    parser-map (prepend value)
+      (parser-many-up-to (limit - 1) progress-code
+        (separated-item separator parser) code start bytes)
+
+
+define separated-first :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a -> ParseReply [a]
+  limit progress-code separator parser code start bytes [Rejected failure consumed]
+    | consumed  -> Rejected failure True
+    | otherwise -> parser-many-up-to 0 progress-code parser code start bytes
+
+  limit progress-code separator parser code start bytes [Parsed value next consumed] ->
+    collect-after-first limit progress-code separator parser code next
+      (parser-drop (next - start) bytes) value
+
+
+define separated :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
+  limit progress-code separator parser code offset bytes ->
+    (separated-first limit progress-code separator parser code offset bytes
+      (parser code offset bytes))
+
+
+tests
+  assert-eq (count (reply-value-or [] (collect-after-first 8 90 (parser-satisfy comma?) (parser-satisfy digit?) 24 1 ⌜0x2c 0x32 0x2c 0x33⌝ 0x31))) 3 "Two independent parser parameters preserve the item collection type"
+  assert-eq (count (reply-value-or [] (separated 8 90 (parser-satisfy comma?) (parser-satisfy digit?) 24 0 ⌜0x31 0x2c 0x32 0x2c 0x33⌝))) 3 "A public separated parser retains both polymorphic parser parameters"

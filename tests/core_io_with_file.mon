@@ -28,7 +28,7 @@ define close-then-succeed :: FileHandle -io-> Either IOError Int
 
 
 tests
-  descriptor = fromRight (with-file /tmp/monad-with-file-probe WriteOnly remember-handle) (0 - 1)
+  define descriptor (fromRight (with-file /tmp/monad-with-file-probe WriteOnly remember-handle) (0 - 1))
   assert-eq (left? (close-file (FileHandle descriptor))) True "with-file closes its descriptor"
 
   assert-eq (left? (with-file /tmp/monad-with-file-failure WriteOnly fail-owned)) True "with-file preserves callback failure"

@@ -50,6 +50,7 @@ typedef struct {
     QttAnfType type;
     QttTypeId type_id;
     QttRepresentation representation;
+    QttNominalAuthority nominal_authority;
     QttCallTransfer transfer;
     QttCoreVar source_resource;
     QttAnfLoanId loan_id;

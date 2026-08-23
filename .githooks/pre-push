@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+if [ "${MONADC_ALLOW_UNVERIFIED_PUSH:-}" = "1" ]; then
+    echo "warning: bypassing monadc pre-push verification" >&2
+    exit 0
+fi
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+make verify-push

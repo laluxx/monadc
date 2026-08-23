@@ -1,0 +1,922 @@
+;;; Parser.mon --- Bootstrap parser core
+
+:author "Laluxx"
+:version "0.4.0"
+:keywords "parser combinator incremental consumption diagnostics text"
+:reference-parsec "https://dspace.library.uu.nl/handle/1874/2535"
+:reference-attoparsec "https://hackage.haskell.org/package/attoparsec/docs/Data-Attoparsec-Text.html"
+:reference-megaparsec "https://hackage.haskell.org/package/megaparsec/docs/Text-Megaparsec.html"
+:reference-parser-combinators "https://hackage.haskell.org/package/parser-combinators/docs/Control-Applicative-Combinators.html"
+:reference-error-reporting-peg "https://arxiv.org/abs/1405.6646"
+:reference-staged-selective "https://doi.org/10.1145/3409002"
+:reference-ll1-derivatives "https://arxiv.org/abs/1911.12737"
+:reference-derivative-peg "https://arxiv.org/abs/1405.4841"
+:reference-happy-gll "https://arxiv.org/abs/2303.08044"
+
+;;; Commentary:
+
+ Text.Parser is the grammar-independent parsing kernel for Core. Its active
+ reply algebra makes the four Parsec outcomes explicit: empty success, empty
+ failure, consumed success, and consumed failure. Choice evaluates its right
+ branch only after empty failure; bind combines consumption monotonically;
+ attempt changes commitment without lying about the failure offset; cut makes
+ a failure committed; and label replaces only an uncommitted local error.
+
+ Failure selection is position biased. When alternatives fail without
+ commitment, the reply at the greatest input offset wins. Equal-offset errors
+ are joined as canonical finite expectation sets. Sorted insertion, idempotent
+ union, and deterministic rendering make expectations a finite join-semilattice
+ rather than an order-sensitive list of strings.
+
+ Literal chunks are atomic parser tokens: they automatically backtrack for
+ choice while retaining their furthest mismatch position. Labels are local in
+ the same sense: they replace expectations only on empty failure and never
+ erase evidence produced after commitment. Attempt and cut are idempotent
+ projections over the consumption bit. These laws are executable contracts,
+ not informal implementation folklore.
+
+ Repetition is explicitly resource bounded. =parser-many-up-to= and
+ =parser-some-up-to= require an item budget and reject a successful element
+ parser that does not advance the input offset. This makes termination a
+ checked part of the combinator contract rather than an undocumented demand on
+ grammar authors. Empty element failure terminates =many= successfully;
+ consumed failure remains committed.
+
+ Separated and delimited repetition preserve the same algebra.
+ =parser-sep-by-up-to= and =parser-sep-by1-up-to= keep separator and element
+ result types independent, reject nullable non-progress, and commit once a
+ separator has selected the continuation. =parser-between= returns only the
+ enclosed semantic value while retaining delimiter consumption and failures.
+
+ Exact decimal recognition is grammar, not conversion.
+ =parser-decimal-lexeme-up-to= implements sign, integer, fraction, and exponent
+ phases as a finite-state machine, returns the original lexeme, and enforces
+ independent coefficient and exponent budgets. Clients remain free to choose
+ arbitrary precision, rational, decimal, or floating semantics.
+
+ ParserBudget is immutable policy shared by grammar clients. Tightening two
+ policies takes the pointwise minimum: it is associative, commutative, and
+ idempotent, so independently imposed limits can only become stricter. A limit
+ of N permits exactly N units and reports N as the zero-based first prohibited
+ unit. Negative limits are invalid rather than magical sentinels.
+
+ Diagnostics carry stable codes and human labels as data. The terminal
+ renderer derives line and column positions, preserves merged expectations,
+ and emits source excerpts with carets. Future LSP publication consumes the
+ same ParserFailure value; it must not reparse terminal prose or maintain a
+ second diagnostic interpretation.
+
+ The strict input model is deliberately separate from incremental delivery.
+ The future streaming boundary is a third reply state carrying a continuation,
+ following Attoparsec's Partial result, while preserving this module's
+ empty/consumed semantics when more input arrives. Resource limits, recovery,
+ source spans, indentation, lexer policy, and memoization belong in layers
+ above this small operational kernel.
+
+ ParseResult remains as a first-order migration bridge for older Core clients.
+ ParseReply is the production abstraction. Input is still passed separately as
+ [Int], because list-bearing parser-state layouts are not yet trustworthy at
+ the compiler ABI boundary. Data.Char exclusively owns character classes;
+ parsers convert bytes at that seam instead of copying ASCII tables.
+
+;;; Code:
+
+import Sequence
+import Data.Bool
+import Data.Char
+import Text.Format
+
+module Text.Parser
+  [ParseResult ParseReply Parsed Rejected ParserFailure Spanned WithSpan ParserBudget
+   Expectations NoExpectations Expected
+   expectation-singleton expectation-named
+   expectations-union expectations-member? expectations-count
+   reply-ok? reply-consumed? reply-value-or reply-offset reply-success-rest
+   spanned-start-or spanned-end-or
+   reply-error-offset reply-error-code
+   failure-offset failure-code failure-expectations failure-expects?
+   parser-pure parser-fail parser-fail-named parser-satisfy
+   parser-map parser-bind parser-or parser-attempt parser-cut
+   parser-many-up-to parser-some-up-to
+   parser-sep-by-up-to parser-sep-by1-up-to parser-between
+   parser-decimal-lexeme-up-to
+   parser-lexeme parser-lexeme-value parser-spanned parser-spanned-value
+   parser-label parser-relabel parser-eof parser-literal
+   parser-symbol parser-complete parser-complete-value parser-complete-reply
+   parser-lookahead parser-not-followed-by render-parser-error
+   parser-empty? parser-drop skip-space-offset skip-space-xs signed-int token-byte
+   parser-budget-allows? parser-budget-first-prohibited
+   parser-budget-valid? parser-budget-tighten parser-budget-equal?
+   parse-result parse-ok parse-error
+   parse-ok? parse-failed? parse-value parse-offset parse-error-code
+   byte choice]
+
+
+layout ParseResult
+  ok     :: Bool
+  value  :: Int
+  offset :: Int
+  error  :: Int
+
+
+layout ParserFailure
+  offset       :: Int
+  code         :: Int
+  expectations :: Expectations
+
+
+layout ParserBudget
+  input-bytes     :: Int
+  nesting         :: Int
+  tokens          :: Int
+  string-bytes    :: Int
+  number-digits   :: Int
+  collection-items :: Int
+
+
+data Expectations
+  = NoExpectations
+  | Expected Int String Expectations
+
+
+data ParseReply a
+  = Rejected ParserFailure Bool
+  | Parsed a Int Bool
+
+
+data Spanned a
+  = WithSpan a Int Int
+
+
+data DecimalPhase
+  = DecimalIntegerStart
+  | DecimalZero
+  | DecimalInteger
+  | DecimalFractionStart
+  | DecimalFraction
+  | DecimalExponentSign
+  | DecimalExponentStart
+  | DecimalExponent
+
+
+;;; Resource policy
+
+define parser-budget-allows? :: Int -> Int -> Bool
+  limit used | used <= limit -> True
+             | otherwise     -> False
+
+
+define parser-budget-first-prohibited :: Int -> Int
+  limit | < 0       -> 0
+        | otherwise -> limit
+
+
+define parser-budget-min :: Int -> Int -> Int
+  left right | left <= right -> left
+             | otherwise     -> right
+
+
+define parser-budget-valid? :: ParserBudget -> Bool
+  budget | .input-bytes      < 0 -> False
+         | .nesting          < 0 -> False
+         | .tokens           < 0 -> False
+         | .string-bytes     < 0 -> False
+         | .number-digits    < 0 -> False
+         | .collection-items < 0 -> False
+         | otherwise            -> True
+
+
+define parser-budget-tighten :: ParserBudget -> ParserBudget -> ParserBudget
+  left right -> (ParserBudget (parser-budget-min left.input-bytes right.input-bytes) (parser-budget-min left.nesting right.nesting) (parser-budget-min left.tokens right.tokens) (parser-budget-min left.string-bytes right.string-bytes) (parser-budget-min left.number-digits right.number-digits) (parser-budget-min left.collection-items right.collection-items))
+
+
+define parser-budget-equal? :: ParserBudget -> ParserBudget -> Bool
+  left right | left.input-bytes != right.input-bytes           -> False
+             | left.nesting != right.nesting                   -> False
+             | left.tokens != right.tokens                     -> False
+             | left.string-bytes != right.string-bytes         -> False
+             | left.number-digits != right.number-digits       -> False
+             | left.collection-items != right.collection-items -> False
+             | otherwise                                       -> True
+
+
+;;; Typed replies
+
+define expectation-singleton :: Int -> Expectations
+  code -> Expected code ("token " ++ (int->text code)) NoExpectations
+
+
+define expectation-named :: Int -> String -> Expectations
+  code name -> Expected code name NoExpectations
+
+
+define parser-code-equal? :: Int -> Int -> Bool
+  left right -> (= left right)
+
+
+define parser-code-before? :: Int -> Int -> Bool
+  left right -> (< left right)
+
+
+define expectations-member? :: Int -> Expectations -> Bool
+  code [NoExpectations] -> False
+  code [Expected item name rest]
+    | parser-code-equal? code item  -> True
+    | parser-code-before? code item -> False
+    | otherwise                     -> expectations-member? code rest
+
+
+define expectations-insert :: Int -> Expectations -> Expectations
+  code [NoExpectations] -> Expected code ("token " ++ (int->text code)) NoExpectations
+  code [Expected item name rest]
+    | parser-code-equal? code item  -> Expected item name rest
+    | parser-code-before? code item -> Expected code ("token " ++ (int->text code)) (Expected item name rest)
+    | otherwise                     -> Expected item name (expectations-insert code rest)
+
+
+define expectations-insert-named :: Int -> String -> Expectations -> Expectations
+  code label [NoExpectations] -> Expected code label NoExpectations
+  code label [Expected item name rest]
+    | parser-code-equal? code item  -> Expected item label rest
+    | parser-code-before? code item -> Expected code label (Expected item name rest)
+    | otherwise                     -> Expected item name (expectations-insert-named code label rest)
+
+
+define expectations-union :: Expectations -> Expectations -> Expectations
+  [NoExpectations] right -> right
+  [Expected item name rest] right -> expectations-union rest (expectations-insert-named item name right)
+
+
+define expectations-count :: Expectations -> Int
+  [NoExpectations]      -> 0
+  [Expected item name rest] -> 1 + expectations-count rest
+
+define reply-ok? :: ParseReply a -> Bool
+  [Parsed _ _ _]  -> True
+  [Rejected _ _]  -> False
+
+
+define reply-consumed? :: ParseReply a -> Bool
+  [Parsed _ _ consumed] -> consumed
+  [Rejected _ consumed] -> consumed
+
+
+define reply-value-or :: a -> ParseReply a -> a
+  fallback [Parsed value _ _] -> value
+  fallback [Rejected _ _]     -> fallback
+
+
+define failure-offset :: ParserFailure -> Int
+  failure -> failure.offset
+
+
+define failure-code :: ParserFailure -> Int
+  failure -> failure.code
+
+
+define failure-expectations :: ParserFailure -> Expectations
+  failure -> failure.expectations
+
+
+define failure-expects? :: Int -> ParseReply a -> Bool
+  code [Rejected failure consumed] -> expectations-member? code (failure-expectations failure)
+  code [Parsed value offset consumed] -> False
+
+
+define reply-offset :: ParseReply a -> Int
+  [Parsed _ offset _]           -> offset
+  [Rejected failure _]          -> failure-offset failure
+
+
+define reply-error-offset :: ParseReply a -> Int
+  [Rejected failure _] -> failure-offset failure
+  [Parsed _ offset _]  -> offset
+
+
+define reply-error-code :: ParseReply a -> Int
+  [Rejected failure _] -> failure-code failure
+  [Parsed _ _ _]       -> 0
+
+
+define reply-success-rest :: Int -> [Int] -> ParseReply a -> [Int]
+  start bytes [Parsed value offset consumed] -> parser-drop (offset - start) bytes
+  start bytes [Rejected failure consumed]    -> bytes
+
+
+define spanned-start-or :: Int -> Spanned a -> Int
+  fallback [WithSpan value start end] -> start
+
+
+define spanned-end-or :: Int -> Spanned a -> Int
+  fallback [WithSpan value start end] -> end
+
+
+;;; Primitive parser algebra
+
+define parser-pure :: a -> Int -> [Int] -> ParseReply a
+  value offset xs -> Parsed value offset False
+
+
+define parser-fail :: Int -> Int -> [Int] -> ParseReply a
+  code offset xs -> Rejected (ParserFailure offset code (expectation-singleton code)) False
+
+
+define parser-fail-named :: Int -> String -> Int -> [Int] -> ParseReply a
+  code label offset xs -> Rejected (ParserFailure offset code (expectation-named code label)) False
+
+
+define parser-satisfy :: (Char -> Bool) -> Int -> Int -> [Int] -> ParseReply Int
+  predicate code offset [] -> Rejected (ParserFailure offset code (expectation-singleton code)) False
+  predicate code offset [byte|rest]
+    | (predicate (chr byte)) -> Parsed byte (offset + 1) True
+    | otherwise              -> Rejected (ParserFailure offset code (expectation-singleton code)) False
+
+
+define parser-map :: (a -> b) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply b
+  transform parser code offset xs -> parser-map-reply transform (parser code offset xs)
+
+
+define parser-map-reply :: (a -> b) -> ParseReply a -> ParseReply b
+  transform [Parsed value offset consumed] -> Parsed (transform value) offset consumed
+  transform [Rejected failure consumed]    -> Rejected failure consumed
+
+
+define parser-bind :: (Int -> Int -> [Int] -> ParseReply a) -> (a -> Int -> Int -> [Int] -> ParseReply b) -> Int -> Int -> [Int] -> ParseReply b
+  parser next code offset xs -> parser-bind-reply next code offset xs (parser code offset xs)
+
+
+define parser-bind-reply :: (a -> Int -> Int -> [Int] -> ParseReply b) -> Int -> Int -> [Int] -> ParseReply a -> ParseReply b
+  next code start xs [Rejected failure consumed] -> Rejected failure consumed
+  next code start xs [Parsed value offset consumed] ->
+    (parser-propagate-consumption consumed
+      (next value code offset (parser-drop (offset - start) xs)))
+
+
+;;; Progress-safe repetition
+
+define parser-reverse-values :: [a] -> [a] -> [a]
+  result []         -> result
+  result [value|xs] -> parser-reverse-values (prepend value result) xs
+
+
+define parser-nonprogress-failure :: Int -> Int -> ParseReply a
+  code offset ->
+    def expected (expectation-named code "parser that consumes input")
+    Rejected (ParserFailure offset code expected) True
+
+
+define parser-many-loop :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> [a] -> Bool -> ParseReply a -> ParseReply [a]
+  limit progress-code parser code offset bytes values consumed reply
+    | limit <= 0 -> Parsed (parser-reverse-values [] values) offset consumed
+
+  limit progress-code parser code offset bytes values consumed [Rejected failure item-consumed]
+    | item-consumed -> Rejected failure True
+    | otherwise     -> Parsed (parser-reverse-values [] values) offset consumed
+
+  limit progress-code parser code offset bytes values consumed [Parsed value next item-consumed]
+    -> (if (parser-offset-advanced? offset next)
+           (parser-many-loop (limit - 1) progress-code parser code next
+             (parser-drop (next - offset) bytes) (prepend value values) True
+             (parser code next (parser-drop (next - offset) bytes)))
+           (parser-nonprogress-failure progress-code offset))
+
+
+define parser-many-up-to :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
+  limit progress-code parser code offset bytes ->
+    (parser-many-loop limit progress-code parser code offset bytes [] False
+      (parser code offset bytes))
+
+
+define parser-some-reply :: Int -> Int -> ParseReply [a] -> ParseReply [a]
+  code start [Parsed values offset consumed]
+    | empty? values -> Rejected (ParserFailure start code (expectation-singleton code)) False
+    | otherwise     -> Parsed values offset consumed
+  code start [Rejected failure consumed] -> Rejected failure consumed
+
+
+define parser-some-up-to :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
+  limit progress-code parser code offset bytes ->
+    (parser-some-reply code offset
+      (parser-many-up-to limit progress-code parser code offset bytes))
+
+
+define parser-separated-value :: (Int -> Int -> [Int] -> ParseReply a) -> s -> Int -> Int -> [Int] -> ParseReply a
+  parser separator code offset bytes -> parser code offset bytes
+
+
+define parser-separated-item :: (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  separator parser code offset bytes ->
+    parser-bind separator (parser-separated-value parser) code offset bytes
+
+
+define parser-sep-finish :: a -> ParseReply [a] -> ParseReply [a]
+  value [Parsed values offset consumed] -> Parsed (prepend value values) offset True
+  value [Rejected failure consumed]     -> Rejected failure True
+
+
+define parser-sep-after-first :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> a -> ParseReply [a]
+  limit progress-code separator parser code offset bytes value ->
+    (parser-sep-finish value
+      (parser-many-up-to (limit - 1) progress-code
+        (parser-separated-item separator parser) code offset bytes))
+
+
+define parser-sep-first :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a -> ParseReply [a]
+  limit progress-code separator parser code start bytes [Rejected failure consumed]
+    | consumed  -> Rejected failure True
+    | otherwise -> parser-many-up-to 0 progress-code parser code start bytes
+
+  limit progress-code separator parser code start bytes [Parsed value next consumed] ->
+    if (parser-offset-advanced? start next) then (parser-sep-after-first limit progress-code separator parser code next (parser-drop (next - start) bytes) value) else (parser-nonprogress-failure progress-code start)
+
+
+define parser-sep-by-up-to :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
+  limit progress-code separator parser code offset bytes
+    | limit <= 0 -> parser-many-up-to 0 progress-code parser code offset bytes
+    | otherwise  ->
+        (parser-sep-first limit progress-code separator parser code offset bytes
+          (parser code offset bytes))
+
+
+define parser-sep-by1-reply :: Int -> Int -> ParseReply [a] -> ParseReply [a]
+  code start [Parsed values offset consumed]
+    | empty? values -> Rejected (ParserFailure start code (expectation-singleton code)) False
+    | otherwise     -> Parsed values offset consumed
+  code start [Rejected failure consumed] -> Rejected failure consumed
+
+
+define parser-sep-by1-up-to :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
+  limit progress-code separator parser code offset bytes ->
+    (parser-sep-by1-reply code offset
+      (parser-sep-by-up-to limit progress-code separator parser code offset bytes))
+
+
+define parser-between-keep :: a -> c -> Int -> Int -> [Int] -> ParseReply a
+  value closing code offset bytes -> parser-pure value offset bytes
+
+
+define parser-between-close :: (Int -> Int -> [Int] -> ParseReply c) -> a -> Int -> Int -> [Int] -> ParseReply a
+  close value code offset bytes ->
+    parser-bind close (parser-between-keep value) code offset bytes
+
+
+define parser-between-opened :: (Int -> Int -> [Int] -> ParseReply a) -> (Int -> Int -> [Int] -> ParseReply c) -> o -> Int -> Int -> [Int] -> ParseReply a
+  parser close opening code offset bytes ->
+    parser-bind parser (parser-between-close close) code offset bytes
+
+
+define parser-between :: (Int -> Int -> [Int] -> ParseReply o) -> (Int -> Int -> [Int] -> ParseReply c) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  open close parser code offset bytes ->
+    parser-bind open (parser-between-opened parser close) code offset bytes
+
+
+define parser-propagate-consumption :: Bool -> ParseReply a -> ParseReply a
+  prefix [Parsed value offset consumed] | prefix -> Parsed value offset True
+  prefix [Rejected failure consumed]    | prefix -> Rejected failure True
+  prefix reply                                   -> reply
+
+
+define parser-lexeme :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  parser code start bytes -> parser-bind parser parser-lexeme-value code start bytes
+
+
+define parser-lexeme-value :: a -> Int -> Int -> [Int] -> ParseReply a
+  value code offset bytes ->
+    def final-offset (skip-space-offset offset bytes)
+    Parsed value final-offset (parser-offset-advanced? offset final-offset)
+
+
+define parser-offset-advanced? :: Int -> Int -> Bool
+  offset final-offset -> final-offset > offset
+
+
+define parser-spanned :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply (Spanned a)
+  parser code start bytes -> parser-bind parser (parser-spanned-value start) code start bytes
+
+
+define parser-spanned-value :: Int -> a -> Int -> Int -> [Int] -> ParseReply (Spanned a)
+  start value code offset bytes -> Parsed (WithSpan value start offset) offset False
+
+
+define parser-or :: (Int -> Int -> [Int] -> ParseReply a) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  left right code offset xs -> parser-or-reply right code offset xs (left code offset xs)
+
+
+define parser-or-reply :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a -> ParseReply a
+  right code offset xs [Parsed value next consumed] -> Parsed value next consumed
+  right code offset xs [Rejected failure consumed]
+    | consumed  -> Rejected failure True
+    | otherwise ->
+        parser-merge-failure failure (right code offset xs)
+
+
+define parser-merge-failure :: ParserFailure -> ParseReply a -> ParseReply a
+  left [Rejected right consumed]
+    | left.offset > right.offset -> Rejected left consumed
+    | left.offset < right.offset -> Rejected right consumed
+    | otherwise                  -> Rejected (merge-equal-failure left right) consumed
+  left [Parsed value offset consumed]                         -> Parsed value offset consumed
+
+
+define merge-equal-failure :: ParserFailure -> ParserFailure -> ParserFailure
+  left right ->
+    def code (minimum-failure-code left.code right.code)
+    ParserFailure right.offset code (expectations-union left.expectations right.expectations)
+
+
+define minimum-failure-code :: Int -> Int -> Int
+  left right | parser-code-before? left right -> left
+             | otherwise                     -> right
+
+
+define parser-attempt :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  parser code offset xs -> parser-attempt-reply (parser code offset xs)
+
+
+define parser-attempt-reply :: ParseReply a -> ParseReply a
+  [Rejected failure consumed] -> Rejected failure False
+  [Parsed value offset consumed] -> Parsed value offset consumed
+
+
+define parser-cut :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  parser code offset xs -> parser-cut-reply (parser code offset xs)
+
+
+define parser-cut-reply :: ParseReply a -> ParseReply a
+  [Rejected failure consumed] -> Rejected failure True
+  [Parsed value offset consumed] -> Parsed value offset consumed
+
+
+define parser-label :: Int -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  expectation parser code offset xs -> parser-label-reply expectation (parser code offset xs)
+
+
+define parser-label-reply :: Int -> ParseReply a -> ParseReply a
+  expectation [Rejected failure consumed]
+    | consumed  -> Rejected failure True
+    | otherwise -> Rejected (ParserFailure failure.offset expectation (expectation-singleton expectation)) False
+  expectation [Parsed value offset consumed] -> Parsed value offset consumed
+
+
+define parser-relabel :: String -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  label parser code offset bytes -> parser-relabel-reply label (parser code offset bytes)
+
+
+define parser-relabel-reply :: String -> ParseReply a -> ParseReply a
+  label [Rejected failure consumed]
+    | consumed  -> Rejected failure True
+    | otherwise -> Rejected (relabel-failure label failure) False
+  label [Parsed value offset consumed] -> Parsed value offset consumed
+
+
+define relabel-failure :: String -> ParserFailure -> ParserFailure
+  label failure -> ParserFailure failure.offset failure.code (expectation-named failure.code label)
+
+
+define parser-eof :: Int -> Int -> [Int] -> ParseReply Int
+  code offset [] -> Parsed 0 offset False
+  code offset xs -> Rejected (ParserFailure offset code (expectation-singleton code)) False
+
+
+define parser-complete :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> Int -> [Int] -> ParseReply a
+  parser eof-code code offset bytes ->
+    parser-bind parser (parser-complete-value eof-code) code offset bytes
+
+
+define parser-complete-value :: Int -> a -> Int -> Int -> [Int] -> ParseReply a
+  eof-code value code offset bytes ->
+    parser-complete-reply value (parser-eof eof-code offset bytes)
+
+
+define parser-complete-reply :: a -> ParseReply Int -> ParseReply a
+  value [Parsed ignored offset consumed] -> Parsed value offset consumed
+  value [Rejected failure consumed]      -> Rejected failure consumed
+
+
+define parser-lookahead :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  parser code offset bytes -> parser-lookahead-reply offset (parser code offset bytes)
+
+
+define parser-lookahead-reply :: Int -> ParseReply a -> ParseReply a
+  start [Parsed value offset consumed] -> Parsed value start False
+  start [Rejected failure consumed]    -> Rejected failure consumed
+
+
+define parser-not-followed-by :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> Int -> [Int] -> ParseReply Int
+  parser expectation code offset bytes ->
+    parser-not-followed-by-reply expectation offset (parser code offset bytes)
+
+
+define parser-not-followed-by-reply :: Int -> Int -> ParseReply a -> ParseReply Int
+  expectation offset [Rejected failure consumed] -> Parsed 0 offset False
+  expectation offset [Parsed value next consumed] ->
+    Rejected (ParserFailure offset expectation (expectation-singleton expectation)) False
+
+
+;;; Diagnostic rendering
+
+define render-expectations :: Expectations -> String
+  [NoExpectations] -> "token"
+  [Expected code name rest] -> render-expectation-tail name rest
+
+
+define render-expectation-tail :: String -> Expectations -> String
+  name [NoExpectations] -> name
+  name rest             -> ((name ++ " or ") ++ (render-expectations rest))
+
+
+define source-line-number :: Int -> [Int] -> Int
+  target bytes -> source-line-number-from target 0 1 bytes
+
+
+define source-line-number-from :: Int -> Int -> Int -> [Int] -> Int
+  target index line bytes | (>= index target) -> line
+  target index line []                      -> line
+  target index line [byte|rest]
+    | (= byte 0x0a) -> source-line-number-from target (index + 1) (line + 1) rest
+    | otherwise     -> source-line-number-from target (index + 1) line rest
+
+
+define source-column-number :: Int -> [Int] -> Int
+  target bytes -> source-column-number-from target 0 1 bytes
+
+
+define source-column-number-from :: Int -> Int -> Int -> [Int] -> Int
+  target index column bytes | (>= index target) -> column
+  target index column []                      -> column
+  target index column [byte|rest]
+    | (= byte 0x0a) -> source-column-number-from target (index + 1) 1 rest
+    | otherwise     -> source-column-number-from target (index + 1) (column + 1) rest
+
+
+define source-line-start :: Int -> [Int] -> Int
+  target bytes -> source-line-start-from target 0 0 bytes
+
+
+define source-line-start-from :: Int -> Int -> Int -> [Int] -> Int
+  target index start bytes | (>= index target) -> start
+  target index start []                      -> start
+  target index start [byte|rest]
+    | (= byte 0x0a) -> source-line-start-from target (index + 1) (index + 1) rest
+    | otherwise     -> source-line-start-from target (index + 1) start rest
+
+
+define source-line-length :: [Int] -> Int
+  [] -> 0
+  [0x0a|rest] -> 0
+  [byte|rest] -> 1 + source-line-length rest
+
+
+define source-bytes->string :: [Int] -> String
+  [] -> ""
+  [byte|rest] -> ((char->text (chr byte)) ++ (source-bytes->string rest))
+
+
+define parser-spaces :: Int -> String
+  count | <= 0     -> ""
+        | otherwise -> (" " ++ (parser-spaces (count - 1)))
+
+
+define render-parser-error :: String -> [Int] -> ParseReply a -> String
+  source-name source [Parsed value offset consumed] -> ""
+  source-name source [Rejected failure consumed] -> render-parser-failure source-name source failure
+
+
+define render-parser-location :: String -> Int -> Int -> String
+  source-name line column -> (source-name ++ ":" ++ (int->text line) ++ ":" ++ (int->text column))
+
+
+define render-parser-message :: ParserFailure -> String
+  failure -> (": error: expected " ++ (render-expectations (failure-expectations failure)))
+
+
+define render-parser-excerpt :: Int -> String -> String
+  line excerpt -> ("\n  |\n" ++ (int->text line) ++ " | " ++ excerpt)
+
+
+define render-parser-caret :: Int -> String
+  column -> ("\n  | " ++ (parser-spaces (column - 1)) ++ "^")
+
+
+define render-parser-failure :: String -> [Int] -> ParserFailure -> String
+  source-name source failure ->
+    def offset (failure-offset failure)
+    def line (source-line-number offset source)
+    def column (source-column-number offset source)
+    def start (source-line-start offset source)
+    def tail (parser-drop start source)
+    def excerpt (source-bytes->string (take tail (source-line-length tail)))
+    ((render-parser-location source-name line column) ++ (render-parser-message failure) ++ (render-parser-excerpt line excerpt) ++ (render-parser-caret column))
+
+
+define parser-literal :: [Int] -> Int -> Int -> [Int] -> ParseReply Int
+  expected code offset bytes ->
+    parser-attempt-reply (parser-literal-loop expected code offset bytes 0 False)
+
+
+define parser-symbol :: [Int] -> Int -> Int -> [Int] -> ParseReply Int
+  expected code offset bytes -> parser-lexeme (parser-literal expected) code offset bytes
+
+
+define parser-heads-equal? :: [Int] -> [Int] -> Bool
+  left right -> left[0] = right[0]
+
+
+define parser-literal-loop :: [Int] -> Int -> Int -> [Int] -> Int -> Bool -> ParseReply Int
+  expected code offset bytes count consumed
+    | parser-empty? expected             -> Parsed count offset consumed
+    | parser-empty? bytes                -> Rejected (ParserFailure offset code (expectation-singleton code)) consumed
+    | parser-heads-equal? expected bytes ->
+        parser-literal-loop (parser-drop 1 expected) code (offset + 1) (parser-drop 1 bytes) (count + 1) True
+    | otherwise                          ->
+        Rejected (ParserFailure offset code (expectation-singleton code)) consumed
+
+
+define parse-result :: Bool -> Int -> Int -> Int -> ParseResult
+  ok value offset error -> (ParseResult ok value offset error)
+
+
+define parse-ok :: Int -> Int -> ParseResult
+  value offset -> (ParseResult True value offset 0)
+
+
+define parse-error :: Int -> Int -> ParseResult
+  code offset -> (ParseResult False 0 offset code)
+
+
+define parse-ok? :: ParseResult -> Bool
+  result -> result.ok
+
+
+define parse-failed? :: ParseResult -> Bool
+  result | result.ok  -> False
+         | otherwise -> True
+
+
+define parse-value :: Int -> ParseResult -> Int
+  default result | result.ok  -> result.value
+                 | otherwise -> default
+
+
+define parse-offset :: ParseResult -> Int
+  result -> result.offset
+
+
+define parse-error-code :: ParseResult -> Int
+  result -> result.error
+
+
+define parser-empty? :: [Int] -> Bool
+  xs -> null? xs
+
+
+define parser-drop :: Int -> [Int] -> [Int]
+  n xs -> drop xs n
+
+
+define byte :: Int -> Int -> [Int] -> ParseResult
+  expected offset [] -> (parse-error 1 offset)
+  expected offset [c|rest] -> byte-got expected offset c
+
+
+define byte-got :: Int -> Int -> Int -> ParseResult
+  expected offset c
+    | (= c expected) -> (parse-ok expected (offset + 1))
+    | otherwise      -> (parse-error 2 offset)
+
+
+define choice :: ParseResult -> ParseResult -> ParseResult
+  left right
+    | left.ok   -> left
+    | otherwise -> right
+
+
+define skip-space-offset :: Int -> [Int] -> Int
+  offset [] -> offset
+  offset [c|rest]
+    | blank? (chr c)     -> skip-space-offset (offset + 1) rest
+    | linebreak? (chr c) -> skip-space-offset (offset + 1) rest
+  offset xs                      -> offset
+
+
+define skip-space-xs :: [Int] -> [Int]
+  [] -> []
+  [c|rest]
+    | blank? (chr c)     -> skip-space-xs rest
+    | linebreak? (chr c) -> skip-space-xs rest
+  xs                      -> xs
+
+
+;;; Exact decimal tokens
+
+define decimal-advanced? :: Int -> Int -> Bool
+  start offset | offset > start -> True
+               | otherwise      -> False
+
+
+define decimal-failure :: Int -> Int -> Int -> ParseReply String
+  start offset code ->
+    (Rejected
+      (ParserFailure offset code (expectation-named code "decimal number"))
+      (decimal-advanced? start offset))
+
+
+define decimal-append :: String -> Int -> String
+  text byte -> (text ++ (char->text (chr byte)))
+
+
+define decimal-success :: String -> Int -> ParseReply String
+  text offset -> Parsed text offset True
+
+
+define decimal-scan :: DecimalPhase -> Int -> Int -> Int -> Int -> String -> Int -> [Int] -> ParseReply String
+  [DecimalIntegerStart] start coefficient exponent code text offset [] -> decimal-failure start offset code
+  [DecimalIntegerStart] start coefficient exponent code text offset [byte|rest] -> if coefficient <= 0 then decimal-failure start offset code else if byte = 0x30 then (decimal-scan DecimalZero start (coefficient - 1) exponent code (decimal-append text byte) (offset + 1) rest) else if and? (>= byte 0x31) (<= byte 0x39) then (decimal-scan DecimalInteger start (coefficient - 1) exponent code (decimal-append text byte) (offset + 1) rest) else decimal-failure start offset code
+
+  [DecimalZero] start coefficient exponent code text offset [] -> decimal-success text offset
+  [DecimalZero] start coefficient exponent code text offset [byte|rest] -> if byte-digit? byte then decimal-failure start offset code else if byte = 0x2e then (decimal-scan DecimalFractionStart start coefficient exponent code (decimal-append text byte) (offset + 1) rest) else if or? (= byte 0x65) (= byte 0x45) then (decimal-scan DecimalExponentSign start coefficient exponent code (decimal-append text byte) (offset + 1) rest) else decimal-success text offset
+
+  [DecimalInteger] start coefficient exponent code text offset [] -> decimal-success text offset
+  [DecimalInteger] start coefficient exponent code text offset [byte|rest] -> if and? (byte-digit? byte) (<= coefficient 0) then decimal-failure start offset code else if byte-digit? byte then (decimal-scan DecimalInteger start (coefficient - 1) exponent code (decimal-append text byte) (offset + 1) rest) else if byte = 0x2e then (decimal-scan DecimalFractionStart start coefficient exponent code (decimal-append text byte) (offset + 1) rest) else if or? (= byte 0x65) (= byte 0x45) then (decimal-scan DecimalExponentSign start coefficient exponent code (decimal-append text byte) (offset + 1) rest) else decimal-success text offset
+
+  [DecimalFractionStart] start coefficient exponent code text offset [] -> decimal-failure start offset code
+  [DecimalFractionStart] start coefficient exponent code text offset [byte|rest] -> if and? (byte-digit? byte) (<= coefficient 0) then decimal-failure start offset code else if byte-digit? byte then (decimal-scan DecimalFraction start (coefficient - 1) exponent code (decimal-append text byte) (offset + 1) rest) else decimal-failure start offset code
+
+  [DecimalFraction] start coefficient exponent code text offset [] -> decimal-success text offset
+  [DecimalFraction] start coefficient exponent code text offset [byte|rest] -> if and? (byte-digit? byte) (<= coefficient 0) then decimal-failure start offset code else if byte-digit? byte then (decimal-scan DecimalFraction start (coefficient - 1) exponent code (decimal-append text byte) (offset + 1) rest) else if or? (= byte 0x65) (= byte 0x45) then (decimal-scan DecimalExponentSign start coefficient exponent code (decimal-append text byte) (offset + 1) rest) else decimal-success text offset
+
+  [DecimalExponentSign] start coefficient exponent code text offset [byte|rest] -> if or? (= byte 0x2b) (= byte 0x2d) then (decimal-scan DecimalExponentStart start coefficient exponent code (decimal-append text byte) (offset + 1) rest) else (decimal-scan DecimalExponentStart start coefficient exponent code text offset (prepend byte rest))
+  [DecimalExponentSign] start coefficient exponent code text offset [] -> decimal-failure start offset code
+
+  [DecimalExponentStart] start coefficient exponent code text offset [] -> decimal-failure start offset code
+  [DecimalExponentStart] start coefficient exponent code text offset [byte|rest] -> if exponent <= 0 then decimal-failure start offset code else if byte-digit? byte then (decimal-scan DecimalExponent start coefficient (exponent - 1) code (decimal-append text byte) (offset + 1) rest) else decimal-failure start offset code
+
+  [DecimalExponent] start coefficient exponent code text offset [] -> decimal-success text offset
+  [DecimalExponent] start coefficient exponent code text offset [byte|rest] -> if and? (byte-digit? byte) (<= exponent 0) then decimal-failure start offset code else if byte-digit? byte then (decimal-scan DecimalExponent start coefficient (exponent - 1) code (decimal-append text byte) (offset + 1) rest) else decimal-success text offset
+
+
+define parser-decimal-lexeme-up-to :: Int -> Int -> Int -> Int -> [Int] -> ParseReply String
+  coefficient exponent code offset [0x2d|rest] -> decimal-scan DecimalIntegerStart offset coefficient exponent code "-" (offset + 1) rest
+  coefficient exponent code offset bytes -> decimal-scan DecimalIntegerStart offset coefficient exponent code "" offset bytes
+
+
+define signed-int :: Int -> [Int] -> ParseResult
+  offset [0x2d|rest] -> (signed-int-digits offset (0 - 1) 0 False (offset + 1) rest)
+  offset xs          -> (signed-int-digits offset 1 0 False offset xs)
+
+
+define signed-int-digits :: Int -> Int -> Int -> Bool -> Int -> [Int] -> ParseResult
+  start sign acc seen offset []
+    | seen      -> (parse-ok (sign * acc) offset)
+    | otherwise -> (parse-error 4 start)
+
+  start sign acc seen offset [c|rest] | digit? (chr c) ->
+    (signed-int-digits start sign ((acc * 10) + (digit->int (chr c))) True (offset + 1) rest)
+
+  start sign acc seen offset xs
+    | seen      -> (parse-ok (sign * acc) offset)
+    | otherwise -> (parse-error 4 start)
+
+
+define token-byte :: Int -> Int -> [Int] -> ParseResult
+  expected offset xs -> (byte expected (skip-space-offset offset xs) (skip-space-xs xs))
+
+
+tests
+  :xs:
+  assert-eq (parser-empty? []) True "Parser empty xs"
+  assert-eq (parser-empty? (list 0x61)) False "Parser nonempty xs"
+  :xs:
+
+  :byte:
+  assert-eq (parse-ok? (byte 0x61 0 (list 0x61 0x62))) True "Parser byte success"
+  assert-eq (parse-value 0 (byte 0x61 0 (list 0x61 0x62))) 0x61 "Parser byte value"
+  assert-eq (parse-offset (byte 0x61 0 (list 0x61 0x62))) 1 "Parser byte advances offset"
+  assert-eq (parse-failed? (byte 0x62 0 (list 0x61))) True "Parser byte mismatch"
+  assert-eq (parse-error-code (byte 0x62 0 (list 0x61))) 2 "Parser byte mismatch code"
+  :byte:
+
+  :choice:
+  assert-eq (parse-ok? (choice (byte 0x62 0 (list 0x61)) (byte 0x61 0 (list 0x61)))) True "Parser choice second"
+  assert-eq (parse-value 0 (choice (byte 0x62 0 (list 0x61)) (byte 0x61 0 (list 0x61)))) 0x61 "Parser choice value"
+  :choice:
+
+  :space:
+  assert-eq (skip-space-offset 0 (list 0x20 0x09 0x61)) 2 "Parser skip-space offset"
+  assert-eq (parse-ok? (token-byte 0x61 0 (list 0x20 0x61))) True "Parser token-byte skips"
+  assert-eq (parse-offset (token-byte 0x61 0 (list 0x20 0x61))) 2 "Parser token-byte offset"
+  :space:
+
+  :digits:
+  assert-eq (digit? (chr 0x30)) True "Parser digit zero"
+  assert-eq (digit? (chr 0x39)) True "Parser digit nine"
+  assert-eq (digit? (chr 0x3a)) False "Parser digit rejects colon"
+  assert-eq (digit->int (chr 0x37)) 7 "Parser digit value"
+  :digits:
+
+  :signed-int:
+  assert-eq (parse-value 0 (signed-int 0 (list 0x34 0x32))) 42 "Parser signed-int positive"
+  assert-eq (parse-value 0 (signed-int 0 (list 0x2d 0x31 0x37))) (0 - 17) "Parser signed-int negative"
+  assert-eq (parse-offset (signed-int 0 (list 0x31 0x32 0x78))) 2 "Parser signed-int stops before non-digit"
+  assert-eq (parse-failed? (signed-int 0 (list 0x2d))) True "Parser signed-int rejects bare minus"
+  :signed-int:

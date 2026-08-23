@@ -88,6 +88,13 @@ typedef struct {
 
 void codegen_init(CodegenContext *ctx, const char *module_name);
 void codegen_dispose(CodegenContext *ctx);
+/* Transfer the verified module/context to an in-process consumer (for example
+ * ORCv2) while releasing all transient production-codegen state.  This is the
+ * ownership seam shared by batch emission and embedding; it deliberately does
+ * not clone or reinterpret the checked AST.
+ * https://llvm.org/docs/ORCv2.html#how-to-add-a-module */
+LLVMModuleRef codegen_take_module(CodegenContext *ctx,
+                                  LLVMContextRef *context_out);
 void codegen_set_trace(bool enabled);
 
 // Format string getters

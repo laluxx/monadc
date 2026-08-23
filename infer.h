@@ -158,6 +158,9 @@ typedef struct InferEnv {
 InferEnv *infer_env_create(void);
 InferEnv *infer_env_create_child(InferEnv *parent);
 void      infer_env_free(InferEnv *env);
+/* Frees each distinct scheme stored in this environment exactly once before
+ * releasing the table. Intended for compilation-unit root environments. */
+void      infer_env_free_owned_schemes(InferEnv *env);
 void      infer_env_insert(InferEnv *env, const char *name, TypeScheme *scheme);
 TypeScheme *infer_env_lookup(InferCtx *ctx, const char *name);
 

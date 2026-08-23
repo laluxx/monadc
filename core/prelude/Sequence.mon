@@ -113,46 +113,52 @@ method reverse :: [a] -> [a]
 
 
 method at :: [a] -> Int -> a?
-  _ n      | n < 0 -> nil
-  [] _             -> nil
-  [x|xs] 0         -> x
-  [x|xs] n         -> at xs (n - 1)
+  _ n      | < 0 -> nil
+  [] _           -> nil
+  [x|xs] 0       -> x
+  [x|xs] n       -> at xs (n - 1)
 
 
 method nth :: [a] -> Int -> a
   [] _              -> error "Coll.nth: index out of bounds"
-  [x|xs] n | n <= 0 -> x
-  [x|xs] n          -> nth xs (n - 1)
+  [x|xs] n
+    | n <= 0    -> x
+    | otherwise -> nth xs (n - 1)
 
 
 method take :: [a] -> Int -> [a]
   [] _                         -> []
-  [x|xs] n | n > 0             -> prepend x (take xs (n - 1))
-  [x|xs] n | otherwise         -> []
+  [x|xs] n
+    | n > 0     -> prepend x (take xs (n - 1))
+    | otherwise -> []
 
 
 method drop :: [a] -> Int -> [a]
   [] _                         -> []
-  [x|xs] n | n > 0             -> drop xs (n - 1)
-  [x|xs] n | otherwise         -> prepend x xs
+  [x|xs] n
+    | n > 0     -> drop xs (n - 1)
+    | otherwise -> prepend x xs
 
 
 method take-while :: [a] -> (a -> Bool) -> [a]
   [] _                         -> []
-  [x|xs] p | p x               -> prepend x (take-while xs p)
-  [x|xs] p | otherwise         -> []
+  [x|xs] p
+    | p x       -> prepend x (take-while xs p)
+    | otherwise -> []
 
 
 method drop-while :: [a] -> (a -> Bool) -> [a]
   [] _                         -> []
-  [x|xs] p | p x               -> drop-while xs p
-  [x|xs] p | otherwise         -> prepend x xs
+  [x|xs] p
+    | p x       -> drop-while xs p
+    | otherwise -> prepend x xs
 
 
 method filter :: (a -> Bool) -> [a] -> [a]
   _ []                         -> []
-  p [x|xs] | p x               -> prepend x (filter p xs)
-  p [x|xs] | otherwise         -> filter p xs
+  p [x|xs]
+      | p x       -> prepend x (filter p xs)
+      | otherwise -> filter p xs
 
 
 method any? :: [a] -> (a -> Bool) -> Bool
@@ -162,8 +168,9 @@ method any? :: [a] -> (a -> Bool) -> Bool
 
 method all? :: [a] -> (a -> Bool) -> Bool
   [] _                         -> True
-  [x|xs] p | p x               -> all? xs p
-  [x|xs] p | otherwise         -> False
+  [x|xs] p
+    | p x       -> all? xs p
+    | otherwise -> False
 
 
 method zip :: [a] -> [b] -> [(a, b)]

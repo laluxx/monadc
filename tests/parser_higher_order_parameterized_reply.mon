@@ -1,0 +1,35 @@
+:TEST-ID tests.parser.higher-order-parameterized-reply
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Higher-order calls preserve parameterized ADT returns at the closure ABI boundary.
+:TEST-EXPECT compile, run, four assertions pass
+:TEST-TIER regression
+:TEST-SECTION codegen
+:TEST-CATEGORY closures
+
+import Text.Parser
+
+module Parser.HigherOrderParameterizedReply []
+
+
+define ascii-a? :: Char -> Bool
+  c -> ord c = 0x61
+
+
+define run-parser :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  parser code offset bytes -> parser code offset bytes
+
+
+define normalize-reply :: ParseReply a -> ParseReply a
+  [Rejected failure consumed]    -> Rejected failure consumed
+  [Parsed value offset consumed] -> Parsed value offset consumed
+
+
+define run-normalized :: (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply a
+  parser code offset bytes -> normalize-reply (parser code offset bytes)
+
+
+tests
+  assert-eq (reply-value-or 0 (run-parser (parser-satisfy ascii-a?) 71 0 ⌜0x61⌝)) 0x61 "Higher-order parsers preserve parameterized reply payloads"
+  assert-eq (reply-consumed? (run-parser (parser-satisfy ascii-a?) 71 0 ⌜0x61⌝)) True "Higher-order parsers preserve reply constructors"
+  assert-eq (reply-value-or 0 (run-normalized (parser-satisfy ascii-a?) 71 0 ⌜0x61⌝)) 0x61 "Generic reconstruction preserves higher-order ADT payloads"
+  assert-eq (reply-consumed? (run-normalized (parser-satisfy ascii-a?) 71 0 ⌜0x61⌝)) True "Generic reconstruction preserves higher-order ADT tags"

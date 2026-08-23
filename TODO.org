@@ -1702,12 +1702,6 @@ queue as a separate linked item.
 
 
 
-
-
-
-
-
-
 • Completed this cycle with a compiler-level IO foundation repair and a visual Core cleanup.
 
   What changed:
@@ -1755,3 +1749,19 @@ queue as a separate linked item.
 
   The strongest next cycle is fixing imported collection evidence, which unlocks sublime partial-progress bulk streams. After that: polling with deadlines, scatter/gather IO, subprocess
   pipe wiring, sockets, and Windows handles.
+
+
+
+* TODO Support this input parameter syntax
+
+#+begin_src monad
+define rule-101 :: [Int, Int, Int] -> Int
+  1 1 1 -> 0
+  1 1 0 -> 1
+  1 0 1 -> 1
+  1 0 0 -> 0
+  0 1 1 -> 0
+  0 1 0 -> 1
+  0 0 1 -> 0
+  0 0 0 -> 1
+#+end_src

@@ -1,191 +1,201 @@
-#+TITLE: Test Contracts and Context Links
-#+AUTHOR: GPT-5.5 Thinking
-#+DATE: 2026-06-16
-#+CREATED: 2026-06-16
-#+LAST_MODIFIED: 2026-06-18
-#+LANGUAGE: en
-#+STARTUP: hideblocks
-#+OPTIONS: toc:2 num:t
-#+CATEGORY: monadc-context
-#+FILETAGS: :monadc:compiler:context:tests:contracts:quality:
-#+PROPERTY: CONTEXT_VERSION 3
+#+TITLE: Test Contract Context Index
 #+PROPERTY: CONTEXT_SCOPE repository-local
-#+PROPERTY: CONTEXT_AUDIENCE human llm codex
-#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
-#+PROPERTY: CONTEXT_DIALECT org-mode
-#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.tests
-#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
-#+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
-#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
-#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
-#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
-#+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
 
-* Purpose
+This index gives stable IDs to executable test contracts whose detailed design
+records live across the focused context files.  It prevents tests from linking
+to filenames or historical prose positions.
+
+* Compiler and inference
 :PROPERTIES:
-:ID: monadc.context.tests.contracts
-:CUSTOM_ID: test-contracts-purpose
-:CONTEXT_KIND: tests
-:CONTEXT_DESCRIPTION: The contract between executable tests and context nodes.
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human+llm
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
-:CONTEXT_STABILITY: evolving
-:CONTEXT_STATUS: active
-:SOURCE: context/test-contracts.org
-:CONFIDENCE: high
+:ID: monadc.context.codegen
 :END:
+Production LLVM lowering and ABI behavior; see [[file:codegen.org]].
 
-[DOC id:doc.tests.contracts-purpose src:context/test-contracts.org conf:high]
-  Test metadata is part of the language specification. A fixture without
-  context, purpose, expectation, and tier is weaker than a fixture that explains
-  the compiler contract it protects.
-
-* Tier Policy
+** Expression field projection
 :PROPERTIES:
-:ID: monadc.context.tests.tier-policy
-:CUSTOM_ID: test-tier-policy
-:CONTEXT_KIND: tests
-:CONTEXT_DESCRIPTION: The green/known-fail/future tier split used by the enhanced runner.
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human+llm
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
-:CONTEXT_STABILITY: evolving
-:CONTEXT_STATUS: active
-:SOURCE: context/test-contracts.org
-:CONFIDENCE: high
+:ID: monadc.context.codegen.expression-field-projection
 :END:
+Temporary expression values retain layout field projection semantics.
 
-#+CAPTION: Current tier model from enhanced test inventory
-| Tier | Count | Meaning | Default gate? |
-|------+-------+---------+---------------|
-| regression | 1267 | Passing behavior that should gate normal changes | yes |
-| known-fail | 780 | Active bug witnesses, expected to fail until fixed | no |
-| future | 735 | Aspirational contracts/spec pressure | no |
-
-[DEC id:dec.tests.default-gate-regression date:2026-06-16 by:llm]
-  The default test gate should run only =TEST-TIER: regression=. Known-fail and
-  future tests are valuable, but they should not hide fresh regressions behind a
-  wall of expected red output.
-
-[DEC id:dec.tests.red-tests-are-assets date:2026-06-16 by:llm]
-  Red tests should not be deleted merely because they fail. They should be
-  classified. Delete only malformed, duplicate, misleading, or obsolete tests.
-
-* Required Test Metadata
+** Layout field access
 :PROPERTIES:
-:ID: monadc.context.tests.required-metadata
-:CUSTOM_ID: test-required-metadata
-:CONTEXT_KIND: schema
-:CONTEXT_DESCRIPTION: Minimum metadata required for a durable test fixture.
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human+llm
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
-:CONTEXT_STABILITY: evolving
-:CONTEXT_STATUS: active
-:SOURCE: context/test-contracts.org
-:CONFIDENCE: high
+:ID: monadc.context.codegen.layout-field-access
 :END:
+Layout constructors and field offsets share the production representation.
 
-#+CAPTION: Fixture metadata schema
-| Field | Required | Meaning |
-|-------+----------+---------|
-| =TEST-ID= | yes | Globally unique stable test ID |
-| =TEST-CONTEXT= | yes | Existing =monadc.context.*= heading ID |
-| =TEST-PURPOSE= | yes | Human-readable contract |
-| =TEST-EXPECT= | yes | Expected action/result class |
-| =TEST-TIER= | yes | =regression=, =known-fail=, or =future= |
-| =TEST-STATUS= | yes | =active=, =known-fail=, =future=, =archived= |
-| =TEST-KNOWN-FAILURE= | for red tiers | Why it is quarantined |
-| =TEST-COVERAGE= | recommended | Source functions/paths covered |
-
-[DEC id:dec.tests.context-link-required date:2026-06-16 by:llm]
-  Every durable test must connect to a real context heading. Dangling
-  =TEST-CONTEXT= links should fail validation because they break the garden graph.
-
-* Current Inventory Snapshot
+** Inference
 :PROPERTIES:
-:ID: monadc.context.tests.inventory-snapshot
-:CUSTOM_ID: test-inventory-snapshot
-:CONTEXT_KIND: observation
-:CONTEXT_DESCRIPTION: Snapshot of the enhanced test tar inventory used to improve context links.
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human+llm
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
-:CONTEXT_STABILITY: evolving
-:CONTEXT_STATUS: active
-:SOURCE: context/test-contracts.org
-:CONFIDENCE: high
+:ID: monadc.context.infer
 :END:
+HM inference and collection corner cases; see [[file:infer.org]].
 
-[OBS id:obs.tests.inventory.snapshot src:tests/docs/inventory.json conf:high]
-  Enhanced test inventory registers 2782 tests. Origins:
-  fixture=1756, corpus=1026.
-  Context links: total=5282, unique_contexts=77, missing=0.
-
-#+CAPTION: Tests by section
-| Section | Count |
-|---------+-------|
-| codegen | 1756 |
-| interaction | 100 |
-| language | 597 |
-| layout | 10 |
-| ratio | 31 |
-| refinement | 104 |
-| sugar | 110 |
-| superset | 50 |
-| wisp | 24 |
-
-#+CAPTION: Tests by expectation
-| Expectation | Count |
-|-------------+-------|
-| compile | 17 |
-| compile, run | 976 |
-| fail:compile | 766 |
-| inventory | 1 |
-| json:ast, compile, run | 2 |
-| parse-json | 1020 |
-
-* Promotion Rules
+** Tuple canonicalization
 :PROPERTIES:
-:ID: monadc.context.tests.promotion-rules
-:CUSTOM_ID: test-promotion-rules
-:CONTEXT_KIND: workflow
-:CONTEXT_DESCRIPTION: How a red test becomes a regression test.
-:CONTEXT_VERSION: 1
-:CONTEXT_SCOPE: repository-local
-:CONTEXT_OWNER: human+llm
-:CONTEXT_MAINTAINER: codex
-:CONTEXT_AUDIENCE: human,llm
-:CONTEXT_CREATED: 2026-06-16
-:CONTEXT_UPDATED: 2026-06-16
-:CONTEXT_STABILITY: evolving
-:CONTEXT_STATUS: active
-:SOURCE: context/test-contracts.org
-:CONFIDENCE: high
+:ID: monadc.context.types.tuple-canonicalization
 :END:
+Tuple spellings normalize to one structural type and ABI.
 
-[DEC id:dec.tests.promote-with-proof date:2026-06-16 by:llm]
-  To promote a =known-fail= or =future= test to =regression=, update the fixture
-  metadata, run the specific test, run the regression gate, and record the
-  compiler change in the nearest topic context file.
+* Core libraries
+:PROPERTIES:
+:ID: monadc.context.core-libs
+:END:
+Core library architecture and import contracts; see [[file:core-libs.org]].
 
-[TODO id:todo.tests.add-tier-history owner:codex status:open]
-  Add optional =TEST-PROMOTED-BY= and =TEST-PROMOTED-DATE= fields once test
-  promotion becomes frequent enough to need audit history.
+** Data structures batch
+:PROPERTIES:
+:ID: monadc.context.core-libs.data-structures-batch
+:END:
+Batch coverage for the foundational immutable data structures.
+
+** Enum
+:PROPERTIES:
+:ID: monadc.context.core-libs.enum
+:END:
+Enumeration laws, ranges, and successor/predecessor behavior.
+
+** Math angle
+:PROPERTIES:
+:ID: monadc.context.core-libs.math-angle
+:END:
+Angle constants, conversions, and Unicode aliases.
+
+** Parser
+:PROPERTIES:
+:ID: monadc.context.core-libs.parser
+:END:
+Typed parser combinators, exact decimal grammar, and resource budgets.
+
+** Sequence
+:PROPERTIES:
+:ID: monadc.context.core-libs.sequence
+:END:
+Sequence abstraction, collection instances, and optional indexing.
+
+** Sequence Wisp defaults
+:PROPERTIES:
+:ID: monadc.context.core-libs.sequence-class-wisp-defaults
+:END:
+Wisp class method defaults preserve the Sequence surface declarations.
+
+** Resource-safe files
+:PROPERTIES:
+:ID: monadc.context.core-libs.resource-safe-file-scope
+:END:
+File scopes close resources on normal and exceptional exits.
+
+** Tuple core
+:PROPERTIES:
+:ID: monadc.context.core.data-tuple
+:END:
+Tuple constructors, projections, mapping, curry, and uncurry behavior.
+
+** Unicode core
+:PROPERTIES:
+:ID: monadc.context.unicode.complete-core
+:END:
+Unicode scalar decoding, classification, and byte-promotion contracts.
+
+* Collections
+** Range enumeration
+:PROPERTIES:
+:ID: monadc.context.collections.range-enum
+:END:
+Range syntax delegates enumeration to the core Enum abstraction.
+
+** Range count
+:PROPERTIES:
+:ID: monadc.context.collections.range-count
+:END:
+Range materialization has stable list and count semantics.
+
+* Modules and reader
+** Import resolution
+:PROPERTIES:
+:ID: monadc.context.module.codegen-import-resolution
+:END:
+Qualified and self-module symbols resolve through one module environment.
+
+** Local forward declarations
+:PROPERTIES:
+:ID: monadc.context.module.local-forward-declarations
+:END:
+Typed local helpers may be referenced before their body is emitted.
+
+** Character literals
+:PROPERTIES:
+:ID: monadc.context.reader.char-literal
+:END:
+Character escapes and control characters normalize before code generation.
+
+* Style
+:PROPERTIES:
+:ID: monadc.context.style
+:END:
+Repository language and library style; see [[file:style.org]].
+
+** Multiline conditionals
+:PROPERTIES:
+:ID: monadc.context.style.multiline-conditionals
+:END:
+Indented then/else branches lower to the same conditional AST as inline form.
+
+** Receiver-relative guards
+:PROPERTIES:
+:ID: monadc.context.style.receiver-relative-guards
+:END:
+Subject-relative guard operators bind the final non-wildcard receiver.
+
+** Historical receiver-relative guard contract
+:PROPERTIES:
+:ID: monadc.context.style.receiver-relative-guards-2026-07-28
+:END:
+Stable compatibility ID for the original receiver-relative guard decision.
+
+** Unconditional block clauses
+:PROPERTIES:
+:ID: monadc.context.style.unconditional-block-clause
+:END:
+An unconditional block clause terminates its preceding guarded alternatives.
+
+* Wisp
+:PROPERTIES:
+:ID: monadc.context.wisp
+:END:
+Indentation expansion, arity ownership, and clause grouping; see [[file:wisp.org]].
+
+** Arrow value binding
+:PROPERTIES:
+:ID: monadc.context.wisp.sugar.arrow-value-binding
+:END:
+Arrow syntax in value positions remains data when owned by collection literals.
+
+** Range patterns
+:PROPERTIES:
+:ID: monadc.context.wisp.range-pattern
+:END:
+Range patterns preserve endpoints and pattern ownership.
+
+** For body assignment
+:PROPERTIES:
+:ID: monadc.context.wisp.for-body-assignment
+:END:
+Assignments inside for bodies remain statements owned by the loop.
+
+** For ranges
+:PROPERTIES:
+:ID: monadc.context.wisp.for-range
+:END:
+For-range layout expands to the canonical range iteration form.
+
+** Ignored signature parameters
+:PROPERTIES:
+:ID: monadc.context.wisp.ignored-signature-param
+:END:
+An ignored signature slot must use the wildcard in every clause.
+
+* QTT
+:PROPERTIES:
+:ID: monadc.context.type-theory
+:END:
+Quantitative type theory, usage evidence, and resource certificates; see
+[[file:../qtt/README.org]].

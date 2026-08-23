@@ -29,14 +29,16 @@ module Data.Enum
 ;;; Representation Predicates
 
 define enum-step-empty? :: Int -> Int -> Int -> Bool
-  start next end | (and (> next start) (> start end)) -> True
-  start next end | (and (< next start) (< start end)) -> True
+  start next end
+    | (and (> next start) (> start end)) -> True
+    | (and (< next start) (< start end)) -> True
   _ _ _                                             -> False
 
 
 define enum-step-overshoots? :: Int -> Int -> Int -> Bool
-  start next end | (and (> next start) (> next end)) -> True
-  start next end | (and (< next start) (< next end)) -> True
+  start next end
+    | (and (> next start) (> next end)) -> True
+    | (and (< next start) (< next end)) -> True
   _ _ _                                             -> False
 
 
@@ -56,13 +58,18 @@ class Enum a where
   pred x ->
     toEnum ((fromEnum x) - 1)
 
-  enumFromTo start end | (fromEnum start) > (fromEnum end) -> (list)
-  enumFromTo start end | otherwise -> prepend start (enumFromTo (succ start) end)
+  enumFromTo start end
+    | (fromEnum start) > (fromEnum end) -> (list)
+    | (fromEnum start) = (fromEnum end) -> prepend start (list)
+    | otherwise                         -> prepend start (enumFromTo (succ start) end)
 
-  enumFromThenTo start next end | (fromEnum start) = (fromEnum next) -> error "enumFromThenTo: zero step"
-  enumFromThenTo start next end | enum-step-empty? (fromEnum start) (fromEnum next) (fromEnum end) -> (list)
-  enumFromThenTo start next end | enum-step-overshoots? (fromEnum start) (fromEnum next) (fromEnum end) -> prepend start (list)
-  enumFromThenTo start next end | otherwise -> prepend start (enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end)
+  enumFromThenTo start next end
+    | (fromEnum start) = (fromEnum next)                                    -> error "enumFromThenTo: zero step"
+    | enum-step-empty? (fromEnum start) (fromEnum next) (fromEnum end)      -> (list)
+    | (fromEnum start) = (fromEnum end)                                     -> prepend start (list)
+    | (fromEnum next) = (fromEnum end)                                      -> prepend start (prepend next (list))
+    | enum-step-overshoots? (fromEnum start) (fromEnum next) (fromEnum end) -> prepend start (list)
+    | otherwise                                                             -> prepend start (enumFromThenTo next (toEnum ((2 * (fromEnum next)) - (fromEnum start))) end)
 
   law successor-representation :: a -> Bool
     x -> (fromEnum (succ x)) = ((fromEnum x) + 1)
@@ -95,8 +102,9 @@ method range :: Int -> Int -> [Int]
 
 
 method rangeBy :: Int -> Int -> Int -> [Int]
-  start step end | step > 0   -> enumFromThenTo start (start + step) end
-  start step end | step < 0   -> enumFromThenTo start (start + step) end
+  start step end
+    | step > 0 -> enumFromThenTo start (start + step) end
+    | step < 0 -> enumFromThenTo start (start + step) end
   start _ _                   -> error "rangeBy: zero step"
 
 

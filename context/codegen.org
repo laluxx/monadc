@@ -797,7 +797,7 @@ LLVM function with no type tags or dispatch overhead.
 :CONTEXT_UPDATED: 2026-06-27
 :CONTEXT_STABILITY: active
 :CONTEXT_STATUS: active
-:SOURCE: codegen.c,runtime.c,core/prelude/Coll.mon,core/prelude/Text/Parser.mon,core/prelude/Text/Readline.mon
+:SOURCE: codegen.c,runtime.c,core/prelude/Coll.mon,core/Text/Parser.mon,core/prelude/Text/Readline.mon
 :CONFIDENCE: high
 :END:
 
@@ -820,3 +820,37 @@ LLVM function with no type tags or dispatch overhead.
   of the implementation. Covered by =python3 tests/run_core.py= through active
   =Data.Either= and =Data.Maybe= higher-order polymorphic tests in the
   materialized-core path.
+
+[FIX id:fix.codegen.char-string-primitive-2026-08-11 date:2026-08-11 src:codegen.c,runtime.c,runtime.h,core/Text/Format.mon conf:high]
+  The typed =__rt_char_string= lowering calls =rt_char_string(i64) -> ptr= and
+  returns =TYPE_STRING=. The runtime allocates a two-byte NUL-terminated string.
+  This is the representation-safe bridge used by parser diagnostic excerpts;
+  a boxed one-element Char list is not representation-compatible with String.
+
+[FIX id:fix.codegen.constructor-closure-bool-abi-2026-08-22 date:2026-08-22 by:codex src:codegen.c,tests/codegen_constructor_closure_bool.mon conf:high]
+  Typed functions and ADT constructors used as first-class values receive boxed
+  arguments through the closure calln ABI. Their trampoline must convert every
+  argument back to the native signature. In particular, a =Bool= parameter is
+  an LLVM =i1=: unbox its runtime integer representation and truncate it before
+  the typed call. Passing the boxed pointer directly produces invalid LLVM.
+  The executable regression passes a constructor with a Bool field through a
+  higher-order function, so this representation boundary stays covered.
+[FIX id:fix.codegen.function-undefined-scope-2026-08-22 date:2026-08-22 by:codex src:codegen.c,tests/codegen_constructor_closure_bool.mon conf:high]
+  The code generator now distinguishes the real top-level initializer from a
+  user function while validating =undefined=. Pattern compilation may append
+  an unreachable =undefined= fallback inside a function; temporarily using
+  that function as =init_fn= must not turn the fallback into a top-level error.
+
+[FIX id:fix.codegen.semantic-empty-collection-2026-08-22 date:2026-08-22 by:codex src:codegen.c,core/Text/Parser.mon conf:high]
+  Empty bracket literals no longer force =Arr= specialization at polymorphic
+  call sites. When inference requires =Coll= or =List=, bracket lowering builds
+  the corresponding runtime list value, preserving the source-level =[]=
+  contract used by parser repetition replies.
+
+[FIX id:fix.codegen.closed-monomorphization-2026-08-22 date:2026-08-22 by:codex src:codegen.c,tests/core_text_parser_combinators.mon,tests/parser_recursive_higher_order_collection_reply.mon conf:high]
+  Monomorphization now substitutes variables recursively through collection,
+  array, pointer, optional, map, and application types. A specialization is
+  emitted only when its complete result ABI is closed; a nominal result such
+  as =ParseReply a= must retain the generic closure path. Collection-pattern
+  heads are unboxed according to their inferred scalar type instead of being
+  routed through opaque-pointer unboxing.

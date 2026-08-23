@@ -91,6 +91,7 @@ typedef struct {
     QttCallTransfer *argument_transfers;
     QttRepresentation *argument_representations;
     QttTypeId *argument_type_ids;
+    QttNominalAuthority *argument_nominal_authorities;
     QttCoreVar *source_vars;
     size_t argument_count;
     QttResultContract result;

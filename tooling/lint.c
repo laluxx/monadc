@@ -35,6 +35,8 @@ static const LintRule LINT_RULES[] = {
      LINT_PHASE_SOURCE, LINT_WARNING, LINT_FIX_SUGGESTED},
     {"style/grouped-module-exports", "Group a large module export catalogue",
      LINT_PHASE_SOURCE, LINT_WARNING, LINT_FIX_NONE},
+    {"style/group-repeated-pattern-guards", "Group repeated guarded patterns",
+     LINT_PHASE_SOURCE, LINT_WARNING, LINT_FIX_SAFE},
 };
 
 const LintRule *lint_rule_find(const char *id) {
@@ -101,6 +103,38 @@ static bool add_diagnostic(LintResult *result, const char *path,
         return false;
     }
     if (!diagnostic_set_push(result, &diagnostic)) {
+        diagnostic_dispose(&diagnostic);
+        result->internal_error = true;
+        return false;
+    }
+    return true;
+}
+
+static bool add_multiline_diagnostic(
+    LintResult *result, const char *path, const char *rule,
+    size_t line, size_t column, size_t end_line, size_t end_column,
+    const char *message, const char *suggestion, const char *replacement) {
+    LintDiagnostic diagnostic = {0};
+    const LintRule *definition = lint_rule_find(rule);
+    diagnostic.path = copy_text(path);
+    diagnostic.code = copy_text(rule);
+    diagnostic.severity = definition ? definition->default_severity : LINT_WARNING;
+    diagnostic.origin = DIAGNOSTIC_ORIGIN_COMPILER;
+    diagnostic.complete = true;
+    diagnostic.phase = definition ? definition->phase : LINT_PHASE_SOURCE;
+    diagnostic.applicability = DIAGNOSTIC_EDIT_MACHINE_APPLICABLE;
+    diagnostic.line = line;
+    diagnostic.column = column;
+    diagnostic.end_line = end_line;
+    diagnostic.end_column = end_column;
+    diagnostic.message = copy_text(message);
+    diagnostic.explanation = copy_text(suggestion);
+    if (!diagnostic.path || !diagnostic.code || !diagnostic.message ||
+        !diagnostic.explanation ||
+        !diagnostic_add_edit(&diagnostic, path, line, column,
+                             end_line, end_column, replacement,
+                             DIAGNOSTIC_EDIT_MACHINE_APPLICABLE) ||
+        !diagnostic_set_push(result, &diagnostic)) {
         diagnostic_dispose(&diagnostic);
         result->internal_error = true;
         return false;
@@ -436,6 +470,194 @@ static void check_commentary_prose(const char *path, const char *start,
         "");
 }
 
+typedef struct {
+    const char *guard_start, *guard_end;
+    const char *body_start, *body_end;
+} RepeatedGuardBranch;
+
+static const char *top_level_character(const char *start, const char *end,
+                                       char wanted) {
+    int round = 0, square = 0, brace = 0;
+    bool in_string = false, in_char = false, escaped = false;
+    for (const char *p = start; p < end; p++) {
+        if (in_string || in_char) {
+            if (escaped) escaped = false;
+            else if (*p == '\\') escaped = true;
+            else if (in_string && *p == '"') in_string = false;
+            else if (in_char && *p == '\'') in_char = false;
+            continue;
+        }
+        if (*p == '"') { in_string = true; continue; }
+        if (*p == '\'') { in_char = true; continue; }
+        if (*p == '(') round++;
+        else if (*p == ')') round--;
+        else if (*p == '[') square++;
+        else if (*p == ']') square--;
+        else if (*p == '{') brace++;
+        else if (*p == '}') brace--;
+        else if (*p == wanted && !round && !square && !brace) return p;
+    }
+    return NULL;
+}
+
+static const char *line_arrow(const char *start, const char *end) {
+    const char *dash = start;
+    while ((dash = memchr(dash, '-', (size_t)(end - dash)))) {
+        if (dash + 1 < end && dash[1] == '>') return dash;
+        dash++;
+    }
+    return NULL;
+}
+
+static bool same_trimmed_text(const char *left, const char *left_end,
+                              const char *right, const char *right_end) {
+    while (left < left_end && isspace((unsigned char)*left)) left++;
+    while (left_end > left && isspace((unsigned char)left_end[-1])) left_end--;
+    while (right < right_end && isspace((unsigned char)*right)) right++;
+    while (right_end > right && isspace((unsigned char)right_end[-1])) right_end--;
+    return left_end - left == right_end - right &&
+           strncmp(left, right, (size_t)(left_end - left)) == 0;
+}
+
+static void check_repeated_pattern_guards(const char *path, const char *source,
+                                          LintResult *result) {
+    const char *line = source;
+    size_t line_number = 1;
+    while (*line) {
+        const char *end = strchr(line, '\n');
+        if (!end) end = line + strlen(line);
+        const char *first = skip_space(line, end);
+        const char *pipe = top_level_character(first, end, '|');
+        const char *arrow = pipe ? line_arrow(pipe + 1, end) : NULL;
+        if (!pipe || !arrow) goto next_line;
+
+        const char *pattern_end = pipe;
+        while (pattern_end > first && isspace((unsigned char)pattern_end[-1]))
+            pattern_end--;
+        bool structured_pattern = false;
+        for (const char *p = first; p < pattern_end; p++) {
+            if (isspace((unsigned char)*p) || *p == '[' || *p == '(') {
+                structured_pattern = true;
+            }
+        }
+        if (!structured_pattern) goto next_line;
+        size_t indent = (size_t)(first - line);
+        RepeatedGuardBranch branches[64];
+        size_t branch_count = 0, max_guard = 0;
+        const char *scan = line;
+        const char *scan_end = end;
+        size_t scan_line = line_number;
+        const char *last_branch_start = line;
+        const char *last_branch_end = end;
+        size_t last_branch_line = line_number;
+        bool caught_fallback = false;
+
+        while (branch_count < 64) {
+            const char *scan_first = skip_space(scan, scan_end);
+            if ((size_t)(scan_first - scan) != indent) break;
+            const char *scan_pipe =
+                top_level_character(scan_first, scan_end, '|');
+            const char *scan_arrow = line_arrow(
+                scan_pipe ? scan_pipe + 1 : scan_first, scan_end);
+            if (!scan_arrow) break;
+            const char *scan_pattern_end = scan_pipe ? scan_pipe : scan_arrow;
+            if (!same_trimmed_text(first, pattern_end,
+                                   scan_first, scan_pattern_end)) break;
+
+            const char *guard_start, *guard_end;
+            if (scan_pipe) {
+                guard_start = skip_space(scan_pipe + 1, scan_arrow);
+                guard_end = scan_arrow;
+                while (guard_end > guard_start &&
+                       isspace((unsigned char)guard_end[-1])) guard_end--;
+            } else {
+                guard_start = "otherwise";
+                guard_end = guard_start + strlen(guard_start);
+                caught_fallback = true;
+            }
+            const char *body_start = skip_space(scan_arrow + 2, scan_end);
+            const char *body_end = scan_end;
+            while (body_end > body_start &&
+                   isspace((unsigned char)body_end[-1])) body_end--;
+            branches[branch_count++] =
+                (RepeatedGuardBranch){guard_start, guard_end,
+                                      body_start, body_end};
+            last_branch_start = scan;
+            last_branch_end = scan_end;
+            last_branch_line = scan_line;
+            size_t guard_length = (size_t)(guard_end - guard_start);
+            if (guard_length > max_guard) max_guard = guard_length;
+            if (caught_fallback) break;
+            if (!*scan_end) break;
+            scan = scan_end + 1;
+            scan_end = strchr(scan, '\n');
+            if (!scan_end) scan_end = scan + strlen(scan);
+            scan_line++;
+        }
+
+        /* A guarded constructor row followed by its unguarded twin is the
+         * smallest complete decision table: the second row is semantically
+         * `otherwise`.  Constructor syntax used to suppress this two-row
+         * case, so exactly the most readable recursive clauses escaped the
+         * grouping rule.  Unary bare-name clauses still do not reach this
+         * checker because they are not structured patterns. */
+        bool group_short_catch_all = branch_count == 2;
+        bool group_guarded_run = branch_count >= 2 && !caught_fallback;
+        if (((branch_count >= 3 || group_short_catch_all) && caught_fallback) ||
+            group_guarded_run) {
+            size_t capacity = (size_t)(last_branch_end - line) +
+                              branch_count * (indent + max_guard + 16) + 1;
+            char *replacement = malloc(capacity);
+            if (!replacement) { result->internal_error = true; return; }
+            size_t used = 0;
+            memcpy(replacement + used, line, indent); used += indent;
+            memcpy(replacement + used, first, (size_t)(pattern_end - first));
+            used += (size_t)(pattern_end - first);
+            replacement[used++] = '\n';
+            for (size_t i = 0; i < branch_count; i++) {
+                memcpy(replacement + used, line, indent); used += indent;
+                replacement[used++] = ' ';
+                replacement[used++] = ' ';
+                replacement[used++] = '|';
+                replacement[used++] = ' ';
+                size_t guard_length =
+                    (size_t)(branches[i].guard_end - branches[i].guard_start);
+                memcpy(replacement + used, branches[i].guard_start, guard_length);
+                used += guard_length;
+                while (guard_length++ < max_guard) replacement[used++] = ' ';
+                size_t body_length =
+                    (size_t)(branches[i].body_end - branches[i].body_start);
+                if (body_length) {
+                    memcpy(replacement + used, " -> ", 4); used += 4;
+                } else {
+                    memcpy(replacement + used, " ->", 3); used += 3;
+                }
+                memcpy(replacement + used, branches[i].body_start, body_length);
+                used += body_length;
+                if (i + 1 < branch_count) replacement[used++] = '\n';
+            }
+            replacement[used] = '\0';
+            add_multiline_diagnostic(
+                result, path, "style/group-repeated-pattern-guards",
+                line_number, 1, last_branch_line,
+                (size_t)(last_branch_end - last_branch_start) + 1,
+                "repeated pattern heads hide one guarded decision table",
+                caught_fallback
+                    ? "write the shared pattern once, then align its guards and use `otherwise` for the fallback"
+                    : "write the shared pattern once, then align its guards",
+                replacement);
+            free(replacement);
+            end = last_branch_end;
+            line_number = last_branch_line;
+        }
+
+next_line:
+        if (!*end) break;
+        line = end + 1;
+        line_number++;
+    }
+}
+
 bool lint_source(const char *path, const char *source, LintResult *result) {
     if (!path || !source || !result) return false;
     ToolingCstDocument *document = tooling_cst_parse(path, source);
@@ -446,6 +668,10 @@ bool lint_source(const char *path, const char *source, LintResult *result) {
         return false;
     }
     check_large_flat_exports(path, code, result);
+    /* This rule builds a whole-clause replacement, so it must retain literal
+     * spelling from the original source rather than CST's whitespace-masked
+     * code projection. Its scanner is quote- and nesting-aware. */
+    check_repeated_pattern_guards(path, source, result);
     size_t line = 1;
     const char *cursor = code;
     const char *original = source;

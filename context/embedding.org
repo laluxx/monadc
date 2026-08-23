@@ -1,0 +1,662 @@
+#+TITLE: Native C Embedding ABI
+#+AUTHOR: Codex
+#+DATE: 2026-08-14
+#+LANGUAGE: en
+#+STARTUP: hideblocks
+#+OPTIONS: toc:2 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:embedding:abi:qtt:ownership:
+#+PROPERTY: CONTEXT_VERSION 1
+#+PROPERTY: CONTEXT_SCOPE repository-local
+#+PROPERTY: CONTEXT_AUDIENCE human llm codex
+#+PROPERTY: CONTEXT_SOURCE_ROOT /home/l/xos/projects/c/monadc
+#+PROPERTY: CONTEXT_DIALECT org-mode
+#+PROPERTY: CONTEXT_ID_PREFIX monadc.context.embedding
+#+PROPERTY: CONTEXT_RECORD_TYPES DOC OBS INF DEC TODO THINK IDEA FIX
+#+PROPERTY: CONTEXT_OPEN_POLICY showeverything
+#+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
+#+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+#+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
+
+* Public ABI
+:PROPERTIES:
+:ID: monadc.context.embedding.public-abi
+:CUSTOM_ID: embedding-public-abi
+:CONTEXT_KIND: architecture
+:CONTEXT_DESCRIPTION: Stable native C boundary for hosting compiled Monad code.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human+llm
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-08-14
+:CONTEXT_UPDATED: 2026-08-14
+:CONTEXT_STABILITY: evolving
+:CONTEXT_STATUS: active
+:SOURCE: embed/include/monad/embed.h,embed/embed.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.embedding.two-lane-api date:2026-08-14 by:human+llm]
+  Monad embedding has two complementary call paths. The stable dynamic path
+  uses opaque handles, checked statuses, and versioned structures. The native
+  path exposes signature-checked function pointers for supported closed ABI
+  types. Dynamic convenience must not impose boxing on a native typed call.
+
+[DEC id:dec.embedding.no-internal-abi date:2026-08-14 by:human+llm]
+  =RuntimeValue=, LLVM objects, compiler environments, and =.mexp= structures
+  are implementation details. They must not appear in the installed embedding
+  header. Public symbols are real =monad_*= functions with hidden visibility
+  as the library default; ABI evolution uses size/version fields.
+
+[DEC id:dec.embedding-protected-boundary date:2026-08-14 by:human+llm]
+  No language failure may abort, exit, or longjmp across a C host boundary.
+  Embedding operations return =monad_status_t= and optionally populate a
+  structured error. Error message storage is library-owned and remains valid
+  for the duration documented by the operation family.
+
+[DEC id:dec.embedding-thread-attachment date:2026-08-14 by:human+llm]
+  Calls that can enter Monad execute through an explicit thread attachment.
+  Attachments are thread-affine and keep their runtime busy until detached.
+  Runtime creation/destruction is a host lifecycle operation and must not race
+  calls using that runtime.
+
+[OBS id:obs.embedding-lifecycle-slice src:embed/include/monad/embed.h,embed/embed.c conf:high]
+  ABI version 1 implements opaque runtime/thread handles, version negotiation,
+  allocator injection, explicit attachment, thread-affinity checking,
+  deterministic busy destruction, and a hidden-by-default shared library.
+
+[OBS id:obs.embedding-native-pointer-slice src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/native-call/atom.embedding.02.native-call.zero-wrapper/host.c conf:high]
+  Cycle 2's first executable slice binds an in-memory versioned module
+  descriptor, checks artifact and signature fingerprints once, retains module
+  lifetime with a function token, and returns the descriptor's exact function
+  address. The host calls that address directly; no embedding dispatcher or
+  wrapper executes on the hot path.
+
+[DEC id:dec.embedding.performance-contract date:2026-08-14 by:human src:user-request]
+  The primary embedding performance goal is parity with hand-written C.
+  Native lookup may validate and retain state, but repeated calls must not box,
+  allocate, dispatch by signature, reflect, or cross a wrapper trampoline.
+  Claims of parity require pointer/assembly evidence and representative
+  benchmarks against an equivalent C function.
+
+[DEC id:dec.embedding-dry-contract date:2026-08-14 by:human src:user-request]
+  Embedding APIs must avoid ceremonial wrappers and duplicate representations.
+  One canonical descriptor and one lifecycle model serve static, dynamic, and
+  future ORC-backed loading. Additional handles are justified only when they
+  carry necessary ownership, synchronization, or unload-safety state.
+
+* Certified module boundary
+
+[OBS id:obs.embedding-mqti-boundary src:qtt/interface.h,qtt/README.org conf:high]
+  =.mqti= version 12 stores callable ownership/effect contracts and an object
+  content fingerprint. Its supported ownership interface is restricted to
+  closed flat types. A mismatched object fingerprint must fail closed for
+  certified ownership decisions.
+
+[DEC id:dec.embedding-certified-fast-path date:2026-08-14 by:human+llm]
+  Native entrypoint lookup will require a supported portable ABI signature, a
+  matching object/interface fingerprint, and an embedding ABI descriptor.
+  The existing callable contract alone is not a complete C calling convention
+  and must not be treated as one.
+
+[DEC id:dec.embedding.structural-abi-compatibility date:2026-08-14 by:human+llm]
+  Native-call authority is structural equality in the versioned signature
+  algebra, including calling convention, result, arity, and every ordered
+  parameter type. Fingerprints may index or accelerate this relation but can
+  never replace it. This makes hash collisions irrelevant to type safety and
+  rejects LLVM caller/callee prototype mismatch before returning an address.
+
+[OBS id:obs.embedding.abi-algebra-v1 src:embed/include/monad/embed.h,embed/embed.c,embed/README.org conf:high]
+  Native ABI v1 is the closed finite algebra of fixed-width integers and
+  IEEE-754 =f32/f64= parameters, with those atoms plus =void= as results and C
+  as the sole calling convention. Managed pointers, aggregates, variadics, and
+  target-dependent C integer spellings are omitted rather than approximated.
+
+[DEC id:dec.embedding.bidirectional-native-symmetry date:2026-08-14 by:human src:user-request]
+  Native embedding is bidirectional: C hosts call Monad exports and compiled
+  Monad calls runtime-registered C imports. Both directions use the same
+  structural ABI algebra, resolve once, and call the exact address without a
+  dynamic-value wrapper.
+
+[OBS id:obs.embedding.host-native-registry src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/bidirectional/atom.embedding.03.bidirectional.zero-wrapper/host.c conf:high]
+  A runtime-scoped registry now owns copied host symbol names and structural
+  signatures. Resolution returns the exact address plus an affine import token;
+  unregister fails while imports exist, preventing dangling foreign targets.
+  Duplicate registration is checked again at the insertion linearization point.
+
+[DEC id:dec.embedding.live-image date:2026-08-14 by:human src:user-request]
+  Embedding targets a Lisp-like live image for a Vulkan-based Emacs rewrite:
+  functions and variables can be redefined at runtime, and C tooling can query
+  all bindings, documentation, types, and type-filtered inventories.
+
+[DEC id:dec.embedding.live-vs-frozen date:2026-08-14 by:human+llm]
+  Frozen pointers provide the minimum direct C ABI cost and intentionally do
+  not observe redefinition. Live bindings preserve identity and observe atomic
+  replacement through one address-cell load. The API makes this choice explicit
+  so render-loop code is never silently charged for editability.
+
+[OBS id:obs.embedding.live-function-cell src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/live-image/atom.embedding.04.live-image.function-cell/host.c conf:high]
+  A retained native import now reads its target with acquire semantics. A
+  signature-preserving redefinition publishes the replacement with release
+  semantics, updates documentation, and increments a monotone generation. The
+  same import calls the new body without name resolution.
+
+[DEC id:dec.embedding.immutable-inventory date:2026-08-14 by:human+llm]
+  Editor reflection consumes immutable, self-owning snapshots rather than
+  pointers into mutable compiler/runtime tables. Snapshots are deterministic,
+  filterable, safe across later mutation, and require no runtime lock while the
+  editor renders or searches them.
+
+[OBS id:obs.embedding.snapshot-epoch-protocol src:embed/embed.c,tests/embedding/branches/live-image/atom.embedding.05.live-image.snapshot-values/host.c conf:high]
+  Snapshot creation measures under a binding epoch, allocates one slab outside
+  the lock, revalidates the epoch, copies a coherent image, and sorts by name.
+  Epoch interference retries rather than exposing a torn inventory. The slab
+  owns strings, documentation, ABI signatures, parameter arrays, values, types,
+  and generations.
+
+[OBS id:obs.embedding.i64-value-cell src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/live-image/atom.embedding.05.live-image.snapshot-values/host.c conf:high]
+  Runtime-scoped =i64= cells implement typed acquire reads, release writes,
+  compare-and-set, monotone per-cell generations, and global image epochs. Exact
+  =MONAD_ABI_I64= snapshot filtering returns variables without dynamic boxing.
+
+[DEC id:dec.embedding.foreign-object-nominality date:2026-08-14 by:human+llm]
+  Host-defined foreign types are generative and nominal. Payload projection
+  requires exact type-handle identity; equal C layouts never authorize access.
+  Successful object creation transfers payload ownership, final release invokes
+  the type destructor synchronously exactly once, and a live object prevents
+  unregistering its type.
+
+[OBS id:obs.embedding.foreign-object-cycle-6 src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/foreign-object/atom.embedding.06.foreign-object.nominal-lifetime/host.c conf:high]
+  The public ABI registers C-defined types, creates and retains typed objects,
+  rejects confused access with =MONAD_ERROR_TYPE_MISMATCH=, and calls the host
+  destructor outside the runtime lock while the live-object count pins the type.
+
+[DEC id:dec.embedding.foreign-ownership-alignment date:2026-08-14 by:human+llm]
+  Embedding foreign ownership reuses QTT's storage-capability distinction rather
+  than treating binder quantity as alias authority. Unique foreign objects
+  reject retain; shared foreign objects permit it. Borrowed foreign objects are
+  withheld until the public ABI can carry a checked region/loan token.
+
+[OBS id:obs.embedding.foreign-executor-cycle-7 src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/foreign-object/atom.embedding.07.foreign-object.executor-ownership/host.c conf:high]
+  Final release may transfer the object's own cell as a one-shot job to a host
+  executor. The foreign type remains live until that job destroys the payload
+  and completes, so queued Vulkan-thread destruction cannot race type removal.
+
+[DEC id:dec.embedding.foreign-nominal-authority date:2026-08-14 by:human+llm]
+  A registered foreign type owns a process-local generative authority pair.
+  Textual names and structural =QttTypeId=s do not decide its equality. Removing
+  and recreating the same name yields a fresh authority, which a future compiler
+  bridge must attach to =QTT_REP_FOREIGN=.
+
+[OBS id:obs.embedding.foreign-reflection-cycle-8 src:embed/include/monad/embed.h,embed/embed.c,tests/embedding/branches/foreign-object/atom.embedding.08.foreign-object.generative-reflection/host.c conf:high]
+  Immutable binding snapshots include foreign types, copied nominal authority,
+  ownership mode, executor policy, names, and documentation. Type registry
+  mutation advances the image epoch and cannot invalidate an older snapshot.
+
+[DEC id:dec.embedding.qtt-foreign-import date:2026-08-14 by:human+llm]
+  Compiler sessions import foreign types as structural =QttTypeId= plus separate
+  generative nominal authority, =QTT_REP_FOREIGN=, and an existing QTT ownership
+  mode. Borrowed imports fail closed until accompanied by a region/loan token.
+
+[OBS id:obs.embedding.nominal-call-cycle-9 src:qtt/foreign_type.h,qtt/foreign_type.c,qtt/call.c,qtt/anf.c,qtt/semantic_ir.c,qtt/semantic_anf.c,tests/qtt/branches/foreign-call/atom.qtt.09.foreign-call.nominal-transfer/host.c conf:high]
+  Foreign consumed calls require a move, shared calls require a scoped borrow,
+  and structurally identical arguments with unequal nominal authority are
+  rejected. Both ownership ANF and Semantic IR retain and recheck the authority.
+
+[DEC id:dec.embedding.compiler-library-boundary date:2026-08-14 by:human+llm]
+  Compiler embedding is a separately installed library. Its stable C facade
+  exposes opaque thread-affine sessions and inspection records, while QTT arenas,
+  foreign environments, ASTs, LLVM handles, and mutable compiler tables remain
+  private. Runtime-only hosts do not acquire compiler dependencies.
+
+[OBS id:obs.embedding.transactional-foreign-import-cycle-10 src:embed/include/monad/compiler.h,embed/compiler.c,qtt/foreign_type.c,tests/embedding/branches/compiler-session/atom.embedding.10.compiler-session.transactional-foreign-import/host.c conf:high]
+  A compiler session stages an entire runtime foreign-type snapshot in a fresh
+  canonical arena and QTT environment, commits with one state replacement, and
+  preserves the prior view on validation or allocation failure. The normal
+  install graph includes both compiler libraries and the public compiler header.
+
+[DEC id:dec.embedding.foreign-lowering-cost date:2026-08-14 by:human+llm]
+  Certified foreign move is a zero-call ownership transfer. Foreign drop emits
+  one release. Shared foreign duplication emits one unchecked retain whose
+  safety is authorized by QTT evidence; uncertified hosts use the checked API.
+
+[OBS id:obs.embedding.foreign-lowering-cycle-11 src:qtt/foreign_lowering.h,qtt/foreign_lowering.c,embed/embed.c,tests/qtt/branches/foreign-lowering/atom.qtt.11.foreign-lowering.exact-runtime-actions conf:high]
+  The lowering gate re-verifies the complete ownership block and reconstructs
+  foreign provenance before selecting a runtime symbol. Assembly regression
+  proves exact zero/one/one runtime transitions for move/drop/shared-dup.
+
+[DEC id:dec.embedding.foreign-llvm-direct-calls date:2026-08-14 by:human+llm]
+  Certified foreign ownership lowering enters LLVM as an unchanged opaque
+  pointer: move emits nothing, drop emits one direct release, and shared
+  duplication emits one direct fast retain. Runtime declarations are exact and
+  mismatches fail closed; no generic value or dispatch ABI is introduced.
+
+[OBS id:obs.embedding.foreign-llvm-cycle-12 src:qtt/foreign_llvm.h,qtt/foreign_llvm.c,tests/qtt/branches/foreign-llvm/atom.qtt.12.foreign-llvm.verified-direct-calls conf:high]
+  LLVM's verifier accepts the generated module. IR inspection proves exact
+  zero/one/one call counts, pointer preservation, and rejection of an
+  incompatible pre-existing runtime declaration.
+
+[DEC id:dec.embedding.authoritative-test-gate date:2026-08-14 by:human+llm]
+  =make test-embedding= is the authoritative vertical gate and must execute the
+  runtime API, nominal QTT call, certified lowering, and LLVM emission suites.
+  Native C/C++ fixtures retain living metadata but use this dedicated runner;
+  the general runner remains scoped to executable Monad fixtures.
+
+[OBS id:obs.embedding.verification-cycle-13 src:Makefile,tests/test_embedding.py,tests/embedding/branches/installed-sdk/atom.embedding.13.installed-sdk.c-cpp-static-shared/host.cpp conf:high]
+  One gate audits fixture metadata, consumes a temporary-prefix installation
+  through static and shared runtime and compiler libraries from C and C++, runs
+  runtime lifecycle under ASan and UBSan, and executes every foreign ownership
+  proof layer through LLVM IR.
+
+[DEC id:dec.embedding.orcv2-native-image date:2026-08-14 by:human+llm]
+  Executable compiler images use ORCv2 resource ownership and symbol lookup,
+  never legacy MCJIT. Experimental LLVM handles remain private to the compiler
+  boundary and cannot enter the stable installed embedding ABI.
+
+[OBS id:obs.embedding.foreign-execution-cycle-14 src:tests/embedding/branches/foreign-execution/atom.embedding.14.foreign-execution.orc-ownership/host.c,qtt/foreign_llvm.c,embed/compiler.c,embed/embed.c conf:high]
+  One host proves C object creation, nominal compiler import, QTT ownership
+  verification, exact LLVM retain/release/move emission, ORCv2 native execution,
+  unchanged pointer transfer, checked payload access, and exactly one final
+  destructor invocation. Surface source compilation remains outside this proof.
+
+[DEC id:dec.embedding.immutable-source-unit date:2026-08-14 by:human+llm]
+  In-memory compiler input is an opaque immutable owned copy with logical name,
+  explicit byte count, and host document version. It is independent of compiler
+  session lifetime. Embedded NUL fails explicitly until every parser stage is
+  length-aware; a private trailing NUL is an implementation bridge, not input.
+
+[OBS id:obs.embedding.source-unit-cycle-15 src:embed/include/monad/compiler.h,embed/compiler.c,tests/embedding/branches/source-unit/atom.embedding.15.source-unit.owned-versioned-buffer/host.c conf:high]
+  Caller mutation cannot alter source name or bytes. Empty buffers work;
+  embedded NUL, descriptor ABI mismatch, invalid shape, overflow, and allocation
+  failure have non-aborting outcomes. Installed static and shared compiler
+  libraries expose the same source-unit ABI.
+
+[DEC id:dec.embedding.diagnostic-result-algebra date:2026-08-14 by:human+llm]
+  Compiler API status describes whether a transaction produced a complete
+  immutable result; source rejection is represented inside its diagnostic set.
+  Diagnostics carry stable code, phase, severity, source version and half-open
+  byte range. Rendering is a client concern and cannot control compiler flow.
+
+[OBS id:obs.embedding.input-diagnostics-cycle-16 src:embed/include/monad/compiler.h,embed/compiler.c,tests/embedding/branches/diagnostics/atom.embedding.16.diagnostics.immutable-input-check/host.c conf:high]
+  The first check validates strict RFC 3629 UTF-8 and returns =MONAD-C0001=
+  without output or termination. Results own their source name, survive source
+  destruction, preserve document version and location, and work through both
+  installed compiler-library forms. Parser checking awaits per-check recovery.
+
+[DEC id:dec.embedding.parser-recovery-lifetime date:2026-08-14 by:human+llm]
+  Parser recovery targets are caller-owned stack objects armed only after a
+  live =setjmp=. They form a thread-local nested stack. A raise pops before
+  invoking the synchronous borrowed diagnostic sink and jumping; no jump target
+  or sink is process-global. Public clients see only owned diagnostic sets.
+
+[OBS id:obs.embedding.parser-context-cycle-17 src:reader_diagnostic.h,reader_diagnostic.c,reader.h,reader.c,wisp.c,tests/embedding/branches/parser-context/atom.embedding.17.parser-context.thread-local-recovery/host.c conf:high]
+  Two simultaneous host threads recover independently with no output or exit,
+  nested context discipline is checked, and reader plus Wisp central errors
+  consult structured recovery before legacy rendering. Existing CLI reader
+  diagnostics remain compatible. Remaining parser globals prevent a full
+  compiler-session parse transaction in this cycle.
+
+[DEC id:dec.embedding.parser-unwind-ownership date:2026-08-14 by:human+llm]
+  Every resource acquired across a parser recovery boundary must register a
+  caller-owned non-failing cleanup record or transfer ownership by cancelling
+  it. Failure pops and disarms the context, unwinds records exactly once in
+  LIFO order, then publishes the diagnostic. Normal pop rejects live records.
+
+[OBS id:obs.embedding.parser-unwind-cycle-18 src:reader_diagnostic.h,reader_diagnostic.c,tests/embedding/branches/parser-context/atom.embedding.18.parser-context.lifo-unwind/host.c conf:high]
+  Recovery requires no allocation, transferred resources are not destroyed,
+  remaining resources unwind in reverse acquisition order before the sink, and
+  each cleanup executes exactly once. The real frontend is not exposed until
+  its progressive allocations and mutable hooks use this ownership protocol.
+
+[DEC id:dec.embedding.frontend-capsule-boundary date:2026-08-14 by:human+llm]
+  The installed compiler library owns a distinct PIC copy of the minimal real
+  reader/Wisp dependency closure. All frontend implementation objects compile
+  hidden-by-default; only the stable =monad_*= surface is dynamically exported.
+  Parser invocation remains gated on proven partial-AST unwind safety.
+
+[OBS id:obs.embedding.frontend-capsule-cycle-19 src:Makefile,tests/test_embedding_frontend_capsule.py,tests/embedding/branches/frontend-capsule/atom.embedding.19.frontend-capsule.hidden-pic/contract.org conf:high]
+  Archive inspection proves all nine frontend objects ship in the compiler
+  SDK, while dynamic-symbol inspection proves none becomes public ABI. The
+  capsule no longer depends on symbols exported by the compiler executable.
+
+[DEC id:dec.embedding.parser-transaction-ownership date:2026-08-14 by:human+llm]
+  AST allocation during parsing belongs to a thread-local nested ledger.
+  Commit transfers all nodes to returned roots. Abort destructs a node only
+  while it remains a ledger member, making aliased child edges inert after the
+  first destruction and guaranteeing at-most-once release.
+
+[OBS id:obs.embedding.parser-transaction-cycle-20 src:reader.h,reader.c,tests/test_embedding_ast_transaction.py,tests/embedding/branches/parser-transaction/atom.embedding.20.parser-transaction.ast-ledger/host.c conf:high]
+  Thirty-two partial nested-list failures recover silently with an empty
+  ledger, then a valid graph commits and is caller-destroyed. AddressSanitizer
+  proves no use-after-free or double-free; LeakSanitizer is unavailable under
+  the current container ptrace policy and remains an open full-frontend gate.
+
+[DEC id:dec.embedding.frontend-transaction-boundary date:2026-08-14 by:human+llm]
+  Embedded parsing enters through one protected internal operation combining a
+  diagnostic context, partial-AST ledger, and Wisp recovery scope. Failure
+  unwinds Wisp resources and borrowed hooks before AST nodes, then publishes a
+  copied diagnostic. Persistent frontend globals require facade serialization.
+
+[OBS id:obs.embedding.frontend-transaction-cycle-21 src:embed/frontend_transaction.c,wisp.c,reader_diagnostic.c,tests/test_embedding_frontend_transaction.py,tests/embedding/branches/frontend-transaction/atom.embedding.21.frontend-transaction.wisp-recovery/host.c conf:high]
+  Thirty-two malformed Wisp definitions recover silently through one entry
+  point, after which a valid definition commits and is caller-destroyed.
+  AddressSanitizer reports no invalid access on the complete transaction path.
+
+[DEC id:dec.embedding.public-parser-diagnostics date:2026-08-14 by:human+llm]
+  Public source checking returns =MONAD-C0001= for invalid UTF-8 and
+  =MONAD-C0002= for protected reader/Wisp rejection. Both are immutable
+  diagnostic data under =MONAD_OK=; transport status remains reserved for API
+  misuse or inability to construct a result. Remaining frontend globals are
+  serialized at the facade until state becomes session-owned.
+
+[OBS id:obs.embedding.public-parser-cycle-22 src:embed/compiler.c,embed/include/monad/compiler.h,tests/test_embedding_public_parse_diagnostics.py,tests/embedding/branches/diagnostics/atom.embedding.22.diagnostics.public-parser-check/host.c conf:high]
+  A host compiled only against a staged installed SDK performs 32 sequential
+  and 32 concurrent malformed Wisp checks without output or termination,
+  retains diagnostics after source destruction, and receives an empty set for
+  valid source. Two sessions execute on their owning threads.
+
+[DEC id:dec.embedding.thread-affine-frontend-state date:2026-08-14 by:human+llm]
+  Under the existing thread-affine compiler-session contract, all mutable
+  reader/Wisp/macro transaction state has thread storage duration. This removes
+  process serialization and permits independent host threads to parse in
+  parallel. Thread locality does not replace final session ownership.
+
+[OBS id:obs.embedding.parallel-frontend-cycle-23 src:reader.h,reader.c,wisp.c,reader_syntax.c,macro.c,features.c,types.c,embed/compiler.c,tests/test_embedding_frontend_parallel.py,tests/embedding/branches/frontend-state/atom.embedding.23.frontend-state.parallel-entry/host.c conf:high]
+  Two frontend transactions rendezvous inside the parse entry point before
+  either proceeds, proving overlap that a process mutex could not satisfy, and
+  both commit independently. Protected boundaries clear temporary reader
+  syntax and macro registries. Same-thread session isolation remains open.
+
+[DEC id:dec.embedding.compiler-owned-frontend-state date:2026-08-14 by:human+llm]
+  Every compiler session owns an opaque frontend state. Persistent module
+  substates bind by moving their graph into the thread-active slot and move it
+  back on success or diagnostic unwind, avoiding per-lookup indirection in the
+  native frontend hot path.
+
+[OBS id:obs.embedding.frontend-state-cycle-24 src:embed/frontend_transaction.h,embed/frontend_transaction.c,embed/compiler.c,wisp.h,wisp.c,tests/test_embedding_frontend_session_state.py,tests/embedding/branches/frontend-state/atom.embedding.24.frontend-state.same-thread-isolation/host.c conf:high]
+  Two states alternate 32 times on one thread with distinct Wisp arity
+  judgments; malformed parsing through one preserves the distinction.
+  Compiler-session creation and destruction own the state lifetime. Remaining
+  reader and type registries have not yet migrated into module substates.
+
+[DEC id:dec.embedding.frontend-module-substates date:2026-08-14 by:human+llm]
+  Reader layouts, nominal type names, and feature knowledge are opaque module
+  substates of compiler-owned frontend state. Multi-module bind is atomic with
+  reverse-order rollback, and session destruction recursively releases each
+  migrated graph without adding lookup wrappers.
+
+[OBS id:obs.embedding.frontend-registry-cycle-25 src:reader.c,reader.h,types.c,types.h,features.c,features.h,embed/frontend_transaction.c,tests/test_embedding_frontend_registry_state.py,tests/embedding/branches/frontend-state/atom.embedding.25.frontend-state.registry-ownership/host.c conf:high]
+  Two same-thread states retain disjoint nominal, layout, and feature judgments
+  over 32 alternations and diagnostic unwinds. Type aliases, refinements, and
+  finite type sets remain intentionally open because code generation shares
+  their compilation-unit lifetime.
+
+[DEC id:dec.embedding.compilation-unit-type-state date:2026-08-14 by:human+llm]
+  Nominals, aliases, refinements, and finite sets have one compiler-owned type
+  substate. Binding moves their roots into direct thread-local active slots so
+  inference and code generation retain zero-wrapper access; destruction owns
+  all nested allocations and cloned predicate ASTs.
+
+[OBS id:obs.embedding.type-state-cycle-26 src:types.c,types.h,embed/frontend_transaction.c,tests/test_embedding_frontend_type_state.py,tests/embedding/branches/frontend-state/atom.embedding.26.frontend-state.compilation-unit-types/host.c conf:high]
+  Two same-thread states retain disjoint alias, refinement, and finite-set
+  judgments through 32 alternations and protected parser unwinds. The next
+  boundary is one transaction spanning parse through native emission.
+
+[DEC id:dec.embedding.continuous-compilation-unit date:2026-08-14 by:human+llm]
+  A compilation unit binds compiler-owned frontend state exactly once, owns
+  its parsed AST, and destroys syntax before restoring the prior active state.
+  The same unit will accumulate inference, QTT, and emission resources so no
+  phase can outlive the semantic vocabulary used to construct it.
+
+[OBS id:obs.embedding.compilation-unit-cycle-27 src:embed/frontend_transaction.c,embed/frontend_transaction.h,tests/test_embedding_compilation_unit.py,tests/embedding/branches/compilation-unit/atom.embedding.27.compilation-unit.continuous-state/host.c conf:high]
+  Successful parsing retains AST and type state together; parser rejection
+  retains the binding until explicit destruction. Both paths restore ambient
+  state deterministically, and the existing parse facade remains compatible.
+
+[DEC id:dec.embedding.unit-owned-inference date:2026-08-14 by:human+llm]
+  The compilation unit owns its HM environment and retains inference contexts
+  for the lifetime of inferred AST annotations. The installed compiler uses
+  the production inferencer and hidden quantitative grade/effect objects;
+  type rejection is immutable diagnostic code MONAD-C0003, never process exit.
+
+[OBS id:obs.embedding.inference-cycle-28 src:infer.c,infer.h,embed/frontend_transaction.c,embed/compiler.c,embed/include/monad/compiler.h,tests/test_embedding_type_diagnostics.py,tests/embedding/branches/diagnostics/atom.embedding.28.diagnostics.inference-phase/host.c conf:high]
+  A heterogeneous collection reaches production HM unification through the
+  public C facade and returns one source-independent TYPE-phase diagnostic.
+  Frontend state, AST, InferEnv, substitutions, grades, and effects share one
+  deterministic compilation-unit lifetime.
+
+[DEC id:dec.embedding.transactional-inference-commit date:2026-08-14 by:human+llm]
+  Top-level HM inference uses a stable builtin environment Γ₀ and a child
+  source overlay Δ. Definitions generalize W-by-W inside Δ, but Δ becomes
+  publishable only after every source expression succeeds; failed units
+  destroy the overlay and expose no prefix of inferred bindings.
+
+[OBS id:obs.embedding.inference-commit-cycle-29 src:embed/frontend_transaction.c,tests/test_embedding_inference_transaction.py,tests/embedding/branches/compilation-unit/atom.embedding.29.compilation-unit.inference-commit/host.c conf:high]
+  A later expression consumes an earlier generalized definition, successful
+  completion exposes the committed binding internally, and a definition before
+  a heterogeneous-collection failure is absent from both the failed commit view
+  and the next fresh compilation unit.
+
+[DEC id:dec.embedding.immutable-environment-snapshot date:2026-08-14 by:human+llm]
+  Successful analysis copies committed source definitions into an opaque,
+  immutable, independently owned C snapshot. Enumeration follows source order;
+  stable IDs derive from source identity and binding name, while exact strings
+  and serialized schemes remain authoritative. No AST, InferEnv, TypeScheme,
+  substitution, or arena pointer crosses the installed ABI.
+
+[OBS id:obs.embedding.environment-snapshot-cycle-30 src:embed/compiler.c,embed/include/monad/compiler.h,embed/frontend_transaction.c,tests/test_embedding_environment_snapshot.py,tests/embedding/branches/introspection/atom.embedding.30.introspection.environment-snapshot/host.c conf:high]
+  The staged installed SDK returns two definitions in lexical order with
+  stable cross-version IDs and copied principal schemes and locations. The
+  snapshot remains readable after source and compiler-session destruction.
+
+[DEC id:dec.embedding.indexed-environment-queries date:2026-08-15 by:human+llm]
+  Immutable environment snapshots own open-addressed exact-name and stable-ID
+  indexes. Definition metadata owns docstrings and complete half-open source
+  intervals. Source-ordered filters accept kind, name prefix, and exact
+  alpha-canonical principal scheme; hashes are acceleration, never authority.
+
+[OBS id:obs.embedding.indexed-environment-cycle-31 src:embed/compiler.c,embed/include/monad/compiler.h,embed/frontend_transaction.c,tests/test_embedding_environment_queries.py,tests/embedding/branches/introspection/atom.embedding.31.introspection.indexed-environment/host.c conf:high]
+  A staged installed SDK resolves definitions by name and ID, exposes owned
+  function documentation and multiline ranges, filters in lexical order, and
+  preserves every returned view after source, diagnostics, and session teardown.
+
+[DEC id:dec.embedding.progressive-surface-api date:2026-08-15 by:human+llm]
+  Beginner embedding uses one opaque owner and common-intent operations through
+  =monad/monad.h=. Native cells, threads, compiler sessions, environments, QTT,
+  and lifetime controls remain opt-in advanced layers. The facade composes
+  ownership but never inserts boxing or generic dispatch into a validated hot
+  call. Source loading will be one atomic parse-to-publication transaction and
+  must not be claimed before native publication exists.
+
+[OBS id:obs.embedding.surface-cycle-32 src:embed/include/monad/monad.h,embed/monad.c,how_to/Embedding.c,tests/test_embedding_how_to.py,tests/embedding/branches/surface/atom.embedding.32.surface.one-owner-host/host.c conf:high]
+  The installed beginner header opens and closes a complete current-thread
+  host, retains typed native bindings automatically, and returns a direct
+  =Int -> Int= C function pointer. The exact one-screen tutorial compiles and
+  executes without naming runtime, thread, compiler, or registration internals.
+
+[DEC id:dec.embedding.prepared-source-surface date:2026-08-15 by:human+llm]
+  Surface source preparation is one owned parse/infer transaction returning an
+  opaque result. API status reports infrastructure success; result validity
+  reports language success. The operation is not called load until QTT,
+  codegen, and atomic live-image publication are present. Runtime-only hosts
+  remain independent of the compiler library.
+
+[OBS id:obs.embedding.surface-source-cycle-33 src:embed/include/monad/monad.h,embed/surface_compiler.c,tests/test_embedding_surface_source.py,tests/embedding/branches/surface/atom.embedding.33.surface.prepared-source/host.c conf:high]
+  A staged installed host prepares copied valid source and enumerates one
+  definition, then receives an owned =MONAD-C0003= result for invalid source,
+  without constructing or retaining any compiler-level object.
+
+[DEC id:dec.embedding.qtt-evidence-staging date:2026-08-15 by:human+llm]
+  Public QTT evidence records the exact compiler stage and independent
+  availability of quantitative, effect, resource, and destructor judgments.
+  Missing stages are explicit false/zero data; HM or effect inference never
+  impersonates a typed-Core resource certificate. Reports share stable
+  definition IDs and are owned by immutable environment/source snapshots.
+
+[OBS id:obs.embedding.qtt-report-cycle-34 src:embed/include/monad/qtt.h,embed/compiler.c,embed/frontend_transaction.c,embed/surface_compiler.c,tests/test_embedding_qtt_report.py,tests/embedding/branches/introspection/atom.embedding.34.introspection.qtt-inference-evidence/host.c conf:high]
+  A staged installed host obtains a copied, complete portable effect contract
+  and fingerprint for =identity= by stable ID. The same record explicitly says
+  quantitative usage, resource verification, and destructor planning are not
+  yet available in the embedding pipeline.
+
+[DEC id:dec.embedding.solved-quantity-snapshots date:2026-08-15 by:human+llm]
+  Embedding runs the production source-grade solver after deterministic lexical
+  identity resolution. Exact solved parameter/capture quantities are copied
+  into immutable ABI values only on solver success; unsupported analysis has
+  no heuristic fallback. QTT arenas, schemes, expressions, and solvers remain
+  compilation-unit private.
+
+[OBS id:obs.embedding.qtt-quantity-cycle-35 src:qtt/pipeline.c,embed/frontend_transaction.c,embed/compiler.c,embed/include/monad/qtt.h,tests/test_embedding_qtt_quantities.py,tests/embedding/branches/introspection/atom.embedding.35.introspection.solved-quantities/host.c conf:high]
+  A staged installed host observes finite usage one for the returned parameter
+  and zero for the erased parameter of =first=. Bounds-checked access and
+  snapshot destruction preserve the public ownership boundary.
+
+[DEC id:dec.embedding.typed-core-resource-certificate date:2026-08-15 by:human+llm]
+  Public resource verification advances only after typed-Core validation,
+  canonical graded-signature validation, resource-aware ANF lowering, loan
+  inference, and ANF verification all succeed. Unsupported source remains at
+  inferred stage; it never receives fallback or synthetic resource evidence.
+  Evidence fingerprints are deterministic indexes over structural summaries,
+  not proof authority.
+
+[OBS id:obs.embedding.resource-certificate-cycle-36 src:qtt/pipeline.c,embed/frontend_transaction.c,embed/compiler.c,embed/include/monad/qtt.h,tests/test_embedding_resource_certificate.py,tests/embedding/branches/introspection/atom.embedding.36.introspection.resource-certificate/host.c conf:high]
+  A staged installed host sees verified immediate representation, destructor
+  plan, block summary, and evidence fingerprint for =identity=. A valid
+  multi-expression definition in the same source remains explicitly inferred
+  and uncertified because the current typed-Core fragment does not support it.
+
+[DEC id:dec.embedding.guile-facility-map date:2026-08-15 by:human+llm]
+  Monad targets Guile's important embedding intents—string/file loading,
+  modules, protected errors, bidirectional calls, foreign objects, and live
+  redefinition—through compiled-language contracts. It does not copy Guile's
+  universal boxed object ABI: validated hot calls remain direct native calls.
+  Preparation is never named evaluation/loading before native publication.
+
+[OBS id:obs.embedding.source-hooks-cycle-37 src:embed/include/monad/monad.h,embed/surface_compiler.c,tests/test_embedding_source_hooks.py,tests/embedding/branches/surface/atom.embedding.37.surface.source-hooks/host.c conf:high]
+  A staged installed host prepares one definition from a mutable C string, an
+  exact byte view with ignored trailing storage, and a file. All results own
+  their compiler state, and file I/O failures have a structured status channel.
+
+[OBS id:obs.embedding.executable-how-to src:how_to/Embedding.c,tests/test_embedding_how_to.py,Makefile conf:high]
+  The installed public headers and static libraries compile and execute one
+  tutorial covering the runtime, live native cells, variables, snapshots,
+  foreign objects, module exports, compiler foreign imports, diagnostics, and
+  inferred environments. The tutorial explicitly identifies source-to-native
+  emission/live commit as absent, preventing API maturity from being confused
+  with completion of the end-to-end embedding goal.
+
+[OBS id:obs.embedding.how-to-lsp-resolution src:how_to/Embedding.c,embed/include/monad/compiler.h,tests/test_embedding_how_to.py conf:high]
+  The tutorial resolves public headers both from an installed SDK and when an
+  LSP opens the checkout with no compile flags. Public sibling headers use a
+  relative include; no private compiler include directory is exposed.
+
+[TODO id:todo.embedding-cycle-2 status:active]
+  Add a versioned native module descriptor emitted by the compiler, load a
+  precompiled shared module without source, validate its exact =.mqti= object
+  identity, initialize it idempotently, and invoke a closed =Int -> Int= export
+  through a typed function pointer. Exit gate: a metadata-complete C host
+  integration test exercises success, missing-symbol, ABI-mismatch, and stale
+  certificate paths without boxing or process termination.
+
+[DEC id:dec.embedding-end-state date:2026-08-14 by:human+llm]
+  Embedding is complete when a C host can create isolated runtimes; compile
+  source or load certified precompiled modules; inspect diagnostics, inferred
+  environments, effects, and QTT ownership evidence; invoke dynamic values or
+  validated native entrypoints; exchange owned and borrowed data under explicit
+  contracts; register callbacks safely; run concurrently; unload deterministically;
+  and recover from every language/compiler failure without process termination.
+  The installed ABI must remain compatible across a declared stable release
+  series, work from C and C++, and require neither compiler internals nor LLVM
+  for runtime-only deployment.
+
+* Research basis
+
+[DOC id:doc.embedding-research-basis src:external-primary-docs conf:high]
+  The architecture is informed by Guile's explicit VM-entry boundary and
+  stable API policy, Lua's state/protected-call discipline, CPython's opaque
+  stable ABI and explicit thread attachment, and Julia's distinction between
+  boxed generic calls and native =@cfunction= pointers. These are design
+  inputs, not claims of binary compatibility.
+
+[DEC id:dec.embedding-orc-resource-tracking date:2026-08-14 by:human+llm]
+  When source/JIT embedding arrives, one loaded Monad module maps to an LLVM
+  ORC resource tracker rather than leaking symbols into a process-global JIT
+  namespace. Lookup must use target data-layout mangling, initialization must
+  be explicit, and unload must fail while host-visible functions or values
+  retain the module. LLVM's LLJIT C API itself is experimental, so it remains
+  behind Monad's stable ABI and is never exposed from =embed.h=.
+
+* Compiler and QTT introspection
+
+[DEC id:dec.embedding.compiler-capability-api date:2026-08-14 by:human src:user-request]
+  The C libraries should expose useful compiler capabilities, including typed
+  environments and QTT evidence. This is a supported product goal rather than
+  a private debugging accident.
+
+[DEC id:dec.embedding.snapshot-not-structs date:2026-08-14 by:human+llm]
+  Compiler capabilities are exposed through a separate
+  =libmonad-compiler= surface using opaque sessions, immutable versioned
+  snapshots, stable IDs, count/index queries, and visitors. Raw =Env=,
+  =EnvEntry=, AST, QTT arena pointers, and LLVM handles remain private because
+  their layouts and lifetimes are compilation-local. Advanced clients can
+  inspect inferred schemes, resolved bindings, grades, effects, ownership
+  transitions, destructor plans, fingerprints, and rejection provenance
+  without linking a runtime-only host to LLVM.
+
+[TODO id:todo.embedding.compiler-query-cycle status:active]
+  Specify the first compiler query objects: source unit, diagnostic set,
+  environment snapshot, QTT report, definition, and certified native export.
+  Every borrowed string/view must name its owner and validity window; every
+  retained snapshot must be independently releasable. Exit gate: a C tool
+  compiles a fixture in memory and enumerates the same checked ownership
+  judgment shown by compiler tracing without parsing terminal text.
+[DEC id:dec.embedding.native-generation-commit date:2026-08-15 by:human+llm]
+  Source publication stages code and all registration metadata before entering
+  one runtime critical section. The commit validates the complete export set,
+  changes every registry cell, and advances the binding epoch exactly once, or
+  changes nothing. Resolution and immutable snapshots therefore observe one
+  registry generation. Already-retained live cells remain individually atomic;
+  coherence across several independent hot calls requires a future explicit
+  read-generation token and is not falsely claimed by the zero-wrapper API.
+
+[OBS id:obs.embedding.native-generation-cycle-39 src:embed/embed.c,embed/monad.c,embed/surface_load.c,tests/embedding/branches/live-source/atom.embedding.39.live-source.atomic-redefinition conf:high]
+  Cycle 39 reloads multi-definition native source into stable cells, retains
+  all preceding ORC images until host close, and proves deterministic rollback
+  when a later staged export conflicts with an existing variable.
+
+[DEC id:dec.embedding.read-generation-token date:2026-08-15 by:human+llm]
+  Coherence across several native calls is explicit and opt-in. A read token
+  snapshots compatible names and direct addresses at one binding epoch, pins
+  their live cells, and performs no work on the eventual C calls. Frozen lookup
+  remains available when cross-call coherence is unnecessary. Host close fails
+  busy while a read token exists rather than invalidating callable code.
+
+[OBS id:obs.embedding.read-generation-cycle-40 src:embed/embed.c,embed/monad.c,embed/include/monad/monad.h,tests/embedding/branches/live-source/atom.embedding.40.live-source.read-generation conf:high]
+  Cycle 40 implements one-slab immutable generation snapshots, deterministic
+  name ordering, logarithmic lookup, retained cell lifetimes, and old/new
+  source-image coexistence through the installed beginner facade.
+
+[DEC id:dec.embedding.address-owned-code-lifetime date:2026-08-15 by:human+llm]
+  Generated-code lifetime follows addresses, not compiler transactions or host
+  lifetime. The current registration, each frozen import, and each captured
+  generation entry retain the owner of the exact callable address they expose.
+  Replacement releases the old registration reference only after commit; the
+  final reader destroys the retired ORC image synchronously.
+
+[OBS id:obs.embedding.orc-reclamation-cycle-41 src:embed/embed.c,embed/monad.c,embed/surface_load.c,tests/embedding/branches/live-source/atom.embedding.41.live-source.orc-reclamation conf:high]
+  Cycle 41 replaces close-time image accumulation with reference-driven ORC
+  destruction. Public live-image observation proves unpinned reload remains
+  bounded, read tokens delay reclamation exactly until end, and frozen pointers
+  retain their resolved machine code across later publication.
+
+[DEC id:dec.embedding.explicit-frozen-handle date:2026-08-15 by:human+llm]
+  Deterministic frozen-pointer lifetime uses an opaque typed handle. Address
+  extraction performs no wrapping: the C pointer remains valid until explicit
+  handle release. The older raw-pointer lookup is retained as host-lifetime
+  convenience and shares the same signature-checked resolver.
+
+[OBS id:obs.embedding.releasable-function-cycle-42 src:embed/monad.c,embed/include/monad/monad.h,tests/embedding/branches/live-source/atom.embedding.42.live-source.releasable-function conf:high]
+  Cycle 42 adds releasable =Int -> Int= handles, immediate retired-image
+  reclamation, and preflight busy-close semantics that preserve a usable host
+  when explicit handles remain outstanding.

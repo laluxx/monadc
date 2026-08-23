@@ -31,8 +31,9 @@ module Data.List
 
 define partition-into :: [a] -> (a -> Bool) -> [a] -> [a] -> ([a], [a])
   [] _ accepted rejected -> (reverse accepted, reverse rejected)
-  [x|xs] predicate accepted rejected | predicate x -> (partition-into xs predicate (prepend x accepted) rejected)
-  [x|xs] predicate accepted rejected -> (partition-into xs predicate accepted (prepend x rejected))
+  [x|xs] predicate accepted rejected
+    | predicate x -> (partition-into xs predicate (prepend x accepted) rejected)
+    | otherwise   -> (partition-into xs predicate accepted (prepend x rejected))
 
 
 method partition :: [a] -> (a -> Bool) -> ([a], [a])

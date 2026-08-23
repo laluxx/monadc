@@ -27,6 +27,8 @@ class CoreStandaloneCompileTests(unittest.TestCase):
             "core/prelude/Numeric.mon",
             "core/prelude/Data/Semigroup.mon",
             "core/prelude/Text/LineEditor.mon",
+            "core/Text/Parser.mon",
+            "core/Data/Json.mon",
             "core/IO.mon",
             "core/IO/Readline.mon",
             "core/prelude/Test/QuickCheck.mon",

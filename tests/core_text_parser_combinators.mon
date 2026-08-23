@@ -1,0 +1,144 @@
+:TEST-ID tests.core.text-parser.combinators
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Typed parser replies preserve values, consumption, and structured failure offsets.
+:TEST-EXPECT compile, run, parser combinator assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY text-parser
+
+import Text.Parser
+import Data.Char
+
+module Core.TextParserCombinators
+  []
+
+
+define increment :: Int -> Int
+  value -> value + 1
+
+
+define ascii-a? :: Char -> Bool
+  byte | = 0x61    -> True
+       | otherwise -> False
+
+
+define comma? :: Char -> Bool
+  character | = 0x2c    -> True
+            | otherwise -> False
+
+
+define bracket-open? :: Char -> Bool
+  character | = 0x5b    -> True
+            | otherwise -> False
+
+
+define bracket-close? :: Char -> Bool
+  character | = 0x5d    -> True
+            | otherwise -> False
+
+
+define comma-name :: Int -> String
+  separator -> "comma"
+
+
+define comma-parser :: Int -> Int -> [Int] -> ParseReply String
+  code offset bytes -> parser-map comma-name (parser-satisfy comma?) code offset bytes
+
+
+define digit-after :: Int -> Int -> Int -> [Int] -> ParseReply Int
+  ignored code offset bytes -> parser-satisfy digit? code offset bytes
+
+
+define fail-at-five :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail 51 5 bytes
+
+
+define fail-at-three :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail 31 3 bytes
+
+
+define fail-41-here :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail 41 offset bytes
+
+
+define fail-42-here :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail 42 offset bytes
+
+
+define fail-letter-here :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail-named 41 "letter" offset bytes
+
+
+define fail-digit-here :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-fail-named 42 "digit" offset bytes
+
+
+define ascii-a-then-digit :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-bind (parser-satisfy ascii-a?) digit-after code offset bytes
+
+
+define empty-seven :: Int -> Int -> [Int] -> ParseReply Int
+  code offset bytes -> parser-pure 7 offset bytes
+
+
+tests
+  assert-eq (byte-digit? 0x37) True "Data.Char exposes monomorphic byte classification to parsers"
+  assert-eq (reply-value-or 0 (parser-pure 7 0 [])) 7 "Parser pure returns its value"
+  assert-eq (reply-consumed? (parser-satisfy ascii-a? 10 0 (list 0x61))) True "Parser satisfy records consumption"
+  assert-eq (reply-value-or 0 (parser-map increment (parser-satisfy ascii-a?) 10 0 (list 0x61))) 0x62 "Parser map transforms success"
+  assert-eq (reply-error-offset (parser-satisfy ascii-a? 10 4 (list 0x62))) 4 "Parser failure retains its source offset"
+  assert-eq (reply-error-code (parser-satisfy ascii-a? 10 4 (list 0x62))) 10 "Parser failure retains its structured code"
+  assert-eq (reply-value-or 0 (parser-or (parser-satisfy ascii-a?) (parser-satisfy digit?) 11 0 (list 0x37))) 0x37 "Empty failure permits alternative choice"
+  assert-eq (reply-value-or 0 (parser-bind (parser-satisfy ascii-a?) digit-after 12 0 (list 0x61 0x37))) 0x37 "Parser bind sequences dependent parsing"
+  assert-eq (reply-consumed? (parser-bind (parser-satisfy ascii-a?) digit-after 12 0 (list 0x61 0x78))) True "Bind propagates consumption into failure"
+  assert-eq (reply-consumed? (parser-attempt (parser-bind (parser-satisfy ascii-a?) digit-after) 12 0 (list 0x61 0x78))) False "Attempt restores alternative eligibility"
+  assert-eq (reply-consumed? (parser-cut (parser-satisfy ascii-a?) 12 0 (list 0x78))) True "Cut commits an empty failure"
+  assert-eq (reply-error-code (parser-label 99 (parser-satisfy ascii-a?) 12 0 (list 0x78))) 99 "Label replaces an empty local expectation"
+  assert-eq (reply-ok? (parser-eof 13 2 [])) True "EOF succeeds at the input boundary"
+  assert-eq (reply-error-offset (parser-eof 13 2 (list 0x78))) 2 "EOF rejects trailing input at its offset"
+  assert-eq (reply-offset (parser-literal (list 0x6e 0x75 0x6c 0x6c) 14 3 (list 0x6e 0x75 0x6c 0x6c))) 7 "Literal parser advances across the complete token"
+  assert-eq (reply-error-offset (parser-literal (list 0x6e 0x75 0x6c 0x6c) 14 3 (list 0x6e 0x75 0x78 0x6c))) 5 "Literal parser reports its furthest mismatch"
+  assert-eq (reply-consumed? (parser-literal (list 0x6e 0x75 0x6c 0x6c) 14 3 (list 0x6e 0x75 0x78 0x6c))) False "Literal tokens auto-backtrack while retaining their furthest mismatch"
+  assert-eq (count (reply-success-rest 0 (list 0x6e 0x75 0x6c 0x6c 0x78) (parser-literal (list 0x6e 0x75 0x6c 0x6c) 14 0 (list 0x6e 0x75 0x6c 0x6c 0x78)))) 1 "Reply rest exposes the unconsumed suffix"
+  assert-eq (reply-error-offset (parser-or fail-at-five fail-at-three 15 0 [])) 5 "Choice retains the furthest empty failure"
+  assert-eq (expectations-count (expectations-union (expectation-singleton 7) (expectation-singleton 7))) 1 "Expectation union is idempotent"
+  assert-eq (expectations-member? 7 (expectations-union (expectation-singleton 7) (expectation-singleton 9))) True "Expectation union retains its left member"
+  assert-eq (expectations-member? 9 (expectations-union (expectation-singleton 7) (expectation-singleton 9))) True "Expectation union retains its right member"
+  assert-eq (failure-expects? 41 (parser-or fail-41-here fail-42-here 15 4 [])) True "Equal-offset choice merges the left expectation"
+  assert-eq (failure-expects? 42 (parser-or fail-41-here fail-42-here 15 4 [])) True "Equal-offset choice merges the right expectation"
+  assert-eq (reply-error-code (parser-or fail-41-here fail-42-here 15 4 [])) (reply-error-code (parser-or fail-42-here fail-41-here 15 4 [])) "Equal-offset failure join is commutative"
+  assert-eq (reply-consumed? (parser-attempt (parser-attempt ascii-a-then-digit) 12 0 (list 0x61 0x78))) False "Attempt is idempotent"
+  assert-eq (reply-consumed? (parser-cut (parser-cut (parser-satisfy ascii-a?)) 12 0 (list 0x78))) True "Cut is idempotent"
+  assert-eq (render-parser-error "grammar.mon" (list 0x61 0x78) (parser-relabel "letter then digit" (parser-bind (parser-satisfy ascii-a?) digit-after) 12 0 (list 0x61 0x78))) "grammar.mon:1:2: error: expected token 12\n  |\n1 | ax\n  |  ^" "Labels do not erase a committed inner failure"
+  assert-eq (reply-value-or 0 (parser-lookahead (parser-satisfy ascii-a?) 16 8 (list 0x61))) 0x61 "Lookahead returns the observed value"
+  assert-eq (reply-offset (parser-lookahead (parser-satisfy ascii-a?) 16 8 (list 0x61))) 8 "Lookahead rewinds successful input"
+  assert-eq (reply-consumed? (parser-lookahead (parser-satisfy ascii-a?) 16 8 (list 0x61))) False "Lookahead success is empty"
+  assert-eq (reply-ok? (parser-not-followed-by (parser-satisfy ascii-a?) 77 17 0 (list 0x62))) True "Negative lookahead succeeds when its parser fails"
+  assert-eq (reply-error-code (parser-not-followed-by (parser-satisfy ascii-a?) 77 17 0 (list 0x61))) 77 "Negative lookahead reports its named expectation"
+  assert-eq (render-parser-error "demo.json" (list 0x6e 0x75 0x78 0x6c) (parser-relabel "null" (parser-literal (list 0x6e 0x75 0x6c 0x6c)) 14 0 (list 0x6e 0x75 0x78 0x6c))) "demo.json:1:3: error: expected null\n  |\n1 | nuxl\n  |   ^" "Parser diagnostics render a source line and caret"
+  assert-eq (render-parser-error "demo.json" (list 0x5b 0x0a 0x6e 0x75 0x78 0x6c) (parser-relabel "null" (parser-literal (list 0x6e 0x75 0x6c 0x6c)) 14 2 (list 0x6e 0x75 0x78 0x6c))) "demo.json:2:3: error: expected null\n  |\n2 | nuxl\n  |   ^" "Parser diagnostics calculate multiline source positions"
+  assert-eq (render-parser-error "grammar.mon" [] (parser-or fail-letter-here fail-digit-here 15 0 [])) "grammar.mon:1:1: error: expected letter or digit\n  |\n1 | \n  | ^" "Parser diagnostics render merged expectations deterministically"
+  assert-eq (reply-offset (parser-lexeme (parser-satisfy ascii-a?) 18 0 ⌜0x61 0x20 0x0a⌝)) 3 "Lexemes consume trailing grammar whitespace"
+  assert-eq (reply-value-or 0 (parser-lexeme (parser-satisfy ascii-a?) 18 0 ⌜0x61 0x20⌝)) 0x61 "Lexemes preserve parser payloads"
+  assert-eq (reply-error-offset (parser-lexeme (parser-satisfy ascii-a?) 18 4 ⌜0x78⌝)) 4 "Lexemes preserve parser failure positions"
+  assert-eq (spanned-start-or 0 (reply-value-or (WithSpan 0 0 0) (parser-spanned (parser-literal ⌜0x6e 0x75 0x6c 0x6c⌝) 18 3 ⌜0x6e 0x75 0x6c 0x6c⌝))) 3 "Spans retain the inclusive start offset"
+  assert-eq (spanned-end-or 0 (reply-value-or (WithSpan 0 0 0) (parser-spanned (parser-literal ⌜0x6e 0x75 0x6c 0x6c⌝) 18 3 ⌜0x6e 0x75 0x6c 0x6c⌝))) 7 "Spans retain the exclusive end offset"
+  assert-eq (reply-consumed? (parser-spanned (parser-literal ⌜0x6e 0x75 0x6c 0x6c⌝) 18 3 ⌜0x6e 0x75 0x6c 0x6c⌝)) True "Spans preserve parser consumption"
+  assert-eq (reply-offset (parser-symbol ⌜0x6e 0x75 0x6c 0x6c⌝ 19 0 ⌜0x6e 0x75 0x6c 0x6c 0x20 0x0a⌝)) 6 "Grammar symbols consume their token and trailing whitespace"
+  assert-eq (reply-error-offset (parser-symbol ⌜0x6e 0x75 0x6c 0x6c⌝ 19 0 ⌜0x6e 0x75 0x78 0x6c⌝)) 2 "Grammar symbols retain literal mismatch positions"
+  assert-eq (reply-value-or 0 (parser-complete (parser-satisfy ascii-a?) 20 21 0 ⌜0x61⌝)) 0x61 "Complete parsers return values at end of input"
+  assert-eq (reply-error-offset (parser-complete (parser-satisfy ascii-a?) 20 21 0 ⌜0x61 0x78⌝)) 1 "Complete parsers reject trailing input at its boundary"
+  assert-eq (count (reply-value-or [] (parser-many-up-to 8 90 (parser-satisfy digit?) 22 0 ⌜0x31 0x32 0x33 0x78⌝))) 3 "Bounded repetition collects every consuming success"
+  assert-eq (reply-offset (parser-many-up-to 2 90 (parser-satisfy digit?) 22 0 ⌜0x31 0x32 0x33⌝)) 2 "Bounded repetition obeys its item budget"
+  assert-eq (reply-ok? (parser-many-up-to 8 90 (parser-satisfy digit?) 22 0 ⌜0x78⌝)) True "Many terminates successfully on an empty failure"
+  assert-eq (reply-consumed? (parser-many-up-to 8 90 ascii-a-then-digit 22 0 ⌜0x61 0x78⌝)) True "Many propagates a committed element failure"
+  assert-eq (reply-error-code (parser-many-up-to 8 90 empty-seven 22 0 [])) 90 "Many rejects parsers that succeed without progress"
+  assert-eq (count (reply-value-or [] (parser-some-up-to 8 90 (parser-satisfy digit?) 23 0 ⌜0x31 0x32 0x78⌝))) 2 "Some collects one or more consuming successes"
+  assert-eq (reply-error-code (parser-some-up-to 8 90 (parser-satisfy digit?) 23 0 ⌜0x78⌝)) 23 "Some rejects an empty result with its grammar code"
+  assert-eq (count (reply-value-or [] (parser-sep-by-up-to 8 90 comma-parser (parser-satisfy digit?) 24 0 ⌜0x31 0x2c 0x32 0x2c 0x33⌝))) 3 "Separated repetition collects delimited values"
+  assert-eq (reply-ok? (parser-sep-by-up-to 8 90 comma-parser (parser-satisfy digit?) 24 0 [])) True "Separated repetition accepts an empty sequence"
+  assert-eq (reply-consumed? (parser-sep-by-up-to 8 90 comma-parser (parser-satisfy digit?) 24 0 ⌜0x31 0x2c 0x78⌝)) True "A consumed separator commits a missing following item"
+  assert-eq (reply-offset (parser-sep-by-up-to 2 90 comma-parser (parser-satisfy digit?) 24 0 ⌜0x31 0x2c 0x32 0x2c 0x33⌝)) 3 "Separated repetition obeys its item budget"
+  assert-eq (reply-error-code (parser-sep-by1-up-to 8 90 comma-parser (parser-satisfy digit?) 25 0 [])) 25 "Non-empty separated repetition rejects an empty sequence"
+  assert-eq (reply-value-or 0 (parser-between (parser-satisfy bracket-open?) (parser-satisfy bracket-close?) (parser-satisfy digit?) 26 0 ⌜0x5b 0x37 0x5d⌝)) 0x37 "Between returns the value inside its delimiters"
+  assert-eq (reply-consumed? (parser-between (parser-satisfy bracket-open?) (parser-satisfy bracket-close?) (parser-satisfy digit?) 26 0 ⌜0x5b 0x37 0x78⌝)) True "A missing closing delimiter remains committed"

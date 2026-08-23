@@ -191,6 +191,37 @@ void infer_env_free(InferEnv *env) {
     free(env);
 }
 
+void infer_env_free_owned_schemes(InferEnv *env) {
+    if (!env) return;
+    TypeScheme **owned = NULL;
+    size_t count = 0;
+    size_t capacity = 0;
+    for (size_t i = 0; i < env->size; i++) {
+        for (InferEnvEntry *entry = env->buckets[i]; entry;
+             entry = entry->next) {
+            bool seen = false;
+            for (size_t j = 0; j < count; j++)
+                if (owned[j] == entry->scheme) { seen = true; break; }
+            if (seen || !entry->scheme) continue;
+            if (count == capacity) {
+                size_t next = capacity ? capacity * 2 : 32;
+                TypeScheme **grown = realloc(owned, next * sizeof(*grown));
+                if (!grown) {
+                    /* Preserve safety under allocation failure: leaking an
+                     * unrecorded scheme is preferable to double-freeing it. */
+                    continue;
+                }
+                owned = grown;
+                capacity = next;
+            }
+            owned[count++] = entry->scheme;
+        }
+    }
+    for (size_t i = 0; i < count; i++) scheme_free(owned[i]);
+    free(owned);
+    infer_env_free(env);
+}
+
 void infer_env_insert(InferEnv *env, const char *name, TypeScheme *scheme) {
     size_t         idx = infer_env_hash(name);
     /* Overwrite existing entry for this name if present */
@@ -300,9 +331,11 @@ Type *subst_apply_shallow(Substitution *s, Type *t) {
     if (t->kind != TYPE_VAR) return t;
     int root = subst_find(s, t->var_id);
     if (s->bound[root]) return s->bound[root];
-    /* Path compression directly on the AST node to massively improve performance */
-    t->var_id = root;
-    return t;
+    /* Type nodes may belong to an imported principal scheme shared by many
+     * inference contexts. Union-find owns path compression; rewriting the
+     * node itself corrupts immutable scheme metadata when local variable IDs
+     * happen to overlap its canonical quantifiers. */
+    return root == t->var_id ? t : type_var(root);
 }
 
 static bool infer_optional_like(InferCtx *ctx, Type *t) {
@@ -4450,6 +4483,27 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
+        /* Primitive type names are conversion forms at expression heads.
+         * Core may also export values named String/Char, but those bindings
+         * must not replace the language's cast semantics during call
+         * validation.  Code generation already lowers these four forms. */
+        if (head->type == AST_SYMBOL && ast->list.count == 2 &&
+            (!strcmp(head->symbol, "Int") ||
+             !strcmp(head->symbol, "Float") ||
+             !strcmp(head->symbol, "Char") ||
+             !strcmp(head->symbol, "String"))) {
+            (void)infer_expr(ctx, ast->list.items[1]);
+            if (!strcmp(head->symbol, "Int"))
+                result = type_int();
+            else if (!strcmp(head->symbol, "Float"))
+                result = type_float();
+            else if (!strcmp(head->symbol, "Char"))
+                result = type_char();
+            else
+                result = type_string();
+            break;
+        }
+
         /* ---- runtime collection helpers -------------------------------- */
         if (head->type == AST_SYMBOL &&
             strcmp(head->symbol, "rt_coll_is_empty") == 0 &&
@@ -4517,6 +4571,15 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             infer_constrain(ctx, text_t, type_string(), ast->line, ast->column);
             infer_constrain(ctx, index_t, type_int(), ast->line, ast->column);
             result = type_int();
+            break;
+        }
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "__rt_char_string") == 0 &&
+            ast->list.count == 2) {
+            Type *char_t = infer_expr(ctx, ast->list.items[1]);
+            infer_constrain(ctx, char_t, type_char(), ast->line, ast->column);
+            result = type_string();
             break;
         }
 
@@ -5209,6 +5272,8 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
     infer_env_insert(ctx->env, "__rt_string_byte",
                      scheme_mono(type_arrow(type_string(),
                                             type_arrow(type_int(), type_int()))));
+    infer_env_insert(ctx->env, "__rt_char_string",
+                     scheme_mono(type_arrow(type_char(), type_string())));
     infer_env_insert(ctx->env, "__rt_set_singleton",
                      scheme_mono(type_arrow(type_set(), type_bool())));
 
@@ -5333,6 +5398,12 @@ void infer_register_builtins(InferCtx *ctx) {
     TypeScheme *adt_tag_sc = infer_generalise(ctx,
         type_arrow(adt_a, type_int()), ctx->env);
     infer_env_insert(ctx->env, "__adt_tag", adt_tag_sc);
+
+    Type *write_elem = infer_fresh(ctx);
+    Type *write_arr = type_arr_fat(write_elem);
+    infer_env_insert(ctx->env, "__rt_write_array", infer_generalise(ctx,
+        type_arrow(type_int(), type_arrow(write_arr,
+            type_arrow(type_int(), type_int()))), ctx->env));
 }
 
 
@@ -5344,9 +5415,21 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
     if (ast->type == AST_LIST && ast->list.count >= 2) {
         AST *head = ast->list.items[0];
         if (head->type == AST_SYMBOL) {
-            TypeScheme *sc = infer_env_lookup(ctx, head->symbol);
+            bool primitive_cast = ast->list.count == 2 &&
+                (!strcmp(head->symbol, "Int") ||
+                 !strcmp(head->symbol, "Float") ||
+                 !strcmp(head->symbol, "Char") ||
+                 !strcmp(head->symbol, "String"));
+            TypeScheme *sc = primitive_cast
+                ? NULL : infer_env_lookup(ctx, head->symbol);
             if (sc) {
-                Type *ft = subst_apply(ctx->subst, sc->type);
+                /* Validate against this occurrence's instantiated, zonked
+                 * callable. Applying a local substitution directly to the
+                 * shared principal scheme aliases canonical quantifier IDs
+                 * with unrelated local variables. */
+                Type *ft = head->inferred_type
+                    ? subst_apply(ctx->subst, head->inferred_type)
+                    : infer_instantiate(ctx, sc);
                 for (int i = 1; i < (int)ast->list.count && ft && ft->kind == TYPE_ARROW; i++) {
                     Type *param_t = subst_apply(ctx->subst, ft->arrow_param);
                     AST  *arg     = ast->list.items[i];
@@ -5357,7 +5440,7 @@ static void infer_validate_calls(InferCtx *ctx, AST *ast) {
                     if ((!arg_t || arg_t->kind == TYPE_UNKNOWN) &&
                         arg->type == AST_SYMBOL) {
                         TypeScheme *asc = infer_env_lookup(ctx, arg->symbol);
-                        if (asc) arg_t = subst_apply(ctx->subst, asc->type);
+                        if (asc) arg_t = infer_instantiate(ctx, asc);
                     }
 
                     if (param_t && arg_t &&

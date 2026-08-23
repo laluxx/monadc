@@ -68,6 +68,9 @@ certified conservative fallback.
   a type but must not survive into runtime Core.
 - Quantitative validity and storage ownership are separate judgments. Usage
   evidence alone does not prove alias, lifetime, effect, or destructor safety.
+- Runtime foreign types pair canonical structural =TypeId= with a separate
+  generative nominal authority. Neither identity may substitute for the other;
+  foreign calls validate both and reject unscoped borrowed imports.
 - Surface syntax should normally infer grades. Annotations are optional
   contracts and optimization controls, not mandatory ownership noise.
 - Every claimed fragment has an independent executable checker. Unsupported

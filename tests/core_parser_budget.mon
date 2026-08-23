@@ -1,0 +1,32 @@
+:TEST-ID tests.core.text-parser.resource-budget
+:TEST-CONTEXT monadc.context.core-libs.parser
+:TEST-PURPOSE ParserBudget is immutable shared policy with stable first-prohibited offsets.
+:TEST-EXPECT compile, run, resource budget assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY parser
+
+import Text.Parser
+
+module Core.ParserBudget []
+
+define small :: ParserBudget
+  (ParserBudget 4 2 8 16 6 3)
+
+define narrow :: ParserBudget
+  (ParserBudget 9 1 4 20 5 8)
+
+define combined :: ParserBudget
+  (parser-budget-tighten small narrow)
+
+tests
+  assert-eq small.input-bytes 4 "Parser budget exposes its byte limit"
+  assert-eq (parser-budget-allows? small.input-bytes 4) True "A resource may exactly fill its budget"
+  assert-eq (parser-budget-allows? small.input-bytes 5) False "A resource may not exceed its budget"
+  assert-eq (parser-budget-first-prohibited 4) 4 "A zero-based failure points at the first prohibited unit"
+  assert-eq combined.input-bytes 4 "Composition preserves the tighter byte limit"
+  assert-eq combined.nesting 1 "Composition preserves the tighter nesting limit"
+  assert-eq combined.tokens 4 "Composition preserves the tighter token limit"
+  assert-eq (parser-budget-valid? combined) True "A non-negative composed policy is valid"
+  assert-eq (parser-budget-equal? (parser-budget-tighten small small) small) True "Budget composition is idempotent"
+  assert-eq (parser-budget-equal? (parser-budget-tighten small narrow) (parser-budget-tighten narrow small)) True "Budget composition is commutative"

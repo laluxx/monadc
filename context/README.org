@@ -18,6 +18,22 @@
 #+PROPERTY: CONTEXT_OPEN_POLICY hideblocks
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+* Development cycle handoff
+
+[DEC id:dec.context.cycle-next-handoff-2026-08-11 date:2026-08-11 by:human src:user-request conf:high]
+  Every completed implementation cycle must state the single ideal next cycle.
+  The handoff names the concrete objective, explains why it is the highest
+  leverage continuation, and gives an executable exit gate. Subsystem roadmaps
+  must be updated at the same time so the continuation survives conversation
+  compaction and does not depend on agent memory.
+
+[DEC id:dec.context.cycle-next-handoff-required-2026-08-14 date:2026-08-14 by:human src:user-request conf:high]
+  Every cycle handoff must contain a plainly labelled “What should be done
+  next” section. It names one bounded implementation cycle, explains why it is
+  next, and supplies executable completion gates. Research that materially
+  determines a public implementation must also be cited beside that source
+  code, using stable primary-documentation links.
 #+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
 #+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
 
@@ -80,6 +96,7 @@
 | Test-suite contracts and tier policy  | [[file:test-contracts.org][test-contracts.org]] |
 | Current bug agenda                    | [[file:debug-agenda.org][debug-agenda.org]]   |
 | Source-file routing                   | [[file:navigation.org][navigation.org]]     |
+| Native C embedding ABI                | [[file:embedding.org][embedding.org]]      |
 
 * Operating Rule For Agents
 :PROPERTIES:

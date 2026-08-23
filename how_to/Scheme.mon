@@ -1,0 +1,346 @@
+;;; Scheme.mon --- A tiny Scheme, parsed and evaluated in Monad
+
+:author Laluxx
+:version 0.1.0
+:keywords how-to scheme interpreter parser combinators recursion
+
+;;; Commentary:
+
+ A language can be small without being a toy-shaped pile of special cases.
+ This example follows the whole path from source text to a useful result:
+
+   source  →  Text.Parser  →  ScmValue  →  evaluate  →  render
+
+ The reader recognizes integers, booleans, symbols, lists, and quote sugar.
+ The evaluator adds lexical names, quotation, conditionals, and
+ a few arithmetic predicates. That is enough Scheme to make nested programs
+ interesting while keeping every moving part visible on one calm page.
+
+ Try it from the how_to directory:
+
+   monad Scheme.mon && ./Scheme
+
+;;; Code:
+
+import Text.Parser
+import Text.Format
+import Text.Unicode
+import Data.Char
+import Sequence
+import IO
+import IO.Readline
+
+module Main where
+
+
+;;; Scheme values
+
+data ScmValue
+  = ScmNumber  Int
+  | ScmBoolean Bool
+  | ScmSymbol  String
+  | ScmList    [ScmValue]
+  | ScmError   String
+
+
+layout ScmBinding
+  name  :: String
+  value :: ScmValue
+
+
+define scm-true :: ScmValue
+  ScmBoolean True
+
+
+define scm-false :: ScmValue
+  ScmBoolean False
+
+
+;;; Reading Scheme
+
+define scm-symbol-character? :: Char -> Bool
+  character | blank?      -> False
+            | linebreak?  -> False
+            | = '('       -> False
+            | = ')'       -> False
+            | = Char 0x27 -> False
+            | otherwise    -> True
+
+
+define scm-symbol-value :: [Int] -> ScmValue
+  scalars -> ScmSymbol (scalars->text scalars)
+
+
+define scm-number-value :: String -> ScmValue
+  text -> ScmNumber (parse-value 0 (signed-int 0 (decode-utf8 text)))
+
+
+define scm-symbol-scalars-parser :: Int -> Int -> [Int] -> ParseReply [Int]
+  code offset input ->
+    parser-lexeme (parser-some-up-to 64 905 (parser-satisfy scm-symbol-character?)) code offset input
+
+
+define scm-symbol-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset input ->
+    parser-map scm-symbol-value scm-symbol-scalars-parser code offset input
+
+
+define scm-number-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    parser-map scm-number-value (parser-lexeme (parser-decimal-lexeme-up-to 32 4)) code offset bytes
+
+
+define scm-boolean-reply :: ScmValue -> ParseReply Int -> ParseReply ScmValue
+  value [Parsed _ offset consumed]  -> Parsed value offset consumed
+  _ [Rejected failure consumed]     -> Rejected failure consumed
+
+
+define scm-true-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    scm-boolean-reply scm-true (parser-symbol ⌜0x23 0x74⌝ code offset bytes)
+
+
+define scm-false-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    scm-boolean-reply scm-false (parser-symbol ⌜0x23 0x66⌝ code offset bytes)
+
+
+define scm-quote-value :: ScmValue -> ScmValue
+  value -> ScmList (list (ScmSymbol "quote") value)
+
+
+define scm-after-quote :: Int -> Int -> Int -> [Int] -> ParseReply ScmValue
+  _ code offset bytes ->
+    parser-map scm-quote-value scm-expression code offset bytes
+
+
+define scm-quote-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset input ->
+    parser-bind (parser-symbol ⌜0x27⌝) scm-after-quote code offset input
+
+
+define scm-reverse :: [ScmValue] -> [ScmValue] -> [ScmValue]
+  result []           -> result
+  result [value|rest] -> scm-reverse (prepend value result) rest
+
+
+define scm-list-finished :: [ScmValue] -> Int -> [Int] -> ParseReply ScmValue
+  values offset bytes ->
+    def final-offset (skip-space-offset offset bytes)
+    Parsed (ScmList (scm-reverse [] values)) final-offset True
+
+
+define scm-list-next :: [ScmValue] -> ScmValue -> Int -> Int -> [Int] -> ParseReply ScmValue
+  values value code offset bytes ->
+    scm-list-items (prepend value values) code offset bytes
+
+
+define scm-list-item-or-close :: [ScmValue] -> Int -> Int -> Int -> [Int] -> ParseReply ScmValue
+  values code offset byte rest
+    | byte = 0x29 -> scm-list-finished values (offset + 1) rest
+    | otherwise   -> parser-bind scm-expression (scm-list-next values) code offset (prepend byte rest)
+
+
+define scm-list-items :: [ScmValue] -> Int -> Int -> [Int] -> ParseReply ScmValue
+  values code offset [] -> Rejected (ParserFailure offset code (expectation-named code "closing parenthesis")) True
+  values code offset [byte|rest] -> scm-list-item-or-close values code offset byte rest
+
+
+define scm-list-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    parser-bind (parser-symbol ⌜0x28⌝) scm-after-opening code offset bytes
+
+
+define scm-after-opening :: Int -> Int -> Int -> [Int] -> ParseReply ScmValue
+  _ code offset bytes -> scm-list-items [] code offset bytes
+
+
+define scm-boolean-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    parser-or scm-true-parser scm-false-parser code offset bytes
+
+
+define scm-atom-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset [] -> scm-number-or-symbol-parser code offset []
+  code offset bytes -> scm-atom-start code offset bytes bytes[0]
+
+
+define scm-atom-start :: Int -> Int -> [Int] -> Int -> ParseReply ScmValue
+  code offset bytes byte
+    | byte = 0x23 -> scm-boolean-parser code offset bytes
+    | otherwise   -> scm-number-or-symbol-parser code offset bytes
+
+
+define scm-number-or-symbol-parser :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    parser-or (parser-attempt scm-number-parser) scm-symbol-parser code offset bytes
+
+
+define scm-expression :: Int -> Int -> [Int] -> ParseReply ScmValue
+  code offset bytes ->
+    parser-or scm-quote-parser (parser-or scm-list-parser scm-atom-parser) code offset bytes
+
+
+define scm-read :: [Int] -> ParseReply ScmValue
+  bytes ->
+    parser-complete (parser-bind (parser-lexeme-value 0) scm-after-leading-space) 909 900 0 bytes
+
+
+define scm-after-leading-space :: Int -> Int -> Int -> [Int] -> ParseReply ScmValue
+  _ code offset bytes -> scm-expression code offset bytes
+
+
+;;; Evaluating Scheme
+
+;; Names
+
+define environment-find :: String -> [ScmBinding] -> ScmValue
+  name [] -> ScmError ("unbound symbol: " ++ name)
+  name [entry|rest]
+    | name = entry.name -> entry.value
+    | otherwise         -> environment-find name rest
+
+
+define truthy? :: ScmValue -> Bool
+  [ScmBoolean value] -> value
+  _                  -> True
+
+
+;;;; Primitive procedures
+
+define evaluate-values :: [ScmValue] -> [ScmBinding] -> [ScmValue]
+  [] _ -> []
+  [value|rest] environment ->
+    prepend (evaluate value environment) (evaluate-values rest environment)
+
+
+define sum-values :: Int -> [ScmValue] -> ScmValue
+  total [] -> ScmNumber total
+  total [value|rest] -> sum-value total value rest
+
+
+define sum-value :: Int -> ScmValue -> [ScmValue] -> ScmValue
+  total [ScmNumber value] rest -> sum-values (total + value) rest
+  _ _ _ -> ScmError "+ expects numbers"
+
+
+define multiply-values :: Int -> [ScmValue] -> ScmValue
+  total [] -> ScmNumber total
+  total [value|rest] -> multiply-value total value rest
+
+
+define multiply-value :: Int -> ScmValue -> [ScmValue] -> ScmValue
+  total [ScmNumber value] rest -> multiply-values (total * value) rest
+  _ _ _ -> ScmError "* expects numbers"
+
+
+define greater-values :: [ScmValue] -> ScmValue
+  [left, right] -> greater-pair left right
+  _ -> ScmError "> expects two numbers"
+
+
+define greater-pair :: ScmValue -> ScmValue -> ScmValue
+  [ScmNumber left] [ScmNumber right] -> ScmBoolean (left > right)
+  _ _ -> ScmError "> expects two numbers"
+
+
+define apply-scm :: String -> [ScmValue] -> ScmValue
+  name values
+    | name = "+" -> sum-values 0 values
+    | name = "*" -> multiply-values 1 values
+    | name = ">" -> greater-values values
+    | otherwise  -> ScmError ("unknown procedure: " ++ name)
+
+
+;;;; Special forms and evaluation
+
+define evaluate-if :: [ScmValue] -> [ScmBinding] -> ScmValue
+  [condition, consequent, alternative] environment
+    | truthy? (evaluate condition environment) -> evaluate consequent environment
+    | otherwise                                -> evaluate alternative environment
+  _ _ -> ScmError "if expects three expressions"
+
+
+define evaluate-form :: String -> [ScmValue] -> [ScmBinding] -> ScmValue
+  name [value] _ | name = "quote" -> value
+  name values environment | name = "if" -> evaluate-if values environment
+  name values environment ->
+    apply-scm name (evaluate-values values environment)
+
+
+define evaluate-list :: [ScmValue] -> [ScmBinding] -> ScmValue
+  [] _ -> ScmList []
+  [head|values] environment -> evaluate-call head values environment
+
+
+define evaluate-call :: ScmValue -> [ScmValue] -> [ScmBinding] -> ScmValue
+  [ScmSymbol name] values environment -> evaluate-form name values environment
+  _ _ _ -> ScmError "procedure position must be a symbol"
+
+
+define evaluate :: ScmValue -> [ScmBinding] -> ScmValue
+  [ScmNumber value] _  -> ScmNumber value
+  [ScmBoolean value] _ -> ScmBoolean value
+  [ScmSymbol name] environment -> environment-find name environment
+  [ScmList values] environment -> evaluate-list values environment
+  [ScmError message] _ -> ScmError message
+
+
+;;;; Printing
+
+define render-scm-tail :: [ScmValue] -> String
+  [] -> ""
+  [value] -> render-scm value
+  [value|rest] -> (render-scm value) ++ " " ++ (render-scm-tail rest)
+
+
+define render-scm-boolean :: Bool -> String
+  value | value     -> "#t"
+        | otherwise -> "#f"
+
+
+define render-scm :: ScmValue -> String
+  [ScmNumber value]  -> (int->text value)
+  [ScmBoolean value] -> render-scm-boolean value
+  [ScmSymbol name]   -> name
+  [ScmList values]   -> "(" ++ (render-scm-tail values) ++ ")"
+  [ScmError message] -> "error: " ++ message
+
+
+define interpret :: String -> [ScmBinding] -> String
+  source environment ->
+    def parsed (scm-read (decode-utf8 source))
+    def expression (reply-value-or (ScmError "parse failed") parsed)
+    render-scm (evaluate expression environment)
+
+
+;;; Interactive use
+
+define scheme-repl-line :: Int -> [Int] -io-> Int
+  _ [] | (= readline-status 1) -> 0
+  evaluations [] -> scheme-repl evaluations
+  evaluations input ->
+    def source (bytes-prefix->text (length input) input)
+    def ignored (write-text stdout ((interpret source []) ++ "\n"))
+    scheme-repl (evaluations + 1)
+
+
+define scheme-repl :: Int -io-> Int
+  evaluations -> scheme-repl-line evaluations (read-line-with-prompt "scm> ")
+
+
+tests
+  assert-eq (interpret "(+ 1 (* 2 3))" []) "7"                 "nested arithmetic evaluates"
+  assert-eq
+    (interpret "(if (> answer 40) answer 0)"
+      (list (ScmBinding "answer" (ScmNumber 42))))
+    "42"                                                       "conditionals and lexical names evaluate"
+  assert-eq (interpret "'(hello scm)" []) "(hello scm)"        "quote preserves a list as data"
+  assert-eq (interpret "'λ" []) "λ"                            "symbols preserve Unicode text"
+  assert-eq
+    (reply-ok? (scm-read (decode-utf8 "(+ 1 2")))
+    False
+                                                                "a missing parenthesis is a structured parser failure"
+
+
+scheme-repl 0

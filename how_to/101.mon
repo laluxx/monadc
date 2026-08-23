@@ -1,0 +1,218 @@
+;;; Rule101.mon --- Elementary cellular automaton Rule 101
+
+:Author   Laluxx
+:Version  0.0.1
+:Keywords cellular-automata rule-101 example
+
+;;; Commentary:
+
+                         #
+                        ##
+                       # #
+                     ### ##
+                    #   # #
+                  ### ### ##
+                 #   #  # #
+               ### ###### ##
+              #   ##     # #
+            ### ### #  ### ##
+           #   #  #### #  # #
+
+ Rule 101 is an elementary one-dimensional cellular automaton.
+
+ Every cell looks only at itself and its two neighbours.  The three
+ cells form a binary neighbourhood which determines the next value:
+
+     111  110  101  100  011  010  001  000
+      0    1    1    0    0    1    0    1
+
+                    01100101₂ = 101
+
+ This module deliberately expresses the rule through pattern matching
+ rather than bit arithmetic.  The source therefore mirrors the rule's
+ mathematical definition directly.
+
+ Cells outside the row are considered dead.  A simulation starts from
+ a single live cell in the centre of an otherwise empty row.
+
+;;; Code:
+
+import Sequence
+
+module Main
+
+
+;;; Rule
+
+;; Wolfram's neighbourhood order is:
+;;
+;;   111 110 101 100 011 010 001 000
+;;
+;; Rule 101:
+;;
+;;    0   1   1   0   0   1   0   1
+
+define rule-101 :: Int -> Int -> Int -> Int
+  1 1 1 -> 0
+  1 1 0 -> 1
+  1 0 1 -> 1
+  1 0 0 -> 0
+  0 1 1 -> 0
+  0 1 0 -> 1
+  0 0 1 -> 0
+  0 0 0 -> 1
+
+;;; Neighbourhoods
+
+╭─ Cells beyond either edge are dead.
+define cell-at :: [Int] -> Int -> Int
+  _ i | < 0 -> 0
+  c i | i >= count c -> 0
+  c i -> c[i]
+
+define next-cell :: [Int] -> Int -> Int
+  :doc "Return the Rule 101 value for the cell at INDEX in the next generation."
+  cells index ->
+    rule-101 (cell-at cells (index - 1)) (cell-at cells index) (cell-at cells (index + 1))
+
+
+define cell-at-background :: [Int] -> Int -> Int -> Int
+  cells i background
+    | i < 0             -> background
+    | i >= count cells  -> background
+    | otherwise         -> cells[i]
+
+
+define next-cell-background :: [Int] -> Int -> Int -> Int
+  cells index background ->
+    rule-101 (cell-at-background cells (index - 1) background) (cell-at-background cells index background) (cell-at-background cells (index + 1) background)
+
+
+;;; Evolution
+
+define next-row-from :: [Int] -> Int -> [Int]
+  cells index | index >= count cells -> []
+  cells index ->
+    prepend (next-cell cells index) (next-row-from cells (index + 1))
+
+
+define next-row :: [Int] -> [Int]
+  cells -> next-row-from cells 0
+
+
+define next-row-background-from :: [Int] -> Int -> Int -> [Int]
+  cells index _ | index >= count cells -> []
+  cells index background ->
+    prepend (next-cell-background cells index background) (next-row-background-from cells (index + 1) background)
+
+
+define next-row-background :: [Int] -> Int -> [Int]
+  cells background -> next-row-background-from cells 0 background
+
+
+╭─ returns exactly generations rows, including the initial row.
+define evolve :: [Int] -> Int -> [ [Int] ]
+  _     0           -> []
+  cells generations ->
+    prepend cells (evolve (next-row cells) (generations - 1))
+
+
+;;; Initial state
+
+define seed-row :: Int -> [Int]
+  0 -> []
+  width -> seed-row-from width 0
+
+
+define seed-cell :: Int -> Int -> Int
+  width index | index = width / 2 -> 1
+  _ _ -> 0
+
+
+define seed-row-from :: Int -> Int -> [Int]
+  width index | index >= width -> []
+  width index ->
+    prepend (seed-cell width index) (seed-row-from width (index + 1))
+
+
+;;; Rendering
+
+define cell-char :: Int -> String
+  0 -> " "
+  _ -> "#"
+
+
+define render-row :: [Int] -> String
+  [] -> ""
+  [cell|cells] -> (cell-char cell) ++ (render-row cells)
+
+
+define relative-cell-char :: Int -> Int -> String
+  cell background | = -> " "
+  _ _ -> "#"
+
+
+define render-relative-row :: [Int] -> Int -> String
+  [] _ -> ""
+  [cell|cells] background ->
+    (relative-cell-char cell background) ++ (render-relative-row cells background)
+
+
+define render-grid :: [[Int]] -> String
+  []         -> ""
+  [row|rows] ->
+    (render-row row) ++ "\n" ++ (render-grid rows)
+
+
+;;; Demo
+
+define render-generations-from :: [Int] -> Int -> Int -> String
+  _ 0 _ -> ""
+  cells 1 background -> render-relative-row cells background
+  cells generations background ->
+    (render-relative-row cells background) ++ "\n" ++ (render-generations-from (next-row-background cells background) (generations - 1) (rule-101 background background background))
+
+
+define render-generations :: [Int] -> Int -> String
+  cells generations -> render-generations-from cells generations 0
+
+
+define demo :: String
+  render-generations (seed-row 79) 40
+
+show demo
+
+
+;;; Tests
+
+tests
+  :rule:
+  assert-eq (rule-101 1 1 1) 0 "111 becomes 0"
+  assert-eq (rule-101 1 1 0) 1 "110 becomes 1"
+  assert-eq (rule-101 1 0 1) 1 "101 becomes 1"
+  assert-eq (rule-101 1 0 0) 0 "100 becomes 0"
+  assert-eq (rule-101 0 1 1) 0 "011 becomes 0"
+  assert-eq (rule-101 0 1 0) 1 "010 becomes 1"
+  assert-eq (rule-101 0 0 1) 0 "001 becomes 0"
+  assert-eq (rule-101 0 0 0) 1 "000 becomes 1"
+  :rule:
+
+  :boundaries:
+  assert-eq (cell-at (list 0 1 0) (0 - 1)) 0 "left of the row is dead"
+  assert-eq (cell-at (list 0 1 0) 3)       0 "right of the row is dead"
+  assert-eq (cell-at (list 0 1 0) 1)       1 "cell-at reads an in-range cell"
+  :boundaries:
+
+  :seed:
+  assert-eq (count (seed-row 9)) 9 "seed keeps the requested width"
+  assert-eq (cell-at (seed-row 9) 4) 1 "seed places one live cell in the centre"
+  assert-eq (cell-at (seed-row 9) 3) 0 "cell before the seed remains dead"
+  assert-eq (cell-at (seed-row 9) 5) 0 "cell after the seed remains dead"
+  :seed:
+
+  :evolution:
+  assert-eq
+    (next-row (list 0 0 1 0 0))
+    (list 1 0 1 0 1)
+    "Rule 101 evolves a centred seed correctly"
+  :evolution:

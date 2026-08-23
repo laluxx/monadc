@@ -1,8 +1,10 @@
 ;;; Unicode.mon --- Core-owned Unicode text algorithms
 
 :author "Laluxx"
-:version "1.0.0"
+:version "1.1.0"
 :keywords "unicode utf-8 scalar value grapheme terminal width text"
+:reference-well-formed-utf8 "https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/"
+:reference-rfc3629 "https://www.rfc-editor.org/rfc/rfc3629.html"
 
 ;;; Commentary:
 
@@ -26,6 +28,12 @@
  byte-sequence decoder rather than pretending malformed bytes inhabit String.
  Surrogates and values above U+10FFFF are never Unicode scalar values.
 
+ =utf8-prefix-width= recognizes exactly one canonical sequence from Unicode
+ Table 3-7. Returning zero distinguishes malformed, truncated, overlong,
+ surrogate, and out-of-range octet prefixes without manufacturing replacement
+ text. Protocol decoders such as Data.Json can therefore reject invalid input
+ before it enters String.
+
  Unicode behavior is pinned to Unicode 17.0.0.  Grapheme rules below name the
  corresponding UAX #29 rules directly: CR × LF (GB3), conjoining Hangul jamo
  (GB6–GB8), Extend/ZWJ handling, and regional-indicator parity (GB12/GB13).
@@ -37,11 +45,12 @@ import Sequence
 import Data.Bool
 import Data.Char
 import Function
+import Text.Format
 
 module Text.Unicode
   [unicode-version replacement-character
-   byte-count valid-scalar? ascii-byte? continuation-byte?
-   valid-utf8? decode-utf8 scalar-count
+   byte-count valid-scalar? ascii-byte? continuation-byte? utf8-prefix-width bytes-prefix->text
+   valid-utf8? decode-utf8 encode-scalar scalars->text scalar-count
    grapheme-count display-width text-width]
 
 
@@ -73,8 +82,51 @@ define continuation-byte? :: Int -> Bool
        | otherwise           -> False
 
 
+define utf8-prefix-width :: [Int] -> Int
+  [first second third fourth|rest]
+    | and? (= first 0xf0) (and? (>= second 0x90) (and? (<= second 0xbf) (and? (continuation-byte? third) (continuation-byte? fourth)))) -> 4
+    | and? (>= first 0xf1) (and? (<= first 0xf3) (and? (continuation-byte? second) (and? (continuation-byte? third) (continuation-byte? fourth)))) -> 4
+    | and? (= first 0xf4) (and? (>= second 0x80) (and? (<= second 0x8f) (and? (continuation-byte? third) (continuation-byte? fourth)))) -> 4
+  [first second third|rest]
+    | and? (= first 0xe0) (and? (>= second 0xa0) (and? (<= second 0xbf) (continuation-byte? third))) -> 3
+    | and? (>= first 0xe1) (and? (<= first 0xec) (and? (continuation-byte? second) (continuation-byte? third))) -> 3
+    | and? (= first 0xed) (and? (>= second 0x80) (and? (<= second 0x9f) (continuation-byte? third))) -> 3
+    | and? (>= first 0xee) (and? (<= first 0xef) (and? (continuation-byte? second) (continuation-byte? third))) -> 3
+  [first second|rest]
+    | and? (>= first 0xc2) (and? (<= first 0xdf) (continuation-byte? second)) -> 2
+  [first|rest]
+    | first <= 0x7f -> 1
+    | otherwise     -> 0
+  []                -> 0
+
+
+define bytes-prefix->text :: Int -> [Int] -> String
+  width [] -> ""
+  width [byte|rest]
+    | width <= 0 -> ""
+    | otherwise  -> ((char->text (chr byte)) ++ (bytes-prefix->text (width - 1) rest))
+
+
 define valid-utf8? :: String -> Bool
   _ -> True
+
+
+define byte-text :: Int -> String
+  byte -> (char->text (chr byte))
+
+
+define encode-scalar :: Int -> String
+  scalar
+    | not (valid-scalar? scalar) -> ((byte-text 0xef) ++ (byte-text 0xbf) ++ (byte-text 0xbd))
+    | scalar <= 0x7f            -> byte-text scalar
+    | scalar <= 0x7ff           -> ((byte-text (0xc0 + (scalar / 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+    | scalar <= 0xffff          -> ((byte-text (0xe0 + (scalar / 0x1000))) ++ (byte-text (0x80 + ((scalar / 0x40) % 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+    | otherwise                 -> ((byte-text (0xf0 + (scalar / 0x40000))) ++ (byte-text (0x80 + ((scalar / 0x1000) % 0x40))) ++ (byte-text (0x80 + ((scalar / 0x40) % 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+
+
+define scalars->text :: [Int] -> String
+  []            -> ""
+  [scalar|rest] -> (encode-scalar scalar) ++ (scalars->text rest)
 
 
 define prepend-scalar :: Int -> [Int] -> [Int]
@@ -346,6 +398,9 @@ tests
   assert-eq (valid-utf8? "Aλ🙂") True "valid mixed-width UTF-8"
   assert-eq (show (decode-utf8 "Aλ🙂")) "(65 955 128578)" "decode UTF-8 scalars"
   assert-eq (scalar-count "Aλ🙂") 3 "scalar count differs from byte count"
+  assert-eq (encode-scalar 0x03bb) "λ" "UTF-8 encodes a two-byte scalar"
+  assert-eq (encode-scalar 0x1f642) "🙂" "UTF-8 encodes a supplementary scalar"
+  assert-eq (scalars->text ⌜0x41 0x03bb 0x1f642⌝) "Aλ🙂" "scalar sequences encode as text"
   :utf8:
 
   :segmentation:

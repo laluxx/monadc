@@ -6,3 +6,7 @@
 (define sum 0)
 (for [i 0 4] (set! sum (+ sum i)))
 (show sum)
+
+
+for 4 times
+ show "hello"

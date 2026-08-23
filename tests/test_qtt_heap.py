@@ -72,10 +72,15 @@ int main(void) {
            QTT_RESOURCE_INVALID_CAPABILITY);
 
     QttResourceOp foreign_ops[] = {
-        qtt_resource_alloc_typed(var(5), QTT_REP_FOREIGN)};
-    QttResourceBlock foreign_program = {foreign_ops, 1};
+        qtt_resource_alloc_typed(var(5), QTT_REP_FOREIGN),
+        qtt_resource_drop(var(5))};
+    QttResourceBlock foreign_program = {foreign_ops, 2};
     assert(qtt_resource_verify(&foreign_program, NULL, 0).error ==
-           QTT_RESOURCE_INVALID_CAPABILITY);
+           QTT_RESOURCE_VALID);
+    QttHeapExecution foreign_run =
+        qtt_resource_execute(&foreign_program, NULL, 0);
+    assert(foreign_run.error == QTT_RESOURCE_VALID);
+    assert(foreign_run.releases == 1 && foreign_run.live_owned == 0);
 
     QttResourceOp shared_ops[] = {
         qtt_resource_alloc_typed(var(7), QTT_REP_OWNED_HEAP),

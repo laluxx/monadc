@@ -568,7 +568,8 @@ static QttResourceVerification verify_block(const QttResourceBlock *block,
             state_find(state->consumed, state->consumed_count, op->var);
         switch (op->kind) {
         case QTT_RESOURCE_ALLOC:
-            if (op->representation != QTT_REP_OWNED_HEAP)
+            if (op->representation != QTT_REP_OWNED_HEAP &&
+                op->representation != QTT_REP_FOREIGN)
                 return verification(
                     QTT_RESOURCE_INVALID_CAPABILITY, i, op->var,
                     state->live_count);
@@ -1043,7 +1044,8 @@ static void execute_block(const QttResourceBlock *block, HeapState *heap) {
                 heap->result.error = QTT_RESOURCE_OUT_OF_MEMORY;
                 return;
             }
-            if (op->representation == QTT_REP_OWNED_HEAP) {
+            if (op->representation == QTT_REP_OWNED_HEAP ||
+                op->representation == QTT_REP_FOREIGN) {
                 heap->result.allocated++;
                 heap->result.live_owned++;
                 if (heap->result.live_owned > heap->result.peak_live_owned)
@@ -1095,7 +1097,8 @@ static void execute_block(const QttResourceBlock *block, HeapState *heap) {
                 heap->result.error = QTT_RESOURCE_OUT_OF_MEMORY;
                 return;
             }
-            if (source.representation == QTT_REP_OWNED_HEAP)
+            if (source.representation == QTT_REP_OWNED_HEAP ||
+                source.representation == QTT_REP_FOREIGN)
                 heap->result.retains++;
             break;
         }
@@ -1123,11 +1126,16 @@ static void execute_block(const QttResourceBlock *block, HeapState *heap) {
         case QTT_RESOURCE_DROP: {
             HeapEntry entry = heap->entries[(size_t)found];
             heap->entries[(size_t)found] = heap->entries[--heap->count];
-            if (entry.representation == QTT_REP_OWNED_HEAP) {
+            if (entry.representation == QTT_REP_OWNED_HEAP ||
+                entry.representation == QTT_REP_FOREIGN) {
                 bool last_local = !heap_has_root(heap, entry.root);
                 if (op->kind == QTT_RESOURCE_MOVE) {
                     heap->result.moved_out++;
                     if (last_local) heap->result.live_owned--;
+                } else if (entry.representation == QTT_REP_FOREIGN) {
+                    if (last_local) heap->result.live_owned--;
+                    heap->result.releases++;
+                    heap->result.dropped++;
                 } else if (last_local) {
                     heap->result.live_owned--;
                     heap->result.dropped++;

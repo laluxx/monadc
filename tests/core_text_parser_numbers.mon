@@ -1,0 +1,24 @@
+:TEST-ID tests.core.text-parser.exact-decimal
+:TEST-CONTEXT monadc.context.core-libs.parser
+:TEST-PURPOSE Exact decimal tokens preserve syntax and enforce independent resource budgets.
+:TEST-EXPECT compile, run, exact decimal assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY parser
+
+import Text.Parser
+
+module Core.TextParserNumbers []
+
+define decimal :: [Int] -> ParseReply String
+  bytes -> parser-decimal-lexeme-up-to 32 8 70 0 bytes
+
+tests
+  assert-eq (reply-value-or "" (decimal ⌜0x30⌝)) "0" "Decimal accepts zero"
+  assert-eq (reply-value-or "" (decimal ⌜0x2d 0x31 0x32 0x2e 0x35 0x65 0x2b 0x32⌝)) "-12.5e+2" "Decimal preserves its exact lexeme"
+  assert-eq (reply-offset (decimal ⌜0x36 0x2e 0x30 0x32 0x45 0x32 0x33 0x78⌝)) 7 "Decimal stops before a delimiter"
+  assert-eq (reply-ok? (decimal ⌜0x30 0x31⌝)) False "Decimal rejects a leading zero"
+  assert-eq (reply-error-offset (decimal ⌜0x31 0x2e⌝)) 2 "Fraction requires a digit"
+  assert-eq (reply-error-offset (decimal ⌜0x31 0x65 0x2d⌝)) 3 "Exponent requires a digit"
+  assert-eq (reply-ok? (parser-decimal-lexeme-up-to 2 8 70 0 ⌜0x31 0x32 0x33⌝)) False "Coefficient budget is enforced"
+  assert-eq (reply-ok? (parser-decimal-lexeme-up-to 32 2 70 0 ⌜0x31 0x65 0x31 0x32 0x33⌝)) False "Exponent budget is enforced"

@@ -273,8 +273,9 @@ define read-file-bytes :: Path -io-> Either IOError [Int]
 
 
 define read-prefix-loop :: FileHandle -> Int -> [Int] -io-> Either IOError [Int]
-  handle remaining bytes | remaining <= 0 -> Right bytes
-  handle remaining bytes -> def result (read-file-byte handle)
+  handle remaining bytes
+    | remaining <= 0 -> Right bytes
+    | otherwise      -> def result (read-file-byte handle)
                             (match result with | (Left error) -> (finish-read-error error bytes) | (Right byte) -> (read-prefix-loop handle (remaining - 1) (snoc bytes byte)))
 
 

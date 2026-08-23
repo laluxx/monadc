@@ -7,10 +7,10 @@
 :TEST-QUALITY branch-regression
 :TEST-CODEGEN-ATOM atom.codegen.diagnostic.begin.empty.list
 :TEST-CONTEXT monadc.context.language.codegen-branch-coverage, monadc.context.language.runtime-codegen-corpus
-:TEST-PURPOSE Cover AST_LIST empty-list codegen diagnostic.
-:TEST-ATOM An empty list expression should be rejected by codegen.
-:TEST-EXPECT fail:compile
-:TEST-COVERAGE codegen.c:4161 AST_LIST empty list diagnostic
+:TEST-PURPOSE The empty application spelling denotes the Unit value.
+:TEST-ATOM An empty list expression compiles as Unit.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE codegen.c AST_LIST Unit-value lowering
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/compile-fail/atom.codegen.diagnostic.begin.empty.list

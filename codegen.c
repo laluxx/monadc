@@ -275,8 +275,69 @@ static Type *mono_apply_subst(Type *t, TypeSubst *ts) {
     case TYPE_APP:
         return type_app(t->app_constructor,
                         mono_apply_subst(t->app_arg, ts));
+    case TYPE_COLL: {
+        Type *result = type_clone(t);
+        result->element_type = mono_apply_subst(t->element_type, ts);
+        return result;
+    }
+    case TYPE_ARR: {
+        Type *result = type_clone(t);
+        result->arr_element_type = mono_apply_subst(t->arr_element_type, ts);
+        return result;
+    }
+    case TYPE_PTR:
+    case TYPE_OPTIONAL: {
+        Type *result = type_clone(t);
+        result->element_type = mono_apply_subst(t->element_type, ts);
+        return result;
+    }
+    case TYPE_MAP: {
+        Type *result = type_clone(t);
+        result->map_key_type = mono_apply_subst(t->map_key_type, ts);
+        result->map_value_type = mono_apply_subst(t->map_value_type, ts);
+        return result;
+    }
     default:
         return t;
+    }
+}
+
+/* Specialization is only sound when substitution closes the entire ABI, not
+ * merely the variables visible in the call arguments.  A nested variable in
+ * `ParseReply a`, for example, must keep using the erased polymorphic entry;
+ * emitting a nominally specialized function would otherwise guess its return
+ * representation and can also lose partial-application dependencies. */
+static bool mono_type_has_unresolved_part(Type *t) {
+    if (!t) return true;
+    switch (t->kind) {
+    case TYPE_UNKNOWN:
+    case TYPE_VAR:
+        return true;
+    case TYPE_ARROW:
+        return mono_type_has_unresolved_part(t->arrow_param) ||
+               mono_type_has_unresolved_part(t->arrow_ret);
+    case TYPE_FN:
+        for (int i = 0; i < t->param_count; i++)
+            if (mono_type_has_unresolved_part(t->params[i].type)) return true;
+        return mono_type_has_unresolved_part(t->return_type);
+    case TYPE_LIST:
+        for (int i = 0; i < t->list_count; i++)
+            if (mono_type_has_unresolved_part(t->list_types[i])) return true;
+        return false;
+    case TYPE_APP:
+        return mono_type_has_unresolved_part(t->app_arg);
+    case TYPE_COLL:
+    case TYPE_PTR:
+    case TYPE_OPTIONAL:
+        return mono_type_has_unresolved_part(t->element_type);
+    case TYPE_ARR:
+        return t->arr_element_type &&
+               mono_type_has_unresolved_part(t->arr_element_type);
+    case TYPE_MAP:
+        return mono_type_has_unresolved_part(t->map_key_type) ||
+               mono_type_has_unresolved_part(t->map_value_type);
+    default:
+        return false;
     }
 }
 
@@ -389,6 +450,17 @@ static Type *codegen_instantiated_call_result(
 static Type *codegen_call_arg_static_type(CodegenContext *ctx, AST *arg_ast) {
     if (!arg_ast) return type_unknown();
 
+    /* Bracket syntax is shared by collection literals and fixed arrays. HM
+     * has already resolved that ambiguity from the call contract, so retain
+     * its concrete collection evidence before falling back to the raw AST
+     * shape. In particular, [] used as the fallback for a polymorphic
+     * =a -> ParseReply a -> a= call must not force =a= to Arr when the reply
+     * supplies =Coll t=. */
+    if (arg_ast->inferred_type &&
+        (arg_ast->inferred_type->kind == TYPE_COLL ||
+         arg_ast->inferred_type->kind == TYPE_LIST))
+        return arg_ast->inferred_type;
+
     if (arg_ast->type == AST_NUMBER) {
         bool is_float = false;
         if (arg_ast->literal_str) {
@@ -406,9 +478,23 @@ static Type *codegen_call_arg_static_type(CodegenContext *ctx, AST *arg_ast) {
     if (arg_ast->type == AST_STRING)  return type_string();
     if (arg_ast->type == AST_CHAR)    return type_char();
     if (arg_ast->type == AST_KEYWORD) return type_keyword();
-    if (arg_ast->type == AST_ARRAY)   return type_arr(NULL, -1);
+    if (arg_ast->type == AST_ARRAY) {
+        /* An empty bracket literal carries no representation evidence of its
+         * own. Let another argument or the expected result bind the type
+         * variable instead of prematurely selecting the fat Arr ABI. */
+        if (arg_ast->array.element_count == 0)
+            return type_unknown();
+        return type_arr(NULL, -1);
+    }
 
     if (arg_ast->type == AST_SYMBOL) {
+        /* Bool literals are nullary constructors, not integer variables.
+         * Preserve their source-level type when selecting a polymorphic ABI;
+         * falling through to the generic closure path returns an i1 through
+         * the erased i64 convention and makes later specializations unsound. */
+        if (!strcmp(arg_ast->symbol, "True") ||
+            !strcmp(arg_ast->symbol, "False"))
+            return type_bool();
         EnvEntry *ae = env_lookup(ctx->env, arg_ast->symbol);
         if (ae && ae->kind == ENV_FUNC && ae->scheme && ae->scheme->type)
             return ae->scheme->type;
@@ -514,7 +600,12 @@ static Type *lambda_inferred_param_at(AST *lambda, int index) {
 }
 
 static bool codegen_type_is_concrete_value(Type *t) {
-    return t && t->kind != TYPE_UNKNOWN && t->kind != TYPE_VAR &&
+    if (!t || t->kind == TYPE_UNKNOWN || t->kind == TYPE_VAR ||
+        t->kind == TYPE_ARROW || t->kind == TYPE_FN || t->kind == TYPE_PTR)
+        return false;
+    if (t->kind == TYPE_ARR)
+        return codegen_type_is_concrete_value(t->arr_element_type);
+    return
            t->kind != TYPE_ARROW && t->kind != TYPE_FN &&
            t->kind != TYPE_PTR;
 }
@@ -1414,6 +1505,23 @@ void codegen_dispose(CodegenContext *ctx) {
     mono_cache_free(&ctx->mono_cache);
     env_free(ctx->env);
     tc_registry_free(ctx->tc_registry);
+}
+
+LLVMModuleRef codegen_take_module(CodegenContext *ctx,
+                                  LLVMContextRef *context_out) {
+    if (!ctx || !ctx->module || !ctx->context || !context_out) return NULL;
+    LLVMModuleRef module = ctx->module;
+    *context_out = ctx->context;
+    LLVMDisposeBuilder(ctx->builder);
+    mono_cache_free(&ctx->mono_cache);
+    env_free(ctx->env);
+    tc_registry_free(ctx->tc_registry);
+    ctx->builder = NULL;
+    ctx->module = NULL;
+    ctx->context = NULL;
+    ctx->env = NULL;
+    ctx->tc_registry = NULL;
+    return module;
 }
 
 /// Runtime Functions Declaration
@@ -4074,10 +4182,6 @@ void codegen_layout(CodegenContext *ctx, AST *ast) {
     // 4. Force creation of the LLVM named struct type now
     type_to_llvm(ctx, layout_type);
 
-    printf("Layout %s :: %d bytes (%d fields%s%s)\n",
-           ast->layout.name, total_size, ast->layout.field_count,
-           ast->layout.packed ? ", packed" : "",
-           ast->layout.align  ? ", aligned" : "");
 }
 
 
@@ -4299,6 +4403,7 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
         snprintf(tname, sizeof(tname), "__tramp_%d", tramp_count++);
 
         LLVMValueRef      tramp  = LLVMAddFunction(ctx->module, tname, tft);
+        LLVMSetLinkage(tramp, LLVMInternalLinkage);
         LLVMBasicBlockRef tentry = LLVMAppendBasicBlockInContext(
                                        ctx->context, tramp, "entry");
         LLVMBasicBlockRef tsaved = LLVMGetInsertBlock(ctx->builder);
@@ -4324,6 +4429,13 @@ static LLVMValueRef wrap_func_as_closure(CodegenContext *ctx, EnvEntry *e) {
                 LLVMTypeRef uft = LLVMFunctionType(dbl, &ptr_t, 1, 0);
                 real_args[i] = LLVMBuildCall2(ctx->builder, uft,
                                    get_rt_unbox_float(ctx), &boxed, 1, "ua");
+            } else if (native == i1) {
+                LLVMTypeRef uft = LLVMFunctionType(i64, &ptr_t, 1, 0);
+                LLVMValueRef unboxed = LLVMBuildCall2(ctx->builder, uft,
+                                           get_rt_unbox_int(ctx), &boxed, 1,
+                                           "ua_bool");
+                real_args[i] = LLVMBuildTrunc(ctx->builder, unboxed, i1,
+                                               "ua_bool_trunc");
             } else if (pt && pt->kind == TYPE_LAYOUT) {
                 LLVMTypeRef uft = LLVMFunctionType(ptr_t, &ptr_t, 1, 0);
                 real_args[i] = LLVMBuildCall2(ctx->builder, uft,
@@ -6476,7 +6588,8 @@ static bool codegen_inline_imported(CodegenContext *ctx, AST *call,
     if (lambda->type == AST_LIST && lambda->list.count >= 3)
         lambda = lambda->list.items[2];
     if (!lambda || lambda->type != AST_LAMBDA ||
-        lambda->lambda.param_count != (int)call->list.count - 1)
+        lambda->lambda.param_count != (int)call->list.count - 1 ||
+        lambda->lambda.has_effect_arrows)
         return false;
 
     Env *saved_env = ctx->env;
@@ -7818,6 +7931,18 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
                 free(mangled);
             }
+            /* Nullary definitions are values in Monad source. Referencing one
+             * evaluates it; an explicit function value requires a lambda. */
+            if (entry->param_count == 0 && entry->func_ref &&
+                !entry->is_closure_abi) {
+                LLVMTypeRef fn_t = LLVMGlobalGetValueType(entry->func_ref);
+                result.value = LLVMBuildCall2(ctx->builder, fn_t,
+                                               entry->func_ref, NULL, 0,
+                                               ast->symbol);
+                result.type = entry->return_type
+                    ? type_clone(entry->return_type) : type_unknown();
+                return result;
+            }
             result.value = wrap_func_as_closure(ctx, entry);
             result.type  = type_fn(NULL, 0, NULL);
             return result;
@@ -8117,6 +8242,29 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
     }
 
     case AST_ARRAY: {
+        if (ast->inferred_type &&
+            (ast->inferred_type->kind == TYPE_COLL ||
+             ast->inferred_type->kind == TYPE_LIST)) {
+            LLVMTypeRef ptr = LLVMPointerType(
+                LLVMInt8TypeInContext(ctx->context), 0);
+            LLVMTypeRef append_params[] = {ptr, ptr};
+            LLVMTypeRef append_type = LLVMFunctionType(
+                LLVMVoidTypeInContext(ctx->context), append_params, 2, 0);
+            LLVMValueRef raw = emit_call_0(
+                ctx, get_rt_list_new(ctx), ptr, "collection_literal");
+            for (size_t i = 0; i < ast->array.element_count; i++) {
+                CodegenResult item = codegen_expr(ctx, ast->array.elements[i]);
+                LLVMValueRef boxed = codegen_box(ctx, item.value, item.type);
+                LLVMValueRef args[] = {raw, boxed};
+                LLVMBuildCall2(ctx->builder, append_type,
+                               get_rt_list_append(ctx), args, 2, "");
+            }
+            result.value = emit_call_1(
+                ctx, get_rt_value_list(ctx), ptr, raw, "boxed_collection");
+            result.type = type_clone(ast->inferred_type);
+            return result;
+        }
+
         Type *elem_type = NULL;
         if (ast->array.element_count > 0) {
             CodegenResult first = codegen_expr(ctx, ast->array.elements[0]);
@@ -8997,7 +9145,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                          * polymorphic ABI. Usage heuristics must never
                          * specialize it (for example, a key used by member?
                          * is not thereby a Bool). */
-                        if (param_type && param_type->kind != TYPE_VAR &&
+                        if (param_type &&
                             codegen_param_type_needs_usage(param_type) && hm_scheme) {
                             // Use HM-inferred concrete param type if available,
                             // but only for simple ground types (Int, Float, Bool, Char).
@@ -9013,9 +9161,9 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                                 if (codegen_type_is_concrete_value(hp))
                                     hm_param = hp;
                             }
-                            if (!hm_param)
+                            if (!hm_param && param_type->kind != TYPE_VAR)
                                 hm_param = lambda_inferred_param_at(lambda, i);
-                            if (!hm_param)
+                            if (!hm_param && param_type->kind != TYPE_VAR)
                                 hm_param = lambda_param_type_from_usage(
                                     ctx, lambda, lambda->lambda.params[i].name);
                             if (hm_param) {
@@ -11590,7 +11738,8 @@ if (ast->list.count >= 5) {
                  * block identifies the owning function, while init_fn
                  * distinguishes the generated top-level entry point from a
                  * user function. */
-                if (!cur_fn || (is_at_top_level(ctx) && ast->line > 0)) {
+                if (!cur_fn || (!ctx->current_function_name &&
+                                is_at_top_level(ctx) && ast->line > 0)) {
                     CODEGEN_ERROR(ctx, "%s:%d:%d: error: 'undefined' is only valid inside a function body",
                             parser_get_filename(), ast->line, ast->column);
                 }
@@ -11699,6 +11848,45 @@ if (ast->list.count >= 5) {
                 emit_call_3(ctx, memset_fn, ptr, buf, LLVMBuildZExt(ctx->builder, fill_r.value, i32, "fill"), len, "");
                 result.value = buf; result.type = type_string(); return result;
            }
+
+            if (strcmp(head->symbol, "__rt_write_array") == 0 ||
+                strcmp(head->symbol, "write-buffer") == 0) {
+                REQUIRE_ARGS(3);
+                CodegenResult descriptor = codegen_expr(ctx, ast->list.items[1]);
+                CodegenResult array = codegen_expr(ctx, ast->list.items[2]);
+                CodegenResult count = codegen_expr(ctx, ast->list.items[3]);
+                Type *lvalue_type = NULL;
+                LLVMValueRef storage = codegen_lvalue(
+                    ctx, ast->list.items[2], &lvalue_type);
+                Type *actual_array_type = lvalue_type && lvalue_type->kind == TYPE_ARR
+                    ? lvalue_type : array.type;
+                Type *element = actual_array_type && actual_array_type->arr_element_type
+                    ? actual_array_type->arr_element_type : type_int();
+                LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+                LLVMTypeRef params[] = {i64, ptr, i64};
+                LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "write");
+                if (!fn) fn = LLVMAddFunction(ctx->module, "write",
+                    LLVMFunctionType(i64, params, 3, 0));
+                LLVMValueRef data;
+                if (actual_array_type && actual_array_type->kind == TYPE_ARR &&
+                    !type_arr_runtime_sized(actual_array_type)) {
+                    LLVMTypeRef storage_type = type_to_llvm(ctx, actual_array_type);
+                    LLVMValueRef zero = LLVMConstInt(
+                        LLVMInt32TypeInContext(ctx->context), 0, 0);
+                    LLVMValueRef indices[] = {zero, zero};
+                    data = LLVMBuildGEP2(ctx->builder, storage_type, storage,
+                        indices, 2, "write_array_data");
+                } else {
+                    data = arr_fat_data(ctx, array.value, element);
+                }
+                LLVMValueRef args[] = {
+                    emit_type_cast(ctx, descriptor.value, i64), data,
+                    emit_type_cast(ctx, count.value, i64)};
+                result.value = LLVMBuildCall2(ctx->builder,
+                    LLVMGlobalGetValueType(fn), fn, args, 3, "write_array");
+                result.type = type_int(); return result;
+            }
 
 
             // (list) -> List  — new list (empty list)
@@ -11908,6 +12096,38 @@ if (ast->list.count >= 5) {
                     result.value = LLVMBuildLoad2(
                         ctx->builder, elem_t, gep, "pattern_head");
                     result.type = col_r.type->arr_element_type;
+                    if ((!result.type || result.type->kind == TYPE_UNKNOWN) &&
+                        ast->inferred_type &&
+                        ast->inferred_type->kind != TYPE_UNKNOWN) {
+                        Type *inferred = type_clone(ast->inferred_type);
+                        if (type_is_integer(inferred))
+                            result.value = emit_call_1(
+                                ctx, get_rt_unbox_int(ctx), i64_t,
+                                result.value, "pattern_head_int");
+                        else if (type_is_bool(inferred)) {
+                            LLVMValueRef integer = emit_call_1(
+                                ctx, get_rt_unbox_int(ctx), i64_t,
+                                result.value, "pattern_head_bool");
+                            result.value = LLVMBuildTrunc(
+                                ctx->builder, integer,
+                                LLVMInt1TypeInContext(ctx->context),
+                                "pattern_head_bool_i1");
+                        } else if (inferred->kind == TYPE_CHAR)
+                            result.value = emit_call_1(
+                                ctx, get_rt_unbox_char(ctx),
+                                LLVMInt8TypeInContext(ctx->context),
+                                result.value, "pattern_head_char");
+                        else if (inferred->kind == TYPE_STRING ||
+                                 inferred->kind == TYPE_PATH)
+                            result.value = emit_call_1(
+                                ctx, get_rt_unbox_string(ctx), ptr_t,
+                                result.value, "pattern_head_string");
+                        else
+                            result.value = emit_call_1(
+                                ctx, get_rt_unbox_opaque(ctx), ptr_t,
+                                result.value, "pattern_head_value");
+                        result.type = inferred;
+                    }
                     return result;
                 }
 
@@ -11971,6 +12191,25 @@ if (ast->list.count >= 5) {
                     head_value = emit_call_1(
                         ctx, get_rt_unbox_string(ctx), ptr_t,
                         boxed_head, "pattern_head_string");
+                } else if (result.type && type_is_integer(result.type)) {
+                    head_value = emit_call_1(
+                        ctx, get_rt_unbox_int(ctx),
+                        LLVMInt64TypeInContext(ctx->context), boxed_head,
+                        "pattern_head_int");
+                } else if (result.type && result.type->kind == TYPE_CHAR) {
+                    head_value = emit_call_1(
+                        ctx, get_rt_unbox_char(ctx),
+                        LLVMInt8TypeInContext(ctx->context), boxed_head,
+                        "pattern_head_char");
+                } else if (result.type && type_is_bool(result.type)) {
+                    LLVMValueRef integer = emit_call_1(
+                        ctx, get_rt_unbox_int(ctx),
+                        LLVMInt64TypeInContext(ctx->context), boxed_head,
+                        "pattern_head_bool");
+                    head_value = LLVMBuildTrunc(
+                        ctx->builder, integer,
+                        LLVMInt1TypeInContext(ctx->context),
+                        "pattern_head_bool_i1");
                 } else {
                     head_value = emit_call_1(
                         ctx, get_rt_unbox_opaque(ctx), ptr_t,
@@ -12151,6 +12390,22 @@ if (ast->list.count >= 5) {
                     (LLVMValueRef[]){text_r.value, index}, 2,
                     "string_byte");
                 result.type = type_int();
+                return result;
+            }
+
+            if (strcmp(head->symbol, "__rt_char_string") == 0 &&
+                ast->list.count == 2) {
+                LLVMTypeRef ptr_t = LLVMPointerType(
+                    LLVMInt8TypeInContext(ctx->context), 0);
+                LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                CodegenResult char_r = codegen_expr(ctx, ast->list.items[1]);
+                LLVMValueRef codepoint = emit_type_cast(ctx, char_r.value, i64_t);
+                result.value = LLVMBuildCall2(
+                    ctx->builder,
+                    LLVMFunctionType(ptr_t, &i64_t, 1, 0),
+                    get_rt_char_string(ctx), &codepoint, 1,
+                    "char_string");
+                result.type = type_string();
                 return result;
             }
 
@@ -12663,19 +12918,10 @@ if (ast->list.count >= 5) {
             }
 
             if (strcmp(head->symbol, "if") == 0) {
-                /* The switch fast-path is disabled during bootstrap.
-                 * It was corrupting/generated-state around ADT pattern-match
-                 * lowering, especially Maybe functions, and the normal if
-                 * lowering below is the stable path.
-                 *
-                 * Re-enable only after adding focused tests for:
-                 *   - Maybe-returning pattern matches
-                 *   - pointer-valued PHIs
-                 *   - default/undefined branches
-                 *   - nested ADT matches
-                 */
                 bool switch_handled = false;
-                (void)switch_handled;
+                CodegenResult switch_result = codegen_if_switch(ctx, ast, &switch_handled);
+                if (switch_handled)
+                    return switch_result;
 
                 bool infix_subtype_cond =
                     ast->list.count >= 5 &&
@@ -15271,6 +15517,10 @@ if (ast->list.count >= 5) {
             }
 
             EnvEntry *entry = resolve_symbol_with_modules(ctx, head->symbol, head);
+            Type *language_cast_type = NULL;
+            bool language_cast = ast->list.count == 2 &&
+                codegen_is_cast_target_name(head->symbol,
+                                            &language_cast_type);
 
             if (codegen_import_debug_enabled()) {
                 fprintf(stderr,
@@ -16282,7 +16532,26 @@ if (ast->list.count >= 5) {
                 }
             }
 
-            if (entry && entry->kind == ENV_FUNC) {
+            if (entry && entry->kind == ENV_FUNC && !language_cast) {
+                /* A default typeclass method may recurse while its instance
+                 * dictionary is still being assembled.  At that point the
+                 * public method entry is intentionally only a dispatch
+                 * placeholder and has no LLVM function yet, while the
+                 * currently emitted __impl_Class_Type_method function is
+                 * already present in the lexical environment. */
+                if (!entry->func_ref &&
+                    tc_is_method(ctx->tc_registry, head->symbol) &&
+                    ctx->current_function_name &&
+                    strncmp(ctx->current_function_name, "__impl_", 7) == 0) {
+                    const char *suffix = strrchr(ctx->current_function_name, '_');
+                    if (suffix && strcmp(suffix + 1, head->symbol) == 0) {
+                        EnvEntry *recursive = env_lookup(
+                            ctx->env, ctx->current_function_name);
+                        if (recursive && recursive->func_ref)
+                            entry = recursive;
+                    }
+                }
+
                 /* Typeclass instance resolution for non-operator methods */
                 bool local_method_definition = entry->source_ast &&
                                                !entry->module_name;
@@ -16757,9 +17026,17 @@ if (ast->list.count >= 5) {
                         /*         _i, _atypes[_i] ? (int)_atypes[_i]->kind : -1, */
                         /*         _arg->type == AST_SYMBOL ? _arg->symbol : "<expr>"); */
                     }
-                    env_hm_check_call(ctx->env, head->symbol, _atypes, declared_params,
-                                      parser_get_filename(), ast->list.items[1]->line,
-                                      ast->list.items[1]->column);
+                    bool primitive_cast = declared_params == 1 &&
+                        (!strcmp(head->symbol, "Int") ||
+                         !strcmp(head->symbol, "Float") ||
+                         !strcmp(head->symbol, "Char") ||
+                         !strcmp(head->symbol, "String"));
+                    if (!primitive_cast)
+                        env_hm_check_call(ctx->env, head->symbol, _atypes,
+                                          declared_params,
+                                          parser_get_filename(),
+                                          ast->list.items[1]->line,
+                                          ast->list.items[1]->column);
                     free(_atypes);
                 }
 
@@ -16821,6 +17098,16 @@ if (ast->list.count >= 5) {
                             break;
                         }
                     }
+
+                    /* Concrete arguments are insufficient evidence when the
+                     * substituted result still contains a quantified leaf.
+                     * Keep the generic closure ABI in that case. */
+                    Type *mono_result = entry->scheme
+                        ? mono_apply_subst(
+                            mono_fn_return_as_arrow(entry->scheme->type), &ts)
+                        : mono_apply_subst(entry->return_type, &ts);
+                    if (mono_type_has_unresolved_part(mono_result))
+                        all_concrete = false;
 
                     if (all_concrete) {
                         LLVMValueRef spec_fn = codegen_specialize(ctx,
@@ -17253,6 +17540,18 @@ if (ast->list.count >= 5) {
                     }
 
                     expected_type = entry->params[i].type;
+
+                    if (expected_type && expected_type->kind == TYPE_FINITE_SET) {
+                        AST *finite_arg = ast->list.items[i + 1];
+                        size_t ordinal = 0;
+                        if (finite_type_set_contains_literal(
+                                expected_type->finite_name, finite_arg, &ordinal)) {
+                            type_free(arg_result.type);
+                            arg_result.type = type_clone(expected_type);
+                            arg_result.value = LLVMConstInt(
+                                type_to_llvm(ctx, expected_type), ordinal, 0);
+                        }
+                    }
 
                     // Compile-time refinement check via JIT — fully general,
                     // works for any predicate the user writes.
@@ -19113,9 +19412,38 @@ if (ast->list.count >= 5) {
             Env *saved_env = ctx->env;
             ctx->env = env_create_child(saved_env);
 
-            for (int i = 0; i < arg_count && i < head->lambda.param_count; i++) {
-                CodegenResult init = codegen_expr(ctx, ast->list.items[i + 1]);
+            int arg_index = 0;
+            for (int i = 0; i < head->lambda.param_count; i++) {
                 ASTParam *param = &head->lambda.params[i];
+                CodegenResult init = {0};
+                if (param->is_rest) {
+                    LLVMTypeRef ptr_t = LLVMPointerType(
+                        LLVMInt8TypeInContext(ctx->context), 0);
+                    LLVMValueRef raw = emit_call_0(
+                        ctx, get_rt_list_new(ctx), ptr_t, "rest_list");
+                    while (arg_index < arg_count) {
+                        CodegenResult item = codegen_expr(
+                            ctx, ast->list.items[arg_index + 1]);
+                        LLVMValueRef boxed = codegen_box(
+                            ctx, item.value, item.type);
+                        emit_call_2(ctx, get_rt_list_append(ctx),
+                                    LLVMVoidTypeInContext(ctx->context),
+                                    raw, boxed, "");
+                        arg_index++;
+                    }
+                    init.value = emit_call_1(
+                        ctx, get_rt_value_list(ctx), ptr_t, raw,
+                        "boxed_rest_list");
+                    init.type = type_list(NULL, 0);
+                } else {
+                    if (arg_index >= arg_count)
+                        CODEGEN_ERROR(ctx,
+                            "%s:%d:%d: error: immediately invoked lambda expects %d arguments, got %d",
+                            parser_get_filename(), ast->line, ast->column,
+                            head->lambda.param_count, arg_count);
+                    init = codegen_expr(ctx, ast->list.items[arg_index + 1]);
+                    arg_index++;
+                }
                 LLVMTypeRef llvm_type = type_to_llvm(ctx, init.type);
                 LLVMValueRef alloca = LLVMBuildAlloca(ctx->builder, llvm_type,
                                                       param->name ? param->name : "let_tmp");
@@ -19322,9 +19650,6 @@ if (ast->list.count >= 5) {
 
         codegen_expr(ctx, cons_define);
         ast_free(cons_define);
-
-        printf("Refinement type: %s (%s) where %s satisfies predicate\n",
-               rname, base, var);
 
         result.type  = NULL;
         result.value = NULL;
@@ -19632,6 +19957,7 @@ void register_builtins(CodegenContext *ctx) {
 
     // String operations
     env_insert_builtin(ctx->env, "make-string", 2,  0, "Create a string of length n filled with char c", NULL);
+    env_insert_builtin(ctx->env, "__rt_write_array", 3, 0, "Private contiguous array output", NULL);
 
     env_insert_builtin(ctx->env, "layout",   1, -1, "Define a struct layout", NULL);
     env_insert_builtin(ctx->env, "data",     1, -1, "Define an algebraic data type", NULL);

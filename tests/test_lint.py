@@ -165,6 +165,145 @@ class MonadLintTests(unittest.TestCase):
             checked = self.run_lint(source)
             self.assertEqual(checked.returncode, 0, checked.stdout)
 
+    def test_repeated_guard_patterns_are_grouped_and_safely_fixed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Expectations.mon"
+            source.write_text(
+                "define insert :: Int -> Expectations -> Expectations\n"
+                "  code [NoExpectations] -> NoExpectations\n"
+                "  code [Expected item name rest] | equal? code item -> rest\n"
+                "  code [Expected item name rest] | before? code item -> Expected code name rest\n"
+                "  code [Expected item name rest] -> Expected item name (insert code rest)\n"
+            )
+
+            diagnosed = self.run_lint("--json", source)
+            self.assertEqual(diagnosed.returncode, 1, diagnosed.stdout)
+            self.assertIn('"rule":"style/group-repeated-pattern-guards"', diagnosed.stdout)
+            self.assertIn('"applicability":"machine-applicable"', diagnosed.stdout)
+
+            fixed = self.run_lint("--fix", source)
+            self.assertEqual(fixed.returncode, 0, fixed.stdout)
+            self.assertEqual(
+                source.read_text(),
+                "define insert :: Int -> Expectations -> Expectations\n"
+                "  code [NoExpectations] -> NoExpectations\n"
+                "  code [Expected item name rest]\n"
+                "    | equal? code item  -> rest\n"
+                "    | before? code item -> Expected code name rest\n"
+                "    | otherwise         -> Expected item name (insert code rest)\n",
+            )
+            self.assertEqual(self.run_lint(source).returncode, 0)
+
+    def test_two_repeated_name_pattern_clauses_are_not_rewritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Pair.mon"
+            source.write_text(
+                "define classify :: Int -> Bool\n"
+                "  n | positive? n -> True\n"
+                "  n                 -> False\n"
+            )
+            self.assertNotIn(
+                "style/group-repeated-pattern-guards",
+                self.run_lint("--json", source).stdout,
+            )
+
+    def test_guarded_constructor_fallback_becomes_otherwise(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Source.mon"
+            source.write_text(
+                "define source-line-start-from :: Int -> Int -> Int -> [Int] -> Int\n"
+                "  target index start [] -> start\n"
+                "  target index start [byte|rest] | byte = 0x0a -> next-line rest\n"
+                "  target index start [byte|rest]               -> same-line rest\n"
+            )
+
+            diagnosed = self.run_lint("--json", source)
+            self.assertEqual(diagnosed.returncode, 1, diagnosed.stdout)
+            self.assertIn('"rule":"style/group-repeated-pattern-guards"', diagnosed.stdout)
+            self.assertIn('"applicability":"machine-applicable"', diagnosed.stdout)
+
+            fixed = self.run_lint("--fix", source)
+            self.assertEqual(fixed.returncode, 0, fixed.stdout)
+            self.assertEqual(
+                source.read_text(),
+                "define source-line-start-from :: Int -> Int -> Int -> [Int] -> Int\n"
+                "  target index start [] -> start\n"
+                "  target index start [byte|rest]\n"
+                "    | byte = 0x0a -> next-line rest\n"
+                "    | otherwise   -> same-line rest\n",
+            )
+
+    def test_guarded_multi_argument_fallback_becomes_otherwise(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Digits.mon"
+            source.write_text(
+                "define digits :: Int -> Bool -> [Int] -> Int\n"
+                "  acc seen xs | seen -> acc\n"
+                "  acc seen xs        -> 0\n"
+            )
+
+            diagnosed = self.run_lint("--json", source)
+            self.assertEqual(diagnosed.returncode, 1, diagnosed.stdout)
+            self.assertIn('"rule":"style/group-repeated-pattern-guards"', diagnosed.stdout)
+            self.assertIn('"applicability":"machine-applicable"', diagnosed.stdout)
+
+            fixed = self.run_lint("--fix", source)
+            self.assertEqual(fixed.returncode, 0, fixed.stdout)
+            self.assertEqual(
+                source.read_text(),
+                "define digits :: Int -> Bool -> [Int] -> Int\n"
+                "  acc seen xs\n"
+                "    | seen      -> acc\n"
+                "    | otherwise -> 0\n",
+            )
+            self.assertEqual(self.run_lint(source).returncode, 0)
+
+    def test_grouped_guard_fix_preserves_multiline_fallback_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Loop.mon"
+            source.write_text(
+                "define loop :: Int -> Int -> Int\n"
+                "  value limit | value > limit -> value\n"
+                "  value limit ->\n"
+                "    def next (value + 1)\n"
+                "    loop next limit\n"
+            )
+
+            fixed = self.run_lint("--fix", source)
+            self.assertEqual(fixed.returncode, 0, fixed.stdout)
+            self.assertEqual(
+                source.read_text(),
+                "define loop :: Int -> Int -> Int\n"
+                "  value limit\n"
+                "    | value > limit -> value\n"
+                "    | otherwise     ->\n"
+                "    def next (value + 1)\n"
+                "    loop next limit\n",
+            )
+
+    def test_repeated_guarded_constructor_pattern_is_grouped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Space.mon"
+            source.write_text(
+                "define skip :: [Int] -> [Int]\n"
+                "  [] -> []\n"
+                "  [c|rest] | blank? (chr c) -> skip rest\n"
+                "  [c|rest] | linebreak? (chr c) -> skip rest\n"
+                "  xs -> xs\n"
+            )
+
+            fixed = self.run_lint("--fix", source)
+            self.assertEqual(fixed.returncode, 0, fixed.stdout)
+            self.assertEqual(
+                source.read_text(),
+                "define skip :: [Int] -> [Int]\n"
+                "  [] -> []\n"
+                "  [c|rest]\n"
+                "    | blank? (chr c)     -> skip rest\n"
+                "    | linebreak? (chr c) -> skip rest\n"
+                "  xs -> xs\n",
+            )
+
     def test_json_exposes_shared_structured_edits(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "Edit.mon"

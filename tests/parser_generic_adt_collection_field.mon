@@ -1,0 +1,19 @@
+:TEST-ID tests.parser.generic-adt-collection-field
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Generic ADT constructors preserve nested collection payloads.
+:TEST-EXPECT compile, run, nested collection payload is preserved
+:TEST-TIER regression
+:TEST-SECTION inference
+:TEST-CATEGORY generic-adt
+
+import Text.Parser
+
+module Parser.GenericAdtCollectionField []
+
+
+define wrap-values :: [a] -> ParseReply [a]
+  values -> Parsed values 0 False
+
+
+tests
+  assert-eq (count (reply-value-or [] (wrap-values ⌜1 2 3⌝))) 3 "Generic constructors preserve collection fields"

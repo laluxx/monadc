@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-08-10
+#+LAST_MODIFIED: 2026-08-21
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -180,18 +180,50 @@ define ascii-byte? :: Int -> Bool
        | otherwise        -> False
 #+END_SRC
 
-#+BEGIN_SRC monad
-define ascii-space? :: Int -> Bool
-  c | = 0x20    -> True
-    | = 0x09    -> True
-    | = 0x0a    -> True
-    | = 0x0d    -> True
-    | otherwise -> False
-#+END_SRC
-
   This notation means =byte >= 0 and byte <= 0x7f=.  It is the canonical style
   for range tables, character properties, classifiers, and other unary guarded
-  definitions throughout core code.
+  definitions throughout core code. Shared classifications belong in their
+  owning module: parser and codec modules import =Data.Char= and compose
+  =blank?=, =linebreak?=, =digit?=, and conversion methods instead of defining
+  private copies of ASCII tables.
+
+  The same omission applies to unary methods and predicates. Given one =Char=
+  subject, write =| blank?= and =| linebreak?= rather than repeating the
+  subject. Prefer character literals for readable characters and the public
+  type cast for code points whose literal would be visually awkward:
+
+#+BEGIN_SRC monad
+define scheme-symbol-character? :: Char -> Bool
+  character | blank?      -> False
+            | linebreak?  -> False
+            | = '('       -> False
+            | = ')'       -> False
+            | = Char 0x27 -> False
+            | otherwise    -> True
+#+END_SRC
+
+  In public example code, =Char codepoint= communicates the conversion more
+  directly than the lower-level =chr codepoint= helper.
+
+[DEC id:dec.style.multi-subject-relative-guards-2026-08-21 date:2026-08-21 by:human src:user-request conf:high]
+  Point-free guard operators fill omitted operands from the clause subjects in
+  source order. An explicitly written subject is excluded from that implicit
+  set, and the remaining subjects precede the explicit operands. Therefore:
+
+#+BEGIN_SRC monad
+define same? :: Int -> Int -> Bool
+  left right | = -> True       ; (= left right)
+  _ _ -> False
+
+define reversed-same? :: Int -> Int -> Bool
+  left right | = left -> True  ; (= right left)
+  _ _ -> False
+#+END_SRC
+
+  This is one omission rule for unary and multi-subject guards: do not repeat a
+  clause subject merely to occupy an operator slot. Retain an explicit infix
+  condition when its operand order is clearer to the reader than the compact
+  point-free form.
 
 [DEC id:dec.style.receiver-relative-field-guards-2026-08-10 date:2026-08-10 by:human src:user-request conf:high]
   A unary guard may access a field of its sole matched subject with =.field=.
@@ -220,7 +252,23 @@ define visible? :: Sample -> Bool
   line, because preserving the complete argument pattern is clearer than
   forcing it beside every branch. Guard bodies use ordinary Wisp application,
   such as =id count= and =null? values=, instead of =(id count)= and
-  =(null? values)=.
+  =(null? values)=. Never repeat the complete multi-argument subject on every
+  guarded clause. Use =| otherwise ->= for the fallback branch.
+
+  When two or more consecutive guarded clauses repeat the same pattern, write
+  that pattern once as a guard table. This includes constructor patterns such
+  as =[c|rest]=; the constructor carries information once, while each aligned
+  pipe states a distinct condition. An unguarded final clause with that same
+  pattern is semantically exhaustive and is spelled =| otherwise ->=.
+  =style/group-repeated-pattern-guards= diagnoses this shape and provides a
+  machine-applicable rewrite. A later clause with a different pattern remains
+  outside the table and retains its independent matching role.
+
+  Direct indexed selection uses postfix =collection[index]=. The compiler
+  resolves it through typed indexing for homogeneous lists, arrays, strings,
+  and other indexable collections. Prefer it to =(nth collection index)= when
+  selecting one known position. Establish non-emptiness or bounds in an
+  earlier guard whenever safety is not otherwise evident.
 
 #+BEGIN_SRC monad
 define take :: Int -> [a] -> [a]
@@ -229,6 +277,60 @@ define take :: Int -> [a] -> [a]
       | n > 0     -> (x ++ (take (n - 1) xs))
       | otherwise -> []
 #+END_SRC
+
+[DEC id:dec.style.early-return-native-surface-2026-08-21 date:2026-08-21 by:human src:user-request conf:high]
+  Put terminating and boundary clauses before the recursive or general clause.
+  Bind only values used by that clause: use =_= for a genuinely ignored
+  argument, but never discard a value that the guard references. Thus
+  =width index | index >= width -> []= is valid and explicit, while
+  =_ index | index >= width -> []= is not, because =width= would be unbound.
+  For collections, prefer direct shapes such as =[]= and =[x|xs]= over
+  recounting the collection to discover whether it is empty.
+
+  Example and library code use public Monad surface forms: string literals for
+  characters, =++= for concatenation, postfix indexing, ordinary application,
+  patterns, and guards. Do not hide simple source operations behind wrappers
+  around =__rt_*= primitives. If the public literal or operator fails, repair
+  and regress the compiler or prelude implementation instead of embedding a
+  runtime escape hatch in otherwise idiomatic code.
+
+#+BEGIN_SRC monad
+define decode-json-value :: Int -> [Int] -> JsonDecode
+  offset bytes
+    | parser-empty? bytes -> JsonDecodeFailed offset 1
+    | bytes[0] = 0x6e     -> decode-json-literal JsonNull ⌜0x6e 0x75 0x6c 0x6c⌝ 10 offset bytes
+    | otherwise           ->
+        decode-json-integer offset bytes (signed-int offset bytes)
+#+END_SRC
+
+[DEC id:dec.style.semantic-values-are-values-2026-08-21 date:2026-08-21 by:human src:user-request conf:high]
+  A semantic constant is defined and typed as a value. Never add a dummy
+  argument merely to force it into a callback shape:
+
+#+BEGIN_SRC monad
+define scm-true :: ScmValue
+  ScmBoolean True
+#+END_SRC
+
+  When an API genuinely requires a function, keep the value independent and
+  give the boundary adapter a name and signature that describe the protocol.
+  An ignored parser token is legitimate in an =after-opening= or
+  =after-quote= continuation because that function sequences consumed syntax;
+  it does not turn the resulting Scheme value into a function.
+
+[DEC id:dec.style.semantic-collection-types-2026-08-21 date:2026-08-21 by:human src:user-request conf:high]
+  Collection element types should communicate the collection's domain rather
+  than defaulting mechanically to =[Int]=. Use =[Byte]= for encoded octets,
+  =[Char]= for characters, and an explicitly scalar-named boundary when the
+  current API represents Unicode scalar values as integers. Do not label the
+  output of =decode-utf8= as bytes: a scalar such as λ has value 955 and cannot
+  inhabit =Byte=. Names such as =scalars= and =scalars->text= preserve that
+  distinction until the parser API gains a character-stream abstraction.
+
+  Tutorial modules expose their conceptual shape before their mechanics.
+  Organize flagship examples into a few ordered sections, then use short local
+  landmarks for dense algorithms. A reader should be able to skim the headings
+  and understand the data flow without first reading every helper definition.
 
 [INF id:inf.style.pure-wisp-connects-to-wisp from:obs.style.pure-wisp-prelude conf:high]
   connects-to -> =monadc.context.wisp.architecture=. Pure Wisp style is a

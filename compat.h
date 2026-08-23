@@ -3,6 +3,13 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifndef MONAD_THREAD_LOCAL
+#if defined(_MSC_VER)
+#define MONAD_THREAD_LOCAL __declspec(thread)
+#else
+#define MONAD_THREAD_LOCAL __thread
+#endif
+#endif
 #if defined(_WIN32)
 #include <direct.h>
 #else

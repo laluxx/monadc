@@ -6,6 +6,15 @@
 
 Status: paused while Core development resumes.
 
+The 2026-08-11 Core/parser cycle extended
+=style/group-repeated-pattern-guards= to every consecutive two-row guarded
+table with an identical pattern, including constructor patterns. The rule
+recognizes the CST structure, synthesizes =otherwise= only for a same-pattern
+exhaustive final row, and publishes one shared machine-applicable edit to CLI,
+JSON, and LSP consumers. Parser whitespace scanning, =signed-int-digits=,
+=byte-got=, and =choice= are the first Core clients of the strengthened
+invariant.
+
 The next tooling cycle builds the first compiler-semantic lint vertical slice:
 
 1. Introduce an immutable analysis snapshot shared by the compiler, linter,
@@ -29,6 +38,8 @@ safe-fix is idempotent; =monad lint core= and the full Core suite remain clean.
 Every completed tooling cycle updates this section before work stops. It must
 describe the next executable vertical slice, its proof obligations, and its
 exit gate rather than leaving the continuation only in conversation history.
+Every final cycle report must also state that ideal next cycle explicitly,
+including why it comes next and what command or invariant proves it complete.
 
 * Purpose
 
@@ -294,3 +305,14 @@ They are not evidence of a completed CST or semantic query system. In
 particular, mutable-binding advice must not be implemented as a search for
 =set!= text: Cycle 3 consumes resolved binder identities and the compiler's
 write/place analysis.
+
+[FIX id:fix.tooling.group-repeated-pattern-guards-2026-08-11 date:2026-08-11 by:codex src:tooling/lint.c,tests/test_lint.py,core/Text/Parser.mon,core/prelude/Text/LineEditor.mon conf:high]
+  =style/group-repeated-pattern-guards= recognizes any consecutive run of at
+  least two guarded clauses with the same structured pattern head, including
+  constructor patterns. A same-pattern catch-all is included when present and
+  becomes =otherwise=; a later different pattern remains outside the edit. It
+  emits one complete multiline machine-applicable edit with guards aligned to
+  their longest condition. Simple unary heads remain owned by
+  =style/receiver-relative-guard=, preventing overlapping rewrite plans. The
+  scanner respects strings, character literals, and nested pattern delimiters;
+  replacements retain original literal spelling rather than CST masking.

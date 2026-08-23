@@ -1524,6 +1524,8 @@ void qtt_source_grade_result_free(QttSourceGradeResult *result) {
     result->result_closure_count = 0;
 }
 
+#ifndef MONAD_QTT_SOURCE_GRADES_ONLY
+
 QttGradeScheme *qtt_shadow_grade_scheme(
     const AST *lambda, uint64_t module_id) {
     if (!lambda || lambda->type != AST_LAMBDA ||
@@ -1980,3 +1982,4 @@ const char *qtt_shadow_status_name(QttShadowStatus status) {
     if (status == QTT_SHADOW_UNSUPPORTED) return "unsupported";
     return "internal-error";
 }
+#endif

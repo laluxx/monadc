@@ -1,0 +1,51 @@
+;;; Format.mon --- Pure text formatting primitives
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "text formatting decimal diagnostics"
+
+;;; Commentary:
+
+ Text.Format owns small pure renderers shared by diagnostics and serializers.
+ Keeping value-to-text conversion separate from terminal output prevents the
+ effectful `show` operation from being mistaken for a String-producing cast.
+
+;;; Code:
+
+import Data.Semigroup
+
+module Text.Format
+  [char->text int->text]
+
+
+define char->text :: Char -> String
+  character -> (__rt_char_string character)
+
+
+define int-digit-text :: Int -> String
+  0 -> "0"
+  1 -> "1"
+  2 -> "2"
+  3 -> "3"
+  4 -> "4"
+  5 -> "5"
+  6 -> "6"
+  7 -> "7"
+  8 -> "8"
+  9 -> "9"
+
+
+define positive-int->text :: Int -> String
+  value | < 10      -> (int-digit-text value)
+        | otherwise -> ((positive-int->text (value / 10)) ++ (int-digit-text (value % 10)))
+
+
+define int->text :: Int -> String
+  value | = 0       -> "0"
+        | < 0       -> ("-" ++ (positive-int->text (0 - value)))
+        | otherwise -> (positive-int->text value)
+
+
+tests
+  assert-eq (int->text 0) "0" "Text.Format renders zero"
+  assert-eq (int->text -1203) "-1203" "Text.Format renders signed decimal text"

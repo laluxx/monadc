@@ -1,0 +1,72 @@
+:TEST-ID tests.core.data-json.scalars
+:TEST-CONTEXT monadc.context.core-libs.json
+:TEST-PURPOSE Data.Json expresses strict scalar JSON grammar through Text.Parser.
+:TEST-EXPECT compile, run, strict scalar assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY json
+
+import Data.Json
+
+module Core.JsonScalars []
+
+
+define first-json-byte :: [Int] -> Int
+  bytes -> bytes[0]
+
+
+define null-token-bytes :: [Int] ⌜0x6e 0x75 0x6c 0x6c⌝
+
+
+define tiny-json-budget :: ParserBudget
+  (ParserBudget :input-bytes 3 :nesting 8 :tokens 32 :string-bytes 64 :number-digits 32 :collection-items 16)
+
+
+tests
+  assert-eq (first-json-byte (list 0x6e 0x75 0x6c 0x6c)) 0x6e "Postfix indexing selects a byte from a homogeneous list"
+  assert-eq null-token-bytes[0] 0x6e "Corner quotes construct an indexable typed homogeneous list literal"
+  assert-eq (count null-token-bytes) 4 "Corner-quoted list literals preserve their element count"
+  assert-eq (json-null? (json-value-or JsonNull (decode-json (list 0x6e 0x75 0x6c 0x6c)))) True "JSON decodes null"
+  assert-eq (json-decode-ok? (decode-json-with-budget tiny-json-budget null-token-bytes)) False "JSON enforces its input-byte budget"
+  assert-eq (json-error-offset (decode-json-with-budget tiny-json-budget null-token-bytes)) 3 "JSON reports the first prohibited input byte"
+  assert-eq (json-error-code (decode-json-with-budget tiny-json-budget null-token-bytes)) 60 "JSON identifies input-budget exhaustion"
+  assert-eq (json-bool-or? False (json-value-or JsonNull (decode-json (list 0x74 0x72 0x75 0x65)))) True "JSON decodes true"
+  assert-eq (json-integer-or 0 (json-value-or JsonNull (decode-json (list 0x2d 0x34 0x32)))) (0 - 42) "JSON decodes a negative integer"
+  assert-eq (json-number-lexeme-or "" (json-value-or JsonNull (decode-json ⌜0x2d 0x31 0x32 0x2e 0x35 0x65 0x2b 0x32⌝))) "-12.5e+2" "JSON preserves an exact decimal lexeme"
+  assert-eq (json-number-lexeme-or "" (json-value-or JsonNull (decode-json ⌜0x31 0x45 0x34 0x30 0x30⌝))) "1E400" "JSON syntax does not impose a machine Float range"
+  assert-eq (json-decode-ok? (decode-json (list 0x30 0x31))) False "JSON rejects leading-zero numbers"
+  assert-eq (json-decode-ok? (decode-json ⌜0x31 0x2e⌝)) False "JSON rejects a missing fractional digit"
+  assert-eq (json-error-offset (decode-json ⌜0x31 0x2e⌝)) 2 "JSON reports the missing fractional digit"
+  assert-eq (json-decode-ok? (decode-json ⌜0x31 0x65 0x2b⌝)) False "JSON rejects a missing exponent digit"
+  assert-eq (json-decode-ok? (decode-json (list 0x0b 0x74 0x72 0x75 0x65))) False "JSON rejects vertical tab as whitespace"
+  assert-eq (json-decode-ok? (decode-json (list 0x0c 0x74 0x72 0x75 0x65))) False "JSON rejects form feed as whitespace"
+  assert-eq (json-decode-ok? (decode-json (list 0x74 0x72 0x75 0x65 0x78))) False "JSON requires end of input"
+  assert-eq (json-error-offset (decode-json (list 0x6e 0x75 0x78 0x6c))) 2 "JSON reports the furthest literal mismatch"
+  assert-eq (render-json-error "sample.json" (list 0x6e 0x75 0x78 0x6c)) "sample.json:1:3: error: expected null\n  |\n1 | nuxl\n  |   ^" "JSON errors use the shared parser diagnostic renderer"
+  assert-eq (json-array-count-or 99 (json-value-or JsonNull (decode-json ⌜0x5b 0x5d⌝))) 0 "JSON decodes an empty array"
+  assert-eq (json-array-count-or 0 (json-value-or JsonNull (decode-json ⌜0x5b 0x6e 0x75 0x6c 0x6c 0x2c 0x74 0x72 0x75 0x65 0x2c 0x2d 0x32 0x5d⌝))) 3 "JSON decodes a heterogeneous array"
+  assert-eq (json-array-count-or 0 (json-value-or JsonNull (decode-json ⌜0x5b 0x5b 0x6e 0x75 0x6c 0x6c 0x5d 0x5d⌝))) 1 "A nested JSON array remains one outer element"
+  assert-eq (json-first-array-count-or 0 (json-value-or JsonNull (decode-json ⌜0x5b 0x5b 0x6e 0x75 0x6c 0x6c 0x5d 0x5d⌝))) 1 "JSON arrays nest recursively"
+  assert-eq (json-decode-ok? (decode-json ⌜0x5b 0x6e 0x75 0x6c 0x6c 0x2c 0x5d⌝)) False "JSON rejects a trailing array comma"
+  assert-eq (json-string-or "fallback" (json-value-or JsonNull (decode-json ⌜0x22 0x22⌝))) "" "JSON decodes an empty string"
+  assert-eq (json-string-or "" (json-value-or JsonNull (decode-json ⌜0x22 0x68 0x65 0x6c 0x6c 0x6f 0x22⌝))) "hello" "JSON decodes an ASCII string"
+  assert-eq (json-string-or "" (json-value-or JsonNull (decode-json ⌜0x22 0x5c 0x22 0x5c 0x5c 0x5c 0x2f 0x5c 0x62 0x5c 0x66 0x5c 0x6e 0x5c 0x72 0x5c 0x74 0x22⌝))) "\"\\/\b\f\n\r\t" "JSON decodes every short escape"
+  assert-eq (json-string-or "" (json-value-or JsonNull (decode-json ⌜0x22 0xce 0xbb 0x22⌝))) "λ" "JSON preserves raw UTF-8 string bytes"
+  assert-eq (json-string-or "" (json-value-or JsonNull (decode-json ⌜0x22 0x5c 0x75 0x30 0x33 0x62 0x62 0x22⌝))) "λ" "JSON decodes a BMP Unicode escape"
+  assert-eq (json-string-or "" (json-value-or JsonNull (decode-json ⌜0x22 0x5c 0x75 0x64 0x38 0x33 0x64 0x5c 0x75 0x64 0x65 0x34 0x32 0x22⌝))) "🙂" "JSON combines a UTF-16 surrogate pair"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0x0a 0x22⌝)) False "JSON rejects unescaped control characters"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0x5c 0x78 0x22⌝)) False "JSON rejects unknown escapes"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0x5c 0x75 0x64 0x38 0x33 0x64 0x22⌝)) False "JSON rejects an unpaired high surrogate"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0x5c 0x75 0x64 0x65 0x34 0x32 0x22⌝)) False "JSON rejects an unpaired low surrogate"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0x5c 0x75 0x31 0x32 0x78 0x34 0x22⌝)) False "JSON rejects malformed hexadecimal escapes"
+  assert-eq (json-error-offset (decode-json ⌜0x22 0x61 0x62⌝)) 3 "JSON reports an unterminated string at end of input"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0x80 0x22⌝)) False "JSON rejects a lone UTF-8 continuation byte"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0xc0 0xaf 0x22⌝)) False "JSON rejects an overlong UTF-8 encoding"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0xe2 0x82 0x22⌝)) False "JSON rejects a truncated UTF-8 sequence"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0xed 0xa0 0x80 0x22⌝)) False "JSON rejects a UTF-8 encoded surrogate"
+  assert-eq (json-decode-ok? (decode-json ⌜0x22 0xf4 0x90 0x80 0x80 0x22⌝)) False "JSON rejects code points above U+10FFFF"
+  assert-eq (json-object-count-or 99 (json-value-or JsonNull (decode-json ⌜0x7b 0x7d⌝))) 0 "JSON decodes an empty object"
+  assert-eq (json-object-count-or 0 (json-value-or JsonNull (decode-json ⌜0x7b 0x22 0x61 0x22 0x3a 0x31 0x7d⌝))) 1 "JSON decodes one object member"
+  assert-eq (json-object-count-or 0 (json-value-or JsonNull (decode-json ⌜0x7b 0x22 0x61 0x22 0x3a 0x31 0x2c 0x22 0x62 0x22 0x3a 0x74 0x72 0x75 0x65 0x7d⌝))) 2 "JSON decodes object members"
+  assert-eq (json-decode-ok? (decode-json ⌜0x7b 0x22 0x61 0x22 0x3a 0x31 0x2c 0x7d⌝)) False "JSON rejects an object trailing comma"
+  assert-eq (json-decode-ok? (decode-json ⌜0x7b 0x22 0x61 0x22 0x31 0x7d⌝)) False "JSON requires a colon after an object key"

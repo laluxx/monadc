@@ -17,22 +17,22 @@
     (array)[(count)++] = (item);                                   \
 } while(0)
 
-jmp_buf  g_reader_escape;
-bool     g_reader_escape_set = false;
-char     g_reader_error_msg[512];
+MONAD_THREAD_LOCAL jmp_buf  g_reader_escape;
+MONAD_THREAD_LOCAL bool     g_reader_escape_set = false;
+MONAD_THREAD_LOCAL char     g_reader_error_msg[512];
 
-int g_quote_depth       = 0;
-int g_srcmap_line_bias  = 0;
-int g_srcmap_col_bias   = 0;
-int g_srcmap_abs_line   = 0;
-int g_scope_depth       = 0;
+MONAD_THREAD_LOCAL int g_quote_depth       = 0;
+MONAD_THREAD_LOCAL int g_srcmap_line_bias  = 0;
+MONAD_THREAD_LOCAL int g_srcmap_col_bias   = 0;
+MONAD_THREAD_LOCAL int g_srcmap_abs_line   = 0;
+MONAD_THREAD_LOCAL int g_scope_depth       = 0;
 
-int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
-int (*g_is_known_function)(const char *name) = NULL;
+MONAD_THREAD_LOCAL int (*g_param_kind_is_func)(const char *func_name, int arg_index) = NULL;
+MONAD_THREAD_LOCAL int (*g_is_known_function)(const char *name) = NULL;
 
 /* Pending defines emitted by layout where blocks */
-static AST **g_pending_defines      = NULL;
-static int   g_pending_define_count = 0;
+static MONAD_THREAD_LOCAL AST **g_pending_defines      = NULL;
+static MONAD_THREAD_LOCAL int   g_pending_define_count = 0;
 
 /// Layout Registry for Pattern Matching
 
@@ -42,9 +42,9 @@ typedef struct {
     int field_count;
 } LayoutRegistryEntry;
 
-static LayoutRegistryEntry *g_layouts = NULL;
-static int g_layout_count = 0;
-static int g_layout_cap = 0;
+static MONAD_THREAD_LOCAL LayoutRegistryEntry *g_layouts = NULL;
+static MONAD_THREAD_LOCAL int g_layout_count = 0;
+static MONAD_THREAD_LOCAL int g_layout_cap = 0;
 
 void register_layout_fields(const char *name, ASTLayoutField *fields, int count) {
     if (g_layout_count >= g_layout_cap) {
@@ -78,9 +78,77 @@ typedef struct {
     char *docstring;
 } LayoutFieldDocEntry;
 
-static LayoutFieldDocEntry *g_layout_field_docs = NULL;
-static int g_layout_field_doc_count = 0;
-static int g_layout_field_doc_cap = 0;
+static MONAD_THREAD_LOCAL LayoutFieldDocEntry *g_layout_field_docs = NULL;
+static MONAD_THREAD_LOCAL int g_layout_field_doc_count = 0;
+static MONAD_THREAD_LOCAL int g_layout_field_doc_cap = 0;
+
+struct ReaderPersistentState {
+    LayoutRegistryEntry *layouts;
+    int layout_count;
+    int layout_cap;
+    LayoutFieldDocEntry *docs;
+    int doc_count;
+    int doc_cap;
+};
+
+static MONAD_THREAD_LOCAL ReaderPersistentState *g_bound_reader_state;
+static MONAD_THREAD_LOCAL ReaderPersistentState g_saved_reader_state;
+
+ReaderPersistentState *reader_persistent_state_create(void) {
+    return calloc(1, sizeof(ReaderPersistentState));
+}
+
+static void reader_persistent_state_clear(ReaderPersistentState *state) {
+    for (int i = 0; i < state->layout_count; i++) {
+        free(state->layouts[i].name);
+        for (int j = 0; j < state->layouts[i].field_count; j++)
+            free(state->layouts[i].fields[j]);
+        free(state->layouts[i].fields);
+    }
+    free(state->layouts);
+    for (int i = 0; i < state->doc_count; i++) {
+        free(state->docs[i].layout_name);
+        free(state->docs[i].field_name);
+        free(state->docs[i].docstring);
+    }
+    free(state->docs);
+    memset(state, 0, sizeof(*state));
+}
+
+void reader_persistent_state_destroy(ReaderPersistentState *state) {
+    if (!state || state == g_bound_reader_state) return;
+    reader_persistent_state_clear(state);
+    free(state);
+}
+
+bool reader_persistent_state_enter(ReaderPersistentState *state) {
+    if (!state || g_bound_reader_state) return false;
+    g_saved_reader_state = (ReaderPersistentState){
+        g_layouts, g_layout_count, g_layout_cap,
+        g_layout_field_docs, g_layout_field_doc_count, g_layout_field_doc_cap};
+    g_layouts = state->layouts; g_layout_count = state->layout_count;
+    g_layout_cap = state->layout_cap; g_layout_field_docs = state->docs;
+    g_layout_field_doc_count = state->doc_count;
+    g_layout_field_doc_cap = state->doc_cap;
+    memset(state, 0, sizeof(*state));
+    g_bound_reader_state = state;
+    return true;
+}
+
+void reader_persistent_state_leave(ReaderPersistentState *state) {
+    if (!state || g_bound_reader_state != state) return;
+    *state = (ReaderPersistentState){
+        g_layouts, g_layout_count, g_layout_cap,
+        g_layout_field_docs, g_layout_field_doc_count, g_layout_field_doc_cap};
+    g_layouts = g_saved_reader_state.layouts;
+    g_layout_count = g_saved_reader_state.layout_count;
+    g_layout_cap = g_saved_reader_state.layout_cap;
+    g_layout_field_docs = g_saved_reader_state.docs;
+    g_layout_field_doc_count = g_saved_reader_state.doc_count;
+    g_layout_field_doc_cap = g_saved_reader_state.doc_cap;
+    memset(&g_saved_reader_state, 0, sizeof(g_saved_reader_state));
+    g_bound_reader_state = NULL;
+}
 
 static void register_layout_field_docstring(const char *layout_name,
                                             const char *field_name,
@@ -135,9 +203,9 @@ typedef struct {
     int arity;
 } LocalFuncEntry;
 
-static LocalFuncEntry *g_local_funcs = NULL;
-static int g_local_func_count = 0;
-static int g_local_func_cap = 0;
+static MONAD_THREAD_LOCAL LocalFuncEntry *g_local_funcs = NULL;
+static MONAD_THREAD_LOCAL int g_local_func_count = 0;
+static MONAD_THREAD_LOCAL int g_local_func_cap = 0;
 
 static void register_local_func_arity(const char *name, int arity) {
     if (!name) return;
@@ -178,13 +246,13 @@ static bool reader_is_known_callable_name(const char *name) {
 
 /// Multiline -| comments |-
 
-CommentSpan *g_comment_spans = NULL;
-int          g_comment_count = 0;
-int          g_comment_cap   = 0;
+MONAD_THREAD_LOCAL CommentSpan *g_comment_spans = NULL;
+MONAD_THREAD_LOCAL int g_comment_count = 0;
+MONAD_THREAD_LOCAL int g_comment_cap   = 0;
 
-DrawerSpan *g_drawer_spans = NULL;
-int         g_drawer_count = 0;
-int         g_drawer_cap   = 0;
+MONAD_THREAD_LOCAL DrawerSpan *g_drawer_spans = NULL;
+MONAD_THREAD_LOCAL int g_drawer_count = 0;
+MONAD_THREAD_LOCAL int g_drawer_cap   = 0;
 
 static void comment_map_free(void) {
     free(g_comment_spans);
@@ -437,10 +505,10 @@ static CommentSpan *comment_map_lookup(int pos) {
 
 /// Error reporting context
 
-const char *current_filename = NULL;
-const char *current_source = NULL;
+MONAD_THREAD_LOCAL const char *current_filename = NULL;
+MONAD_THREAD_LOCAL const char *current_source = NULL;
 
-const char *original_source = NULL;
+MONAD_THREAD_LOCAL const char *original_source = NULL;
 
 void parser_set_original_source(const char *orig_source) {
     original_source = orig_source;
@@ -473,9 +541,12 @@ const char *parser_get_filename(void) {
 static void compiler_error_range(int line, int column, int end_column, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-
+    vsnprintf(g_reader_error_msg, sizeof(g_reader_error_msg), fmt, args);
+    va_end(args);
+    reader_diagnostic_raise(current_filename, line, column, end_column,
+                            g_reader_error_msg, NULL);
     fprintf(stderr, "%s:%d:%d: error: ", current_filename ? current_filename : "<input>", line, column);
-    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "%s", g_reader_error_msg);
     fprintf(stderr, "\n");
 
     const char *src_to_print = original_source ? original_source : current_source;
@@ -512,7 +583,6 @@ static void compiler_error_range(int line, int column, int end_column, const cha
         fprintf(stderr, "\n");
     }
 
-    va_end(args);
     exit(1);
 }
 
@@ -521,6 +591,9 @@ static void compiler_error(int line, int column, const char *fmt, ...) {
     va_start(args, fmt);
     vsnprintf(g_reader_error_msg, sizeof(g_reader_error_msg), fmt, args);
     va_end(args);
+
+    reader_diagnostic_raise(current_filename, line, column, column,
+                            g_reader_error_msg, NULL);
 
     /* print source context */
     fprintf(stderr, "%s:%d:%d: error: %s\n",
@@ -560,6 +633,76 @@ static char *my_strdup(const char *s) {
     return my_strndup(s, strlen(s));
 }
 
+#if defined(_MSC_VER)
+#define MONAD_READER_THREAD_LOCAL __declspec(thread)
+#else
+#define MONAD_READER_THREAD_LOCAL __thread
+#endif
+
+static MONAD_READER_THREAD_LOCAL ReaderAstLedger *current_ast_ledger;
+
+void reader_ast_ledger_begin(ReaderAstLedger *ledger) {
+    if (!ledger) return;
+    ledger->nodes = NULL;
+    ledger->count = 0;
+    ledger->capacity = 0;
+    ledger->previous = current_ast_ledger;
+    ledger->aborting = false;
+    current_ast_ledger = ledger;
+}
+
+static bool reader_ast_ledger_unregister(AST *ast) {
+    ReaderAstLedger *ledger = current_ast_ledger;
+    if (!ledger || !ast) return false;
+    for (size_t i = 0; i < ledger->count; i++) {
+        if (ledger->nodes[i] != ast) continue;
+        ledger->nodes[i] = ledger->nodes[--ledger->count];
+        return true;
+    }
+    return false;
+}
+
+AST *ast_allocate(void) {
+    AST *ast = calloc(1, sizeof(*ast));
+    ReaderAstLedger *ledger = current_ast_ledger;
+    if (!ast || !ledger) return ast;
+    if (ledger->count == ledger->capacity) {
+        size_t capacity = ledger->capacity ? ledger->capacity * 2 : 32;
+        AST **nodes = realloc(ledger->nodes, capacity * sizeof(*nodes));
+        if (!nodes) {
+            free(ast);
+            return NULL;
+        }
+        ledger->nodes = nodes;
+        ledger->capacity = capacity;
+    }
+    ledger->nodes[ledger->count++] = ast;
+    return ast;
+}
+
+void reader_ast_ledger_commit(ReaderAstLedger *ledger) {
+    if (!ledger || current_ast_ledger != ledger) return;
+    current_ast_ledger = ledger->previous;
+    free(ledger->nodes);
+    ledger->nodes = NULL;
+    ledger->count = 0;
+    ledger->capacity = 0;
+    ledger->previous = NULL;
+    ledger->aborting = false;
+}
+
+void reader_ast_ledger_abort(void *state) {
+    ReaderAstLedger *ledger = state;
+    if (!ledger || current_ast_ledger != ledger) return;
+    ledger->aborting = true;
+    while (ledger->count) ast_free(ledger->nodes[ledger->count - 1]);
+    reader_ast_ledger_commit(ledger);
+}
+
+size_t reader_ast_ledger_live_count(const ReaderAstLedger *ledger) {
+    return ledger ? ledger->count : 0;
+}
+
 /* Expand pointer-type sugar: *U8 -> "Pointer :: U8", **U8 -> "Pointer :: Pointer :: U8"
  * Returns a newly malloc'd string. If no expansion needed, returns my_strdup(s). */
 static char *expand_ptr_type(const char *s) {
@@ -585,7 +728,7 @@ static char *expand_ptr_type(const char *s) {
 /// AST constructors
 
 AST *ast_new_number(double value, const char *literal) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type        = AST_NUMBER;
     a->number      = value;
     a->literal_str = literal ? my_strdup(literal) : NULL;
@@ -593,7 +736,7 @@ AST *ast_new_number(double value, const char *literal) {
 }
 
 AST *ast_new_symbol(const char *name) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type   = AST_SYMBOL;
     /* ++ is surface syntax for the core-owned Semigroup.append method.
      * Canonicalize before inference/codegen so the compiler does not acquire
@@ -604,21 +747,21 @@ AST *ast_new_symbol(const char *name) {
 }
 
 AST *ast_new_string(const char *value) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type   = AST_STRING;
     a->string = my_strdup(value);
     return a;
 }
 
 AST *ast_new_char(char value) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type      = AST_CHAR;
     a->character = value;
     return a;
 }
 
 AST *ast_new_list(void) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type           = AST_LIST;
     a->list.capacity  = 4;
     a->list.items     = malloc(sizeof(AST *) * 4);
@@ -633,7 +776,7 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
                     AST *body,
                     AST **body_exprs,
                     int body_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                = AST_LAMBDA;
     a->lambda.params       = params;
     a->lambda.param_count  = param_count;
@@ -648,7 +791,7 @@ AST *ast_new_lambda(ASTParam *params, int param_count,
 }
 
 AST *ast_new_asm(AST **instructions, size_t instruction_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type = AST_ASM;
     a->asm_block.instructions = instructions;
     a->asm_block.instruction_count = instruction_count;
@@ -656,21 +799,21 @@ AST *ast_new_asm(AST **instructions, size_t instruction_count) {
 }
 
 AST *ast_new_keyword(const char *name) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type = AST_KEYWORD;
     a->keyword = my_strdup(name);
     return a;
 }
 
 AST *ast_new_path(const char *value) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type   = AST_PATH;
     a->string = my_strdup(value); // reuse string field — same semantics
     return a;
 }
 
 AST *ast_new_ratio(long long numerator, long long denominator) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type = AST_RATIO;
     a->ratio.numerator = numerator;
     a->ratio.denominator = denominator;
@@ -678,7 +821,7 @@ AST *ast_new_ratio(long long numerator, long long denominator) {
 }
 
 AST *ast_new_array(void) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type = AST_ARRAY;
     a->array.element_capacity = 4;
     a->array.elements = malloc(sizeof(AST *) * 4);
@@ -689,7 +832,7 @@ AST *ast_new_array(void) {
 AST *ast_new_refinement(const char *name, const char *var,
                         const char *base_type, AST *predicate,
                         const char *docstring, const char *alias_name) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                    = AST_REFINEMENT;
     a->refinement.name         = name      ? my_strdup(name)      : NULL;
     a->refinement.var          = var       ? my_strdup(var)        : NULL;
@@ -701,7 +844,7 @@ AST *ast_new_refinement(const char *name, const char *var,
 }
 
 AST *ast_new_address_of(AST *operand) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type = AST_ADDRESS_OF;
     a->list.items = malloc(sizeof(AST*) * 1);
     a->list.items[0] = operand;
@@ -711,7 +854,7 @@ AST *ast_new_address_of(AST *operand) {
 }
 
 AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type        = AST_RANGE;
     a->range.start = start;
     a->range.step  = step;
@@ -723,7 +866,7 @@ AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array) {
 AST *ast_new_layout(const char *name,
                     ASTLayoutField *fields, int field_count,
                     bool packed, int align) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                = AST_LAYOUT;
     a->layout.name         = my_strdup(name);
     a->layout.fields       = fields;
@@ -734,7 +877,7 @@ AST *ast_new_layout(const char *name,
 }
 
 AST *ast_new_set(void) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type              = AST_SET;
     a->set.element_capacity = 4;
     a->set.elements      = malloc(sizeof(AST*) * 4);
@@ -743,7 +886,7 @@ AST *ast_new_set(void) {
 }
 
 AST *ast_new_type_set(const char *name, AST **members, size_t member_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type = AST_TYPE_SET;
     a->type_set.name = my_strdup(name);
     a->type_set.members = members;
@@ -752,7 +895,7 @@ AST *ast_new_type_set(const char *name, AST **members, size_t member_count) {
 }
 
 AST *ast_new_map(void) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type         = AST_MAP;
     a->map.capacity = 4;
     a->map.keys     = malloc(sizeof(AST*) * 4);
@@ -811,7 +954,7 @@ AST *ast_new_data(const char *name,
                   char **type_params, int type_param_count,
                   ASTDataConstructor *constructors, int constructor_count,
                   char **deriving, int deriving_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                     = AST_DATA;
     a->data.name                = my_strdup(name);
     a->data.type_params         = type_params;
@@ -831,7 +974,7 @@ AST *ast_new_class(const char *name, const char *type_var,
                    char **default_names, AST **default_bodies, int default_count,
                    char **law_names, char **law_types, AST **law_bodies,
                    int law_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                          = AST_CLASS;
     a->class_decl.name               = my_strdup(name);
     a->class_decl.type_var           = my_strdup(type_var);
@@ -856,7 +999,7 @@ AST *ast_new_class(const char *name, const char *type_var,
 AST *ast_new_instance(const char *class_name, const char *type_name,
                       char **assoc_names, char **assoc_values, int assoc_count,
                       char **method_names, AST **method_bodies, int method_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                            = AST_INSTANCE;
     a->instance_decl.class_name        = my_strdup(class_name);
     a->instance_decl.type_name         = my_strdup(type_name);
@@ -870,7 +1013,7 @@ AST *ast_new_instance(const char *class_name, const char *type_name,
 }
 
 AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count) {
-    AST *a = calloc(1, sizeof(AST));
+    AST *a = ast_allocate();
     a->type                = AST_PMATCH;
     a->pmatch.clauses      = clauses;
     a->pmatch.clause_count = clause_count;
@@ -897,7 +1040,7 @@ void ast_list_append(AST *list, AST *item) {
 
 AST *ast_clone(AST *ast) {
     if (!ast) return NULL;
-    AST *c = calloc(1, sizeof(AST));
+    AST *c = ast_allocate();
     *c = *ast;  /* shallow copy all fields */
     c->syntax_context = ast->syntax_context ? strdup(ast->syntax_context) : NULL;
     c->syntax_original_symbol = ast->syntax_original_symbol
@@ -1162,6 +1305,9 @@ AST *ast_clone(AST *ast) {
 
 void ast_free(AST *ast) {
     if (!ast) return;
+    bool registered = reader_ast_ledger_unregister(ast);
+    if (current_ast_ledger && current_ast_ledger->aborting && !registered)
+        return;
     switch (ast->type) {
     case AST_SYMBOL:
         free(ast->symbol);
@@ -1382,6 +1528,12 @@ void ast_free(AST *ast) {
         free(ast->literal_str);
     free(ast->syntax_context);
     free(ast->syntax_original_symbol);
+    free(ast);
+}
+
+static void ast_free_shell(AST *ast) {
+    if (!ast) return;
+    reader_ast_ledger_unregister(ast);
     free(ast);
 }
 
@@ -2952,8 +3104,8 @@ static ASTParam parse_one_param(Parser *p) {
     return param;
 }
 
-static int g_anon_param_counter = 0;
-static int g_typevar_counter    = 0;
+static MONAD_THREAD_LOCAL int g_anon_param_counter = 0;
+static MONAD_THREAD_LOCAL int g_typevar_counter    = 0;
 
 static char *parse_anonymous_finite_type(Parser *p) {
     const char **members = NULL;
@@ -3213,6 +3365,16 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
         } else if (p->current.type == TOK_LBRACKET) {
             /* Typed or annotated parameter: [name] or [name :: Type] */
             p->current = lexer_next_token(p->lexer);
+            /* `[] -> Result` is the canonical explicit nullary signature.
+             * It is an arity marker, not an anonymous collection parameter. */
+            if (p->current.type == TOK_RBRACKET) {
+                p->current = lexer_next_token(p->lexer);
+                if (p->current.type != TOK_ARROW &&
+                    p->current.type != TOK_EFFECT_ARROW)
+                    compiler_error(p->current.line, p->current.column,
+                                   "Empty parameter list must be followed by a return arrow");
+                continue;
+            }
             ASTParam param = parse_one_param(p);
             if (p->current.type != TOK_RBRACKET)
                 compiler_error(p->current.line, p->current.column,
@@ -3802,9 +3964,7 @@ static void parse_fn_signature(Parser *p, ASTParam **out_params,
             }
             free(ret_type);
             if (type_buf[0] != '\0') {
-                char wrapped[560];
-                snprintf(wrapped, sizeof(wrapped), "(%s)", type_buf);
-                ret_type = my_strdup(wrapped);
+                ret_type = my_strdup(type_buf);
             }
         }
     }
@@ -7322,6 +7482,27 @@ static AST *parse_list(Parser *p) {
                 while (p->current.type != TOK_RPAREN &&
                        p->current.type != TOK_EOF) {
 
+                    while (parser_current_is_line_directive(p))
+                        parser_skip_line_directive(p);
+
+                    bool signature_wrapped = false;
+                    if (p->current.type == TOK_LBRACKET) {
+                        signature_wrapped = true;
+                        p->current = lexer_next_token(p->lexer);
+                    }
+
+                    bool method_wrapped = false;
+                    if (p->current.type == TOK_LPAREN) {
+                        Lexer lookahead = *p->lexer;
+                        Token next = lexer_next_token(&lookahead);
+                        method_wrapped = next.type == TOK_SYMBOL &&
+                                         next.value &&
+                                         strcmp(next.value, "method") == 0;
+                        free(next.value);
+                        if (method_wrapped)
+                            p->current = lexer_next_token(p->lexer);
+                    }
+
                     if (p->current.type != TOK_SYMBOL ||
                         strcmp(p->current.value, "method") != 0) {
                         compiler_error(p->current.line, p->current.column,
@@ -7349,6 +7530,8 @@ static AST *parse_list(Parser *p) {
                     char sig_buf[512] = {0};
                     while (p->current.type != TOK_EOF &&
                            p->current.type != TOK_RPAREN &&
+                           !(signature_wrapped &&
+                             p->current.type == TOK_RBRACKET) &&
                            p->current.type != TOK_KEYWORD &&
                            !(p->current.type == TOK_SYMBOL &&
                              strcmp(p->current.value, "method") == 0)) {
@@ -7387,6 +7570,10 @@ static AST *parse_list(Parser *p) {
                         }
                         p->current = lexer_next_token(p->lexer);
                     }
+
+                    if (signature_wrapped &&
+                        p->current.type == TOK_RBRACKET)
+                        p->current = lexer_next_token(p->lexer);
 
                     /* Count params: number of '->' in sig minus 1 (last is return) */
                     int mparam_count = 0;
@@ -7544,6 +7731,9 @@ static AST *parse_list(Parser *p) {
                     g_pending_defines = realloc(g_pending_defines,
                         sizeof(AST*) * (g_pending_define_count + 1));
                     g_pending_defines[g_pending_define_count++] = def;
+
+                    if (method_wrapped && p->current.type == TOK_RPAREN)
+                        p->current = lexer_next_token(p->lexer);
                 }
                 break; /* 'where' is always last in a layout block */
             }
@@ -8364,7 +8554,7 @@ static AST *parse_list(Parser *p) {
         strcmp(p->current.value, "tests") == 0) {
         p->current = lexer_next_token(p->lexer);
 
-        AST *node = calloc(1, sizeof(AST));
+        AST *node = ast_allocate();
         node->type = AST_TESTS;
         node->tests.assertions = NULL;
         node->tests.count = 0;
@@ -8726,7 +8916,7 @@ static AST *parse_list(Parser *p) {
                         p->current  = lexer_next_token(p->lexer);
                         /* list was never appended to — safe to free the empty shell */
                         free(list->list.items);
-                        free(list);
+                        ast_free_shell(list);
                         acc->line       = start_line;
                         acc->column     = start_column;
                         acc->end_column = end_col;
@@ -8745,7 +8935,7 @@ static AST *parse_list(Parser *p) {
                 int end_col = p->current.column + 1;
                 p->current = lexer_next_token(p->lexer);
                 free(list->list.items);
-                free(list);
+                ast_free_shell(list);
                 first->line = start_line;
                 first->column = start_column;
                 first->end_column = end_col;
@@ -8862,7 +9052,7 @@ static AST *parse_list(Parser *p) {
                     free(positional);
                     /* free the old list shell (items already stolen/freed) */
                     free(list->list.items);
-                    free(list);
+                    ast_free_shell(list);
                     list = reordered;
                 }
             }
@@ -8878,7 +9068,7 @@ static AST *parse_list(Parser *p) {
 
             AST *inner = list->list.items[0];
             free(list->list.items);
-            free(list);
+            ast_free_shell(list);
 
             inner->line = start_line;
             inner->column = start_column;
@@ -8916,7 +9106,7 @@ static unsigned long long elem_type_size(const char *t) {
     if (strcmp(t,"I8")==0||strcmp(t,"U8")==0)   return 1;
     if (strcmp(t,"I16")==0||strcmp(t,"U16")==0)  return 2;
     if (strcmp(t,"I32")==0||strcmp(t,"U32")==0||strcmp(t,"F32")==0) return 4;
-    if (strcmp(t,"I64")==0||strcmp(t,"U64")==0||strcmp(t,"F64")==0) return 8;
+    if (strcmp(t,"I64")==0||strcmp(t,"U64")==0||strcmp(t,"F64")==0||strcmp(t,"Float")==0) return 8;
     if (strcmp(t,"I128")==0||strcmp(t,"U128")==0) return 16;
     return 0;
 }
@@ -8968,7 +9158,7 @@ static AST *parse_bracket_list(Parser *p) {
             result->column     = start_column;
             result->end_column = end_col;
             free(list->list.items);
-            free(list);
+            ast_free_shell(list);
             return result;
         }
     }
@@ -9080,7 +9270,7 @@ static AST *parse_bracket_list(Parser *p) {
 
         ast_free(list->list.items[pipe_index]);
         free(list->list.items);
-        free(list);
+        ast_free_shell(list);
         result->line = start_line;
         result->column = start_column;
         result->end_column = end_column;
@@ -9091,7 +9281,7 @@ static AST *parse_bracket_list(Parser *p) {
     for (size_t i = 0; i < list->list.count; i++)
         ast_array_append(array, list->list.items[i]);
     free(list->list.items);
-    free(list);
+    ast_free_shell(list);
     array->line = start_line;
     array->column = start_column;
     array->end_column = end_column;

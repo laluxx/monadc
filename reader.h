@@ -4,15 +4,52 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#ifndef MONAD_THREAD_LOCAL
+/* Thread-affine compiler sessions use a disjoint frontend working set.
+ * GCC TLS storage model: https://gcc.gnu.org/onlinedocs/gcc/Thread-Local.html
+ */
+#if defined(_MSC_VER)
+#define MONAD_THREAD_LOCAL __declspec(thread)
+#else
+#define MONAD_THREAD_LOCAL __thread
+#endif
+#endif
+#include "reader_diagnostic.h"
 
 /* Forward declarations */
 struct Type;
 struct AST;
+struct ASTLayoutField;
 typedef struct AST AST;
 
-extern const char *current_filename;
-extern const char *current_source;
-extern const char *original_source;
+/* Internal parse-transaction ledger. Nodes are registered at allocation time;
+ * abort destroys every remaining graph exactly once, while commit transfers
+ * ownership to the returned AST roots. */
+typedef struct ReaderAstLedger {
+    AST **nodes;
+    size_t count;
+    size_t capacity;
+    struct ReaderAstLedger *previous;
+    bool aborting;
+} ReaderAstLedger;
+
+void reader_ast_ledger_begin(ReaderAstLedger *ledger);
+void reader_ast_ledger_commit(ReaderAstLedger *ledger);
+void reader_ast_ledger_abort(void *ledger);
+size_t reader_ast_ledger_live_count(const ReaderAstLedger *ledger);
+AST *ast_allocate(void);
+typedef struct ReaderPersistentState ReaderPersistentState;
+ReaderPersistentState *reader_persistent_state_create(void);
+void reader_persistent_state_destroy(ReaderPersistentState *state);
+bool reader_persistent_state_enter(ReaderPersistentState *state);
+void reader_persistent_state_leave(ReaderPersistentState *state);
+void register_layout_fields(
+    const char *name, struct ASTLayoutField *fields, int count);
+const char *layout_get_field_name(const char *layout_name, int index);
+
+extern MONAD_THREAD_LOCAL const char *current_filename;
+extern MONAD_THREAD_LOCAL const char *current_source;
+extern MONAD_THREAD_LOCAL const char *original_source;
 
 void parser_set_original_source(const char *orig_source);
 
@@ -22,10 +59,12 @@ void parser_set_original_source(const char *orig_source);
 #define READER_ERROR(line, col, fmt, ...) \
     do { \
         snprintf(g_reader_error_msg, sizeof(g_reader_error_msg), \
-                 "%s:%d:%d: error: " fmt, \
-                 current_filename ? current_filename : "<input>", \
-                 (line), (col), ##__VA_ARGS__); \
-        fprintf(stderr, "%s\n", g_reader_error_msg); \
+                 fmt, ##__VA_ARGS__); \
+        reader_diagnostic_raise(current_filename, (line), (col), (col), \
+                                g_reader_error_msg, NULL); \
+        fprintf(stderr, "%s:%d:%d: error: %s\n", \
+                current_filename ? current_filename : "<input>", \
+                (line), (col), g_reader_error_msg); \
         if (g_reader_escape_set) { \
             g_reader_escape_set = false; \
             longjmp(g_reader_escape, 1); \
@@ -82,9 +121,9 @@ typedef struct CommentSpan {
     int para_end;   /* if paragraph: position after last comment char */
 } CommentSpan;
 
-extern CommentSpan *g_comment_spans;
-extern int          g_comment_count;
-extern int          g_comment_cap;
+extern MONAD_THREAD_LOCAL CommentSpan *g_comment_spans;
+extern MONAD_THREAD_LOCAL int g_comment_count;
+extern MONAD_THREAD_LOCAL int g_comment_cap;
 
 void comment_map_build(const char *source);
 
@@ -95,9 +134,9 @@ typedef struct DrawerSpan {
     int close_end;  /* position after closing marker line */
 } DrawerSpan;
 
-extern DrawerSpan *g_drawer_spans;
-extern int         g_drawer_count;
-extern int         g_drawer_cap;
+extern MONAD_THREAD_LOCAL DrawerSpan *g_drawer_spans;
+extern MONAD_THREAD_LOCAL int g_drawer_count;
+extern MONAD_THREAD_LOCAL int g_drawer_cap;
 
 void drawer_map_build(const char *source);
 
@@ -519,24 +558,24 @@ char *ast_to_json(AST *ast);
 
 #include <setjmp.h>
 #include <stdbool.h>
-extern jmp_buf  g_reader_escape;
-extern bool     g_reader_escape_set;
-extern char     g_reader_error_msg[512];
+extern MONAD_THREAD_LOCAL jmp_buf  g_reader_escape;
+extern MONAD_THREAD_LOCAL bool     g_reader_escape_set;
+extern MONAD_THREAD_LOCAL char     g_reader_error_msg[512];
 
 // Source map: set by the lexer when it sees a #line N COL directive
 // emitted by the wisp transformer. Shifts all subsequent line/column
 // reporting back to original source coordinates.
-extern int g_srcmap_line_bias;
-extern int g_srcmap_col_bias;
-extern int g_srcmap_abs_line;    // when >0, overrides lex->line directly
-extern int g_quote_depth;        // >0 means we are inside a quoted form
-extern int g_scope_depth;        // >0 means we are inside a function body
+extern MONAD_THREAD_LOCAL int g_srcmap_line_bias;
+extern MONAD_THREAD_LOCAL int g_srcmap_col_bias;
+extern MONAD_THREAD_LOCAL int g_srcmap_abs_line;    // when >0, overrides lex->line directly
+extern MONAD_THREAD_LOCAL int g_quote_depth;        // >0 means we are inside a quoted form
+extern MONAD_THREAD_LOCAL int g_scope_depth;        // >0 means we are inside a function body
 
 // Param-kind lookup hook — set by wisp before parsing so the reader
 // can decide whether a symbol in non-head position is infix or an argument.
 // Returns 1 if the given argument slot of `func_name` expects a function
 // (i.e. PARAM_FUNC), 0 otherwise. NULL = always return 0.
-extern int (*g_param_kind_is_func)(const char *func_name, int arg_index);
-extern int (*g_is_known_function)(const char *name);
+extern MONAD_THREAD_LOCAL int (*g_param_kind_is_func)(const char *func_name, int arg_index);
+extern MONAD_THREAD_LOCAL int (*g_is_known_function)(const char *name);
 
 #endif

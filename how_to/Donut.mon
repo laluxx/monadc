@@ -29,8 +29,8 @@
 
  This module owns only torus projection and rasterization. Mathematical
  constants come from Math, while unit-aware normalization and trigonometry
- come from Math.Angle. The frame and depth buffers remain ordinary immutable
- lists indexed by small specialized replacement helpers.
+ come from Math.Angle. The animation uses fixed-size mutable frame and depth
+ buffers so every projected sample updates one terminal cell in place.
 
  The rendering math is the classic torus-rotation-and-project formulation:
  each (theta, phi) pair on the torus surface is rotated by two frame angles
@@ -48,34 +48,29 @@ import Data.Bool
 import Data.List
 import Math
 import Math.Angle
+import System.Terminal.ANSI
 
 module Donut
-  [shades donut-preview
+  [shades
    screen-width screen-height theta-steps phi-steps
    tube-radius donut-radius viewer-distance projection-scale
-   float->int
-   Angles Sample Buffers
+   Angles Sample
    compute-sample visible? pixel-index shade-for
    repeat-char repeat-float blank-chars far-depths
-   update-buffers scan-phi scan-theta render-frame
-   render draw-frame
+   update-buffers scan-phi scan-theta prepare-frame draw-frame
    spin-frames]
-
 
 ;;; The shade ramp, darkest to brightest.
 
 define shades :: [Char]
   list '.' ',' '-' '~' ':' ';' '=' '!' '*' '#' '$' '@'
 
-
-define donut-preview :: String
-  "\n                 @@@@@@@@@@\n            $$$$$$$########$$$$$\n         $$$####*****!!!!!****####\n       #####****!!*!!!!!=!!!!*!****#\n     *###*****!!!===;;;;;;;====!!!!!**\n    *****!!*!!==;:::~~~~~~~~::;;==!!!!!\n   !***!*!!!==;::~-,,.....,,-~~:;;===!!=\n  !!!!!!!!==;;~~-,...........,--::;===!=\n  !!!!!!!==;::~-......   ......-~:;;;===;\n  =!!!!===;;:~-,...         ...,-~::;;===;\n  ==!!===;;::~-,..           .,-~:;;;===;;\n  ;=======;;:~~-.,          :;;::;;=====;:\n  ;;=======;;;:::::       ;!***!!======;:\n  ~;;;===========!!***#$$$$$##***!!!==;~\n   ~:;;=======!!!**##$$@@@@$$$#**!!!=;~\n    -::;;=====!!!**##$$$$$$###**!!=;;-\n     ,~:;;;;==!!!!***######*****!=;~.\n       ,-~::;;===!!!*!!!!!!*!!=;:~.\n         .-~~:;:;;===!!!!==;;:~,\n            ..,--~~~~~~~~--,.\n"
-
-
 ;;; Screen and torus geometry
 
 define screen-width    :: Int    80
 define screen-height   :: Int    22
+define frame-row-width :: Int    81
+define frame-size      :: Int    (frame-row-width * screen-height)
 define theta-steps     :: Int    90
 define phi-steps       :: Int    314
 define tube-radius     :: Float  1.0
@@ -83,20 +78,7 @@ define donut-radius    :: Float  2.0
 define viewer-distance :: Float  5.0
 
 define projection-scale :: Float
-  ((Float screen-width) * viewer-distance * 3.0) / (8.0 * (tube-radius + donut-radius))
-
-
-;;; Float/Int plumbing
-
-define increment-int :: Int -> Int
-  value -> value + 1
-
-
-define int-zero :: Int 0
-
-
-define float->int :: Float -> Int
-  value -> Int value
+  30.0
 
 
 ;;; Types
@@ -118,11 +100,6 @@ layout Sample
   [luminance :: Float]
 
 
-layout Buffers
-  [depths :: [Float]]
-  [chars  :: [Char]]
-
-
 ;;; Per-point math
 
 define compute-sample :: Angles -> Float -> Float -> Sample
@@ -141,10 +118,10 @@ define compute-sample :: Angles -> Float -> Float -> Sample
     def y         (circle-x * rotated-y) + tilted-y
     def z (viewer-distance + (angles.cos-a * circle-x * sinphi) + (circle-y * angles.sin-a))
     def ooz (1.0 / z)
-    def xp (float->int (((Float screen-width) / 2.0) + (projection-scale * ooz * x)))
+    def xp (Int (((Float screen-width) / 2.0) + (projection-scale * ooz * x)))
     ;; Terminal cells are taller than wide; the extra 0.5 keeps the torus
     ;; round instead of egg-shaped.
-    def yp (float->int (((Float screen-height) / 2.0) - (projection-scale * ooz * y * 0.5)))
+    def yp (Int (12.0 - (projection-scale * ooz * y * 0.5)))
     def light-a cosphi * costheta * angles.sin-b
     def light-b angles.cos-a * costheta * sinphi
     def light-c angles.sin-a * sintheta
@@ -168,16 +145,17 @@ define pixel-index :: Sample -> Int
 
 define shade-for :: Float -> Char
   luminance ->
-    def raw (float->int (luminance * 8.0))
+    def raw (Int (luminance * 8.0))
     nth shades (clamp-shade-index raw)
 
 
 define clamp-shade-index :: Int -> Int
-  index | > 11      -> 11
+  index | < 0       -> 0
+        | > 11      -> 11
         | otherwise -> index
 
 
-;;; The z-buffer and frame-buffer, hand-built as flat lists
+;;; The z-buffer and frame-buffer
 
 define repeat-char :: Char -> Int -> [Char]
   c 0 -> []
@@ -197,57 +175,104 @@ define far-depths :: [Float]
   repeat-float (0.0 - 1000000.0) (screen-width * screen-height)
 
 
-define update-buffers :: [Float] -> [Char] -> Sample -> Buffers
-  depths chars sample | not (visible? sample) -> Buffers depths chars
-  depths chars sample | sample.depth <= (nth depths (pixel-index sample)) -> Buffers depths chars
-  depths chars sample ->
+define depth-buffer :: [14kb Float]
+define char-buffer :: [2kb]
+
+
+define clear-buffers :: Int -> Int
+  index | index >= (screen-width * screen-height) -> 0
+  index ->
+    def output-index (index + (index / screen-width))
+    def depth-status (set! (depth-buffer index) (0.0 - 1000000.0))
+    def char-status (set! (char-buffer output-index) 32)
+    def newline-status (clear-row-end index output-index)
+    clear-buffers ((index + 1) + (newline-status - newline-status))
+
+
+define clear-row-end :: Int -> Int -> Int
+  index output-index | (index % screen-width) = (screen-width - 1) -> set! (char-buffer (output-index + 1)) 10
+  index output-index -> 0
+
+
+define update-buffers :: Sample -> Int
+  sample | not (visible? sample) -> 0
+  sample | sample.depth <= (depth-buffer (pixel-index sample)) -> 0
+  sample ->
     def index (pixel-index sample)
-    Buffers (replace-at index sample.depth depths) (replace-at index (shade-for sample.luminance) chars)
+    def output-index ((sample.yp * frame-row-width) + sample.xp)
+    def depth-status (set! (depth-buffer index) sample.depth)
+    def char-status (set! (char-buffer output-index) (shade-byte (clamp-shade-index (Int (sample.luminance * 8.0)))))
+    char-status
+
+;; TODO The function should be rewritten as:
+
+;; define update-buffers :: Sample -> Int
+;;   sample | not visible? -> 0
+;;   sample | .depth <= depth-buffer[pixel-index sample] -> 0
+;;   sample ->
+;;     def index (pixel-index sample)
+;;     def output-index ((.yp * frame-row-width) + .xp)
+;;     depth-buffer[index] <- .depth
+;;     char-buffer[output-index] <-
+;;       (shade-byte (clamp-shade-index (Int (.luminance * 8.0))))
+
+
+define shade-byte :: Int -> Int
+  0  -> 46
+  1  -> 44
+  2  -> 45
+  3  -> 126
+  4  -> 58
+  5  -> 59
+  6  -> 61
+  7  -> 33
+  8  -> 42
+  9  -> 35
+  10 -> 36
+  _  -> 64
 
 
 ;;; Scanning the torus
 
-define scan-phi :: Angles -> Float -> Int -> Buffers -> Buffers
-  angles theta j buffers | j >= phi-steps -> buffers
-  angles theta j buffers ->
+define scan-phi :: Angles -> Float -> Int -> Int
+  _ _ j | >= phi-steps -> 0
+  angles theta j ->
     def phi ((Float j) * (τ / (Float phi-steps)))
     def sample (compute-sample angles theta phi)
-    def next (update-buffers buffers.depths buffers.chars sample)
-    scan-phi angles theta (increment-int j) next
+    def status (update-buffers sample)
+    def next (scan-phi angles theta (j + 1))
+    next + (status - status)
 
 
-define scan-theta :: Angles -> Int -> Buffers -> Buffers
-  angles i buffers | i >= theta-steps -> buffers
-  angles i buffers ->
+define scan-theta :: Angles -> Int -> Int
+  _ i | >= theta-steps -> 0
+  angles i ->
     def theta ((Float i) * (τ / (Float theta-steps)))
-    def next (scan-phi angles theta int-zero buffers)
-    scan-theta angles (increment-int i) next
+    def status (scan-phi angles theta 0)
+    def next (scan-theta angles (i + 1))
+    next + (status - status)
 
 
-define render-frame :: Float -> Float -> [Char]
+define prepare-frame :: Float -> Float -> Int
   a b ->
     def angles (Angles (cos-radians a) (sin-radians a) (cos-radians b) (sin-radians b))
-    def result (scan-theta angles int-zero (Buffers far-depths blank-chars))
-    result.chars
-
-
-;;; Turning the frame buffer into terminal cells
-
-;; The renderer targets an 80-column terminal. Writing exactly screen-width
-;; cells per row lets the terminal perform the row wrapping without allocating
-;; a second list containing explicit newline separators.
-
-
-define render :: Float -> Float -> [Char]
-  a b -> render-frame a b
+    def cleared (clear-buffers 0)
+    def scanned (scan-theta angles 0)
+    scanned + (cleared - cleared)
 
 
 ;;; The animation driver
 
 define draw-frame :: Float -> Float -io-> Int
-  a b ->
-    def output (prepend 27 (prepend 0x5b (prepend 0x48 (render a b))))
-    write-text stdout output
+  a b -> write-prepared-frame (prepare-frame a b)
+
+
+define write-prepared-frame :: Int -io-> Int
+  prepared -> write-homed-frame (home-terminal stdout)
+
+
+define write-homed-frame :: Int -io-> Int
+  homed -> write-buffer stdout char-buffer frame-size
 
 
 ;; There is not yet a Core clock sleep operation, so frames are emitted as fast
@@ -255,26 +280,30 @@ define draw-frame :: Float -> Float -io-> Int
 ;; reusable concept this example asks Core to grow.
 define spin-frames :: Float -> Float -> Int -io-> Int
   a b 0     -> 0
-  a b count ->
-    def status (draw-frame a b)
-    def next (spin-frames (a + 0.04) (b + 0.02) (count - 1))
-    next + (status - status)
+  a b count -> spin-after-frame (draw-frame a b) (a + 0.04) (b + 0.02) (count - 1)
+
+
+define spin-after-frame :: Int -> Float -> Float -> Int -io-> Int
+  status a b count -> spin-frames a b (count + (status - status))
 
 
 ;;; Executable entry point
 
-write-text stdout donut-preview
+define start-animation :: Int -io-> Int
+  hidden -> finish-animation (spin-frames 0.0 0.0 (120 + (hidden - hidden)))
+
+
+define finish-animation :: Int -io-> Int
+  status -> end-terminal-animation stdout
+
+
+start-animation (begin-terminal-animation stdout)
 
 
 tests
   :trigonometry:
   assert-eq (sin-radians 0.0) 0.0 "sin of zero is exact"
   :trigonometry:
-
-  :truncation:
-  assert-eq (float->int 4.7) 4 "float->int truncates toward zero, positive"
-  assert-eq (float->int (0.0 - 4.7)) (0 - 4) "float->int truncates toward zero, negative"
-  :truncation:
 
   :buffers:
   assert-eq (nth (replace-at 1 'x' (list 'a' 'b' 'c')) 1) 'x' "replace-at writes the target index"

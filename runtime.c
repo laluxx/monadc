@@ -17,6 +17,7 @@ static inline RuntimeValue *heap_value(void)        { return malloc(sizeof(Runti
 
 volatile int rt_interrupted = 0;
 
+
 char *__rt_join_path(const char *parent, const char *child) {
     if (!parent) parent = "";
     if (!child) child = "";
@@ -774,6 +775,13 @@ char *rt_string_drop(const char *s, int64_t n) {
 int64_t rt_string_byte(const char *s, int64_t index) {
     if (!s || index < 0 || index >= (int64_t)strlen(s)) return -1;
     return (unsigned char)s[index];
+}
+
+char *rt_char_string(int64_t codepoint) {
+    char *result = malloc(2);
+    result[0] = (char)(unsigned char)codepoint;
+    result[1] = '\0';
+    return result;
 }
 
 char *rt_string_concat(const char *a, const char *b) {
@@ -2903,6 +2911,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- String & Array Helpers ---
     DECL("rt_string_concat",  ptr, ptr, ptr);
+    DECL("rt_char_string",    ptr, i64);
     DECL("rt_arr_concat",     ptr, ptr, i64, ptr, i64, i64);
     DECL("rt_coll_wrap",      ptr, ptr, ptr);
     DECL("rt_coll_empty",     ptr, ptr);
@@ -2957,6 +2966,17 @@ LLVMValueRef get_rt_string_byte(CodegenContext *ctx) {
         LLVMTypeRef args[] = {ptr, i64};
         LLVMTypeRef ft = LLVMFunctionType(i64, args, 2, 0);
         fn = LLVMAddFunction(ctx->module, "rt_string_byte", ft);
+    }
+    return fn;
+}
+
+LLVMValueRef get_rt_char_string(CodegenContext *ctx) {
+    LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, "rt_char_string");
+    if (!fn) {
+        LLVMTypeRef ptr = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        LLVMTypeRef ft = LLVMFunctionType(ptr, &i64, 1, 0);
+        fn = LLVMAddFunction(ctx->module, "rt_char_string", ft);
     }
     return fn;
 }

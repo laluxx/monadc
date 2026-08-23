@@ -1,0 +1,29 @@
+;;; ANSI.mon --- named ANSI terminal controls
+
+import IO
+
+module System.Terminal.ANSI
+  [escape cursor-home clear-screen hide-cursor show-cursor
+   animation-start animation-end
+   home-terminal begin-terminal-animation end-terminal-animation]
+
+define escape          :: String "\x1b["
+define cursor-home     :: String "\x1b[H"
+define clear-screen    :: String "\x1b[2J"
+define hide-cursor     :: String "\x1b[?25l"
+define show-cursor     :: String "\x1b[?25h"
+define animation-start :: String "\x1b[2J\x1b[?25l"
+define animation-end   :: String "\x1b[?25h\n"
+
+define home-terminal :: Int -io-> Int
+  descriptor -> write-text descriptor cursor-home
+
+define begin-terminal-animation :: Int -io-> Int
+  descriptor -> write-text descriptor animation-start
+
+define end-terminal-animation :: Int -io-> Int
+  descriptor -> write-text descriptor animation-end
+
+tests
+  assert-eq (length cursor-home) 3 "ANSI cursor home width"
+  assert-eq (length hide-cursor) 6 "ANSI hide cursor width"

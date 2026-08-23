@@ -46,18 +46,18 @@
   2673 bracket records. Contains 25 category contracts (features.org added).
 
 #+CAPTION: Health checks
-| Check | Result | Notes |
-|-------+--------+-------|
-| Duplicate heading IDs | 0 | Must stay zero. |
-| Duplicate bracket record IDs | 0 | Must stay zero outside escaped examples. |
-| Files missing common headers | 0 | Must stay zero for context-only tar. |
-| Broken local context file links | 0 | Default linter mode ignores repository-relative links. |
-| Broken id links | 0 | Org id-link targets must resolve. |
-| Broken record refs | 0 | Optional =--check-record-refs= now passes. |
-| Category contracts | 25 files | Full coverage: reader, wisp, infer, codegen, runtime, types, tests, dep, codegen-ops, module, ffi, macro, pmatch, arena, asm, env, repl, typeclass, lsp, completion, features + governance: category-context, garden, quality, catface. |
-| Context source coverage | 100% | All 27 .h/.c source pairs have corresponding context/*.org files. |
-| Context graph export tool | present | =context/tools/context_graph.py=. |
-| Clean generated artifacts | enforced | Do not include caches or run leftovers. |
+| Check                           |   Result | Notes                                                                                                                                                                                                                                   |
+|---------------------------------+----------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Duplicate heading IDs           |        0 | Must stay zero.                                                                                                                                                                                                                         |
+| Duplicate bracket record IDs    |        0 | Must stay zero outside escaped examples.                                                                                                                                                                                                |
+| Files missing common headers    |        0 | Must stay zero for context-only tar.                                                                                                                                                                                                    |
+| Broken local context file links |        0 | Default linter mode ignores repository-relative links.                                                                                                                                                                                  |
+| Broken id links                 |        0 | Org id-link targets must resolve.                                                                                                                                                                                                       |
+| Broken record refs              |        0 | Optional =--check-record-refs= now passes.                                                                                                                                                                                                |
+| Category contracts              | 25 files | Full coverage: reader, wisp, infer, codegen, runtime, types, tests, dep, codegen-ops, module, ffi, macro, pmatch, arena, asm, env, repl, typeclass, lsp, completion, features + governance: category-context, garden, quality, catface. |
+| Context source coverage         |     100% | All 27 .h/.c source pairs have corresponding context/*.org files.                                                                                                                                                                       |
+| Context graph export tool       |  present | =context/tools/context_graph.py=.                                                                                                                                                                                                         |
+| Clean generated artifacts       | enforced | Do not include caches or run leftovers.                                                                                                                                                                                                 |
 
 * Duplicate Report
 :PROPERTIES:
@@ -84,14 +84,14 @@
   =context_lint.py --check-record-refs= passes.
 
 #+CAPTION: Duplicate heading IDs
-| ID | Locations |
-|----+-----------|
-| none | none |
+| ID   | Locations |
+|------+-----------|
+| none | none      |
 
 #+CAPTION: Duplicate record IDs
-| ID | Locations |
-|----+-----------|
-| none | none |
+| ID   | Locations |
+|------+-----------|
+| none | none      |
 
 * Validation Commands
 :PROPERTIES:
@@ -460,3 +460,17 @@ cd context/category/catface && zig build run -- --check ../../
   structure, validates parent/range invariants, and supplies the linter's shared
   position-preserving code projection. The duplicate lint masking scanner was
   removed.
+
+[FIX id:fix.quality-generated-artifact-policy-2026-08-23 date:2026-08-23 by:codex src:.gitignore,tests/test_gitignore_policy.py conf:high]
+  Compiler caches, generated prelude metadata, local libraries, and executable
+  outputs from examples and regression fixtures are repository-local products,
+  not source. Narrow root-anchored ignore rules keep those products out of
+  commits while an executable regression ensures similarly named source files
+  remain visible to Git.
+
+[DEC id:dec.quality-pre-push-gate-2026-08-23 date:2026-08-23 by:codex src:.githooks/pre-push,Makefile conf:high]
+  Each clone installs the repository-owned hook with =make install-git-hooks=.
+  Ordinary pushes run =make verify-push=: whitespace, ignore-policy, complete
+  compiler, embedding, and core verification must all pass. The emergency
+  =MONADC_ALLOW_UNVERIFIED_PUSH=1= escape hatch is deliberately explicit and
+  must be disclosed with its known failures.

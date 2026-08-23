@@ -727,6 +727,7 @@ static QttAnfValue lower_closure_body_node(
                 .type_id = parameter->type_id,
                 .representation = parameter->representation,
                 .transfer = transfer,
+                .nominal_authority = parameter->nominal_authority,
             };
             operands[i] = (QttAnfCallOperand){
                 .value = value,
@@ -734,6 +735,7 @@ static QttAnfValue lower_closure_body_node(
                 .type_id = parameter->type_id,
                 .representation = parameter->representation,
                 .transfer = transfer,
+                .nominal_authority = parameter->nominal_authority,
                 .source_resource =
                     captured_heap
                         ? node->apply.arguments[i]->var
@@ -1332,7 +1334,11 @@ static bool call_matches(
                 expected->argument_representations[i] ||
             !qtt_type_id_equal(
                 operand->type_id,
-                expected->argument_type_ids[i]))
+                expected->argument_type_ids[i]) ||
+            (operand->representation == QTT_REP_FOREIGN &&
+             !qtt_nominal_authority_equal(
+                 operand->nominal_authority,
+                 expected->argument_nominal_authorities[i])))
             return false;
         if (source.module_id || source.binder_id) {
             if (!qtt_core_var_equal(

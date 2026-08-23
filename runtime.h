@@ -13,6 +13,7 @@
 extern volatile int rt_interrupted;
 extern Arena g_eval_arena;
 
+
 /// Value Types
 
 typedef enum {
@@ -360,6 +361,7 @@ RuntimeValue *rt_ast_to_runtime_value(AST *ast);
 char         *rt_string_take(const char *s, int64_t n);
 char         *rt_string_drop(const char *s, int64_t n);
 int64_t       rt_string_byte(const char *s, int64_t index);
+char         *rt_char_string(int64_t codepoint);
 char         *rt_string_concat(const char *a, const char *b);
 void         *rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size);
 RuntimeValue *rt_coll_wrap(RuntimeValue *coll, RuntimeValue *item);
@@ -528,6 +530,7 @@ LLVMValueRef get_rt_print_list(CodegenContext *ctx);
 LLVMValueRef get_rt_string_take(CodegenContext *ctx);
 LLVMValueRef get_rt_string_drop(CodegenContext *ctx);
 LLVMValueRef get_rt_string_byte(CodegenContext *ctx);
+LLVMValueRef get_rt_char_string(CodegenContext *ctx);
 LLVMValueRef get_rt_string_concat(CodegenContext *ctx);
 LLVMValueRef get_rt_arr_concat(CodegenContext *ctx);
 LLVMValueRef get_rt_coll_wrap(CodegenContext *ctx);

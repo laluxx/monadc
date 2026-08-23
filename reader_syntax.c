@@ -27,10 +27,10 @@ typedef struct {
     size_t rule_capacity;
 } RSReader;
 
-static RSReader *g_readers;
-static size_t g_reader_count;
-static size_t g_reader_capacity;
-static int g_cleanup_registered;
+static MONAD_THREAD_LOCAL RSReader *g_readers;
+static MONAD_THREAD_LOCAL size_t g_reader_count;
+static MONAD_THREAD_LOCAL size_t g_reader_capacity;
+static MONAD_THREAD_LOCAL int g_cleanup_registered;
 
 typedef struct {
     char *keyword;
@@ -39,10 +39,10 @@ typedef struct {
     int source_line;
 } RSBlockReader;
 
-static RSBlockReader *g_block_readers;
-static size_t g_block_reader_count;
-static size_t g_block_reader_capacity;
-static int g_block_reader_error;
+static MONAD_THREAD_LOCAL RSBlockReader *g_block_readers;
+static MONAD_THREAD_LOCAL size_t g_block_reader_count;
+static MONAD_THREAD_LOCAL size_t g_block_reader_capacity;
+static MONAD_THREAD_LOCAL int g_block_reader_error;
 
 typedef struct RSScope {
     char *owner_file;
@@ -52,7 +52,7 @@ typedef struct RSScope {
     struct RSScope *previous;
 } RSScope;
 
-static RSScope *g_scope;
+static MONAD_THREAD_LOCAL RSScope *g_scope;
 
 static int reader_debug(void);
 
@@ -798,7 +798,12 @@ static char *expand_block_readers(const char *source, const char *filename) {
         while (body < block_end) {
             const char *body_end = strchr(body, '\n');
             if (!body_end || body_end > block_end) body_end = block_end;
-            if (!rs_buffer_text(&output, "\n")) goto allocation_failure;
+            /* Keep the synthetic reader-block payload inside one explicit
+             * list.  Feeding layout-significant newlines back through the
+             * Wisp pass lets it close `(reader-block ...)` after the head and
+             * turns every reader-line into an extra macro argument.  Source
+             * coordinates already live in each reader-line node. */
+            if (!rs_buffer_text(&output, " ")) goto allocation_failure;
             int indent = line_indent(body, body_end);
             int relative_indent = indent > base_indent
                                 ? indent - base_indent : 0;

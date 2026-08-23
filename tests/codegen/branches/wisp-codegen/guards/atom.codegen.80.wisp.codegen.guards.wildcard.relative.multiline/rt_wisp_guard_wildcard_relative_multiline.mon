@@ -1,0 +1,42 @@
+:TEST-ID tests.codegen.rt-wisp-guard-wildcard-relative-multiline
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-CODEGEN-ATOM atom.codegen.80.wisp.codegen.guards.wildcard.relative.multiline
+:TEST-QUALITY branch-regression
+:TEST-SUBSET wisp-guards
+:TEST-CATEGORY wisp-codegen
+:TEST-SECTION codegen
+:TEST-CONTEXT monadc.context.style.receiver-relative-guards, fix.wisp.wildcard-relative-multiline-guard-2026-08-14
+:TEST-PURPOSE Wildcards do not become receiver-relative guard subjects and a multiline fallback remains one sequenced body.
+:TEST-ATOM `_ _ value | >= limit` guards the third argument; the following clause may contain multiple `def` forms.
+:TEST-EXPECT compile, run
+:TEST-COVERAGE wisp.c wildcard subject extraction guarded pattern multiline begin lowering
+:TEST-USES-ATOM atom.codegen.category.80.wisp.codegen
+:TEST-MENU branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.wildcard.relative.multiline
+:TEST-MENU-PATH codegen/branches/wisp-codegen/guards/atom.codegen.80.wisp.codegen.guards.wildcard.relative.multiline
+:TEST-ATOM-LEAF atom.codegen.80.wisp.codegen.guards.wildcard.relative.multiline
+:TEST-CLI-TARGET codegen branches wisp-codegen guards wildcard-relative-multiline
+
+module Main
+
+define buffer :: [8]
+
+define step-or-zero :: Int -> Float -> Int -> Int
+  _ _ value | >= 3 -> 0
+  first second value ->
+    def next (value + 1)
+    def result (next + (first - first) + (Int (second - second)))
+    result
+
+define fill-until-three :: Int -> Float -> Int -> Int
+  _ _ index | >= 3 -> 0
+  first second index ->
+    def status (set! (buffer index) (index + 10))
+    def next (fill-until-three first second (index + 1))
+    next + (status - status)
+
+show (step-or-zero 9 1.5 0)
+show (step-or-zero 9 1.5 3)
+show (fill-until-three 9 1.5 0)
+show (buffer 0)
+show (buffer 2)

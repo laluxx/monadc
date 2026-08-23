@@ -1,12 +1,14 @@
 :TEST-ID tests.wisp.receiver-relative-guards
 :TEST-CONTEXT monadc.context.style.pure-wisp-prelude, monadc.context.style.receiver-relative-guards-2026-07-28
-:TEST-PURPOSE Unary guarded definitions apply their subject to each point-free predicate.
+:TEST-PURPOSE Guarded definitions fill omitted predicate operands from their clause subjects.
 :TEST-ATOM `x | >= lo and <= hi` lowers to two comparisons joined by Boolean conjunction.
 :TEST-EXPECT parse-json
 :TEST-TIER regression
 :TEST-MENU wisp
 :TEST-MENU-PATH wisp/receiver-relative-guards
 :TEST-CLI-TARGET wisp receiver-relative-guards
+
+import Data.Char
 
 module Wisp.ReceiverRelativeGuards []
 
@@ -43,6 +45,25 @@ define word-char? :: Int -> Bool
     | otherwise           -> False
 
 
+define same-pair? :: Int -> Int -> Bool
+  left right | = -> True
+  _ _ -> False
+
+
+define reversed-pair? :: Int -> Int -> Bool
+  left right | = left -> True
+  _ _ -> False
+
+
+define scheme-symbol-character? :: Char -> Bool
+  character | blank?      -> False
+            | linebreak?  -> False
+            | = '('       -> False
+            | = ')'       -> False
+            | = Char 0x27 -> False
+            | otherwise    -> True
+
+
 tests
   assert-eq (ascii-byte? 0) True "relative lower and upper bounds include zero"
   assert-eq (ascii-byte? 0x7f) True "relative lower and upper bounds include the upper edge"
@@ -56,3 +77,11 @@ tests
   assert-eq (sample-visible? (GuardSample 0 0 1.0)) True "relative field guards access the unary subject"
   assert-eq (sample-visible? (GuardSample (0 - 1) 0 1.0)) False "relative field guards reject a negative field"
   assert-eq (sample-visible? (GuardSample 0 0 0.0)) False "continuation field guards retain the unary subject"
+  assert-eq (same-pair? 7 7) True "a bare binary guard receives both clause subjects left to right"
+  assert-eq (same-pair? 7 8) False "a bare binary guard compares distinct clause subjects"
+  assert-eq (reversed-pair? 7 7) True "an explicit subject is not implicitly supplied twice"
+  assert-eq (reversed-pair? 7 8) False "missing subjects precede the explicit guard operand"
+  assert-eq (scheme-symbol-character? 'a') True "a unary method guard receives its Char subject"
+  assert-eq (scheme-symbol-character? ' ') False "blank characters are rejected point-free"
+  assert-eq (scheme-symbol-character? (Char 0x28)) False "a parenthesis character literal remains one guard operand"
+  assert-eq (scheme-symbol-character? (Char 0x27)) False "a Char cast remains one guard operand"

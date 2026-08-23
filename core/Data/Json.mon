@@ -1,0 +1,625 @@
+;;; Json.mon --- Strict JSON values and decoding
+
+:author "Laluxx"
+:version "0.4.0"
+:keywords "json rfc8259 parser serialization data interchange"
+:reference-rfc8259 "https://www.rfc-editor.org/rfc/rfc8259.html"
+:reference-ijson "https://www.rfc-editor.org/rfc/rfc7493.html"
+:reference-jcs "https://www.rfc-editor.org/rfc/rfc8785.html"
+:reference-simdjson "https://arxiv.org/abs/1902.08318"
+:reference-utf8 "https://www.rfc-editor.org/rfc/rfc3629.html"
+:reference-unicode-well-formed "https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/"
+:parser-architecture "Text.Parser consumption algebra with a future incremental continuation boundary"
+
+;;; Commentary:
+
+ Data.Json is the standards-facing client of Text.Parser. The initial active
+ grammar owns strict RFC 8259 literals, exact numbers, strings, arrays, and objects,
+ including whole-document consumption, leading-zero rejection, whitespace,
+ comma discipline, nesting, Unicode escapes, canonical UTF-8, and furthest
+ offsets. UTF-16 surrogate code units are accepted only as a well-formed pair
+ inside =\u= escapes and are immediately converted to a Unicode scalar value.
+
+ The semantic API and scanning backend are separate by design. A declarative
+ grammar remains the reference implementation and diagnostic oracle. A future
+ simdjson-style stage 1 may validate UTF-8 and index structural characters in
+ parallel blocks; stage 2 must construct exactly the same Json values and
+ diagnostics. Backend choice must never change duplicate-key, numeric, depth,
+ allocation, or Unicode policy.
+
+ =RFC 8259= is the default language contract. =RFC 7493 I-JSON= constraints are a
+ named validation profile, not accidental decoder strictness. =RFC 8785 JSON=
+ Canonicalization Scheme rules belong to an encoder profile: deterministic
+ property ordering, Unicode preservation, and ECMAScript-compatible number
+ serialization must not leak into ordinary decoding.
+
+ Fractional and exponent-bearing numbers retain their exact source lexeme, so
+ syntax accepts values outside machine Float range without rounding them.
+ Plain integers keep the compatible JsonInteger representation; conversion and
+ profile-specific range checks remain explicit client policy.
+
+ =decode-json-with-budget= accepts the shared immutable ParserBudget policy.
+ The active slice enforces the whole-document byte limit before grammar entry
+ and reports the first prohibited byte with structured code 60. The remaining
+ fields are deliberately present in the same policy value so recursive grammar
+ entry points can adopt them without proliferating incompatible option types.
+
+ The public Json type already reserves the complete semantic shape. Strings,
+ arrays, objects, configurable duplicate-name policies, and
+ incremental decoding will be activated in successive tested slices rather
+ than hidden behind permissive placeholder behavior. Every recursive entry
+ point will carry explicit byte, nesting, string, number, and collection
+ budgets so untrusted documents cannot turn convenience parsing into an
+ unbounded resource commitment.
+
+;;; Code:
+
+import Text.Parser
+import Data.Bool
+import Data.Char
+import Text.Format
+import Text.Unicode
+
+module Data.Json where
+
+  :types
+    Json JsonNull JsonBool JsonInteger JsonNumber JsonString JsonArray JsonObject JsonMember
+    JsonDecode JsonDecodeFailed JsonDecoded
+
+  :decoding
+    decode-json decode-json-with-budget json-default-budget
+    json-decode-ok? json-value-or
+    json-error-offset json-error-code render-json-error
+
+  :observation
+    json-null? json-bool-or? json-integer-or json-number-lexeme-or
+    json-string-or json-array-count-or json-first-array-count-or json-object-count-or
+
+
+define json-format-version :: Int 1
+
+
+data Json
+  = JsonNull
+  | JsonBool    Bool
+  | JsonInteger Int
+  | JsonNumber  String
+  | JsonString  String
+  | JsonArray   [Json]
+  | JsonObject  [JsonMember]
+
+
+data JsonMember
+  = Member String Json
+
+
+data JsonMemberBuffer
+  = JsonMembers [JsonMember]
+
+
+data JsonDecode
+  = JsonDecodeFailed Int Int
+  | JsonDecoded Json
+
+
+data JsonKeyDecode
+  = JsonKeyFailed ParserFailure
+  | JsonKeyParsed String Int
+
+
+;;; Observation
+
+define json-decode-ok? :: JsonDecode -> Bool
+  [JsonDecoded _]       -> True
+  [JsonDecodeFailed _ _] -> False
+
+
+define json-value-or :: Json -> JsonDecode -> Json
+  fallback [JsonDecoded value]       -> value
+  fallback [JsonDecodeFailed _ _]    -> fallback
+
+
+define json-error-offset :: JsonDecode -> Int
+  [JsonDecodeFailed offset code] -> offset
+  [JsonDecoded _]                -> 0
+
+
+define json-error-code :: JsonDecode -> Int
+  [JsonDecodeFailed offset code] -> code
+  [JsonDecoded _]                -> 0
+
+
+define json-error-label :: Int -> String
+  code | = 1       -> "JSON value"
+       | = 2       -> "end of input"
+       | = 10      -> "null"
+       | = 11      -> "true"
+       | = 12      -> "false"
+       | = 20      -> "delimiter after zero"
+       | = 21      -> "JSON number"
+       | = 30      -> "comma or end of array"
+       | = 31      -> "end of array"
+       | = 40      -> "closing quote"
+       | = 41      -> "escaped string character"
+       | = 42      -> "valid JSON escape"
+       | = 43      -> "four hexadecimal digits"
+       | = 44      -> "paired UTF-16 surrogate"
+       | = 45      -> "valid UTF-8 sequence"
+       | = 50      -> "object key or end of object"
+       | = 51      -> "colon after object key"
+       | = 52      -> "comma or end of object"
+       | = 60      -> "input within parser byte budget"
+       | otherwise -> "valid JSON token"
+
+
+define json-diagnostic-reply :: JsonDecode -> ParseReply Json
+  [JsonDecoded value] -> Parsed value 0 False
+  [JsonDecodeFailed offset code] ->
+    Rejected (ParserFailure offset code (expectation-named code (json-error-label code))) False
+
+
+define render-json-error :: String -> [Int] -> String
+  source-name bytes -> render-parser-error source-name bytes (json-diagnostic-reply (decode-json bytes))
+
+
+define json-null? :: Json -> Bool
+  [JsonNull] -> True
+  value      -> False
+
+
+define json-bool-or? :: Bool -> Json -> Bool
+  fallback [JsonBool value] -> value
+  fallback value            -> fallback
+
+
+define json-integer-or :: Int -> Json -> Int
+  fallback [JsonInteger value] -> value
+  fallback value               -> fallback
+
+
+define json-number-lexeme-or :: String -> Json -> String
+  fallback [JsonNumber lexeme] -> lexeme
+  fallback value               -> fallback
+
+
+define json-string-or :: String -> Json -> String
+  fallback [JsonString value] -> value
+  fallback value              -> fallback
+
+
+define json-array-count-or :: Int -> Json -> Int
+  fallback [JsonArray values] -> count values
+  fallback value              -> fallback
+
+
+define json-first-array-count-or :: Int -> Json -> Int
+  fallback [JsonArray values] -> json-array-count-or fallback (rt_coll_head values)
+  fallback value              -> fallback
+
+
+define json-object-count-or :: Int -> Json -> Int
+  fallback [JsonObject members] -> count members
+  fallback value                -> fallback
+
+
+;;; Document boundary
+
+define json-default-budget :: ParserBudget
+  (ParserBudget
+    :input-bytes 16777216
+    :nesting 256
+    :tokens 1048576
+    :string-bytes 1048576
+    :number-digits 1024
+    :collection-items 1048576)
+
+
+define decode-json :: [Int] -> JsonDecode
+  bytes -> decode-json-with-budget json-default-budget bytes
+
+
+define decode-json-with-budget :: ParserBudget -> [Int] -> JsonDecode
+  budget bytes | parser-budget-allows? budget.input-bytes (count bytes) ->
+    decode-json-unchecked bytes
+  budget bytes ->
+    JsonDecodeFailed (parser-budget-first-prohibited budget.input-bytes) 60
+
+
+define decode-json-unchecked :: [Int] -> JsonDecode
+  bytes ->
+    def offset (skip-space-offset 0 bytes)
+    def rest (skip-space-xs bytes)
+    decode-json-document offset rest (decode-json-value offset rest)
+
+
+define decode-json-document :: Int -> [Int] -> ParseReply Json -> JsonDecode
+  start bytes [Rejected failure consumed] -> JsonDecodeFailed failure.offset failure.code
+  start bytes [Parsed value offset consumed] ->
+    finish-json value offset (parser-drop (offset - start) bytes)
+
+
+define finish-json :: Json -> Int -> [Int] -> JsonDecode
+  value offset rest ->
+    def final-offset (skip-space-offset offset rest)
+    def final-rest (skip-space-xs rest)
+    finish-json-rest value final-offset final-rest
+
+
+define finish-json-rest :: Json -> Int -> [Int] -> JsonDecode
+  value offset []   -> JsonDecoded value
+  value offset rest -> JsonDecodeFailed offset 2
+
+
+;;; Scalar grammar
+
+define json-digit-head? :: [Int] -> Bool
+  bytes | parser-empty? bytes -> False
+        | otherwise           -> byte-digit? bytes[0]
+
+
+define json-negative-leading-zero? :: [Int] -> Bool
+  bytes | parser-empty? bytes -> False
+        | bytes[0] = 0x30     -> json-digit-head? (parser-drop 1 bytes)
+        | otherwise           -> False
+
+
+define json-leading-zero? :: [Int] -> Bool
+  bytes | parser-empty? bytes -> False
+        | bytes[0] = 0x30     -> json-digit-head? (parser-drop 1 bytes)
+        | bytes[0] = 0x2d     -> json-negative-leading-zero? (parser-drop 1 bytes)
+        | otherwise           -> False
+
+
+define decode-json-value :: Int -> [Int] -> ParseReply Json
+  offset bytes
+    | parser-empty? bytes      -> parser-fail-named 1 "JSON value" offset bytes
+    | bytes[0] = 0x6e          -> decode-json-literal JsonNull         ⌜0x6e 0x75 0x6c 0x6c⌝      10 offset bytes
+    | bytes[0] = 0x74          -> decode-json-literal (JsonBool True)  ⌜0x74 0x72 0x75 0x65⌝      11 offset bytes
+    | bytes[0] = 0x66          -> decode-json-literal (JsonBool False) ⌜0x66 0x61 0x6c 0x73 0x65⌝ 12 offset bytes
+    | bytes[0] = 0x22          -> decode-json-string offset bytes
+    | bytes[0] = 0x5b          -> decode-json-array offset bytes
+    | bytes[0] = 0x7b          -> decode-json-object offset bytes
+    | otherwise ->
+        (decode-json-number offset bytes
+          (parser-decimal-lexeme-up-to 1024 64 21 offset bytes))
+
+
+define decode-json-literal :: Json -> [Int] -> Int -> Int -> [Int] -> ParseReply Json
+  json expected code start bytes -> decode-json-literal-reply json code start bytes (parser-literal expected code start bytes)
+
+
+define decode-json-literal-reply :: Json -> Int -> Int -> [Int] -> ParseReply Int -> ParseReply Json
+  json code start bytes reply
+    | reply-ok? reply -> Parsed json (reply-offset reply) (reply-consumed? reply)
+    | otherwise       -> Rejected (ParserFailure (reply-error-offset reply) code (expectation-named code (json-error-label code))) (reply-consumed? reply)
+
+
+define decode-json-integer :: Int -> [Int] -> ParseResult -> ParseReply Json
+  start bytes result
+    | result.ok -> Parsed (JsonInteger result.value) result.offset (json-offset-advanced? start result.offset)
+    | otherwise -> parser-fail-named 21 "JSON number" result.offset bytes
+
+
+define json-decimal-lexeme? :: String -> Bool
+  [] -> False
+  [character|rest]
+    | character = 0x2e -> True
+    | character = 0x65 -> True
+    | character = 0x45 -> True
+    | otherwise        -> json-decimal-lexeme? rest
+
+
+define decode-json-number-value :: Int -> [Int] -> String -> Int -> Bool -> ParseReply Json
+  start bytes lexeme offset consumed
+    | json-decimal-lexeme? lexeme -> Parsed (JsonNumber lexeme) offset consumed
+    | otherwise -> decode-json-integer start bytes (signed-int start bytes)
+
+
+define decode-json-number :: Int -> [Int] -> ParseReply String -> ParseReply Json
+  start bytes [Rejected failure consumed] -> Rejected failure consumed
+  start bytes [Parsed lexeme offset consumed] ->
+    decode-json-number-value start bytes lexeme offset consumed
+
+
+define json-offset-advanced? :: Int -> Int -> Bool
+  start offset | offset > start -> True
+               | otherwise      -> False
+
+
+;;; Strings and Unicode escapes
+
+define json-rejected :: ParserFailure -> Bool -> ParseReply Json
+  failure consumed -> Rejected failure consumed
+
+
+define json-string-rejected :: Int -> Int -> ParseReply Json
+  code offset -> json-rejected (ParserFailure offset code (expectation-named code (json-error-label code))) True
+
+
+define decode-json-string :: Int -> [Int] -> ParseReply Json
+  offset bytes -> decode-json-string-loop "" (offset + 1) (parser-drop 1 bytes)
+
+
+define decode-json-string-loop :: String -> Int -> [Int] -> ParseReply Json
+  text offset [] -> json-string-rejected 40 offset
+  text offset [byte|rest]
+    | = byte 0x22 -> Parsed (JsonString text) (offset + 1) True
+    | byte < 0x20 -> json-string-rejected 41 offset
+    | = byte 0x5c -> decode-json-string-escape text (offset + 1) rest
+    | byte <= 0x7f -> decode-json-string-loop (text ++ (char->text (chr byte))) (offset + 1) rest
+    | (= (utf8-prefix-width (prepend byte rest)) 0) -> json-string-rejected 45 offset
+    | otherwise ->
+        (decode-json-string-loop
+          (text ++ (bytes-prefix->text (utf8-prefix-width (prepend byte rest)) (prepend byte rest)))
+          (offset + (utf8-prefix-width (prepend byte rest)))
+          (parser-drop (utf8-prefix-width (prepend byte rest)) (prepend byte rest)))
+
+
+define decode-json-string-escape :: String -> Int -> [Int] -> ParseReply Json
+  text offset [] -> json-string-rejected 42 offset
+  text offset [escape|rest]
+    | = escape 0x22 -> decode-json-string-loop (text ++ "\"") (offset + 1) rest
+    | = escape 0x5c -> decode-json-string-loop (text ++ "\\") (offset + 1) rest
+    | = escape 0x2f -> decode-json-string-loop (text ++ "/")  (offset + 1) rest
+    | = escape 0x62 -> decode-json-string-loop (text ++ "\b") (offset + 1) rest
+    | = escape 0x66 -> decode-json-string-loop (text ++ "\f") (offset + 1) rest
+    | = escape 0x6e -> decode-json-string-loop (text ++ "\n") (offset + 1) rest
+    | = escape 0x72 -> decode-json-string-loop (text ++ "\r") (offset + 1) rest
+    | = escape 0x74 -> decode-json-string-loop (text ++ "\t") (offset + 1) rest
+    | = escape 0x75 -> decode-json-unicode-escape text (offset + 1) rest
+    | otherwise     -> json-string-rejected 42 offset
+
+
+define json-hex-quad? :: Int -> Int -> Int -> Int -> Bool
+  a b c d -> ((hex? a) and (hex? b) and (hex? c) and (hex? d))
+
+
+define json-hex-quad-value :: Int -> Int -> Int -> Int -> Int
+  a b c d -> ((hex-digit->int a) * 0x1000 + (hex-digit->int b) * 0x100 + (hex-digit->int c) * 0x10 + (hex-digit->int d))
+
+
+define json-high-surrogate? :: Int -> Bool
+  value | >= 0xd800 and <= 0xdbff -> True
+        | otherwise               -> False
+
+
+define json-low-surrogate? :: Int -> Bool
+  value | >= 0xdc00 and <= 0xdfff -> True
+        | otherwise               -> False
+
+
+define json-hex-prefix? :: [Int] -> Bool
+  [a b c d|rest] -> json-hex-quad? a b c d
+  bytes          -> False
+
+
+define json-hex-prefix-value :: [Int] -> Int
+  [a b c d|rest] -> json-hex-quad-value a b c d
+  bytes          -> 0
+
+
+define decode-json-surrogate-codepoint :: Int -> Int -> Int -> ParseResult
+  offset high low
+    | json-low-surrogate? low -> parse-ok (0x10000 + (high - 0xd800) * 0x400 + low - 0xdc00) (offset + 6)
+    | otherwise               -> parse-error 44 (offset + 2)
+
+
+define decode-json-surrogate-code :: Int -> Int -> [Int] -> ParseResult
+  offset high bytes
+    | (count bytes) < 6                            -> parse-error 44 offset
+    | (nth bytes 0) != 0x5c                        -> parse-error 44 offset
+    | (nth bytes 1) != 0x75                        -> parse-error 44 (offset + 1)
+    | not (json-hex-prefix? (parser-drop 2 bytes)) -> parse-error 43 (offset + 2)
+    | otherwise ->
+        decode-json-surrogate-codepoint offset high (json-hex-prefix-value (parser-drop 2 bytes))
+
+
+define decode-json-surrogate-result :: String -> Int -> [Int] -> ParseResult -> ParseReply Json
+  text offset bytes result
+    | result.ok -> decode-json-string-loop (text ++ (encode-scalar result.value)) result.offset (parser-drop (result.offset - offset) bytes)
+    | otherwise -> json-string-rejected result.error result.offset
+
+
+define decode-json-high-surrogate :: String -> Int -> [Int] -> Int -> ParseReply Json
+  text offset rest scalar ->
+    decode-json-surrogate-result text (offset + 4) rest (decode-json-surrogate-code (offset + 4) scalar rest)
+
+
+define decode-json-unicode-scalar :: String -> Int -> [Int] -> Int -> ParseReply Json
+  text offset rest scalar
+    | json-high-surrogate? scalar -> decode-json-high-surrogate text offset rest scalar
+    | json-low-surrogate? scalar  -> json-string-rejected 44 offset
+    | otherwise                   -> decode-json-string-loop (text ++ (encode-scalar scalar)) (offset + 4) rest
+
+
+define decode-json-unicode-escape :: String -> Int -> [Int] -> ParseReply Json
+  text offset bytes
+    | json-hex-prefix? bytes -> decode-json-unicode-scalar text offset (parser-drop 4 bytes) (json-hex-prefix-value bytes)
+    | otherwise              -> json-string-rejected 43 offset
+
+
+;;; Recursive arrays
+
+define decode-json-array :: Int -> [Int] -> ParseReply Json
+  offset bytes -> decode-json-array-body (offset + 1) (parser-drop 1 bytes)
+
+
+define json-array-reply :: [Json] -> Int -> ParseReply Json
+  values offset -> Parsed (JsonArray values) offset True
+
+
+define json-empty-array-reply :: Int -> ParseReply Json
+  offset -> Parsed (JsonArray (list)) offset True
+
+
+define json-singleton :: Json -> [Json]
+  value -> list value
+
+
+define decode-json-array-body :: Int -> [Int] -> ParseReply Json
+  offset bytes ->
+    def value-offset (skip-space-offset offset bytes)
+    def value-bytes (skip-space-xs bytes)
+    decode-json-array-start value-offset value-bytes
+
+
+define decode-json-array-start :: Int -> [Int] -> ParseReply Json
+  offset [] -> json-rejected (ParserFailure offset 31 (expectation-named 31 "end of array")) True
+  offset [0x5d|rest] -> json-empty-array-reply (offset + 1)
+  offset bytes       -> decode-json-array-first offset bytes (decode-json-value offset bytes)
+
+
+define decode-json-array-first :: Int -> [Int] -> ParseReply Json -> ParseReply Json
+  start bytes [Rejected failure consumed] -> json-rejected failure True
+  start bytes [Parsed value offset consumed] ->
+    decode-json-array-after-value (json-singleton value) start bytes offset
+
+
+define decode-json-array-after :: [Json] -> Int -> [Int] -> ParseReply Json -> ParseReply Json
+  values start bytes [Rejected failure consumed] -> json-rejected failure True
+  values start bytes [Parsed value offset consumed] ->
+    decode-json-array-after-value (concat values (json-singleton value)) start bytes offset
+
+
+define decode-json-array-after-value :: [Json] -> Int -> [Int] -> Int -> ParseReply Json
+  values start bytes offset ->
+    def rest (parser-drop (offset - start) bytes)
+    def delimiter-offset (skip-space-offset offset rest)
+    def delimiter-bytes (skip-space-xs rest)
+    decode-json-array-delimiter values delimiter-offset delimiter-bytes
+
+
+define decode-json-array-delimiter :: [Json] -> Int -> [Int] -> ParseReply Json
+  values offset [] -> json-rejected (ParserFailure offset 31 (expectation-named 31 "end of array")) True
+  values offset [0x5d|rest] -> json-array-reply values (offset + 1)
+  values offset [0x2c|rest] -> decode-json-array-next values (offset + 1) rest
+  values offset bytes       -> json-rejected (ParserFailure offset 30 (expectation-named 30 "comma or end of array")) True
+
+
+define decode-json-array-next :: [Json] -> Int -> [Int] -> ParseReply Json
+  values offset bytes ->
+    def value-offset (skip-space-offset offset bytes)
+    def value-bytes (skip-space-xs bytes)
+    decode-json-array-after values value-offset value-bytes (decode-json-value value-offset value-bytes)
+
+
+;;; Recursive objects
+
+define json-member-singleton :: String -> Json -> [JsonMember]
+  key value -> list (Member key value)
+
+
+define json-prepend-member :: String -> Json -> [JsonMember] -> [JsonMember]
+  key value members -> __rt_prepend (Member key value) members
+
+
+define decode-json-object :: Int -> [Int] -> ParseReply Json
+  offset bytes -> decode-json-object-body (offset + 1) (parser-drop 1 bytes)
+
+
+define decode-json-object-body :: Int -> [Int] -> ParseReply Json
+  offset bytes ->
+    def key-offset (skip-space-offset offset bytes)
+    def key-bytes (skip-space-xs bytes)
+    decode-json-object-start key-offset key-bytes
+
+
+define decode-json-object-start :: Int -> [Int] -> ParseReply Json
+  offset []          -> json-string-rejected 50 offset
+  offset [0x7d|rest] -> Parsed (JsonObject (list)) (offset + 1) True
+  offset bytes
+    | bytes[0] = 0x22 -> decode-json-object-key (list) offset bytes (decode-json-key-result (decode-json-string offset bytes))
+    | otherwise       -> json-string-rejected 50 offset
+
+
+define decode-json-key-result :: ParseReply Json -> JsonKeyDecode
+  [Rejected failure consumed]   -> JsonKeyFailed failure
+  [Parsed value offset consumed] -> decode-json-key-value value offset
+
+
+define decode-json-key-value :: Json -> Int -> JsonKeyDecode
+  [JsonString key] offset -> JsonKeyParsed key offset
+  value offset            -> JsonKeyFailed (ParserFailure offset 50 (expectation-named 50 "object key"))
+
+
+define decode-json-object-key :: [JsonMember] -> Int -> [Int] -> JsonKeyDecode -> ParseReply Json
+  members start bytes [JsonKeyFailed failure] -> json-rejected failure True
+  members start bytes [JsonKeyParsed key offset] ->
+    decode-json-object-colon members key offset (parser-drop (offset - start) bytes)
+
+
+define decode-json-object-colon :: [JsonMember] -> String -> Int -> [Int] -> ParseReply Json
+  members key offset bytes ->
+    def colon-offset (skip-space-offset offset bytes)
+    def colon-bytes (skip-space-xs bytes)
+    decode-json-object-colon-token members key colon-offset colon-bytes
+
+
+define decode-json-object-colon-token :: [JsonMember] -> String -> Int -> [Int] -> ParseReply Json
+  members key offset [0x3a|rest] -> decode-json-object-value members key (offset + 1) rest
+  members key offset bytes       -> json-string-rejected 51 offset
+
+
+define decode-json-object-value :: [JsonMember] -> String -> Int -> [Int] -> ParseReply Json
+  members key offset bytes ->
+    def value-offset (skip-space-offset offset bytes)
+    def value-bytes (skip-space-xs bytes)
+    decode-json-object-value-reply members key value-offset value-bytes (decode-json-value value-offset value-bytes)
+
+
+define decode-json-object-value-reply :: [JsonMember] -> String -> Int -> [Int] -> ParseReply Json -> ParseReply Json
+  members key start bytes [Rejected failure consumed] -> json-rejected failure True
+  members key start bytes [Parsed value offset consumed] ->
+    decode-json-object-after (json-prepend-member key value members) offset (parser-drop (offset - start) bytes)
+
+
+define decode-json-object-after :: [JsonMember] -> Int -> [Int] -> ParseReply Json
+  members offset bytes ->
+    def delimiter-offset (skip-space-offset offset bytes)
+    def delimiter-bytes (skip-space-xs bytes)
+    decode-json-object-delimiter members delimiter-offset delimiter-bytes
+
+
+define decode-json-object-delimiter :: [JsonMember] -> Int -> [Int] -> ParseReply Json
+  members offset [0x7d|rest] -> Parsed (JsonObject members) (offset + 1) True
+  members offset [0x2c|rest] -> decode-json-object-next (JsonMembers members) (offset + 1) rest
+  members offset bytes       -> json-string-rejected 52 offset
+
+
+define decode-json-object-next :: JsonMemberBuffer -> Int -> [Int] -> ParseReply Json
+  buffer offset bytes ->
+    def key-offset (skip-space-offset offset bytes)
+    def key-bytes (skip-space-xs bytes)
+    decode-json-object-next-key buffer key-offset key-bytes
+
+
+define json-buffer-members :: JsonMemberBuffer -> [JsonMember]
+  [JsonMembers members] -> members
+
+
+define decode-json-object-next-key :: JsonMemberBuffer -> Int -> [Int] -> ParseReply Json
+  buffer offset bytes
+    | parser-empty? bytes       -> json-string-rejected 50 offset
+    | (= (nth bytes 0) 0x22) ->
+        decode-json-object-key (json-buffer-members buffer) offset bytes (decode-json-key-result (decode-json-string offset bytes))
+    | otherwise                 -> json-string-rejected 50 offset
+
+
+tests
+  :literals:
+  assert-eq (json-null? (json-value-or JsonNull (decode-json (list 0x6e 0x75 0x6c 0x6c)))) True "JSON null literal"
+  assert-eq (json-bool-or? False (json-value-or JsonNull (decode-json (list 0x74 0x72 0x75 0x65)))) True "JSON true literal"
+  assert-eq (json-bool-or? True (json-value-or JsonNull (decode-json (list 0x66 0x61 0x6c 0x73 0x65)))) False "JSON false literal"
+  :literals:
+
+  :numbers:
+  assert-eq (json-integer-or 0 (json-value-or JsonNull (decode-json (list 0x34 0x32)))) 42 "JSON positive integer"
+  assert-eq (json-integer-or 0 (json-value-or JsonNull (decode-json (list 0x2d 0x34 0x32)))) (0 - 42) "JSON negative integer"
+  assert-eq (json-decode-ok? (decode-json (list 0x30 0x31))) False "JSON leading zero rejected"
+  :numbers:
+
+  :document:
+  assert-eq (json-decode-ok? (decode-json (list 0x20 0x74 0x72 0x75 0x65 0x0a))) True "JSON surrounding whitespace"
+  assert-eq (json-decode-ok? (decode-json (list 0x74 0x72 0x75 0x65 0x78))) False "JSON trailing data rejected"
+  assert-eq (json-error-offset (decode-json (list 0x6e 0x75 0x78 0x6c))) 2 "JSON furthest literal offset"
+  :document:

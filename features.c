@@ -4,12 +4,57 @@
 #include <stdlib.h>
 
 // Internal feature tracking for has_feature()
-static char **detected_features = NULL;
-static int feature_count = 0;
+static MONAD_THREAD_LOCAL char **detected_features = NULL;
+static MONAD_THREAD_LOCAL int feature_count = 0;
+
+struct FeaturePersistentState { char **items; int count; };
+static MONAD_THREAD_LOCAL FeaturePersistentState *g_bound_feature_state;
+static MONAD_THREAD_LOCAL FeaturePersistentState g_saved_feature_state;
+
+FeaturePersistentState *feature_persistent_state_create(void) {
+    return calloc(1, sizeof(FeaturePersistentState));
+}
+
+void feature_persistent_state_destroy(FeaturePersistentState *state) {
+    if (!state || state == g_bound_feature_state) return;
+    for (int i = 0; i < state->count; i++) free(state->items[i]);
+    free(state->items);
+    free(state);
+}
+
+bool feature_persistent_state_enter(FeaturePersistentState *state) {
+    if (!state || g_bound_feature_state) return false;
+    g_saved_feature_state = (FeaturePersistentState){detected_features, feature_count};
+    detected_features = state->items; feature_count = state->count;
+    state->items = NULL; state->count = 0;
+    g_bound_feature_state = state;
+    return true;
+}
+
+void feature_persistent_state_leave(FeaturePersistentState *state) {
+    if (!state || g_bound_feature_state != state) return;
+    state->items = detected_features; state->count = feature_count;
+    detected_features = g_saved_feature_state.items;
+    feature_count = g_saved_feature_state.count;
+    memset(&g_saved_feature_state, 0, sizeof(g_saved_feature_state));
+    g_bound_feature_state = NULL;
+}
 
 static void add_feature_internal(const char *feature) {
     detected_features = realloc(detected_features, sizeof(char*) * (feature_count + 1));
     detected_features[feature_count++] = strdup(feature);
+}
+
+bool feature_register(const char *feature) {
+    if (!feature || !feature[0]) return false;
+    if (has_feature(feature)) return true;
+    char *copy = strdup(feature);
+    if (!copy) return false;
+    char **items = realloc(detected_features, sizeof(char*) * (feature_count + 1));
+    if (!items) { free(copy); return false; }
+    detected_features = items;
+    detected_features[feature_count++] = copy;
+    return true;
 }
 
 AST *detect_features(void) {

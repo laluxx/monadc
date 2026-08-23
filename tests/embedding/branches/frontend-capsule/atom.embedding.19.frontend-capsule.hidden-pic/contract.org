@@ -1,0 +1,15 @@
+#+TITLE: Cycle 19 private frontend capsule contract
+
+:TEST-ID: tests.embedding.frontend-capsule.hidden-pic
+:TEST-SCOPE: embedding
+:TEST-KIND: build abi
+:TEST-EMBEDDING-ATOM: atom.embedding.19.frontend-capsule.hidden-pic
+:TEST-MENU: branches/frontend-capsule/atom.embedding.19.frontend-capsule.hidden-pic
+:TEST-MENU-PATH: embedding/branches/frontend-capsule/atom.embedding.19.frontend-capsule.hidden-pic
+:TEST-ATOM-LEAF: atom.embedding.19.frontend-capsule.hidden-pic
+
+The compiler SDK statically contains a position-independent copy of the real
+reader/Wisp dependency closure.  Its implementation symbols remain hidden from
+the dynamic ABI; only names in the public =monad_*= namespace may be exported.
+
+Runner: =python3 -m unittest tests.test_embedding_frontend_capsule=

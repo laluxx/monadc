@@ -1,0 +1,23 @@
+:TEST-ID tests.core.buffer-ansi
+:TEST-CONTEXT fix.core-libs.native-buffer-ansi-donut-2026-08-14
+:TEST-PURPOSE Core owns typed mutable buffers and named ANSI terminal controls.
+:TEST-ATOM Buffer mutation is observable and ANSI animation controls have stable bytes.
+:TEST-EXPECT compile, run
+:TEST-TIER regression
+
+import System.Terminal.ANSI
+
+module Main
+
+define bytes :: [32]
+define floats :: [1kb Float]
+define byte-status (set! (bytes 2) 64)
+define float-status (set! (floats 1) 2.5)
+
+show (bytes 2)
+show (floats 1)
+show (count bytes)
+show (count floats)
+show (length cursor-home)
+show (length animation-start)
+show (length animation-end)
