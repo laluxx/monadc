@@ -120,7 +120,45 @@ static LLVMValueRef emit_type_cast(CodegenContext *ctx, LLVMValueRef val, LLVMTy
     if (sk == LLVMFloatTypeKind && dk == LLVMDoubleTypeKind) return LLVMBuildFPExt(ctx->builder, val, dst_t, "fpext");
     if (sk == LLVMDoubleTypeKind && dk == LLVMFloatTypeKind) return LLVMBuildFPTrunc(ctx->builder, val, dst_t, "fptrunc");
     if (sk == LLVMIntegerTypeKind && dk == LLVMIntegerTypeKind) return LLVMBuildIntCast2(ctx->builder, val, dst_t, 0, "icast");
+    if (sk == LLVMPointerTypeKind && dk == LLVMArrayTypeKind) {
+        LLVMValueRef storage = val;
+        if (LLVMIsACallInst(val)) {
+            Type *element = type_unknown();
+            storage = arr_fat_data(ctx, val, element);
+            type_free(element);
+        }
+        LLVMValueRef pointer = LLVMBuildBitCast(
+            ctx->builder, storage, LLVMPointerType(dst_t, 0),
+            "array_value_pointer");
+        return LLVMBuildLoad2(ctx->builder, dst_t, pointer,
+                              "array_value");
+    }
     return LLVMBuildBitCast(ctx->builder, val, dst_t, "bc");
+}
+
+/* Fixed C array fields are passed by value in generated layout constructors.
+ * A Monad array literal is represented by an arr.fat pointer, so an ordinary
+ * pointer bitcast cannot produce the required LLVM [N x T] value.  Recover
+ * the literal's data pointer (or use fixed storage directly) and load the
+ * aggregate value. */
+static LLVMValueRef emit_semantic_type_cast(CodegenContext *ctx,
+                                            LLVMValueRef val,
+                                            Type *source_type,
+                                            LLVMTypeRef dst_t) {
+    if (LLVMGetTypeKind(dst_t) == LLVMArrayTypeKind &&
+        LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMPointerTypeKind &&
+        source_type && source_type->kind == TYPE_ARR) {
+        LLVMValueRef storage = val;
+        if (source_type->arr_is_fat || source_type->arr_is_heap ||
+            source_type->arr_size < 0)
+            storage = arr_fat_data(ctx, val, source_type->arr_element_type);
+        LLVMValueRef pointer = LLVMBuildBitCast(
+            ctx->builder, storage, LLVMPointerType(dst_t, 0),
+            "fixed_array_pointer");
+        return LLVMBuildLoad2(ctx->builder, dst_t, pointer,
+                              "fixed_array_value");
+    }
+    return emit_type_cast(ctx, val, dst_t);
 }
 
 /* Replace all exit(1) calls in codegen.
@@ -1720,7 +1758,16 @@ LLVMTypeRef type_to_llvm(CodegenContext *ctx, Type *t) {
             return LLVMPointerType(fat, 0);
         }
         /* Known-size stack array */
-        LLVMTypeRef elem_type = type_to_llvm(ctx, t->arr_element_type);
+        Type *array_element = t->arr_element_type;
+        Type *inline_element = NULL;
+        if (array_element && array_element->kind == TYPE_LAYOUT &&
+            !array_element->layout_is_scalar) {
+            inline_element = type_clone(array_element);
+            inline_element->layout_is_inline = true;
+            array_element = inline_element;
+        }
+        LLVMTypeRef elem_type = type_to_llvm(ctx, array_element);
+        type_free(inline_element);
         return LLVMArrayType2(elem_type, (uint64_t)t->arr_size);
     }
     case TYPE_SET:
@@ -3170,6 +3217,7 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
         return val;
     }
     switch (type->kind) {
+        case TYPE_UNIT:
         case TYPE_INT: case TYPE_HEX: case TYPE_BIN: case TYPE_OCT:
         case TYPE_BYTE:
         case TYPE_I8: case TYPE_I16: case TYPE_I32: case TYPE_I64:
@@ -3291,6 +3339,30 @@ static LLVMValueRef codegen_box(CodegenContext *ctx, LLVMValueRef val, Type *typ
             // already a pointer / unknown — pass through
             return val;
     }
+}
+
+static LLVMValueRef codegen_box_abi_value(CodegenContext *ctx,
+                                           LLVMValueRef value,
+                                           Type *source_type) {
+    LLVMValueRef boxed = codegen_box(ctx, value, source_type);
+    if (LLVMGetTypeKind(LLVMTypeOf(boxed)) == LLVMPointerTypeKind)
+        return boxed;
+
+    LLVMTypeRef value_type = LLVMTypeOf(value);
+    if (LLVMGetTypeKind(value_type) == LLVMIntegerTypeKind) {
+        LLVMTypeRef i64 = LLVMInt64TypeInContext(ctx->context);
+        LLVMValueRef widened = LLVMBuildZExtOrBitCast(ctx->builder, value,
+                                                       i64, "box_abi_int");
+        LLVMTypeRef ptr = LLVMPointerType(
+            LLVMInt8TypeInContext(ctx->context), 0);
+        return emit_call_1(ctx, get_rt_value_int(ctx), ptr, widened,
+                           "boxed_abi_int");
+    }
+    if (LLVMGetTypeKind(value_type) == LLVMDoubleTypeKind)
+        return emit_call_1(ctx, get_rt_value_float(ctx),
+                           LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0),
+                           value, "boxed_abi_float");
+    return boxed;
 }
 
 
@@ -6272,12 +6344,69 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
         }
     }
 
+    /* A source-visible signature is authoritative even when this is the
+     * first call emitted in the module.  Generic and unit parameters use a
+     * boxed pointer ABI; deriving a provisional declaration from the literal
+     * argument (for example, the i8 sentinel for ()) creates an invalid call
+     * once the real definition is emitted later. */
+    EnvEntry *known_signature = env_lookup(ctx->env, name);
+    if (known_signature && known_signature->params &&
+        known_signature->param_count == argc) {
+        for (int i = 0; i < argc; i++) {
+            Type *parameter_type = known_signature->params[i].type;
+            LLVMTypeRef parameter_llvm = type_to_llvm(ctx, parameter_type);
+            if (LLVMGetTypeKind(parameter_llvm) == LLVMPointerTypeKind &&
+                LLVMGetTypeKind(LLVMTypeOf(args[i])) != LLVMPointerTypeKind &&
+                parameter_type && parameter_type->kind != TYPE_PTR) {
+                args[i] = codegen_box_abi_value(ctx, args[i], params[i].type);
+            } else {
+                args[i] = emit_semantic_type_cast(
+                    ctx, args[i], params[i].type, parameter_llvm);
+            }
+            arg_types[i] = parameter_llvm;
+        }
+    } else if (ast->list.items[0]->inferred_type) {
+        Type *signature = ast->list.items[0]->inferred_type;
+        for (int i = 0; i < argc && signature &&
+             signature->kind == TYPE_ARROW; i++) {
+            Type *parameter_type = signature->arrow_param;
+            LLVMTypeRef parameter_llvm = type_to_llvm(ctx, parameter_type);
+            if (LLVMGetTypeKind(parameter_llvm) == LLVMPointerTypeKind &&
+                LLVMGetTypeKind(LLVMTypeOf(args[i])) != LLVMPointerTypeKind &&
+                parameter_type && parameter_type->kind != TYPE_PTR) {
+                args[i] = codegen_box_abi_value(ctx, args[i], params[i].type);
+            } else {
+                args[i] = emit_semantic_type_cast(
+                    ctx, args[i], params[i].type, parameter_llvm);
+            }
+            arg_types[i] = parameter_llvm;
+            signature = signature->arrow_ret;
+        }
+    }
+
     LLVMTypeRef ret_llvm = type_to_llvm(ctx, ret_type);
     LLVMTypeRef fn_type = LLVMFunctionType(ret_llvm, arg_types, argc, 0);
 
     if (!fn) {
         fn = LLVMAddFunction(ctx->module, name, fn_type);
         LLVMSetLinkage(fn, LLVMExternalLinkage);
+    } else {
+        LLVMTypeRef actual_fn_type = LLVMGlobalGetValueType(fn);
+        unsigned actual_count = LLVMCountParamTypes(actual_fn_type);
+        if ((int)actual_count == argc && actual_count > 0) {
+            LLVMTypeRef *actual_params = malloc(sizeof(LLVMTypeRef) * actual_count);
+            LLVMGetParamTypes(actual_fn_type, actual_params);
+            for (int i = 0; i < argc; i++) {
+                if (LLVMGetTypeKind(actual_params[i]) == LLVMPointerTypeKind &&
+                    LLVMGetTypeKind(LLVMTypeOf(args[i])) != LLVMPointerTypeKind) {
+                    args[i] = codegen_box_abi_value(ctx, args[i], params[i].type);
+                } else {
+                    args[i] = emit_semantic_type_cast(
+                        ctx, args[i], params[i].type, actual_params[i]);
+                }
+            }
+            free(actual_params);
+        }
     }
 
     env_insert_func(ctx->env, name,
@@ -7936,10 +8065,12 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
             if (entry->param_count == 0 && entry->func_ref &&
                 !entry->is_closure_abi) {
                 LLVMTypeRef fn_t = LLVMGlobalGetValueType(entry->func_ref);
+                bool is_void = LLVMGetTypeKind(LLVMGetReturnType(fn_t)) ==
+                               LLVMVoidTypeKind;
                 result.value = LLVMBuildCall2(ctx->builder, fn_t,
                                                entry->func_ref, NULL, 0,
-                                               ast->symbol);
-                result.type = entry->return_type
+                                               is_void ? "" : ast->symbol);
+                result.type = is_void ? NULL : entry->return_type
                     ? type_clone(entry->return_type) : type_unknown();
                 return result;
             }
@@ -10161,6 +10292,69 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                 }
 
                 // Non-lambda value: (define x 42) or (define [x :: Int] 42)
+                /* A top-level fixed array with an initializer is fixed storage,
+                 * not a runtime-sized fat array.  Materialize its declared LLVM
+                 * array directly and initialize each slot.  Routing the literal
+                 * through codegen_expr first produced an arr.fat* and then stored
+                 * that pointer into [N x T], so indexing returned pointer bits and
+                 * changed between executions. */
+                if (is_at_top_level(ctx) &&
+                    explicit_type && explicit_type->kind == TYPE_ARR &&
+                    explicit_type->arr_size >= 0 &&
+                    value_expr->type == AST_ARRAY &&
+                    value_expr->array.element_count > 0) {
+                    int declared_size = explicit_type->arr_size;
+                    int actual_size = (int)value_expr->array.element_count;
+                    if (actual_size != declared_size) {
+                        CODEGEN_ERROR(ctx, "%s:%d:%d: error: array size mismatch — declared %d but got %d elements",
+                                parser_get_filename(), ast->line, ast->column,
+                                declared_size, actual_size);
+                    }
+
+                    LLVMTypeRef arr_type = type_to_llvm(ctx, explicit_type);
+                    LLVMTypeRef elem_type = LLVMGetElementType(arr_type);
+                    LLVMValueRef global = LLVMGetNamedGlobal(ctx->module, var_name);
+                    if (!global) {
+                        global = LLVMAddGlobal(ctx->module, arr_type, var_name);
+                        LLVMSetInitializer(global, LLVMConstNull(arr_type));
+                        LLVMSetLinkage(global, LLVMExternalLinkage);
+                    }
+
+                    for (int i = 0; i < actual_size; i++) {
+                        CodegenResult element = codegen_expr(
+                            ctx, value_expr->array.elements[i]);
+                        LLVMValueRef cast;
+                        if (explicit_type->arr_element_type->kind == TYPE_LAYOUT &&
+                            !explicit_type->arr_element_type->layout_is_scalar &&
+                            LLVMGetTypeKind(LLVMTypeOf(element.value)) ==
+                                LLVMPointerTypeKind) {
+                            LLVMValueRef pointer = LLVMBuildBitCast(
+                                ctx->builder, element.value,
+                                LLVMPointerType(elem_type, 0),
+                                "array_layout_pointer");
+                            cast = LLVMBuildLoad2(ctx->builder, elem_type,
+                                                  pointer,
+                                                  "array_layout_value");
+                        } else {
+                            cast = emit_type_cast(ctx, element.value, elem_type);
+                        }
+                        LLVMValueRef indices[] = {
+                            LLVMConstInt(LLVMInt32TypeInContext(ctx->context), 0, 0),
+                            LLVMConstInt(LLVMInt32TypeInContext(ctx->context), i, 0)
+                        };
+                        LLVMValueRef slot = LLVMBuildGEP2(
+                            ctx->builder, arr_type, global, indices, 2,
+                            "array_init_slot");
+                        LLVMBuildStore(ctx->builder, cast, slot);
+                    }
+
+                    env_insert(ctx->env, var_name, explicit_type, global);
+                    print_defined(var_name, explicit_type, ctx->env, false);
+                    result.type = explicit_type;
+                    result.value = global;
+                    return result;
+                }
+
                 CodegenResult value_result;
                 if (value_expr->type == AST_ARRAY && value_expr->array.element_count == 0) {
                     if (!explicit_type || explicit_type->kind != TYPE_ARR) {
@@ -12085,49 +12279,25 @@ if (ast->list.count >= 5) {
                 LLVMValueRef val = col_r.value;
 
                 if (type_arr_runtime_sized(col_r.type)) {
+                    Type *element_type = col_r.type->arr_element_type;
+                    if ((!element_type ||
+                         element_type->kind == TYPE_UNKNOWN ||
+                         element_type->kind == TYPE_VAR) &&
+                        ast->inferred_type &&
+                        ast->inferred_type->kind != TYPE_UNKNOWN &&
+                        ast->inferred_type->kind != TYPE_VAR)
+                        element_type = ast->inferred_type;
                     LLVMValueRef data_ptr =
-                        arr_fat_data(ctx, val, col_r.type->arr_element_type);
+                        arr_fat_data(ctx, val, element_type);
                     LLVMTypeRef elem_t =
-                        type_to_llvm(ctx, col_r.type->arr_element_type);
+                        type_to_llvm(ctx, element_type);
                     LLVMValueRef zero = LLVMConstInt(i64_t, 0, 0);
                     LLVMValueRef gep = LLVMBuildGEP2(
                         ctx->builder, elem_t, data_ptr, &zero, 1,
                         "pattern_head_ptr");
                     result.value = LLVMBuildLoad2(
                         ctx->builder, elem_t, gep, "pattern_head");
-                    result.type = col_r.type->arr_element_type;
-                    if ((!result.type || result.type->kind == TYPE_UNKNOWN) &&
-                        ast->inferred_type &&
-                        ast->inferred_type->kind != TYPE_UNKNOWN) {
-                        Type *inferred = type_clone(ast->inferred_type);
-                        if (type_is_integer(inferred))
-                            result.value = emit_call_1(
-                                ctx, get_rt_unbox_int(ctx), i64_t,
-                                result.value, "pattern_head_int");
-                        else if (type_is_bool(inferred)) {
-                            LLVMValueRef integer = emit_call_1(
-                                ctx, get_rt_unbox_int(ctx), i64_t,
-                                result.value, "pattern_head_bool");
-                            result.value = LLVMBuildTrunc(
-                                ctx->builder, integer,
-                                LLVMInt1TypeInContext(ctx->context),
-                                "pattern_head_bool_i1");
-                        } else if (inferred->kind == TYPE_CHAR)
-                            result.value = emit_call_1(
-                                ctx, get_rt_unbox_char(ctx),
-                                LLVMInt8TypeInContext(ctx->context),
-                                result.value, "pattern_head_char");
-                        else if (inferred->kind == TYPE_STRING ||
-                                 inferred->kind == TYPE_PATH)
-                            result.value = emit_call_1(
-                                ctx, get_rt_unbox_string(ctx), ptr_t,
-                                result.value, "pattern_head_string");
-                        else
-                            result.value = emit_call_1(
-                                ctx, get_rt_unbox_opaque(ctx), ptr_t,
-                                result.value, "pattern_head_value");
-                        result.type = inferred;
-                    }
+                    result.type = element_type;
                     return result;
                 }
 
@@ -15706,6 +15876,7 @@ if (ast->list.count >= 5) {
 
             if (entry && entry->kind == ENV_VAR &&
                 entry->type && (entry->type->kind == TYPE_ARR ||
+                                entry->type->kind == TYPE_PTR ||
                                 (entry->type->kind == TYPE_UNKNOWN &&
                                  ast->list.count == 2))) {
                 /* Array used as function: (arr i) -> element at index i */
@@ -15717,13 +15888,16 @@ if (ast->list.count >= 5) {
                 LLVMTypeRef  i64      = LLVMInt64TypeInContext(ctx->context);
                 LLVMTypeRef  i32      = LLVMInt32TypeInContext(ctx->context);
                 LLVMTypeRef  ptr_t    = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
-                bool arr_is_typed = (entry->type->kind == TYPE_ARR);
-                bool arr_is_runtime = type_arr_runtime_sized(entry->type);
-                LLVMTypeRef  arr_llvm = arr_is_typed
+                bool arr_is_pointer = entry->type->kind == TYPE_PTR;
+                bool arr_is_typed = entry->type->kind == TYPE_ARR || arr_is_pointer;
+                bool arr_is_runtime = !arr_is_pointer && type_arr_runtime_sized(entry->type);
+                LLVMTypeRef arr_llvm = arr_is_typed
                     ? type_to_llvm(ctx, entry->type) : ptr_t;
 
                 /* Derive elem_type early — needed by fat pointer path */
-                Type *elem_type = (arr_is_typed &&
+                Type *elem_type = (arr_is_pointer && entry->type->element_type)
+                                ? entry->type->element_type
+                                : (arr_is_typed &&
                                    entry->type->arr_element_type &&
                                    entry->type->arr_element_type->kind != TYPE_UNKNOWN)
                                 ? entry->type->arr_element_type
@@ -16479,6 +16653,12 @@ if (ast->list.count >= 5) {
                 }
                 /* Codegen arguments */
                 int nparams = LLVMCountParamTypes(fn_t);
+                if (n_args != nparams) {
+                    CODEGEN_ERROR(ctx,
+                        "%s:%d:%d: error: constructor '%s' requires %d argument%s, got %d",
+                        parser_get_filename(), ast->line, ast->column, head->symbol,
+                        nparams, nparams == 1 ? "" : "s", n_args);
+                }
                 LLVMTypeRef *param_types = malloc(sizeof(LLVMTypeRef) * (nparams ? nparams : 1));
                 LLVMGetParamTypes(fn_t, param_types);
                 LLVMValueRef *args = malloc(sizeof(LLVMValueRef) * (nparams ? nparams : 1));
@@ -16486,8 +16666,21 @@ if (ast->list.count >= 5) {
                     CodegenResult ar = codegen_expr(ctx, ast->list.items[i + 1]);
                     LLVMValueRef  av = ar.value;
                     LLVMTypeRef   want = param_types[i];
-                    LLVMTypeRef   have = LLVMTypeOf(av);
-                    args[i] = emit_type_cast(ctx, av, want);
+                    Type *expected = i < entry->param_count
+                        ? entry->params[i].type : NULL;
+                    /* Constructor calls use a direct path, but their fields
+                     * obey the same boxed collection ABI as normal function
+                     * parameters.  A bracket literal is initially emitted as
+                     * a fat array; passing that pointer unchanged makes an
+                     * imported recursive ADT field unreadable as [T]. */
+                    if (expected &&
+                        (expected->kind == TYPE_COLL ||
+                         expected->kind == TYPE_LIST) &&
+                        ar.type && ar.type->kind == TYPE_ARR) {
+                        args[i] = codegen_box(ctx, av, ar.type);
+                    } else {
+                        args[i] = emit_type_cast(ctx, av, want);
+                    }
                 }
                 result.value = LLVMBuildCall2(ctx->builder, fn_t, fn, args, nparams, head->symbol);
                 result.type  = type_clone(entry->type);
@@ -17507,8 +17700,13 @@ if (ast->list.count >= 5) {
                     Type *expected_type = entry->params[i].type;
 
                     /* FFI call with array arg — always unwrap fat ptr to raw data pointer */
+                    bool expected_inline_array = expected_type &&
+                        expected_type->kind == TYPE_ARR &&
+                        LLVMGetTypeKind(type_to_llvm(ctx, expected_type)) ==
+                            LLVMArrayTypeKind;
                     if (entry->is_ffi && arg_result.type &&
-                        arg_result.type->kind     == TYPE_ARR) {
+                        arg_result.type->kind == TYPE_ARR &&
+                        !expected_inline_array) {
                         LLVMTypeRef      fat_t     = get_arr_fat_type(ctx);
                         LLVMTypeRef      fat_pt    = LLVMPointerType(fat_t, 0);
                         LLVMTypeRef      ptr_t     = LLVMPointerType(LLVMInt8TypeInContext(ctx->context), 0);
@@ -17546,10 +17744,14 @@ if (ast->list.count >= 5) {
                         size_t ordinal = 0;
                         if (finite_type_set_contains_literal(
                                 expected_type->finite_name, finite_arg, &ordinal)) {
+                            uint64_t tag = ordinal;
+                            if (strcmp(expected_type->finite_name, "Bool") == 0)
+                                tag = finite_arg->type == AST_SYMBOL &&
+                                      strcmp(finite_arg->symbol, "True") == 0 ? 1 : 0;
                             type_free(arg_result.type);
                             arg_result.type = type_clone(expected_type);
                             arg_result.value = LLVMConstInt(
-                                type_to_llvm(ctx, expected_type), ordinal, 0);
+                                type_to_llvm(ctx, expected_type), tag, 0);
                         }
                     }
 
@@ -17968,14 +18170,14 @@ if (ast->list.count >= 5) {
                                (expected_type->kind == TYPE_UNKNOWN ||
                                 expected_type->kind == TYPE_VAR)) {
 
-                        if (actual_type->kind == TYPE_UNKNOWN) {
+                        if (!actual_type || actual_type->kind == TYPE_UNKNOWN) {
                             converted_arg = arg_result.value;
                         } else {
                             converted_arg = codegen_box(ctx, arg_result.value, arg_result.type);
                         }
-                    } else if (expected_type && expected_type->kind == TYPE_LAYOUT &&
-                               actual_type   && actual_type->kind   == TYPE_LAYOUT &&
-                               LLVMGetTypeKind(LLVMTypeOf(converted_arg)) != LLVMPointerTypeKind) {
+                    } else if (entry->is_ffi &&
+                               expected_type && expected_type->kind == TYPE_LAYOUT &&
+                               actual_type   && actual_type->kind   == TYPE_LAYOUT) {
                         /* ADT types are heap-allocated and always passed as pointers.
                          * Only apply struct-by-value C ABI packing for FFI layouts. */
                         EnvEntry *lay_e = env_lookup(ctx->env, expected_type->layout_name);
@@ -17996,21 +18198,35 @@ if (ast->list.count >= 5) {
                         if (is_adt) {
                             /* ADT — pass heap pointer directly, no unpacking */
                             converted_arg = arg_result.value;
-                        } else {
-                            /* FFI layout — struct-by-value C ABI packing */
-                            Type            *full = env_lookup_layout(ctx->env,
-                                             expected_type->layout_name);
-                            int              sz = full ? full->layout_total_size : 0;
-                            if (sz > 0 && sz <= 4) {
-                                LLVMTypeRef  i32 = LLVMInt32TypeInContext(ctx->context);
-                                converted_arg = LLVMBuildLoad2(ctx->builder, i32,
-                                                    arg_result.value, "struct_i32");
-                            } else if (sz > 4 && sz <= 8) {
-                                LLVMTypeRef  i64 = LLVMInt64TypeInContext(ctx->context);
-                                converted_arg = LLVMBuildLoad2(ctx->builder, i64,
-                                                    arg_result.value, "struct_i64");
-                            } else {
-                                converted_arg = arg_result.value;
+                        } else if (LLVMGetTypeKind(LLVMTypeOf(converted_arg)) ==
+                                   LLVMPointerTypeKind) {
+                            /* Monad layout constructors are heap-backed, while
+                             * C declarations such as ClearBackground(Color)
+                             * take the aggregate by value. Load the payload at
+                             * that boundary; casting the pointer itself to i32
+                             * leaks address bits and makes the value vary from
+                             * process to process. */
+                            Type *full = env_lookup_layout(ctx->env,
+                                expected_type->layout_name);
+                            int size = full ? full->layout_total_size : 0;
+                            if (size > 0 && size <= 4)
+                                converted_arg = LLVMBuildLoad2(ctx->builder,
+                                    LLVMInt32TypeInContext(ctx->context),
+                                    arg_result.value, "ffi_layout_i32");
+                            else if (size > 4 && size <= 8)
+                                converted_arg = LLVMBuildLoad2(ctx->builder,
+                                    LLVMInt64TypeInContext(ctx->context),
+                                    arg_result.value, "ffi_layout_i64");
+                            else {
+                                char struct_name[256];
+                                snprintf(struct_name, sizeof(struct_name),
+                                         "layout.%s", expected_type->layout_name);
+                                LLVMTypeRef aggregate = LLVMGetTypeByName2(
+                                    ctx->context, struct_name);
+                                if (aggregate)
+                                    converted_arg = LLVMBuildLoad2(ctx->builder,
+                                        aggregate, arg_result.value,
+                                        "ffi_layout");
                             }
                         }
                     } else if (LLVMTypeOf(converted_arg) ==
@@ -18093,6 +18309,13 @@ if (ast->list.count >= 5) {
                                                           "int_to_bool");
                         }
                     }
+                    if (expected_type && expected_type->kind == TYPE_ARR &&
+                        actual_type && actual_type->kind == TYPE_ARR) {
+                        LLVMTypeRef expected_llvm = type_to_llvm(
+                            ctx, expected_type);
+                        converted_arg = emit_semantic_type_cast(
+                            ctx, converted_arg, actual_type, expected_llvm);
+                    }
                     args[i] = converted_arg;
                 }
 
@@ -18119,7 +18342,16 @@ if (ast->list.count >= 5) {
                         LLVMTypeRef *param_ts = malloc(sizeof(LLVMTypeRef) * nparams);
                         LLVMGetParamTypes(fn_t, param_ts);
                         for (int _i = 0; _i < (int)nparams && _i < total_args; _i++) {
-                            args[_i] = emit_type_cast(ctx, args[_i], param_ts[_i]);
+                            Type *source_type = _i < entry->param_count
+                                ? entry->params[_i].type : NULL;
+                            if (LLVMGetTypeKind(param_ts[_i]) == LLVMPointerTypeKind &&
+                                LLVMGetTypeKind(LLVMTypeOf(args[_i])) != LLVMPointerTypeKind &&
+                                source_type && source_type->kind != TYPE_PTR) {
+                                args[_i] = codegen_box_abi_value(ctx, args[_i], source_type);
+                            } else {
+                                args[_i] = emit_semantic_type_cast(
+                                    ctx, args[_i], source_type, param_ts[_i]);
+                            }
                         }
                         free(param_ts);
                     }
@@ -18199,6 +18431,28 @@ if (ast->list.count >= 5) {
                 } else {
                     result.value = LLVMBuildCall2(ctx->builder, call_ft, call_target,
                                                   args, total_args, "calltmp");
+                    if (entry->is_ffi && entry->return_type &&
+                        entry->return_type->kind == TYPE_LAYOUT &&
+                        LLVMGetTypeKind(ret_llvm) != LLVMPointerTypeKind) {
+                        LLVMTypeRef ptr_t = LLVMPointerType(
+                            LLVMInt8TypeInContext(ctx->context), 0);
+                        LLVMTypeRef i64_t = LLVMInt64TypeInContext(ctx->context);
+                        LLVMValueRef malloc_fn = LLVMGetNamedFunction(
+                            ctx->module, "malloc");
+                        if (!malloc_fn) {
+                            LLVMTypeRef malloc_ft = LLVMFunctionType(
+                                ptr_t, &i64_t, 1, 0);
+                            malloc_fn = LLVMAddFunction(ctx->module, "malloc",
+                                                        malloc_ft);
+                            LLVMSetLinkage(malloc_fn, LLVMExternalLinkage);
+                        }
+                        LLVMValueRef bytes = LLVMSizeOf(ret_llvm);
+                        LLVMValueRef storage = LLVMBuildCall2(
+                            ctx->builder, LLVMGlobalGetValueType(malloc_fn),
+                            malloc_fn, &bytes, 1, "ffi_layout_result");
+                        LLVMBuildStore(ctx->builder, result.value, storage);
+                        result.value = storage;
+                    }
                     result.type  = entry->return_type
                         ? type_clone(entry->return_type) : NULL;
                     Type *instantiated_result =
@@ -18670,6 +18924,10 @@ if (ast->list.count >= 5) {
                     result.type  = type_char();
                     result.value = LLVMBuildTrunc(ctx->builder, as_i64,
                         LLVMInt8TypeInContext(ctx->context), "to_char");
+                } else if (strcmp(cast_target, "Byte") == 0) {
+                    result.type  = type_byte();
+                    result.value = LLVMBuildTrunc(ctx->builder, as_i64,
+                        LLVMInt8TypeInContext(ctx->context), "to_byte");
                 } else if (strcmp(cast_target, "Hex") == 0) {
                     result.type  = type_hex();
                     result.value = as_i64; // same bits, different display type

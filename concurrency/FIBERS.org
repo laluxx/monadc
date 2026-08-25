@@ -1,0 +1,122 @@
+#+title: Monad Fiber Runtime Design
+#+STARTUP: showeverything
+#+FILETAGS: :monad:concurrency:fibers:qtt:runtime:
+
+* Decision
+
+Monad tasks will execute on stackful, cooperatively suspended fibers scheduled
+over an M:N worker pool.  Fibers are a runtime interpreter for structured
+concurrency effects; they are not a source-level escape hatch and do not define
+a second task, ownership, or effect semantics.
+
+Stackful fibers are the correct initial backend because Monad permits deep
+suspension through ordinary native call chains and interoperates with C.  A
+compiler-wide stackless state-machine transform would infect the native ABI,
+duplicate effect lowering, and prevent suspension below untransformed foreign
+frames.  This decision may be revisited after the Core effect ABI is mature.
+
+* QTT and effect boundary
+
+The existing quantity semiring is sufficient.  A suspended continuation is a
+scheduler-owned capability with quantity one:
+
+#+begin_example
+fiber(t) : Continuation t @1
+running(t) -- park --> suspended(t, continuation @1)
+suspended(t, continuation @1) -- resume --> running(t)
+#+end_example
+
+Only the scheduler interpreter may consume and replace that token.  Copying a
+fiber context, resuming it concurrently, destroying a running stack, or
+resuming after terminal completion is invalid.  The task scope owns the stack;
+structured join proves the stack is terminal before reclamation.  QTT places
+continue to govern captured values, while mobility determines whether a
+suspended task may migrate to another worker.
+
+Suspension remains an effect operation.  =yield=, =park=, channel waits,
+=await=, deadlines, and cancellation checkpoints are typed suspension points.
+Pure functions do not acquire a =Parallel= effect merely because a scheduler
+may execute them on another worker.
+
+Foreign frames are classified explicitly:
+
+- nonblocking foreign calls run pinned and cannot suspend inside the frame;
+- blocking foreign calls execute in the bounded blocking pool;
+- callbacks into Monad require a registered runtime entry stack; and
+- thread-affine authority pins the task to its worker until that authority is
+  discharged.
+
+* Stack and context strategy
+
+The first portable implementation uses reserved fixed-size virtual address
+ranges with committed initial pages and guard pages.  It must not use
+=getcontext=/=makecontext=/=swapcontext=: POSIX removed those interfaces in
+POSIX.1-2008 for portability reasons.
+
+Unix context switching will use small per-architecture assembly shims obeying
+the platform ABI and saving callee-saved integer, stack, instruction, and
+required floating-point control state.  Windows may initially use
+=ConvertThreadToFiber=/=CreateFiber=/=SwitchToFiber= behind the same internal
+ABI.  Context structures are private runtime data and never source-visible.
+
+Every stack switch in sanitizer builds calls
+=__sanitizer_start_switch_fiber= before switching and
+=__sanitizer_finish_switch_fiber= after arrival.  Guard-page overflow,
+use-after-terminal-stack, double resume, cross-worker migration, exception
+unwinding, signal delivery, debugger unwinding, and profiler visibility require
+dedicated regression coverage.
+
+Copying/growing stacks is deferred.  It needs compiler-produced stack maps or a
+proof that all interior stack pointers can be relocated.  Guarded fixed virtual
+stacks are less sophisticated but have a much smaller correctness surface for
+the first real runtime.
+
+* Scheduler contract
+
+A fiber can be in exactly one state:
+
+#+begin_example
+new -> runnable -> running -> parked -> runnable
+                          \-> terminal -> reclaimed
+#+end_example
+
+Transitions are linear and worker queues own runnable tokens.  A running fiber
+is owned by exactly one worker.  Wakeup changes =parked -> runnable= once; a
+racing cancellation and ordinary wakeup must converge through one atomic state
+transition.  Cleanup remains masked and cannot reclaim its own live stack.
+
+The deterministic interpreter and parallel interpreter consume the same Core
+operations.  Deterministic mode models suspension without switching native
+stacks; parallel mode realizes the transition with fibers.
+
+* Research and implementation sources
+
+- Boost.Context documents the ABI register/stack nature of stackful context
+  transfer and its one-shot movable continuation discipline:
+  https://www.boost.org/doc/libs/latest/libs/context/doc/html/context/ff.html
+- Boost.Fiber documents guarded fixed stacks, segmented-stack constraints, and
+  sanitizer/Valgrind integration:
+  https://www.boost.org/doc/libs/latest/libs/fiber/doc/html/fiber/stack.html
+- LLVM's public sanitizer interface specifies the required start/finish fiber
+  switch protocol and fake-stack lifetime:
+  https://github.com/llvm/llvm-project/blob/main/compiler-rt/include/sanitizer/common_interface_defs.h
+- Microsoft specifies conversion, creation, and switching requirements for the
+  Windows Fiber backend:
+  https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-switchtofiber
+- Linux documents that the =ucontext= family was removed from POSIX.1-2008:
+  https://man7.org/linux/man-pages/man3/swapcontext.3.html
+- Go's runtime notes provide a production reference for separating user,
+  system, signal, and foreign-call stacks; Monad does not copy its stack design
+  without first acquiring equivalent relocation metadata:
+  https://github.com/golang/go/blob/master/src/runtime/HACKING.md
+
+* Implementation gates
+
+1. Specify the private context ABI and linear state machine in C.
+2. Implement x86-64 SysV switching with guard-page stacks and sanitizer hooks.
+3. Prove deterministic task transitions and fiber transitions agree.
+4. Add AArch64 and Windows backends before claiming portability.
+5. Add worker migration only after thread-affine and foreign-frame pinning tests.
+6. Add M:N queues, parking, timers, and blocking-FFI isolation.
+7. Stress under ASan, UBSan, TSan, cancellation storms, stack overflow, and
+   repeated creation/reclamation before exposing the Core API as stable.

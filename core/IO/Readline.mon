@@ -27,19 +27,19 @@ module IO.Readline
   [readline-status read-key-fd read-line-bytes-fd read-line read-line-with-prompt]
 
 
-;;; Linux termios is a byte-level ABI, so keep the saved snapshot opaque. This
-;;; avoids pretending its control-character array is an ordinary Monad Int.
+;; Linux termios is a byte-level ABI, so keep the saved snapshot opaque. This
+;; avoids pretending its control-character array is an ordinary Monad Int.
 
-define readline-saved-termios  :: [64]
-define readline-active-termios :: [64]
-define readline-history-bytes  :: [16kb]
-define readline-history-lengths :: [64 Int]
-define readline-history-total :: Int 0
+define readline-saved-termios    :: [64]
+define readline-active-termios   :: [64]
+define readline-history-bytes    :: [16kb]
+define readline-history-lengths  :: [64 Int]
+define readline-history-total    :: Int 0
 define readline-history-position :: Int 0
-define readline-kill-bytes :: [4kb]
-define readline-kill-lengths :: [16 Int]
-define readline-kill-total :: Int 0
-define readline-status :: Int 0
+define readline-kill-bytes       :: [4kb]
+define readline-kill-lengths     :: [16 Int]
+define readline-kill-total       :: Int 0
+define readline-status           :: Int 0
 
 
 define history-slot-offset :: Int -> Int -> Int
@@ -116,7 +116,7 @@ define history-reset-position :: Int -> Int
 
 define kill-write :: Int -> Int -> Int -> [Int] -> Int
   _ _ index [] -> index
-  _ _ index _ | (>= index 256) -> index
+  _ _ index _ | >= 256 -> index
   slot base index [byte|rest] ->
     def written (set! (readline-kill-bytes (base + index)) byte)
     kill-write slot base (index + 1) rest
@@ -133,13 +133,13 @@ define kill-save :: [Int] -> Int
 
 
 define kill-read :: Int -> Int -> Int -> [Int]
-  _ index count | (>= index count) -> []
+  _ index count | >= -> []
   base index count ->
     readline-prepend (readline-kill-bytes (base + index)) (kill-read base (index + 1) count)
 
 
 define kill-latest :: Int -> [Int]
-  total | (<= total 0) -> []
+  total | <= 0 -> []
   total ->
     def slot (rem (total - 1) 16)
     def base (slot * 256)
@@ -147,11 +147,11 @@ define kill-latest :: Int -> [Int]
 
 
 define kill-key? :: Int -> Bool
-  key | (= key LineEditor.key-ctrl-k)         -> True
-      | (= key LineEditor.key-ctrl-u)         -> True
-      | (= key LineEditor.key-ctrl-backspace) -> True
-      | (= key LineEditor.key-meta-d)         -> True
-      | otherwise                             -> False
+  key | = LineEditor.key-ctrl-k         -> True
+      | = LineEditor.key-ctrl-u         -> True
+      | = LineEditor.key-ctrl-backspace -> True
+      | = LineEditor.key-meta-d         -> True
+      | otherwise                       -> False
 
 
 define killed-text :: Int -> Int -> [Int] -> [Int]

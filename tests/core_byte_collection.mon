@@ -1,0 +1,18 @@
+:TEST-ID tests.core.byte-collection
+:TEST-CONTEXT fix.compiler.generic-byte-abi-2026-08-23
+:TEST-PURPOSE Primitive Byte values cross the erased generic collection ABI safely.
+:TEST-EXPECT compile, run, byte collection assertion passes
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY byte-collection
+
+module Core.ByteCollection
+  []
+
+
+define raw-byte :: U8
+  65
+
+
+tests
+  assert-eq (prepend (Byte raw-byte) []) ⌜0x41⌝ "Byte values are boxed at generic collection boundaries"

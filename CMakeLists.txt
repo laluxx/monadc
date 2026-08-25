@@ -95,6 +95,23 @@ set(MONADC_COMPILER_SOURCES
   module_export.c
   optimizations.c
   pmatch.c
+  concurrency/channel.c
+  concurrency/channel_effect.c
+  concurrency/channel_machine.c
+  concurrency/commutation.c
+  concurrency/cleanup_bridge.c
+  concurrency/coverage.c
+  concurrency/deterministic.c
+  concurrency/dependence.c
+  concurrency/effect.c
+  concurrency/exploration.c
+  concurrency/failure.c
+  concurrency/kernel.c
+  concurrency/network.c
+  concurrency/network_trace.c
+  concurrency/native.c
+  concurrency/process.c
+  concurrency/process_commutation.c
   qtt/bindings.c
   qtt/anf.c
   qtt/backend.c
@@ -135,6 +152,8 @@ set(MONADC_COMPILER_SOURCES
   qtt/type_identity.c
   qtt/usage.c
   reader.c
+  spirv.c
+  reader_diagnostic.c
   reader_syntax.c
   repl.c
   typeclass.c

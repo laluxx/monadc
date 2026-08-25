@@ -1,0 +1,31 @@
+:TEST-ID tests.compiler.foreign-layout-buffer
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-CONTEXT monadc.context.codegen.fixed-foreign-layout-buffer
+:TEST-PURPOSE Fixed buffers of foreign layouts retain contiguous inline structure values for APIs such as Vulkan pStages.
+:TEST-EXPECT compile,run
+
+module Main
+
+include <vulkan/vulkan.h>
+
+
+define vertex-stage :: VkPipelineShaderStageCreateInfo
+  VkPipelineShaderStageCreateInfo VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO nil 0 VK_SHADER_STAGE_VERTEX_BIT nil "main" nil
+
+
+define fragment-stage :: VkPipelineShaderStageCreateInfo
+  VkPipelineShaderStageCreateInfo VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO nil 0 VK_SHADER_STAGE_FRAGMENT_BIT nil "main" nil
+
+
+define stages :: [2 VkPipelineShaderStageCreateInfo]
+[vertex-stage fragment-stage]
+
+
+define blend-state :: VkPipelineColorBlendStateCreateInfo
+  VkPipelineColorBlendStateCreateInfo
+    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO
+    nil 0 False VK_LOGIC_OP_COPY 0 nil [0.0 0.0 0.0 0.0]
+
+
+show (count stages)

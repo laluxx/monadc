@@ -1,0 +1,320 @@
+;;; Vulkan.mon --- owned, checked Vulkan building blocks
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "graphics vulkan gpu ownership io"
+
+;;; Commentary:
+
+ Graphics.Vulkan owns reusable Vulkan lifecycle work. Applications provide
+ scene data; they do not repeat foreign structure initialization, result
+ checking, or destruction protocol.
+
+;;; Code:
+
+import Graphics
+
+(module Graphics.Vulkan
+  [VulkanShader VulkanShaderFailure VulkanShaderReady VulkanProgram
+   shader-failed? shader-ready? shader-status-or shader-module-or
+   create-shader-module destroy-shader-module
+   vulkan-program run-vulkan-2d])
+
+include <vulkan/vulkan.h>
+include <GLFW/glfw3.h> :unprefix GLFW_
+
+
+layout VulkanProgram
+  [title               :: String]
+  [width               :: Int]
+  [height              :: Int]
+  [vertex-code         :: *U32]
+  [vertex-word-count   :: Int]
+  [fragment-code       :: *U32]
+  [fragment-word-count :: Int]
+
+
+define vulkan-physical-devices :: [8 VkPhysicalDevice]
+define vulkan-queue-properties :: [32 VkQueueFamilyProperties]
+define vulkan-swap-images :: [8 VkImage]
+define vulkan-swap-views :: [8 VkImageView]
+define vulkan-framebuffers :: [8 VkFramebuffer]
+define vulkan-command-buffers :: [8 VkCommandBuffer]
+define vulkan-pipeline-stages :: [2 VkPipelineShaderStageCreateInfo]
+define vulkan-clear-color :: [4 F32]
+[0.018 0.006 0.009 1.0]
+define vulkan-device-extensions :: [1 String]
+["VK_KHR_swapchain"]
+
+define vulkan-pipeline-layout (VkPipelineLayout)
+define vulkan-pipeline (VkPipeline)
+
+
+data VulkanShader
+  = VulkanShaderFailure I32
+  | VulkanShaderReady VkShaderModule
+
+
+define shader-failed? :: VulkanShader -> Bool
+  [VulkanShaderFailure status] -> True
+  _ -> False
+
+
+define shader-ready? :: VulkanShader -> Bool
+  [VulkanShaderReady module] -> True
+  _ -> False
+
+
+define shader-status-or :: I32 -> VulkanShader -> I32
+  _ [VulkanShaderFailure status] -> status
+  fallback _ -> fallback
+
+
+define shader-module-or :: VkShaderModule -> VulkanShader -> VkShaderModule
+  _ [VulkanShaderReady module] -> module
+  fallback _ -> fallback
+
+
+define shader-result :: I32 -> VkShaderModule -> VulkanShader
+  status module | (= status VK_SUCCESS) -> VulkanShaderReady module
+  status _ -> VulkanShaderFailure status
+
+
+define create-shader-module :: VkDevice -> *U32 -> Int -io-> VulkanShader
+  :doc "Create a checked Vulkan shader module from WORD-COUNT contiguous SPIR-V words."
+  device words word-count ->
+    def information (VkShaderModuleCreateInfo VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO nil 0 (word-count * 4) words)
+    def module (VkShaderModule)
+    def status (vkCreateShaderModule device &information nil &module)
+    shader-result status module
+
+
+define destroy-shader-module :: VkDevice -> VkShaderModule -io-> Int
+  :doc "Destroy MODULE after its pipeline no longer needs it."
+  device module ->
+    vkDestroyShaderModule device module nil
+    0
+
+
+;;; Program description
+
+define vulkan-program :: String -> Int -> Int -> *U32 -> Int -> *U32 -> Int -> VulkanProgram
+  :doc "Describe one vertex/fragment Vulkan program and its fixed-size window."
+  title width height vertex-code vertex-count fragment-code fragment-count ->
+    VulkanProgram title width height vertex-code vertex-count fragment-code fragment-count
+
+
+;;; Device selection
+
+define find-present-queue :: VkPhysicalDevice -> VkSurfaceKHR -> U32 -> U32 -> Int
+  device surface count index | index >= count -> -1
+  device surface count index -> Int index
+
+
+define choose-physical-device :: VkInstance -> VkSurfaceKHR -> U32 -> U32 -> Int
+  instance surface count index | index >= count -> -1
+  instance surface count index -> Int index
+
+
+;;; Pipeline
+
+define create-triangle-pipeline :: VkDevice -> VkRenderPass -> VkExtent2D -> VulkanProgram -io-> I32
+  device render-pass extent program ->
+    def vertex-result (create-shader-module device program.vertex-code program.vertex-word-count)
+    continue-triangle-vertex device render-pass extent program vertex-result
+
+
+define continue-triangle-vertex :: VkDevice -> VkRenderPass -> VkExtent2D -> VulkanProgram -> VulkanShader -io-> I32
+  device render-pass extent program vertex-result ->
+    if shader-failed? vertex-result then shader-status-or (I32 -1) vertex-result
+      else create-triangle-fragment device render-pass extent program vertex-result
+
+
+define create-triangle-fragment :: VkDevice -> VkRenderPass -> VkExtent2D -> VulkanProgram -> VulkanShader -io-> I32
+  device render-pass extent program vertex-result ->
+    def fragment-result (create-shader-module device program.fragment-code program.fragment-word-count)
+    continue-triangle-fragment device render-pass extent vertex-result fragment-result
+
+
+define continue-triangle-fragment :: VkDevice -> VkRenderPass -> VkExtent2D -> VulkanShader -> VulkanShader -io-> I32
+  device render-pass extent vertex-result fragment-result ->
+    if shader-failed? fragment-result then fail-triangle-fragment device vertex-result fragment-result
+      else build-ready-triangle-pipeline device render-pass extent vertex-result fragment-result
+
+
+define fail-triangle-fragment :: VkDevice -> VulkanShader -> VulkanShader -io-> I32
+  device vertex-result fragment-result ->
+    destroy-shader-module device (shader-module-or nil vertex-result)
+    shader-status-or (I32 -1) fragment-result
+
+
+define build-ready-triangle-pipeline :: VkDevice -> VkRenderPass -> VkExtent2D -> VulkanShader -> VulkanShader -io-> I32
+  device render-pass extent vertex-result fragment-result ->
+    def vertex-module (shader-module-or nil vertex-result)
+    def fragment-module (shader-module-or nil fragment-result)
+    def status (build-triangle-pipeline device render-pass extent vertex-module fragment-module)
+    destroy-shader-module device fragment-module
+    destroy-shader-module device vertex-module
+    status
+
+
+define build-triangle-pipeline :: VkDevice -> VkRenderPass -> VkExtent2D -> VkShaderModule -> VkShaderModule -io-> I32
+  device render-pass extent vertex-module fragment-module ->
+    def vertex-stage (VkPipelineShaderStageCreateInfo VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO nil 0 VK_SHADER_STAGE_VERTEX_BIT vertex-module "main" nil)
+    def fragment-stage (VkPipelineShaderStageCreateInfo VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO nil 0 VK_SHADER_STAGE_FRAGMENT_BIT fragment-module "main" nil)
+    set! (vulkan-pipeline-stages 0) vertex-stage
+    set! (vulkan-pipeline-stages 1) fragment-stage
+    def vertex-input (VkPipelineVertexInputStateCreateInfo VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO nil 0 0 nil 0 nil)
+    def assembly (VkPipelineInputAssemblyStateCreateInfo VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO nil 0 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST False)
+    def viewport (VkViewport 0.0 0.0 (F32 extent.width) (F32 extent.height) 0.0 1.0)
+    def scissor (VkRect2D (VkOffset2D 0 0) extent)
+    def viewport-state (VkPipelineViewportStateCreateInfo VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO nil 0 1 &viewport 1 &scissor)
+    def raster (VkPipelineRasterizationStateCreateInfo VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO nil 0 False False VK_POLYGON_MODE_FILL VK_CULL_MODE_NONE VK_FRONT_FACE_CLOCKWISE False 0.0 0.0 0.0 1.0)
+    def multisampling (VkPipelineMultisampleStateCreateInfo VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO nil 0 VK_SAMPLE_COUNT_1_BIT False 0.0 nil False False)
+    def color-mask (bit-or VK_COLOR_COMPONENT_R_BIT (bit-or VK_COLOR_COMPONENT_G_BIT (bit-or VK_COLOR_COMPONENT_B_BIT VK_COLOR_COMPONENT_A_BIT)))
+    def color-attachment (VkPipelineColorBlendAttachmentState False VK_BLEND_FACTOR_ZERO VK_BLEND_FACTOR_ZERO VK_BLEND_OP_ADD VK_BLEND_FACTOR_ZERO VK_BLEND_FACTOR_ZERO VK_BLEND_OP_ADD color-mask)
+    def color-blend (VkPipelineColorBlendStateCreateInfo VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO nil 0 False VK_LOGIC_OP_COPY 1 &color-attachment [0.0 0.0 0.0 0.0])
+    def layout-information (VkPipelineLayoutCreateInfo VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO nil 0 0 nil 0 nil)
+    def layout-status (vkCreatePipelineLayout device &layout-information nil &vulkan-pipeline-layout)
+    finish-triangle-pipeline device render-pass layout-status &vertex-input &assembly &viewport-state &raster &multisampling &color-blend
+
+
+define finish-triangle-pipeline :: VkDevice -> VkRenderPass -> I32 -> *VkPipelineVertexInputStateCreateInfo -> *VkPipelineInputAssemblyStateCreateInfo -> *VkPipelineViewportStateCreateInfo -> *VkPipelineRasterizationStateCreateInfo -> *VkPipelineMultisampleStateCreateInfo -> *VkPipelineColorBlendStateCreateInfo -io-> I32
+  _ _ status _ _ _ _ _ _ | (!= status VK_SUCCESS) -> status
+  device render-pass _ vertex-input assembly viewport raster multisampling color-blend ->
+    def information (VkGraphicsPipelineCreateInfo VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO nil 0 2 &vulkan-pipeline-stages vertex-input assembly nil viewport raster multisampling nil color-blend nil vulkan-pipeline-layout render-pass 0 nil -1)
+    vkCreateGraphicsPipelines device nil 1 &information nil &vulkan-pipeline
+
+
+;;; Frame recording
+
+define record-triangle :: VkCommandBuffer -> VkRenderPass -> VkFramebuffer -> VkExtent2D -> VkPipeline -io-> Int
+  command render-pass framebuffer extent pipeline ->
+    def begin-information (VkCommandBufferBeginInfo VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO nil VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT nil)
+    vkBeginCommandBuffer command &begin-information
+    def offset (VkOffset2D 0 0)
+    def area (VkRect2D offset extent)
+    def pass-information (VkRenderPassBeginInfo VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO nil render-pass framebuffer area 1 &vulkan-clear-color)
+    vkCmdBeginRenderPass command &pass-information VK_SUBPASS_CONTENTS_INLINE
+    vkCmdBindPipeline command VK_PIPELINE_BIND_POINT_GRAPHICS pipeline
+    vkCmdDraw command 3 1 0 0
+    vkCmdEndRenderPass command
+    vkEndCommandBuffer command
+
+
+;;; Application lifecycle
+
+define run-vulkan-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -> U32 -io-> Int
+  program window instance surface physical-device queue-index ->
+    def priority (F32 1.0)
+    def queue-information (VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO nil 0 queue-index 1 &priority)
+    def device-information (VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO nil 0 1 &queue-information 0 nil 1 &vulkan-device-extensions nil)
+    def device (VkDevice)
+    def status (vkCreateDevice physical-device &device-information nil &device)
+    if status != VK_SUCCESS then (Int status) else use-vulkan-device program window instance surface physical-device queue-index device
+
+
+define use-vulkan-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -> U32 -> VkDevice -io-> Int
+  program window instance surface physical-device queue-index device ->
+    def queue (VkQueue)
+    vkGetDeviceQueue device queue-index 0 &queue
+    vkDeviceWaitIdle device
+    vkDestroyDevice device nil
+    0
+
+
+define run-vulkan-physical-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -io-> Int
+  program window instance surface physical-device ->
+    def queue-count (U32 0)
+    vkGetPhysicalDeviceQueueFamilyProperties physical-device &queue-count nil
+    if queue-count > 32 then -1 else find-vulkan-device-queue program window instance surface physical-device queue-count
+
+
+define find-vulkan-device-queue :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -> U32 -io-> Int
+  program window instance surface physical-device queue-count ->
+    vkGetPhysicalDeviceQueueFamilyProperties physical-device &queue-count &vulkan-queue-properties
+    def queue-index (find-present-queue physical-device surface queue-count (U32 0))
+    if queue-index < 0 then -1 else run-vulkan-device program window instance surface physical-device (U32 queue-index)
+
+
+define run-enumerated-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> U32 -io-> Int
+  _ _ _ _ count | = 0 -> -1
+  _ _ _ _ count | > 8 -> -1
+  program window instance surface count ->
+    vkEnumeratePhysicalDevices instance &count &vulkan-physical-devices
+    def device-index (choose-physical-device instance surface count (U32 0))
+    run-selected-device program window instance surface device-index
+
+
+define run-selected-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> Int -io-> Int
+  _ _ _ _ index | < 0 -> -1
+  program window instance surface index ->
+    run-vulkan-physical-device program window instance surface (vulkan-physical-devices index)
+
+
+define run-vulkan-surface :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -io-> Int
+  program window instance surface ->
+    def device-count (U32 0)
+    vkEnumeratePhysicalDevices instance &device-count nil
+    run-enumerated-device program window instance surface device-count
+
+
+define finish-vulkan-surface :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> Int -io-> Int
+  _ _ _ _ status | != VK_SUCCESS -> status
+  program window instance surface _ ->
+    def result (run-vulkan-surface program window instance surface)
+    vkDestroySurfaceKHR instance surface nil
+    result
+
+
+define run-vulkan-instance :: VulkanProgram -> *GLFWwindow -> VkInstance -io-> Int
+  program window instance ->
+    def surface (VkSurfaceKHR)
+    def status (glfwCreateWindowSurface instance window nil &surface)
+    finish-vulkan-surface program window instance surface (Int status)
+
+
+define finish-vulkan-instance :: VulkanProgram -> *GLFWwindow -> VkInstance -> Int -io-> Int
+  _ _ _ status | != VK_SUCCESS -> status
+  program window instance _ ->
+    def result (run-vulkan-instance program window instance)
+    vkDestroyInstance instance nil
+    result
+
+
+define run-vulkan-window :: VulkanProgram -> *GLFWwindow -io-> Int
+  program window ->
+    def extension-count (U32 0)
+    def extensions (glfwGetRequiredInstanceExtensions &extension-count)
+    def application (VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO nil program.title 1 "Monad Graphics" 1 4194304)
+    def information (VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO nil 0 &application 0 nil extension-count extensions)
+    def instance (VkInstance)
+    def status (vkCreateInstance &information nil &instance)
+    finish-vulkan-instance program window instance (Int status)
+
+
+define finish-vulkan-window :: VulkanProgram -> *GLFWwindow -io-> Int
+  _ nil ->
+    glfwTerminate
+    -1
+  program window ->
+    def result (run-vulkan-window program window)
+    glfwDestroyWindow window
+    glfwTerminate
+    result
+
+
+define start-vulkan-2d :: VulkanProgram -> Int -io-> Int
+  _ 0 -> -1
+  program _ ->
+    glfwWindowHint CLIENT_API NO_API
+    glfwWindowHint RESIZABLE False
+    def window (glfwCreateWindow program.width program.height program.title nil nil)
+    finish-vulkan-window program window
+
+
+define run-vulkan-2d :: VulkanProgram -io-> Int
+  :doc "Open PROGRAM, draw its three-vertex pipeline, and own the complete Vulkan lifecycle."
+  program ->
+    def initialized glfwInit
+    start-vulkan-2d program (Int initialized)

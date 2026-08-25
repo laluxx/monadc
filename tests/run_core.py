@@ -313,7 +313,10 @@ def artifact_candidates(path: Path) -> list[Path]:
 
 def cleanup_artifacts(path: Path, before: set[Path]) -> None:
     for candidate in artifact_candidates(path):
-        if candidate.exists() and candidate.resolve() not in tracked_files():
+        resolved = candidate.resolve()
+        if (candidate.exists()
+                and resolved not in before
+                and resolved not in tracked_files()):
             if candidate.is_dir():
                 shutil.rmtree(candidate)
             else:

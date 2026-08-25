@@ -415,7 +415,7 @@ define barcan-tableau :: String -> Tableau
 define render-barcan-tableau :: String -> String
   predicate -> render-tableau (barcan-tableau predicate)
 
-tests
+tests [9/9]
   :bounded-proof-search:
   assert-eq (proof-valid? (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "P" [])))) True "identity implication closes for an arbitrary atom"
   assert-eq (proof-valid? (prove ConstantDomains 128 (implies (Predicate "P" [(Constant "a")]) (Predicate "P" [(Constant "a")])))) True "identity implication closes for a first-order atom"

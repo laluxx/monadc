@@ -1,0 +1,41 @@
+:TEST-ID tests.core.text-parser.stream
+:TEST-CONTEXT monadc.context.core-libs.text-parser
+:TEST-PURPOSE Incremental framing preserves continuation, leftovers, and exact limits.
+:TEST-EXPECT compile, run, streaming parser assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY text-parser
+
+import Text.Parser.Stream
+
+module Core.TextParserStream
+  []
+
+
+define head-ending :: [Byte]
+  ⌜0x0d 0x0a 0x0d 0x0a⌝
+
+
+define empty-stream :: ParserStream
+  parser-stream 64
+
+
+define first-fragment :: ParserStreamReply
+  feed-until head-ending empty-stream ⌜0x47 0x45 0x54 0x20 0x2f 0x20 0x48⌝
+
+
+define second-bytes :: [Byte]
+  ⌜0x54 0x54 0x50 0x2f 0x31 0x2e 0x31 0x0d 0x0a 0x0d 0x0a 0x42 0x4f 0x44 0x59⌝
+
+
+define second-fragment :: ParserStreamReply
+  feed-until head-ending (stream-state-or empty-stream first-fragment) second-bytes
+
+
+tests
+  assert-eq (stream-partial? first-fragment) True "An incomplete frame returns continuation state"
+  assert-eq (stream-complete? second-fragment) True "A delimiter split across fragments completes"
+  assert-eq (count (stream-frame-or [] second-fragment)) 18 "The complete frame includes its delimiter"
+  assert-eq (stream-rest-or [] second-fragment) ⌜0x42 0x4f 0x44 0x59⌝ "Bytes after the delimiter remain untouched"
+  assert-eq (stream-rejected? (feed-until head-ending (parser-stream 3) ⌜0x61 0x62 0x63 0x64⌝)) True "The first byte beyond the limit is rejected"
+  assert-eq (stream-error-offset-or 0 (feed-until head-ending (parser-stream 3) ⌜0x61 0x62 0x63 0x64⌝)) 3 "Limit failure identifies the first prohibited byte"

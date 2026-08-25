@@ -6,6 +6,7 @@ BINDIR  = $(PREFIX)/bin
 LIBDIR  = $(PREFIX)/lib
 INCDIR  = $(PREFIX)/include/monad
 COREDIR = $(PREFIX)/lib/monad/core
+CORE_CACHE_DIR ?= $(HOME)/.cache/monad/core
 
 UNAME_S      := $(shell uname -s 2>/dev/null || echo unknown)
 WINDOWS_HOST := $(if $(filter MINGW% MSYS% CYGWIN%,$(UNAME_S)),1,)
@@ -39,7 +40,7 @@ COMPILER_FRONTEND_OBJ = $(patsubst %.c,embed/frontend_%.o,$(COMPILER_FRONTEND_SR
 COMPILER_INFER_OBJ = embed/compiler_infer.o embed/compiler_infer_support.o embed/compiler_qtt_constraints.o embed/compiler_qtt_effect.o embed/compiler_effect_constraints.o embed/compiler_qtt_environment.o embed/compiler_qtt_quantity.o embed/compiler_qtt_bindings.o embed/compiler_qtt_elaboration.o embed/compiler_qtt_source_grades.o embed/compiler_qtt_anf.o embed/compiler_qtt_core.o embed/compiler_qtt_demand.o embed/compiler_qtt_graded.o embed/compiler_qtt_signature.o embed/compiler_qtt_call.o embed/compiler_qtt_resource.o embed/compiler_qtt_signature_env.o
 COMPILER_BACKEND_OBJ = embed/backend_codegen.o embed/backend_env.o embed/backend_typeclass.o embed/backend_language_module.o embed/backend_asm.o embed/backend_ffi.o embed/backend_backend.o embed/backend_compiler.o embed/backend_compiler_module.o embed/backend_core_effect.o embed/backend_interface.o embed/backend_semantic_ir.o embed/backend_effect_runtime.o embed/backend_qtt_module.o embed/backend_drop.o embed/backend_evidence.o embed/backend_closure_policy.o embed/backend_closure.o embed/backend_core_usage.o embed/backend_semantic_anf.o
 COMPILER_API_OBJ = embed/compiler.o embed/surface_compiler.o embed/surface_load.o embed/compiler_native.o embed/frontend_transaction.o embed/native_compile.o embed/compiler_qtt_foreign_type.o embed/compiler_qtt_type_identity.o $(COMPILER_INFER_OBJ) $(COMPILER_FRONTEND_OBJ) $(COMPILER_BACKEND_OBJ) $(RUNTIME_OBJ)
-HEADERS = $(wildcard *.h qtt/*.h tooling/*.h)
+HEADERS = $(wildcard *.h qtt/*.h concurrency/*.h tooling/*.h)
 
 # All compiler .c files except runtime sources and platform-only sources.
 WINDOWS_EXCLUDED_SRCS =
@@ -47,7 +48,7 @@ ifeq ($(WINDOWS_HOST),1)
 WINDOWS_EXCLUDED_SRCS = debugger.c
 endif
 COMPILER_EXCLUDED_SRCS = $(RUNTIME_SRC) $(WINDOWS_EXCLUDED_SRCS)
-SRCS = $(filter-out $(COMPILER_EXCLUDED_SRCS), $(wildcard *.c) $(wildcard qtt/*.c) $(wildcard effects/*.c) $(wildcard tooling/*.c))
+SRCS = $(filter-out $(COMPILER_EXCLUDED_SRCS), $(wildcard *.c) $(wildcard qtt/*.c) $(wildcard concurrency/*.c) $(wildcard effects/*.c) $(wildcard tooling/*.c))
 FFI_CFLAGS = $(shell pkg-config --cflags libclang 2>/dev/null || echo "-I/usr/lib/llvm/include")
 OBJS = $(SRCS:.c=.o)
 
@@ -229,6 +230,8 @@ install: $(RUNTIME_LIB) $(EMBED_STATIC_LIB) $(EMBED_SHARED_LIB) $(COMPILER_STATI
 		install -d $(COREDIR)/$$dir; \
 		install -m 644 "$$f" $(COREDIR)/$$dir/; \
 	done
+# Installed core interfaces and objects form one ABI set.
+	rm -rf "$(CORE_CACHE_DIR)"
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)

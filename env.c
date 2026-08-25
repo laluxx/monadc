@@ -700,6 +700,8 @@ static Type *hm_signature_from_lambda(InferCtx *ctx, AST *lambda_ast) {
         }
         if (!p) p = type_unknown();
         p = infer_freshen_annotation_vars(ctx, p, ann_from, ann_to, &ann_count);
+        if (lambda_ast->lambda.params[i].is_rest)
+            p = type_list(&p, 1);
         Type *arrow = type_arrow(p, sig);
         arrow->arrow_effect_name =
             lambda_ast->lambda.has_effect_arrows &&

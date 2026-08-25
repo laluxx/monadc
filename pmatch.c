@@ -230,7 +230,8 @@ ASTPattern parse_single_pattern(Parser *p) {
             }
         }
         if (!parser_at(p, close_tok)) {
-            fprintf(stderr, "pmatch: expected closing bracket/paren to close list pattern\n");
+            fprintf(stderr, "%s:%d:%d: pmatch: expected closing bracket/paren to close list pattern\n",
+                    parser_get_filename(), p->current.line, p->current.column);
         } else {
             parser_advance(p);
         }
@@ -265,7 +266,8 @@ ASTPattern parse_single_pattern(Parser *p) {
     }
 
     // Fallback: wildcard
-    fprintf(stderr, "pmatch: unexpected token '%s' in pattern, treating as wildcard\n",
+    fprintf(stderr, "%s:%d:%d: pmatch: unexpected token '%s' in pattern, treating as wildcard\n",
+            parser_get_filename(), p->current.line, p->current.column,
             p->current.value ? p->current.value : "?");
     parser_advance(p);
     pat.kind = PAT_WILDCARD;

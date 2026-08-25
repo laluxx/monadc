@@ -26,6 +26,7 @@
 #include "buildsystem.h"
 #include "ffi.h"
 #include "wisp.h"
+#include "spirv.h"
 #include "dep.h"
 #include "typst_emit.h"
 #include "optimizations.h"
@@ -3140,6 +3141,19 @@ int main(int argc, char **argv) {
     case CMD_LSP:     cmd_lsp();                         return 0;
     case CMD_EVAL:    cmd_eval(flags.eval_code);         return 0;
     case CMD_DEBUG:   cmd_debug(&flags);                 return 0;
+    case CMD_SPIRV: {
+        char *error = NULL;
+        int written = spirv_write_monad_module(flags.input_file,
+                                               flags.output_name,
+                                               flags.spirv_name,
+                                               &error);
+        if (!written) {
+            fprintf(stderr, "error: %s\n", error ? error : "cannot emit SPIR-V module");
+            free(error);
+            return 1;
+        }
+        return 0;
+    }
     case CMD_COMPILE:
     default:
         return compile(&flags) ? 0 : 1;

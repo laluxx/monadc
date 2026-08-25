@@ -11,6 +11,12 @@ def source(relative: str) -> str:
 
 
 class CoreAbstractionOwnershipTests(unittest.TestCase):
+    def test_install_invalidates_compiled_core_abi_cache(self):
+        makefile = source("Makefile")
+
+        self.assertIn("CORE_CACHE_DIR ?= $(HOME)/.cache/monad/core", makefile)
+        self.assertIn('rm -rf "$(CORE_CACHE_DIR)"', makefile)
+
     def test_core_declares_its_primitive_module_manifest(self):
         main_c = source("main.c")
         manifest = source("core/prelude/Data/Primitive.modules")

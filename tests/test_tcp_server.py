@@ -27,7 +27,15 @@ class TcpServerExampleTests(unittest.TestCase):
         self.assertNotIn("asm ", source_text)
         self.assertIn("while running", source_text)
         self.assertNotIn("echo-once", source_text)
+        self.assertIn("make-socket-buffer", source_text)
+        self.assertIn("receive", source_text)
+        self.assertIn("send-buffer", source_text)
+        self.assertIn("shutdown-write", source_text)
+        self.assertIn("release-socket-buffer", source_text)
         self.assertIn("define server-port :: Int\n  39127", source_text)
+
+        socket_source = (ROOT / "core/Network/Socket.mon").read_text()
+        self.assertIn("buffer-bytes", socket_source)
         self.assertFalse(
             [line for line in source_text.splitlines() if len(line) > 100],
             "The TCP tutorial should remain calm and readable",
@@ -87,15 +95,43 @@ class TcpServerExampleTests(unittest.TestCase):
                                 break
                             echoed.extend(chunk)
                         self.assertEqual(bytes(echoed), message)
+                        self.assertEqual(client.recv(1), b"")
+
+                def fragmented_exchange(parts):
+                    with socket.create_connection(
+                        ("127.0.0.1", 39127), timeout=2
+                    ) as client:
+                        client.settimeout(5)
+                        for part in parts:
+                            client.sendall(part)
+                            time.sleep(0.01)
+                        client.shutdown(socket.SHUT_WR)
+                        expected = b"".join(parts)
+                        received = bytearray()
+                        while len(received) < len(expected):
+                            chunk = client.recv(16384)
+                            if not chunk:
+                                break
+                            received.extend(chunk)
+                        self.assertEqual(bytes(received), expected)
+                        self.assertEqual(client.recv(1), b"")
 
                 with connection:
                     connection.settimeout(2)
                     first = b"Monad speaks TCP.\n"
                     connection.sendall(first)
                     connection.shutdown(socket.SHUT_WR)
-                    self.assertEqual(connection.recv(4096), first)
+                    try:
+                        echoed = connection.recv(4096)
+                    except ConnectionResetError as error:
+                        self.fail(
+                            f"first client was reset; server status={server.poll()}: {error}"
+                        )
+                    self.assertEqual(echoed, first)
+                    self.assertEqual(connection.recv(1), b"")
 
                 exchange(bytes(range(256)) * 800)
+                fragmented_exchange([b"GET /", b"fragmented", b" HTTP/1.1\r\n\r\n"])
 
                 reset = socket.create_connection(("127.0.0.1", 39127), timeout=2)
                 reset.setsockopt(
@@ -108,6 +144,17 @@ class TcpServerExampleTests(unittest.TestCase):
 
                 exchange(b"still accepting after a large stream\n")
                 self.assertIsNone(server.poll(), "server stopped accepting clients")
+
+                fdinfo = Path(f"/proc/{server.pid}/fdinfo")
+                descriptors = [path for path in fdinfo.iterdir() if int(path.name) > 2]
+                self.assertLessEqual(len(descriptors), 1, "accepted sockets leaked")
+                for descriptor in descriptors:
+                    flags_line = next(
+                        line for line in descriptor.read_text().splitlines()
+                        if line.startswith("flags:")
+                    )
+                    flags = int(flags_line.split()[1], 8)
+                    self.assertTrue(flags & os.O_CLOEXEC, "socket is inheritable")
             finally:
                 if server.poll() is None:
                     server.terminate()

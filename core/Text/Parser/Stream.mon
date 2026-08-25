@@ -1,0 +1,111 @@
+;;; Stream.mon --- incremental delimiter framing for byte streams
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "text parser stream bytes framing"
+
+;;; Commentary:
+
+ Text.Parser.Stream separates transport fragmentation from grammar parsing.
+ Feed arbitrary byte fragments until a delimiter completes one bounded frame;
+ bytes after that delimiter are returned untouched.
+
+;;; Code:
+
+import Sequence
+import Data.Queue
+
+module Text.Parser.Stream
+  [ParserStream ParserStreamReply ParserStreamPartial ParserStreamComplete
+   ParserStreamRejected parser-stream feed-until stream-partial?
+   stream-complete? stream-rejected? stream-state-or stream-frame-or
+   stream-rest-or stream-error-offset-or]
+
+
+layout ParserStream
+  [limit       :: Int]
+  [size        :: Int]
+  [bytes       :: Queue Byte]
+  [window      :: Queue Byte]
+  [window-size :: Int]
+
+
+data ParserStreamReply
+  = ParserStreamPartial ParserStream
+  | ParserStreamComplete [Byte] [Byte]
+  | ParserStreamRejected Int
+
+
+define parser-stream :: Int -> ParserStream
+  :doc "Create an empty incremental frame with a maximum of LIMIT bytes."
+  limit -> ParserStream limit 0 EmptyQueue EmptyQueue 0
+
+
+define stream-partial? :: ParserStreamReply -> Bool
+  [ParserStreamPartial state] -> True
+  _ -> False
+
+
+define stream-complete? :: ParserStreamReply -> Bool
+  [ParserStreamComplete frame rest] -> True
+  _ -> False
+
+
+define stream-rejected? :: ParserStreamReply -> Bool
+  [ParserStreamRejected offset] -> True
+  _ -> False
+
+
+define stream-state-or :: ParserStream -> ParserStreamReply -> ParserStream
+  _ [ParserStreamPartial state] -> state
+  fallback _ -> fallback
+
+
+define stream-frame-or :: [Byte] -> ParserStreamReply -> [Byte]
+  _ [ParserStreamComplete frame rest] -> frame
+  fallback _ -> fallback
+
+
+define stream-rest-or :: [Byte] -> ParserStreamReply -> [Byte]
+  _ [ParserStreamComplete frame rest] -> rest
+  fallback _ -> fallback
+
+
+define stream-error-offset-or :: Int -> ParserStreamReply -> Int
+  _ [ParserStreamRejected offset] -> offset
+  fallback _ -> fallback
+
+
+define push-window :: Int -> ParserStream -> Byte -> Queue Byte
+  width stream byte | (>= stream.window-size width) ->
+    enqueue (dequeue stream.window) byte
+  _ stream byte -> enqueue stream.window byte
+
+
+define pushed-window-size :: Int -> ParserStream -> Int
+  width stream | (>= stream.window-size width) -> width
+  _ stream -> stream.window-size + 1
+
+
+define push-byte :: [Byte] -> ParserStream -> Byte -> ParserStream
+  ending stream byte ->
+    ParserStream stream.limit (stream.size + 1) (enqueue stream.bytes byte) (push-window (count ending) stream byte) (pushed-window-size (count ending) stream)
+
+
+define frame-finished? :: [Byte] -> ParserStream -> Bool
+  ending stream -> (= (queue-to-list stream.window) ending)
+
+
+define stream-bytes :: ParserStream -> [Byte]
+  stream -> queue-to-list stream.bytes
+
+
+define feed-until :: [Byte] -> ParserStream -> [Byte] -> ParserStreamReply
+  :doc "Feed BYTES until ENDING completes a frame or STREAM reaches its limit."
+  _ stream [] -> ParserStreamPartial stream
+  ending stream [byte|rest]
+    | (>= stream.size stream.limit) -> ParserStreamRejected stream.size
+    | frame-finished? ending (push-byte ending stream byte) ->
+        ParserStreamComplete (stream-bytes (push-byte ending stream byte)) rest
+    | otherwise ->
+        feed-until ending (push-byte ending stream byte) rest

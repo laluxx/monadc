@@ -1988,10 +1988,13 @@ Type *parse_type_annotation(struct AST *ast) {
                             strcmp(items[i+4]->symbol, "::") == 0 &&
                             i + 5 < count && items[i+5]->type == AST_SYMBOL) {
                             elem_type = type_from_name(items[i+5]->symbol);
+                            if (!elem_type)
+                                elem_type = type_layout_ref(items[i+5]->symbol);
                         }
                     } else if (a->type == AST_SYMBOL) {
                         /* Arr :: ElemType :: Size */
                         elem_type = type_from_name(a->symbol);
+                        if (!elem_type) elem_type = type_layout_ref(a->symbol);
                         if (i + 4 < count && items[i+4]->type == AST_SYMBOL &&
                             strcmp(items[i+4]->symbol, "::") == 0 &&
                             i + 5 < count && items[i+5]->type == AST_NUMBER) {

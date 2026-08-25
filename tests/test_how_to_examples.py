@@ -33,6 +33,118 @@ class HowToExampleTests(unittest.TestCase):
         "how_to/FirstOrderModalLogic.mon",
     )
 
+    def test_header_only_graphics_examples_compile_without_bindings(self):
+        """Raylib and GLFW headers must supply both arity and C types directly."""
+        expected_loops = {
+            "RaylibSpeedrun.mon": (
+                "(while (not WindowShouldClose) BeginDrawing "
+                "(ClearBackground color) (DrawFPS 600 600) EndDrawing)"
+            ),
+            "GlfwSpeedrun.mon": (
+                "(while (not (glfwWindowShouldClose window)) "
+                "(glfwSwapBuffers window) glfwPollEvents)"
+            ),
+            "RaylibSnake.mon": "(while (not WindowShouldClose)",
+        }
+        for example, expected_loop in expected_loops.items():
+            with self.subTest(example=example), tempfile.TemporaryDirectory(
+                prefix="monadc-graphics-ffi-"
+            ) as td:
+                temp = Path(td)
+                env = os.environ.copy()
+                env["HOME"] = str(temp / "home")
+                Path(env["HOME"]).mkdir()
+                env["MONAD_CORE"] = str(ROOT / "core")
+                env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+                compiled = subprocess.run(
+                    [str(MONAD), str(ROOT / "how_to" / example), "--trace=ast",
+                     "-o", str(temp / example.removesuffix(".mon"))],
+                    cwd=ROOT, env=env, text=True, encoding="utf-8",
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    check=False, timeout=30,
+                )
+                self.assertEqual(compiled.returncode, 0, compiled.stdout[-5000:])
+                self.assertIn(expected_loop, compiled.stdout)
+
+    def test_alsa_synth_generates_and_streams_pcm(self):
+        """The synth must build from the ALSA header and stream to a PCM device."""
+        if not shutil.which("pkg-config"):
+            self.skipTest("pkg-config is required to discover optional ALSA support")
+        alsa = subprocess.run(
+            ["pkg-config", "--exists", "alsa"],
+            cwd=ROOT, check=False,
+        )
+        if alsa.returncode != 0:
+            self.skipTest("ALSA development files are not installed")
+
+        with tempfile.TemporaryDirectory(prefix="monadc-alsa-synth-") as td:
+            temp = Path(td)
+            output = temp / "Synth"
+            alsa_config = temp / "alsa.conf"
+            alsa_config.write_text(
+                "pcm.!default { type null }\n"
+                "ctl.!default { type null }\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            env["ALSA_CONFIG_PATH"] = str(alsa_config)
+
+            compiled = subprocess.run(
+                [str(MONAD), str(ROOT / "how_to/Synth.mon"),
+                 "-o", str(output)],
+                cwd=ROOT, env=env, text=True, encoding="utf-8",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-5000:])
+
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=10,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-5000:])
+            self.assertEqual(run.stdout, "played 24000 frames\n")
+
+
+    def test_raylib_layout_value_crosses_c_abi_by_value(self):
+        """A Color argument must carry its four bytes, never its heap address."""
+        with tempfile.TemporaryDirectory(prefix="monadc-raylib-color-abi-") as td:
+            temp = Path(td)
+            source = temp / "RaylibColorAbi.mon"
+            output = temp / "RaylibColorAbi"
+            source.write_text(
+                "include <raylib.h>\n\n"
+                "define color Color 0 0 0 0\n"
+                "  \"A fully transparent black value.\"\n\n"
+                "show (ColorToInt color)\n"
+                "show (ColorToInt (Fade color 0.0))\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT, env=env, text=True, encoding="utf-8",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-5000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True, encoding="utf-8",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=10,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-5000:])
+            self.assertEqual(run.stdout, "0\n0\n")
+
     def test_donut_executable_renders_terminal_cells(self):
         source_text = (ROOT / "how_to/Donut.mon").read_text()
         self.assertNotIn("donut-preview", source_text)
@@ -66,6 +178,7 @@ class HowToExampleTests(unittest.TestCase):
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
             )
             self.assertEqual(compiled.returncode, 0, compiled.stdout[-4000:])
+            self.assertNotIn("pmatch:", compiled.stdout)
             run = subprocess.run(
                 [str(output)], cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

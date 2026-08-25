@@ -444,9 +444,11 @@ static void arity_prescan(ArityTable *t, const char *source) {
 
             if (in_ctors) {
                 bool data_done = false;
-                while (tok.type == TOK_SYMBOL || tok.type == TOK_LPAREN || tok.type == TOK_LBRACKET) {
+                while (tok.type == TOK_SYMBOL || tok.type == TOK_PIPE ||
+                       tok.type == TOK_LPAREN || tok.type == TOK_LBRACKET) {
                     if (tok.type == TOK_SYMBOL && strcmp(tok.value, "deriving") == 0) { free(tok.value); break; }
-                    if (tok.type == TOK_SYMBOL && strcmp(tok.value, "|") == 0) {
+                    if (tok.type == TOK_PIPE ||
+                        (tok.type == TOK_SYMBOL && strcmp(tok.value, "|") == 0)) {
                         free(tok.value);
                         tok = lexer_next_token(&lex);
                         continue;
@@ -459,7 +461,10 @@ static void arity_prescan(ArityTable *t, const char *source) {
                             Lexer token_start = lex;
                             tok = lexer_next_token(&lex);
                             if (tok.type == TOK_EOF || tok.type == TOK_RPAREN || tok.type == TOK_KEYWORD) break;
-                            if (tok.type == TOK_SYMBOL && strcmp(tok.value, "|") == 0) break;
+                            if (tok.type == TOK_PIPE ||
+                                (tok.type == TOK_SYMBOL &&
+                                 strcmp(tok.value, "|") == 0))
+                                break;
                             if (tok.type == TOK_SYMBOL && strcmp(tok.value, "deriving") == 0) break;
                             if (tok.type == TOK_SYMBOL &&
                                 (strcmp(tok.value, "define") == 0 ||
@@ -625,7 +630,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                              strcmp(tok.value, "layout") == 0 || strcmp(tok.value, "type") == 0)) {
                             lex = next_saved; free(tok.value); break;
                         }
-                        if (tok.type == TOK_ARROW ||
+                        if (tok.type == TOK_ARROW || tok.type == TOK_EFFECT_ARROW ||
                             (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
                             arity++;
                             free(tok.value);
@@ -688,7 +693,8 @@ static void arity_prescan(ArityTable *t, const char *source) {
                         tok = lexer_next_token(&lex);
                         if (tok.type == TOK_EOF) { free(tok.value); break; }
 
-                        if (tok.type == TOK_ARROW || (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
+                        if (tok.type == TOK_ARROW || tok.type == TOK_EFFECT_ARROW ||
+                            (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
                             free(tok.value);
                             found_arrow = true;
                             arity++; /* Every arrow means the previous chunk was a param */
@@ -707,6 +713,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                                 if (tok.type == TOK_LPAREN) depth++;
                                 if (tok.type == TOK_RPAREN) { depth--; if (!depth) { free(tok.value); break; } }
                                 if (depth > 0 && (tok.type == TOK_ARROW ||
+                                                  tok.type == TOK_EFFECT_ARROW ||
                                                   (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0))) {
                                     inner_arrows++;
                                     is_fn = true;
@@ -763,7 +770,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                         }
                     }
                     /* no arrow, no hole = variable definition, not a function, skip */
-                } else if (tok.type == TOK_ARROW ||
+                } else if (tok.type == TOK_ARROW || tok.type == TOK_EFFECT_ARROW ||
                            (tok.type == TOK_SYMBOL && strcmp(tok.value, "->") == 0)) {
                     /* define name -> RetType — nullary function, arity 0 */
                     free(tok.value);
@@ -777,7 +784,7 @@ static void arity_prescan(ArityTable *t, const char *source) {
                     int depth = 0;
 
                     while (tok.type != TOK_EOF && tok.line == clause_line) {
-                        if (tok.type == TOK_ARROW ||
+                        if (tok.type == TOK_ARROW || tok.type == TOK_EFFECT_ARROW ||
                             (tok.type == TOK_SYMBOL && tok.value &&
                              strcmp(tok.value, "->") == 0)) {
                             if (depth == 0) {
@@ -4293,7 +4300,10 @@ static char *wisp_expand_relative_guard_fields(const char *source,
         }
 
         unsigned char next = (unsigned char)p[1];
-        if (*p == '.' &&
+        bool relative_boundary = p == source ||
+            p[-1] == ' ' || p[-1] == '\t' ||
+            p[-1] == '(' || p[-1] == '[' || p[-1] == '{';
+        if (*p == '.' && relative_boundary &&
             (isalpha(next) || next == '_' || next >= 0x80)) {
             sb_puts(&out, subjects[0]);
             sb_putc(&out, '.');
@@ -9080,7 +9090,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                             /* Skip whitespace after number/suffix to find optional element type */
                             while (*_after_suf == ' ' || *_after_suf == '\t') _after_suf++;
                             /* Collect optional element type token */
-                            char _elem_type[32] = "U8";
+                            char _elem_type[256] = "U8";
                             unsigned long long _elem_size = 1;
                             const char *_after_type = _after_suf;
                             if (*_after_suf != ']' && *_after_suf != '\0' && *_after_suf != ';') {
@@ -9096,7 +9106,7 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                     else if (strcmp(_elem_type,"I32") ==0||strcmp(_elem_type,"U32") ==0||strcmp(_elem_type,"F32")==0) _elem_size = 4;
                                     else if (strcmp(_elem_type,"I64") ==0||strcmp(_elem_type,"U64") ==0||strcmp(_elem_type,"F64")==0||strcmp(_elem_type,"Float")==0) _elem_size = 8;
                                     else if (strcmp(_elem_type,"I128")==0||strcmp(_elem_type,"U128")==0) _elem_size = 16;
-                                    else { strcpy(_elem_type, "U8"); _elem_size = 1; }
+                                    else _elem_size = 0;
                                     _after_type = _te;
                                 }
                             }
@@ -9174,16 +9184,48 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
                                          "[%s :: Arr :: %llu :: %s]",
                                          _varname, _elem_count, _elem_type);
                                 free(_varname);
+                                /* A declaration may put its initialized value on
+                                 * the immediately following line:
+                                 *
+                                 *   define words :: [4 U32]
+                                 *   [0x07230203 ...]
+                                 *
+                                 * Keep the sized annotation and the literal in
+                                 * one define.  Previously this path injected []
+                                 * eagerly and the real literal became a discarded
+                                 * top-level expression. */
+                                char *_initializer = NULL;
+                                int _initializer_lines = 0;
+                                const char *_next = p;
+                                while (*_next == ' ' || *_next == '\t') _next++;
+                                if (*_next == '[') {
+                                    const char *_value_end = skip_balanced_chars(_next);
+                                    if (_value_end > _next && _value_end[-1] == ']') {
+                                        _initializer = strndup(_next,
+                                                               (size_t)(_value_end - _next));
+                                        const char *_after_value = _value_end;
+                                        while (*_after_value && *_after_value != '\n')
+                                            _after_value++;
+                                        if (*_after_value == '\n') _after_value++;
+                                        for (const char *_q = p; _q < _after_value; _q++)
+                                            if (*_q == '\n') _initializer_lines++;
+                                        p = _after_value;
+                                    }
+                                }
+
                                 SB form;
                                 sb_init(&form);
                                 sb_puts(&form, "(define ");
                                 sb_puts(&form, _bracket);
-                                sb_puts(&form, " [])");
+                                sb_putc(&form, ' ');
+                                sb_puts(&form, _initializer ? _initializer : "[]");
+                                sb_putc(&form, ')');
                                 char *define_form = sb_take(&form);
                                 wts_push(&s, define_form, indent, lineno);
+                                free(_initializer);
                                 free(define_form);
                                 free(raw);
-                                lineno++;
+                                lineno += 1 + _initializer_lines;
                                 goto next_line;
                             }
                         }
@@ -11830,12 +11872,61 @@ static WTokenStream build_token_stream(const char *source, ArityTable *at) {
 
                     const char *after_else = inline_else + 5;
                     while (*after_else==' '||*after_else=='\t') after_else++;
-                    size_t else_len = if_line_end - after_else;
-                    char *else_raw = strndup(after_else, else_len);
-                    char *else_expanded = wisp_expand_expr_snippet(at, else_raw);
-                    free(else_raw);
-                    WRAP(else_expanded, else_body);
-                    free(else_expanded);
+                    if (after_else < if_line_end) {
+                        size_t else_len = if_line_end - after_else;
+                        char *else_raw = strndup(after_else, else_len);
+                        char *else_expanded = wisp_expand_expr_snippet(at, else_raw);
+                        free(else_raw);
+                        WRAP(else_expanded, else_body);
+                        free(else_expanded);
+                    } else {
+                        /* An inline `else` may introduce an indented body on
+                         * following lines, just like a standalone `else`.
+                         * Do not feed the empty tail to the expression
+                         * expander: its incomplete-input sentinel is not an
+                         * AST node. */
+                        char **else_lines = NULL;
+                        int else_count = 0, else_cap = 0;
+                        int else_layout_base = -1;
+                        while (*p) {
+                            const char *ls = p;
+                            while (*p && *p != '\n') p++;
+                            if (*p == '\n') p++;
+                            char *lraw = strndup(ls, p - ls);
+                            const char *lt = lraw;
+                            while (*lt==' '||*lt=='\t') lt++;
+                            if (!*lt || *lt==';') {
+                                free(lraw); lineno++; continue;
+                            }
+                            int li = measure_indent(lraw);
+                            if (li <= indent) {
+                                p = ls;
+                                free(lraw);
+                                break;
+                            }
+                            if (else_layout_base < 0)
+                                else_layout_base = li;
+                            int relative_indent = li - else_layout_base;
+                            const char *le = get_logical_line_end(lt);
+                            size_t content_len = (size_t)(le - lt);
+                            char *layout_line = malloc((size_t)relative_indent +
+                                                       content_len + 1);
+                            memset(layout_line, ' ', (size_t)relative_indent);
+                            memcpy(layout_line + relative_indent, lt, content_len);
+                            layout_line[relative_indent + content_len] = '\0';
+                            if (else_count >= else_cap) {
+                                else_cap = else_cap ? else_cap * 2 : 4;
+                                else_lines = realloc(else_lines,
+                                    sizeof(char *) * (size_t)else_cap);
+                            }
+                            else_lines[else_count++] = layout_line;
+                            free(lraw); lineno++;
+                        }
+                        BUILD_BODY(else_lines, else_count, else_body);
+                        for (int i = 0; i < else_count; i++)
+                            free(else_lines[i]);
+                        free(else_lines);
+                    }
                 } else {
                     size_t then_len = if_line_end - after_then;
                     char *then_raw = strndup(after_then, then_len);
@@ -12235,6 +12326,15 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
     }
     s->pos++;
 
+    bool until_has_block = false;
+    if (!is_grouped && strcmp(text, "until") == 0) {
+        for (int i = s->pos; i < s->count; i++) {
+            if (s->tokens[i].lineno == my_lineno) continue;
+            until_has_block = s->tokens[i].indent > my_indent;
+            break;
+        }
+    }
+
     if (!is_grouped && strcmp(text, "error") == 0) {
         wisp_emit_error_from_stream(s, &prefix_sb, my_indent, my_lineno);
     }
@@ -12249,6 +12349,20 @@ static void wisp_parse_expr(ArityTable *t, WTokenStream *s, SB *out, int parent_
         if (s->pos < s->count && strcmp(s->tokens[s->pos].text, "else") == 0) s->pos++;
         sb_putc(&prefix_sb, ' ');
         wisp_parse_expr(t, s, &prefix_sb, parent_indent, 1, 0);
+        sb_putc(&prefix_sb, ')');
+    }
+    else if (!is_grouped && strcmp(text, "until") == 0 && until_has_block) {
+        /* Wisp's block form is an imperative loop, distinct from the
+         * parenthesized polymorphic Function.until call.  Header-provided
+         * predicate arity still determines how much of the condition line is
+         * consumed before the indented loop body begins. */
+        sb_puts(&prefix_sb, "(while (not ");
+        wisp_parse_expr(t, s, &prefix_sb, my_indent, 1, 0);
+        sb_putc(&prefix_sb, ')');
+        while (s->pos < s->count && s->tokens[s->pos].indent > my_indent) {
+            sb_putc(&prefix_sb, '\n');
+            wisp_parse_expr(t, s, &prefix_sb, my_indent, 0, 0);
+        }
         sb_putc(&prefix_sb, ')');
     }
     else if (is_grouped || arity == 0 || arity == -2) {

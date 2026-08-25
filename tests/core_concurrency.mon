@@ -1,0 +1,48 @@
+:TEST-ID tests.core.concurrency
+:TEST-CONTEXT monadc.context.concurrency.core-owned-semantics
+:TEST-PURPOSE Core owns structured task outcomes and non-empty failure trees.
+:TEST-EXPECT compile, run, failure tree assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY concurrency
+
+import Control.Concurrent
+
+module Core.Concurrency
+  []
+
+
+define cleanup :: FailureTree
+  failure-leaf (TaskIdentity 3) CleanupFault "release socket"
+
+
+define worker :: FailureTree
+  failure-with-children (TaskIdentity 2) Fault "serve request" [cleanup]
+
+
+define failed TaskFailedWith worker
+
+
+define evidence-cleanup :: FailureEvidence
+  (CleanupEvidence (TaskIdentity 3) "release socket" [])
+
+
+define evidence-worker :: FailureEvidence
+  PrimaryEvidence (TaskIdentity 2) Fault "serve request" [evidence-cleanup]
+
+
+define lowered :: FailureTree
+  failure-from-evidence evidence-worker
+
+
+tests
+  assert-eq (failure-count worker) 2 "Failure trees count the complete causal structure"
+  assert-eq (failure-cleanup? worker) True "Cleanup failure remains visible through its parent"
+  assert-eq (failure-cancelled? worker) False "Unrelated failures are not cancellation"
+  assert-eq (failure-task-number worker) 2 "The failing task identity remains observable"
+  assert-eq (outcome-failed? failed) True "A failed task outcome is explicit"
+  assert-eq (outcome-value-or 41 failed) 41 "Failed outcomes preserve the caller's fallback"
+  assert-eq (outcome-value-or 0 (TaskCompleted 42)) 42 "Completed outcomes retain their value"
+  assert-eq (failure-count lowered) (failure-evidence-count evidence-worker) "Core lowering preserves every certified cause"
+  assert-eq (failure-cleanup? lowered) True "Core lowering preserves causal cleanup children"
+  assert-eq (failure-message lowered) "serve request" "Core owns message attachment during lowering"

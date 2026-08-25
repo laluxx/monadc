@@ -383,6 +383,12 @@
   BeginDrawing/ClearBackground/DrawFPS/EndDrawing. Shows C struct
   creation: =(define color Color 33 33 33 0)= with docstring.
 
+[FIX id:fix.how-to.graphics-header-only-ffi-2026-08-23 date:2026-08-23 by:codex src:how_to/RaylibSpeedrun.mon,how_to/GlfwSpeedrun.mon,tests/test_how_to_examples.py conf:high]
+  The unchanged Raylib and GLFW speedruns compile directly from their C headers
+  without handwritten bindings or source casts. Wisp block =until= is distinct
+  from parenthesized polymorphic =Function.until=: it lowers to a =while not=
+  loop and owns every indented drawing/event expression.
+
 [OBS id:obs.ffi.sdl src:how_to/SdlSpeedrun.mon:1-35 conf:high]
   SDL speedrun: SDL_Init, SDL_CreateWindow/Renderer, while True loop
   with SDL_SetRenderDrawColor/SDL_RenderClear/SDL_RenderPresent/SDL_Delay.
@@ -776,3 +782,68 @@
   normal process signal used by their supervisor. The accept lifetime is a
   native =while= loop rather than recursive growth, so client count does not
   consume process stack.
+
+[FIX id:fix.how-to.tcp-server-owned-lifecycle-2026-08-23 date:2026-08-23 by:codex src:how_to/TcpServer.mon,core/Network/Socket.mon,tests/test_tcp_server.py conf:high]
+  The tutorial shows the whole resource lifetime without showing POSIX
+  plumbing: allocate one connection buffer, receive typed stream outcomes,
+  complete each write, shut down output, release the buffer, and close the
+  client. Fragment boundaries remain deliberately invisible to application
+  policy, preparing the example for an incremental HTTP parser rather than
+  assuming one receive equals one request.
+
+[FIX id:fix.how-to.real-web-server-2026-08-23 date:2026-08-23 by:codex src:how_to/WebServer.mon,core/Web/Server.mon,tests/test_web_server.py conf:high]
+  =WebServer.mon= reads as an application: configuration, page values, three
+  route outcomes, and one documented entry point. It imports only
+  =Web.Server=; socket buffers, stream fragments, parser continuation state,
+  syscalls, write loops, and cleanup remain behind the core boundary. Its host
+  integration test proves the example performs real HTTP work rather than
+  merely compiling or printing a canned demonstration.
+
+[FIX id:fix.how-to.web-server-complete-request-2026-08-23 date:2026-08-23 by:codex src:how_to/WebServer.mon,tests/test_web_server.py conf:high]
+  The tutorial's =/echo= route demonstrates a real request body without
+  exposing framing or socket plumbing. Its live test sends the head and body in
+  independent TCP fragments, checks the exact echoed representation, verifies
+  =HEAD= body suppression, and exercises missing Host, unsupported transfer
+  coding, malformed syntax, 404 routing, continued service, and descriptor
+  cleanup. The example remains organized as configuration, pages, routes, and
+  application entry point.
+
+[FIX id:fix.how-to.web-html-explicit-canonical-values-2026-08-23 date:2026-08-23 by:codex src:how_to/WebHTML.mon,tests/test_how_to_examples.py conf:high]
+  Canonical typed HTML construction names its attribute and child collections
+  before the final =element= value. This avoids implying that visual alignment
+  alone continues an application, keeps every value's role visible, and is
+  executed under the installed read-only-core release topology.
+
+[FIX id:fix.how-to.donut-warning-free-installed-build-2026-08-23 date:2026-08-23 by:codex src:how_to/Donut.mon,core/Math/Angle.mon,core/prelude/Data/List.mon,tests/test_how_to_examples.py conf:high]
+  Donut's public compilation is warning-free and its rendered animation is
+  computed. The test copies the checkout Core, requires =Math/Angle.mon= before
+  invoking the compiler, rejects any =pmatch:= recovery output, then verifies
+  two complete 80-by-22 frames differ and contain the luminance ramp.
+
+[FIX id:fix.how-to.web-server-concurrent-deadline-boundary-2026-08-23 date:2026-08-23 by:codex src:how_to/WebServer.mon,core/Web/Server.mon,tests/test_web_server.py conf:high]
+  =WebServer.mon= remains application-shaped while =Web.Server= adds isolated
+  concurrent workers and request inactivity deadlines. The completed milestone
+  uses a bounded four-worker prefork pool with backlog backpressure and
+  parent-linked cleanup, while the public example remains routes and pages. The tutorial contains
+  no process, signal, timeout, socket, buffer, parser-stream, or accept-loop
+  plumbing; those concerns are verified through real loopback traffic beneath
+  the unchanged =serve-http server-port route= entry point.
+[FIX id:fix.how-to.blood-moon-embedded-vulkan-shaders-2026-08-25 date:2026-08-25 by:codex src:how_to/BloodMoon/BloodMoon.mon,how_to/BloodMoon/Shaders.mon,how_to/BloodMoon/shaders/fullscreen.vert,how_to/BloodMoon/shaders/blood.frag,how_to/BloodMoon/README.org,core/Graphics/Vulkan.mon,tests/test_blood_moon_shaders.py conf:high]
+  Blood Moon begins with a Vulkan-native shader boundary rather than a C-owned
+  game shell.  Its fullscreen vertex and procedural crimson fragment programs
+  are embedded as fixed contiguous =U32= arrays, the word representation
+  required by =VkShaderModuleCreateInfo.pCode=.  The editable GLSL remains next
+  to the module; public regression coverage recompiles it with =glslc=, validates
+  it with =spirv-val=, and compares every generated byte with the embedded
+  arrays.  Runtime rendering therefore requires no shader file I/O or host C
+  allocation. =BloodMoon.mon= delegates checked shader creation to
+  =Graphics.Vulkan= and contains no =VkShaderModuleCreateInfo= plumbing.
+
+[FIX id:fix.how-to.compiler-spirv-module-tool-2026-08-25 date:2026-08-25 by:codex src:spirv.c,spirv.h,cli.c,cli.h,main.c,completion.c,tests/test_spirv_include.py conf:high]
+  =monad spirv shader.frag -o Shader.mon= is a deliberately small asset tool.
+  It invokes =glslc= for Vulkan 1.3, validates the result with =spirv-val=, and
+  writes an ordinary Monad module containing the shader's byte-size constant
+  and fixed =[N U32]= word buffer. The binding name defaults to the shader's
+  filename without its extension; =--name= is only an explicit override. No
+  shader syntax, dependency rule, or file-loading plumbing was added to the
+  language itself.

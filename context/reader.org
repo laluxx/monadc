@@ -376,6 +376,14 @@ Expected Wisp shape:
   correctly but fail in codegen. Wisp form also fails since =[16gb]= expands to
   a static array exceeding the limit.
 
+[FIX id:fix.reader.initialized-sized-buffer-next-line-2026-08-25 date:2026-08-25 by:codex src:wisp.c,tests/wisp_initialized_buffer.mon,tests/test_wisp_initialized_buffer.py conf:high]
+  A Wisp sized-buffer declaration may place its literal initializer on the
+  immediately following line: =define words :: [4 U32]= followed by the
+  bracketed words.  Wisp keeps the annotation and initializer in one =define=;
+  it must not synthesize an empty buffer and discard the following literal as
+  a top-level expression.  The explicit element type is required when the
+  representation matters; =[N]= retains its documented =U8= default.
+
 * Match Expression Syntax
 :PROPERTIES:
 :ID: monadc.context.reader.match-syntax
@@ -1308,6 +1316,13 @@ Test-driven observations and failure records for the corresponding subsystem.
   This deployment regression prevents a workspace-only reader implementation
   or an omitted core reader module from appearing shippable. The exact user
   command =monad WebHTML.mon && ./WebHTML= is also a release gate after install.
+
+[FIX id:fix.reader.web-html-bool-call-lowering-2026-08-23 src:codegen.c,how_to/WebHTML.mon,tests/test_bool_call_lowering.py,tests/test_how_to_examples.py conf:high]
+  The installed WebHTML release gate covers reader expansion through runtime
+  rendering. It exposed typed-call finite-set normalization applying source
+  ordinal tags to Bool, which inverted the line-start flag and made indentation
+  recurse forever. Bool arguments now retain native truth tags, with a focused
+  compiler regression independent of the reader client.
 
 [FIX id:fix.reader.release-gate-optimizer-aliasing-2026-07-28 src:optimizations.c,tests/codegen/branches/optimizations/constant-folding/atom.codegen.optimizations.constant-folding.o-flag/rt_optimization_constant_folding.mon conf:high]
   The reader release gate exposed an alias-unsafe partial constant fold. The

@@ -130,26 +130,27 @@ define json-error-code :: JsonDecode -> Int
 
 
 define json-error-label :: Int -> String
-  code | = 1       -> "JSON value"
-       | = 2       -> "end of input"
-       | = 10      -> "null"
-       | = 11      -> "true"
-       | = 12      -> "false"
-       | = 20      -> "delimiter after zero"
-       | = 21      -> "JSON number"
-       | = 30      -> "comma or end of array"
-       | = 31      -> "end of array"
-       | = 40      -> "closing quote"
-       | = 41      -> "escaped string character"
-       | = 42      -> "valid JSON escape"
-       | = 43      -> "four hexadecimal digits"
-       | = 44      -> "paired UTF-16 surrogate"
-       | = 45      -> "valid UTF-8 sequence"
-       | = 50      -> "object key or end of object"
-       | = 51      -> "colon after object key"
-       | = 52      -> "comma or end of object"
-       | = 60      -> "input within parser byte budget"
-       | otherwise -> "valid JSON token"
+  code
+    | = 1       -> "JSON value"
+    | = 2       -> "end of input"
+    | = 10      -> "null"
+    | = 11      -> "true"
+    | = 12      -> "false"
+    | = 20      -> "delimiter after zero"
+    | = 21      -> "JSON number"
+    | = 30      -> "comma or end of array"
+    | = 31      -> "end of array"
+    | = 40      -> "closing quote"
+    | = 41      -> "escaped string character"
+    | = 42      -> "valid JSON escape"
+    | = 43      -> "four hexadecimal digits"
+    | = 44      -> "paired UTF-16 surrogate"
+    | = 45      -> "valid UTF-8 sequence"
+    | = 50      -> "object key or end of object"
+    | = 51      -> "colon after object key"
+    | = 52      -> "comma or end of object"
+    | = 60      -> "input within parser byte budget"
+    | otherwise -> "valid JSON token"
 
 
 define json-diagnostic-reply :: JsonDecode -> ParseReply Json
@@ -600,7 +601,7 @@ define json-buffer-members :: JsonMemberBuffer -> [JsonMember]
 define decode-json-object-next-key :: JsonMemberBuffer -> Int -> [Int] -> ParseReply Json
   buffer offset bytes
     | parser-empty? bytes       -> json-string-rejected 50 offset
-    | (= (nth bytes 0) 0x22) ->
+    | bytes[0] = 0x22 ->
         decode-json-object-key (json-buffer-members buffer) offset bytes (decode-json-key-result (decode-json-string offset bytes))
     | otherwise                 -> json-string-rejected 50 offset
 

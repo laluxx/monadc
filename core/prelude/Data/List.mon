@@ -73,13 +73,13 @@ method replace-at :: Int -> a -> [a] -> [a]
 
 method intersperse :: a -> [a] -> [a]
   _ []      -> []
-  _ [x|[]]  -> list x
+  _ [x]     -> list x
   separator [x|xs] -> prepend x (prepend separator (intersperse separator xs))
 
 
 method intercalate :: [a] -> [[a]] -> [a]
   _ [] -> []
-  _ [values|[]] -> values
+  _ [values] -> values
   separator [values|remaining] -> (append values (append separator (intercalate separator remaining)))
 
 

@@ -1,0 +1,75 @@
+;;; Process.mon --- minimal Linux worker-process boundary
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "system posix process fork wait worker"
+
+;;; Commentary:
+
+ System.Posix.Process exposes only the lifecycle operations needed by isolated
+ server workers. Policy—descriptor ownership, request handling, and whether to
+ continue accepting—belongs to the server above this syscall seam.
+
+;;; Code:
+
+module System.Posix.Process
+  [sys-fork sys-exit sys-current-process sys-parent-process
+   linked-to-parent? wait-child]
+
+
+define sys-fork :: Int -foreign-> Int
+  ignored ->
+    asm mov 57 %rax
+        syscall ret
+
+
+define sys-exit :: Int -foreign-> Int
+  status ->
+    asm mov 60     %rax
+        mov status %rdi
+        syscall ret
+
+
+define sys-current-process :: Int -foreign-> Int
+  ignored ->
+    asm mov 39 %rax
+        syscall ret
+
+
+define sys-parent-process :: Int -foreign-> Int
+  ignored ->
+    asm mov 110 %rax
+        syscall ret
+
+
+define sys-parent-death-signal :: Int -> Int -foreign-> Int
+  option signal ->
+    asm mov signal %rsi
+        mov 157    %rax
+        mov option %rdi
+        mov 0      %rdx
+        mov 0      %r10
+        mov 0      %r8
+        syscall ret
+
+
+define sys-wait-child :: Int -foreign-> Int
+  process ->
+    asm mov process %rdi
+        mov 61      %rax
+        mov 0       %rsi
+        mov 0       %rdx
+        mov 0       %r10
+        syscall ret
+
+
+define linked-to-parent? :: Int -> Int -io-> Bool
+  :doc "Link this process to EXPECTED-PARENT with a Linux parent-death SIGNAL."
+  expected-parent signal ->
+    def linked (sys-parent-death-signal 1 signal)
+    (= (sys-parent-process 0) expected-parent)
+
+
+define wait-child :: Int -io-> Int
+  :doc "Wait for one worker to exit and return its process identifier."
+  ignored -> sys-wait-child -1

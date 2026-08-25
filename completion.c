@@ -115,6 +115,8 @@ static const Entry ENTRIES[] = {
      "Open compiler debugger", "Starts the compiler debugger TUI for one source file."},
     {ENTRY_COMMAND, "commands", 'c', "l", "lsp", "", "monad lsp",
      "Start language server", "Starts the LSP server, or the LSP REPL when attached to a terminal."},
+    {ENTRY_COMMAND, "commands", 'c', "s", "spirv", "<shader> -o <module.mon>", "monad spirv triangle.vert -o Triangle.mon",
+     "Embed a shader in Monad", "Compiles and validates GLSL for Vulkan 1.3, then writes its byte size and typed U32 words as an ordinary Monad module. --name overrides the shader-derived binding name."},
     {ENTRY_COMMAND, "commands", 'c', "h", "help", "[topic]", "monad help build",
      "Show help", "Prints static help for a command or the top-level menu."},
     {ENTRY_COMMAND, "commands", 'c', "m", "menu", "", "monad menu",

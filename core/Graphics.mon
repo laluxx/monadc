@@ -1,0 +1,3 @@
+;;; Graphics.mon --- graphics namespace
+
+(module Graphics [])

@@ -42,11 +42,13 @@ define pow :: Int -> Int -> Int
   base exponent | exponent <= 0 -> 1
                 | otherwise     -> base * (pow base (exponent - 1))
 
-tests
-  assert-eq (factorial 6) 720 "Math factorial"
-  assert-eq (fib 10) 55 "Math fib"
-  assert-eq (prime? 29) True "Math prime"
-  assert-eq (prime? 21) False "Math composite"
-  assert-eq (sum-range 1 100) 5050 "Math sum range"
-  assert-eq (product-range 2 5) 120 "Math product range"
-  assert-eq (pow 3 4) 81 "Math pow"
+
+tests [/]
+  assert-eq (factorial 6)       720   "Math factorial"
+  assert-eq (fib 10)            55    "Math fib"
+  assert-eq (prime? 29)         True  "Math prime"
+  assert-eq (prime? 21)         False "Math composite"
+  assert-eq (sum-range 1 100)   5050  "Math sum range"
+  assert-eq (product-range 2 5) 120   "Math product range"
+  assert-eq (pow 3 4)           81    "Math pow"
+

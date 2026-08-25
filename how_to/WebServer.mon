@@ -1,0 +1,56 @@
+;;; WebServer.mon --- a small real HTTP application
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "how-to web http server routing"
+
+;;; Commentary:
+
+ A web application chooses routes and creates responses. Web.Server owns the
+ transport, incremental parsing, protocol errors, complete writes, and cleanup.
+
+;;; Code:
+
+import Web.Server
+
+
+;;; Configuration
+
+define server-port :: Int
+  39128
+
+
+;;; Pages
+
+define page-head :: HTML
+  html :lang "en"
+    head
+      title "Monad Web"
+    body
+
+
+define page-content :: String
+  "<h1>Monad is serving HTTP</h1>\n<p>Try <a href=\"/health\">the health check</a>.</p>"
+
+
+define home-page :: String
+  page-head ++ page-content ++ "</body></html>\n"
+
+
+;;; Routes
+
+define route :: HttpRequest -> HttpResponse
+  request | .target = "/"       -> html-response 200 "OK" home-page
+          | .target = "/health" -> text-response 200 "OK" "healthy\n"
+          | .target = "/echo"   -> text-response 200 "OK" request.body
+          | otherwise           -> not-found-response request.target
+
+
+;;; Application
+
+define main :: Int -io-> Int
+  :doc "Serve the example application on its configured loopback port."
+  _ -> serve-http server-port route
+
+
+main 0

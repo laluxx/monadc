@@ -299,7 +299,7 @@ static int levenshtein(const char *a, const char *b)
 static const char *SUBCOMMANDS[] = {
     "new", "build", "run", "clean", "install",
     "test", "check", "lint", "trace", "debug", "lsp", "eval",
-    "repl", "jit", "menu", "flags", "help", NULL
+    "repl", "jit", "spirv", "menu", "flags", "help", NULL
 };
 
 static bool parse_optimization_flag(const char *arg, int *level)
@@ -809,6 +809,28 @@ CompilerFlags parse_flags(int argc, char **argv) {
         if (argc < 3) { fprintf(stderr, "Usage: %s new <name>\n", argv[0]); exit(1); }
         flags.mode         = CMD_NEW;
         flags.package_name = argv[2];
+        return flags;
+    }
+    if (strcmp(argv[1], "spirv") == 0) {
+        if (argc < 3) {
+            fprintf(stderr,
+                    "Usage: %s spirv <shader> -o <module.mon> [--name <binding>]\n",
+                    argv[0]);
+            exit(1);
+        }
+        flags.mode = CMD_SPIRV;
+        flags.input_file = argv[2];
+        for (int i = 3; i < argc; i++) {
+            if ((strcmp(argv[i], "-o") == 0 ||
+                 strcmp(argv[i], "--output") == 0) && i + 1 < argc) {
+                flags.output_name = argv[++i];
+            } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
+                flags.spirv_name = argv[++i];
+            } else {
+                fprintf(stderr, "Unknown spirv argument: %s\n", argv[i]);
+                exit(1);
+            }
+        }
         return flags;
     }
     if (strcmp(argv[1], "run") == 0 || strcmp(argv[1], "build") == 0) {

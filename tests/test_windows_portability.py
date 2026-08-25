@@ -46,7 +46,10 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("WINDOWS_EXCLUDED_SRCS", makefile)
         self.assertIn("debugger.c", makefile)
         self.assertIn("$(WINDOWS_EXCLUDED_SRCS)", makefile)
-        self.assertIn("HEADERS = $(wildcard *.h)", makefile)
+        self.assertIn(
+            "HEADERS = $(wildcard *.h qtt/*.h concurrency/*.h tooling/*.h)",
+            makefile,
+        )
         self.assertIn("%.o: %.c $(HEADERS)", makefile)
 
     def test_cmake_gives_compiler_a_nontrivial_windows_stack(self):

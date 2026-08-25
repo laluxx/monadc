@@ -1,0 +1,253 @@
+;;; Server.mon --- small complete HTTP/1.1 server boundary
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "web http server response routing io"
+
+;;; Commentary:
+
+ Web.Server owns the connection mechanics a web application should not see:
+ isolated workers, inactivity deadlines, bounded incremental framing, strict
+ decoding, complete response writes, and cleanup. Applications provide one
+ pure request handler.
+
+;;; Code:
+
+import Network.Socket
+import System.Posix.Process
+import Data.Queue
+import Sequence
+import Text.Parser.Stream
+import Text.Format
+import Web.HTTP
+
+module Web.Server
+  [HttpRequest HttpResponse HttpServerConfig standard-http-limits
+   standard-http-server
+   response text-response html-response not-found-response
+   render-response serve-http-with serve-http]
+
+
+layout HttpResponse
+  [status       :: Int]
+  [reason       :: String]
+  [content-type :: String]
+  [body         :: String]
+
+
+layout HttpServerConfig
+  [port            :: Int]
+  [request-timeout :: Int]
+
+
+;;; Response values
+
+define standard-http-limits :: HttpLimits
+  HttpLimits 16384 8192 8192 64 1048576
+
+
+define standard-http-server :: Int -> HttpServerConfig
+  :doc "Create a loopback HTTP server with four isolated workers and a two-second request deadline."
+  port -> HttpServerConfig port 2
+
+
+define request-head-ending :: [Byte]  ⌜0x0d 0x0a 0x0d 0x0a⌝
+
+
+define response :: Int -> String -> String -> String -> HttpResponse
+  :doc "Create an HTTP response with STATUS, REASON, CONTENT-TYPE, and BODY."
+  status reason content-type body ->
+    HttpResponse status reason content-type body
+
+
+define text-response :: Int -> String -> String -> HttpResponse
+  :doc "Create a UTF-8 plain-text HTTP response."
+  status reason body ->
+    response status reason "text/plain; charset=utf-8" body
+
+
+define html-response :: Int -> String -> String -> HttpResponse
+  :doc "Create a UTF-8 HTML HTTP response."
+  status reason body ->
+    response status reason "text/html; charset=utf-8" body
+
+
+define not-found-response :: String -> HttpResponse
+  :doc "Create a conventional plain-text 404 response."
+  target -> text-response 404 "Not Found" ("No route for " ++ target ++ "\n")
+
+
+define render-response-head :: HttpResponse -> String
+  response ->
+    def status-line ("HTTP/1.1 " ++ (int->text response.status) ++ " " ++ response.reason ++ "\r\n")
+    def type-header ("Content-Type: " ++ response.content-type ++ "\r\n")
+    def length-header ("Content-Length: " ++ (int->text (length response.body)) ++ "\r\n")
+    status-line ++ type-header ++ length-header ++ "Connection: close\r\n\r\n"
+
+
+define render-response :: HttpResponse -> String
+  :doc "Render RESPONSE as one complete HTTP/1.1 message."
+  response -> (render-response-head response) ++ response.body
+
+
+define request-error-response :: Int -> HttpResponse
+  408 -> text-response 408 "Request Timeout" "The request was not completed in time.\n"
+  413 -> text-response 413 "Content Too Large" "The request body is too large.\n"
+  414 -> text-response 414 "URI Too Long" "Request target is too long.\n"
+  431 -> text-response 431 "Request Header Fields Too Large" "Request headers are too large.\n"
+  501 -> text-response 501 "Not Implemented" "The requested transfer coding is not supported.\n"
+  505 -> text-response 505 "HTTP Version Not Supported" "Only HTTP/1.1 is supported.\n"
+  _   -> text-response 400 "Bad Request" "The request is not valid HTTP/1.1.\n"
+
+
+;;; Request framing
+
+define empty-request :: HttpRequest
+  HttpRequest "" "" "HTTP/1.1" EmptyQueue "" 0 0
+
+
+define response-for :: HttpDecode -> (HttpRequest -> HttpResponse) -> HttpResponse
+  request handler | (http-decoded? request) -> (handler (request-or empty-request request))
+  request _ -> request-error-response (http-error-code-or 400 request)
+
+
+define send-response :: Socket -> HttpDecode -> HttpResponse -io-> Int
+  client request response | (= (request-method-or "" request) "HEAD") ->
+    send-text client (render-response-head response)
+  client _ response -> send-text client (render-response response)
+
+
+define request-fragment :: SocketBuffer -> Int -> ParserStream -> ParserStreamReply
+  buffer count stream ->
+    feed-until request-head-ending stream (buffer-bytes buffer count)
+
+
+define complete-http-body :: HttpDecode -> [Byte] -> HttpDecode
+  request bytes ->
+    complete-request-body request (take bytes (request-content-length-or 0 request))
+
+
+define continue-body-read :: Socket -> SocketBuffer -> HttpDecode -> [Byte] -io-> HttpDecode
+  _ _ request bytes | (>= (count bytes) (request-content-length-or 0 request)) ->
+    complete-http-body request bytes
+  client buffer request bytes ->
+    (read-http-body client buffer request bytes (receive client buffer))
+
+
+define read-http-body :: Socket -> SocketBuffer -> HttpDecode -> [Byte] -> SocketRead -io-> HttpDecode
+  _ _ _ _ [SocketReadFailure status] -> HttpFailed 400 0
+  _ _ _ _ [SocketReadTimeout status] -> HttpFailed 408 0
+  client buffer request bytes [SocketReadRetry status] ->
+    def received (receive client buffer)
+    (read-http-body client buffer request bytes received)
+  _ _ _ _ [SocketReadEOF status] -> HttpFailed 400 0
+  client buffer request bytes [SocketReadReady body-count] ->
+    def next (bytes ++ (buffer-bytes buffer body-count))
+    (continue-body-read client buffer request next)
+
+
+define continue-http-body :: Socket -> SocketBuffer -> HttpDecode -> [Byte] -io-> HttpDecode
+  _ _ request _ | not (http-decoded? request) -> request
+  _ _ request bytes | (>= (count bytes) (request-content-length-or 0 request)) ->
+    complete-http-body request bytes
+  client buffer request bytes ->
+    (read-http-body client buffer request bytes (receive client buffer))
+
+
+define continue-http-read :: Socket -> SocketBuffer -> ParserStreamReply -io-> HttpDecode
+  client buffer [ParserStreamPartial next] ->
+    def received (receive client buffer)
+    (read-http-request client buffer next received)
+  client buffer [ParserStreamComplete frame rest] ->
+    continue-http-body client buffer (decode-request-bytes standard-http-limits frame) rest
+  _ _ [ParserStreamRejected offset] -> HttpFailed 431 offset
+
+
+define read-http-request :: Socket -> SocketBuffer -> ParserStream -> SocketRead -io-> HttpDecode
+  _ _ _ [SocketReadFailure status] -> HttpFailed 400 0
+  _ _ _ [SocketReadTimeout status] -> HttpFailed 408 0
+  client buffer stream [SocketReadRetry status] ->
+    (read-http-request client buffer stream (receive client buffer))
+  _ _ _ [SocketReadEOF status] -> HttpFailed 400 0
+  client buffer stream [SocketReadReady head-count] ->
+    continue-http-read client buffer (request-fragment buffer head-count stream)
+
+
+;;; Connection lifecycle
+
+define serve-http-client :: Int -> (HttpRequest -> HttpResponse) -> Socket -io-> Int
+  timeout-seconds handler client ->
+    def timeout (set-receive-timeout client timeout-seconds)
+    def buffer (make-socket-buffer 4096)
+    def request (read-http-request client buffer (parser-stream 16384) (receive client buffer))
+    def sent (send-response client request (response-for request handler))
+    def shutdown (shutdown-write client)
+    def released (release-socket-buffer buffer)
+    def closed (close-socket client)
+    sent
+
+
+;;; Listener lifecycle
+
+define continue-http-worker? :: SocketResult -> Int -> (HttpRequest -> HttpResponse) -> Socket -io-> Bool
+  [SocketFailure status] _ _ listener ->
+    def closed (close-socket listener)
+    False
+  [SocketReady client] timeout-seconds handler _ ->
+    def served (serve-http-client timeout-seconds handler client)
+    True
+
+
+define serve-http-clients :: Int -> (HttpRequest -> HttpResponse) -> Socket -io-> Int
+  timeout-seconds handler listener ->
+    def running True
+    while running (set! running (continue-http-worker? (accept-client listener) timeout-seconds handler listener))
+    0
+
+
+define finish-worker-fork :: Int -> Int -> Int -> (HttpRequest -> HttpResponse) -> Socket -io-> Int
+  0 expected-parent timeout-seconds handler listener | (linked-to-parent? expected-parent 15) ->
+    sys-exit (serve-http-clients timeout-seconds handler listener)
+  0 _ _ _ listener -> sys-exit (close-socket listener)
+  process _ _ _ _ -> process
+
+
+define fork-http-worker :: Int -> Int -> (HttpRequest -> HttpResponse) -> Socket -io-> Int
+  expected-parent timeout-seconds handler listener ->
+    finish-worker-fork (sys-fork 0) expected-parent timeout-seconds handler listener
+
+
+define worker-launch-status :: Int -> Int -> Int -> Int -> Int
+  first second third fourth
+    | (first  < 0) -> first
+    | (second < 0) -> second
+    | (third  < 0) -> third
+    | (fourth < 0) -> fourth
+    | otherwise    -> 0
+
+
+define await-http-workers :: Int -io-> Int
+  launched | < 0 -> launched
+  _ -> wait-child 0
+
+
+define run-http-server :: HttpServerConfig -> SocketResult -> (HttpRequest -> HttpResponse) -io-> Int
+  _ [SocketFailure status] _ -> status
+  config [SocketReady listener] handler ->
+    def parent (sys-current-process 0)
+    def first (fork-http-worker parent config.request-timeout handler listener)
+    def second (fork-http-worker parent config.request-timeout handler listener)
+    def third (fork-http-worker parent config.request-timeout handler listener)
+    def fourth (fork-http-worker parent config.request-timeout handler listener)
+    def launched (worker-launch-status first second third fourth)
+    await-http-workers launched
+
+
+define serve-http-with :: HttpServerConfig -> (HttpRequest -> HttpResponse) -io-> Int
+  :doc "Serve CONFIG with a bounded pool of isolated HTTP workers."
+  config handler -> run-http-server config (listen-loopback config.port) handler
+
+
+define serve-http :: Int -> (HttpRequest -> HttpResponse) -io-> Int
+  :doc "Serve HTTP/1.1 on loopback PORT with production-oriented defaults."
+  port handler -> serve-http-with (standard-http-server port) handler

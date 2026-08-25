@@ -8,6 +8,99 @@ algebraic effects. POSIX threads, futexes, mutexes, condition variables,
 semaphores, barriers, read-write locks, and atomics are backend mechanisms;
 none may weaken source-level lifetime, cancellation, or ownership laws.
 
+The executable cycle log and current claim boundary live in
+[[file:../concurrency/README.org][concurrency/README.org]].  This context file
+records the cross-compiler destination; the subsystem README owns research
+milestones and their exit criteria.
+
+* FIX Cycle 5.10 process-keyed operational streams
+  :PROPERTIES:
+  :ID: fix.concurrency.cycle-5-10-process-streams-2026-08-24
+  :END:
+
+The deterministic research core represents execution agents with generative
+=ConcurrencyProcessId=s and schedules their process-local event indices.  A
+valid process program is a bijective partition of the existing certified task
+and channel operations; a valid schedule preserves every process-local order.
+Independent replay lowers that linear extension through the Cycle 5 binary
+oracle and commits both representations to one certificate.  See
+[[file:../tests/test_concurrency_commutation.py][the sanitizer regression]].
+
+* FIX Cycle 5.11 process-indexed enabled frontier
+  :PROPERTIES:
+  :ID: fix.concurrency.cycle-5-11-process-frontier-2026-08-24
+  :END:
+
+Every process schedule prefix has a certified frontier with one cursor per
+generative process identity.  Entries distinguish stream completion, a pending
+same-projection predecessor, and semantic blocking by the existing task,
+cleanup, or channel rules.  The certificate retains the complete binary
+enabledness result as differential evidence, and the sanitizer regression
+checks agreement at every prefix of its three-stream schedule.  Native
+N-process independence remains a later judgment; this cycle does not infer it
+from the new representation.
+
+* FIX Cycle 5.12 process-keyed commutation certificates
+  :PROPERTIES:
+  :ID: fix.concurrency.cycle-5-12-process-commutation-2026-08-24
+  :END:
+
+Adjacent independence is exposed using generative process identities and local
+cursors, but its semantic footprint remains owned by the established
+dependence oracle.  Both processes must be enabled in the certified frontier;
+the resulting evidence retains the frontier, dependence, and executable binary
+diamond fingerprints.  This prevents the process representation from silently
+inventing a weaker QTT, effect, authority, cleanup, or channel relation.  See
+[[file:../tests/test_concurrency_commutation.py][the sanitizer regression]].
+
+* FIX Cycle 5.13 native N-process frontier
+  :PROPERTIES:
+  :ID: fix.concurrency.cycle-5-13-native-frontier-2026-08-25
+  :END:
+
+Native process enabledness is owned by process-local cursors rather than the
+two binary projection heads.  Operations reuse canonical QTT places and effect
+atoms for conservative dependence.  The regression requires three co-enabled
+processes and all six exhaustive schedules.  This native state space must now
+absorb task, cancellation, cleanup, and channel transitions before replacing
+the binary reference interpreter.
+
+* FIX Fiber runtime architecture
+  :PROPERTIES:
+  :ID: fix.concurrency.fiber-runtime-architecture-2026-08-25
+  :END:
+
+Parallel task interpreters will use stackful fibers with linear scheduler-owned
+continuations.  Fibers remain runtime carriers for scoped effects, not a second
+source concurrency model.  Existing QTT quantity one governs continuation
+ownership; mobility and foreign-frame classification govern migration and
+pinning.  The researched ABI, stack, sanitizer, and portability gates live in
+[[file:../concurrency/FIBERS.org][concurrency/FIBERS.org]].
+
+* FIX Cycle 5.14 native structured-task prefixes
+  :PROPERTIES:
+  :ID: fix.concurrency.cycle-5-14-native-task-prefix-2026-08-25
+  :END:
+
+The authority kernel distinguishes open-prefix validity from closed-scope
+completion without duplicating transition rules.  Native process frontiers use
+that prefix checker to decide whether each process-owned task transition is
+enabled.  Two spawn/join chains and a third process now explore 30 schedules;
+join-before-spawn disables only its owning process.  Complete kernel checking
+still requires every child to be joined.
+
+* FIX Cycle 5.15 native cancellation exploration
+  :PROPERTIES:
+  :ID: fix.concurrency.cycle-5-15-native-cancellation-2026-08-25
+  :END:
+
+Cancellation, checkpoint, cleanup completion, and join now execute as
+process-owned native transitions checked by the existing authority kernel.
+Successful exploration retains the six placements of one unrelated operation;
+premature-checkpoint branches are counted as certified dead ends.  Native
+task/task dependence reuses the established semantic footprint oracle and
+preserves task-order, lifetime, cleanup, and QTT-authority reasons.
+
 * Core judgment
 
 The effect/QTT judgment grows a task-scope identity =s=:
@@ -70,34 +163,343 @@ provable lock cycles, and unjustified atomic order. CLI, JSON, LSP diagnostics,
 hovers, inlay hints, code actions, task-scope visualization, and deterministic
 trace replay consume the same evidence. Editor-only analysis is forbidden.
 
-* Implementation cycles
+* Implementation policy
 
-** C0 — formal contracts and deterministic model
+The earlier plan put the parallel runtime immediately after the paper model.
+That order is superseded.  Each concurrency claim now advances through an
+independent semantic checker, typed/effect integration, a deterministic
+interpreter, and only then a parallel runtime.  See the numbered cycles in the
+subsystem README.
 
-Define task, scope, cancellation, and failure transitions in Core; executable
-laws; effect signatures; QTT capture obligations; and trace format.
+Core owns the source-visible concurrency algebra.  =Control.Concurrent=
+defines task identities, outcomes, and failure trees; the research subsystem
+defines independently checkable traces and certificates.  The compiler may
+lower Core operations into that machinery and optimize certified IR, but must
+not become the semantic home of scheduling, cancellation, cleanup, or failure
+policy.  Runtime interpreters remain downstream of the certificate boundary.
 
-** C1 — runtime substrate
+[FIX id:fix.concurrency.cycle-1-authority-kernel-2026-08-24 date:2026-08-24 by:codex src:concurrency/kernel.c,concurrency/kernel.h,concurrency/README.org,tests/test_concurrency_kernel.py conf:high]
+  Cycle 1 gives structured spawn/join an independently executable authority
+  transition system. It reuses canonical QTT places and exact quantities,
+  separates mobility from usage, transfers ownership rather than copying it,
+  rejects overlapping initial authority, and requires every child to be joined
+  exactly once by its parent before successful scope exit.
 
-Implement workers, deques, injection, parking, monotonic timers, wakeup races,
-shutdown, and deterministic scheduling in =concurrency/=. Stress under
-sanitizers and forced schedules.
+[FIX id:fix.concurrency.cycle-2-scoped-loans-2026-08-24 date:2026-08-24 by:codex src:concurrency/kernel.c,concurrency/kernel.h,qtt/place.h,concurrency/README.org,tests/test_concurrency_kernel.py conf:high]
+  Cycle 2 imports QTT loan identity, place, and polarity without creating a
+  second borrow semantics. Shared loans delegate read-only authority across a
+  task edge; exclusive loans transfer their unique holder and are restored by
+  join. Every loan requires explicit mobility and a covering transferable
+  capability. Join ends the child grant and certifies the first structured
+  happens-before edge. Moving storage under any overlapping lexical loan and
+  overlapping shared/exclusive initial loans fail closed.
 
-** C2 — structured surface
+[FIX id:fix.concurrency.cycle-3-1-cancellation-effects-2026-08-24 date:2026-08-24 by:codex src:concurrency/kernel.c,concurrency/kernel.h,concurrency/effect.c,concurrency/effect.h,concurrency/README.org,tests/test_concurrency_kernel.py,tests/test_concurrency_effect.py conf:high]
+  Cycle 3.1 makes spawn, cancel, checkpoint, cleanup completion, and join exact
+  scoped QTT effect atoms. Cancellation is level-triggered and cannot destroy a
+  task: the child must observe it at a checkpoint, finish masked cleanup, and
+  join through the ordinary authority-return edge. Cleanup recursively requires
+  all children joined. Failure-tree construction and exceptional cleanup remain
+  named Cycle 3 boundaries rather than implicit claims.
 
-Expose =with-task-scope=, =spawn=, =await=, checkpoints, cancellation scopes,
-deadlines, failure trees, and supervised restart. Detached safe tasks remain
-unrepresentable.
+[FIX id:fix.concurrency.cycle-3-2-exceptional-cleanup-2026-08-24 date:2026-08-24 by:codex src:core/Control/Concurrent.mon,codegen.c,concurrency/kernel.c,concurrency/kernel.h,concurrency/effect.c,concurrency/effect.h,concurrency/failure.c,concurrency/failure.h,concurrency/README.org,tests/core_concurrency.mon,tests/test_concurrency_kernel.py,tests/test_concurrency_effect.py,tests/test_concurrency_failure.py conf:high]
+  Cycle 3.2 begins with a Core-owned non-empty failure-tree model and checked
+  exceptional cleanup transitions. A primary task failure enters masked cleanup;
+  cleanup failure remains subordinate, cleanup completion is still mandatory,
+  and verification distinguishes primary from cleanup failure counts. The
+  causal certificate reuses the existing effect solver and row fingerprint,
+  assigns exact QTT grade one to every cause, derives parent indices from task
+  ancestry, and independently replays the trace. Its canonical =MCFC= version 1
+  encoding uses fixed-width network byte order and is mutation-tested under
+  sanitizers; decoding never substitutes for replay certification. Verified
+  evidence lowers structurally into the Core-owned failure tree, preserving
+  task, cause, child order, cardinality, and message attachment. Imported ADT
+  constructor collection fields now use the same boxed collection ABI as
+  ordinary typed calls, with this lowering retained as its regression.
 
-** C3 — communication and POSIX portfolio
+[FIX id:fix.concurrency.cycle-4-1-binary-session-kernel-2026-08-24 date:2026-08-24 by:codex src:concurrency/channel.c,concurrency/channel.h,concurrency/channel_effect.c,concurrency/effect.h,concurrency/README.org,tests/test_concurrency_channel.py conf:high]
+  Cycle 4.1 adds an independently replayed finite binary-session kernel. Two
+  distinct grade-one endpoints retain unique task owners and pointwise-dual
+  protocols. Buffered transitions preserve directional FIFO bounds;
+  zero-capacity channels require an atomic dual rendezvous; normal close consumes
+  both endpoints only at End; explicit cancellation terminally propagates to the
+  peer. Send, receive, close, and cancel reuse the existing scoped QTT effect
+  row and linear resumptions. This milestone proves local protocol fidelity and
+  bounded state, not global progress, deadlock freedom, delegation, choice, or
+  recursive protocols.
 
-Add bounded/rendezvous channels, select, atomics, mutexes, conditions,
-read-write locks, semaphores, barriers, once, and thread-local state.
+[FIX id:fix.concurrency.cycle-4-2-in-flight-authority-2026-08-24 date:2026-08-24 by:codex src:concurrency/channel.c,concurrency/channel.h,concurrency/README.org,tests/test_concurrency_delegation.py conf:high]
+  Cycle 4.2 gives higher-order endpoint payloads a conservation ledger rather
+  than treating them as integers. Each authority retains an exact grade-one QTT
+  quantity, canonical non-overlapping place, protocol type, and exclusive state:
+  task-owned, uniquely in-flight in a directional FIFO slot, or terminally
+  cancelled. Buffered receive transfers authority to the receiver exactly once;
+  rendezvous transfers atomically; carrier cancellation consumes every queued
+  endpoint as explicit evidence. Whole-network recursive cancellation and
+  delegated endpoint execution remain named boundaries.
 
-** C4 — semantic tooling
+[FIX id:fix.concurrency.cycle-4-3-network-cancellation-closure-2026-08-24 date:2026-08-24 by:codex src:concurrency/network.c,concurrency/network.h,concurrency/README.org,tests/test_concurrency_network.py conf:high]
+  Cycle 4.3 computes and independently replays the least E-Zap cancellation
+  closure over a finite higher-order endpoint graph. Global authorities remain
+  grade-one and pairwise disjoint under canonical QTT places; queue slots and
+  in-flight owners are unique. Canonical proof parents strictly decrease
+  shortest cancellation distance, so evidence is acyclic even for cyclic
+  delegation graphs. The certificate commits to the complete snapshot and
+  conserves one cancellation grade per reachable endpoint. Deriving the
+  snapshot from interleaved protocol traces remains the next explicit bridge.
 
-Publish scope, capture, lock, and atomic evidence through common diagnostics and
-LSP. Add deterministic schedule exploration and minimized replay.
+[FIX id:fix.concurrency.cycle-4-4-trace-snapshot-bridge-2026-08-24 date:2026-08-24 by:codex src:concurrency/network_trace.c,concurrency/network_trace.h,concurrency/channel.c,concurrency/channel.h,concurrency/README.org,tests/test_concurrency_network_trace.py conf:high]
+  Cycle 4.4 derives the finite E-Zap snapshot from one globally ordered trace
+  instead of trusting caller-authored queue edges. Buffered endpoint sends use
+  the Cycle 4.1 protocol predicates and Cycle 4.2 grade-one ownership ledger;
+  channel-local owners must agree with global QTT authority. A cancellation
+  frontier fixes the snapshot cut, after which Cycle 4.3 independently builds
+  and replays the least cancellation closure. Receive, rendezvous, effect-row
+  authorization, and task-cleanup coupling remain explicit future boundaries.
+
+[FIX id:fix.concurrency.cycle-4-5-receive-rendezvous-2026-08-24 date:2026-08-24 by:codex src:concurrency/network_trace.c,concurrency/network_trace.h,concurrency/README.org,tests/test_concurrency_network_trace.py conf:high]
+  Cycle 4.5 projects buffered receive by consuming the unique peer FIFO head,
+  compacting live queue slots, and transferring endpoint authority from
+  in-flight to the receiver. Zero-capacity rendezvous checks both dual actions
+  and both current owners atomically, transferring authority without a queue
+  edge. The receiver can immediately use the endpoint as a carrier, so dynamic
+  global ownership—not the channel's initial owner annotation—governs replay.
+
+[FIX id:fix.concurrency.cycle-4-6-global-effect-authorization-2026-08-24 date:2026-08-24 by:codex src:concurrency/network_trace.c,concurrency/network_trace.h,concurrency/channel_effect.c,concurrency/effect.h,concurrency/README.org,tests/test_concurrency_network_trace.py,tests/test_concurrency_channel.py conf:high]
+  Cycle 4.6 requires every semantically valid global channel event to have its
+  exact scoped QTT effect atom. Per-channel generative scope and type identities
+  feed the existing effect solver; send, receive, cancel, and the paired
+  send/receive obligation for rendezvous reuse the same step-authorization
+  helper as local channel verification. Operational errors retain precedence,
+  and no snapshot or cancellation certificate is built without full effect
+  authorization.
+
+[FIX id:fix.concurrency.cycle-4-7-cleanup-discharge-2026-08-24 date:2026-08-24 by:codex src:concurrency/cleanup_bridge.c,concurrency/cleanup_bridge.h,concurrency/README.org,tests/test_concurrency_cleanup_bridge.py conf:high]
+  Cycle 4.7 independently replays the effect-authorized E-Zap closure and the
+  Cycle 3 task trace, assigning every recursively cancelled endpoint one
+  grade-one discharge rooted in the actual channel-cancellation actor. That
+  actor must have an ordered cancel, observing checkpoint, masked cleanup
+  completion, and structured join lifecycle. The certificate commits to the
+  network proof and is independently rebuilt on verification. Cross-trace wall
+  clock ordering remains explicitly deferred to the deterministic interpreter.
+
+[FIX id:fix.concurrency.cycle-5-1-deterministic-temporal-replay-2026-08-24 date:2026-08-24 by:codex src:concurrency/deterministic.c,concurrency/deterministic.h,concurrency/README.org,tests/test_concurrency_cleanup_bridge.py conf:high]
+  Cycle 5.1 interprets one complete stable merge of the independently certified
+  task and channel projections under a monotonic virtual clock. Projection order
+  is conserved exactly. Channel cancellation must occur after the responsible
+  task observes cancellation at a checkpoint and before masked cleanup completes;
+  the later structured join remains enforced by Cycle 3. Replay certificates
+  commit to the schedule, final tick, and Cycle 4.7 cleanup proof. Enabledness,
+  blocking, DPOR exploration, and minimization remain explicit later milestones.
+
+[FIX id:fix.concurrency.cycle-5-2-prefix-enabledness-2026-08-24 date:2026-08-24 by:codex src:concurrency/deterministic.c,concurrency/deterministic.h,concurrency/README.org,tests/test_concurrency_cleanup_bridge.py conf:high]
+  Cycle 5.2 computes explicit task/channel enabledness at every stable schedule
+  prefix. Channel actors and rendezvous peers must be live; channel cancellation
+  requires the actor's observed masked-cleanup phase; cleanup completion and join
+  remain blocked until that task's channel-cancellation roots execute. The
+  interpreter consults this judgment before every selection. Local queue and
+  protocol blocking still belongs to the certified global channel projection
+  until its replay kernel exposes an incremental stepping interface.
+
+[FIX id:fix.concurrency.cycle-5-3-channel-reference-machine-2026-08-24 date:2026-08-24 by:codex src:concurrency/channel_machine.c,concurrency/channel.h,concurrency/README.org,tests/test_concurrency_channel.py conf:high]
+  Cycle 5.3 exposes an opaque incremental channel machine whose non-mutating
+  enabledness query replays accepted-prefix plus candidate through the existing
+  channel verifier. Queue full/empty, rendezvous peer waiting, protocol blocking,
+  terminal, invalid, and allocation outcomes remain classifications of the one
+  session semantics. Rejected transitions never mutate prefix state. This
+  replay-based reference is intentionally quadratic and becomes the differential
+  oracle for a future optimized machine and scheduler integration.
+
+[FIX id:fix.concurrency.cycle-5-4-scheduler-channel-machine-2026-08-24 date:2026-08-24 by:codex src:concurrency/deterministic.c,concurrency/deterministic.h,concurrency/channel_machine.c,concurrency/README.org,tests/test_concurrency_cleanup_bridge.py conf:high]
+  Cycle 5.4 projects proposed network events onto per-channel reference machines
+  without requiring whole-future certification, so scheduler enabledness can
+  expose local queue/protocol/rendezvous blocking. Exact scoped effects and task
+  liveness remain conjunctive requirements. Complete deterministic replay also
+  passes the projection through independent global network derivation,
+  differentially checking local and global acceptance. Dynamically received
+  carrier ownership remains an explicit next boundary.
+
+[FIX id:fix.concurrency.cycle-5-5-ownership-epochs-2026-08-24 date:2026-08-24 by:codex src:concurrency/channel.c,concurrency/channel.h,concurrency/channel_machine.c,concurrency/deterministic.c,concurrency/README.org,tests/test_concurrency_channel.py,tests/test_concurrency_network_trace.py conf:high]
+  Cycle 5.5 represents dynamic carrier ownership as sorted grade-one epochs at
+  exact local-prefix boundaries, preserving the owners under which earlier
+  actions were checked. The deterministic scheduler imports matching buffered
+  receive and atomic rendezvous handoffs from the global event order into the
+  endpoint's local machine. Forged source owners, omega quantities, mismatched
+  buffered receivers, and use while in flight fail closed; rejected epochs do
+  not mutate machine state. Complete replay retains independent global network
+  derivation as the authority/protocol/FIFO differential oracle.
+
+[FIX id:fix.concurrency.cycle-5-6-semantic-dependence-2026-08-24 date:2026-08-24 by:codex src:concurrency/dependence.c,concurrency/dependence.h,concurrency/README.org,tests/test_concurrency_dependence.py conf:high]
+  Cycle 5.6 adds one symmetric, conservative event-dependence oracle as the
+  semantic prerequisite for DPOR. Footprints reuse structured task identities,
+  session channel/endpoints, canonical QTT place overlap, existing scoped effect
+  identities, and cleanup-task roots. Results retain explicit conflict reasons;
+  malformed projections fail closed. This cycle does not claim source sets,
+  optimal exploration, or even executable commutation validation: adjacent-swap
+  certification is the next proof boundary.
+
+[FIX id:fix.concurrency.cycle-5-7-commutation-certificate-2026-08-24 date:2026-08-24 by:codex src:concurrency/commutation.c,concurrency/commutation.h,concurrency/README.org,tests/test_concurrency_commutation.py conf:high]
+  Cycle 5.7 executes the adjacent task/channel diamond required by DPOR
+  independence: both events must be co-enabled, Cycle 5.6-independent, remain
+  enabled after the opposite first step, and reach identical canonical semantic
+  state after both orders. Certificates commit to the prefix, exact pair, and
+  independently derived state fingerprints; verification rebuilds the diamond.
+  Projection order remains inviolable, schedule-order fingerprints are not state
+  equivalence, and uncertified diamonds conservatively remain dependent.
+
+[FIX id:fix.concurrency.cycle-5-8-certified-source-exploration-2026-08-24 date:2026-08-24 by:codex src:concurrency/exploration.c,concurrency/exploration.h,concurrency/README.org,tests/test_concurrency_commutation.py conf:high]
+  Cycle 5.8 adds bounded DFS exploration over the finite task/channel prefix
+  lattice. Exhaustive mode is the differential oracle. Certified-source mode
+  prunes the channel-first choice only when Cycle 5.7 rebuilds its commutation
+  diamond; every other two-way choice is retained as conservative backtracking.
+  Every leaf has an independently verified deterministic certificate, aggregate
+  verification reruns the search, and limit exhaustion returns no partial proof.
+  Mazurkiewicz-class coverage of exhaustive schedules remains the next explicit
+  proof boundary; this binary specialization is not claimed as N-process
+  optimal-DPOR or a wakeup-tree implementation.
+
+[FIX id:fix.concurrency.cycle-5-9-mazurkiewicz-coverage-2026-08-24 date:2026-08-24 by:codex src:concurrency/coverage.c,concurrency/coverage.h,concurrency/README.org,tests/test_concurrency_commutation.py conf:high]
+  Cycle 5.9 constructs one explicit adjacent-swap path from every exhaustive
+  schedule to a retained reduced representative. Each edge rebuilds the Cycle
+  5.7 commutation diamond at the evolving prefix; the independent verifier then
+  performs the swaps and demands exact representative equality. The aggregate
+  commits to both exploration proofs, schedule identities, bounded witness
+  paths, and total swaps. This proves Mazurkiewicz-class coverage for the finite
+  enumerated binary corpus, not unbounded or N-process optimality.
+
+[FIX id:fix.concurrency.cycle-5-16-native-channel-frontier-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.16 gives every modeled network step one native process owner and
+  derives candidate readiness by replaying the selected native network prefix
+  through the existing incremental channel oracle. Capacity, FIFO, protocol,
+  endpoint authority, and scoped QTT effect authorization therefore retain one
+  semantics. A capacity-one regression proves queue-empty and queue-full
+  blocking and exactly five schedules for one unrelated operation interleaved
+  with the uniquely valid four-step channel order. Native modeled-operation
+  dependence delegates task/channel pairs to the Cycle 5.6 semantic oracle and
+  preserves channel, authority, lifetime, cleanup, and effect conflict reasons.
+
+[FIX id:fix.concurrency.cycle-5-17-native-temporal-integration-2026-08-25 date:2026-08-25 by:codex src:concurrency/deterministic.c,concurrency/deterministic.h,concurrency/native.c,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.17 extracts the combined interpreter's task/channel temporal rule as
+  a reusable query over an arbitrary selected event set. Both deterministic and
+  native frontiers now use that single judgment. Native channel actors and
+  rendezvous peers must be live; endpoint cancellation requires observed masked
+  cleanup; cleanup completion and join wait for every modeled channel
+  cancellation rooted in the task. The three-process regression admits exactly
+  one complete cancellation/discharge schedule and retains premature
+  observation paths as explicit dead ends.
+
+[FIX id:fix.concurrency.cycle-5-18-native-commutation-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.18 certifies native N-process adjacent diamonds only for co-enabled
+  pairs accepted by the existing semantic dependence oracle. Both orders must
+  preserve reciprocal enabledness and yield identical recursively fingerprinted
+  finite continuation trees, including cursors, enabled operations, completion,
+  deadlock, and every successor behavior. A caller state bound fails closed;
+  verification rebuilds both trees. Regressions cover pure and structured/pure
+  diamonds, mutation, dependence, same-process selection, and bound exhaustion.
+
+[FIX id:fix.concurrency.cycle-5-19-native-reduction-coverage-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.19 adds a conservative native reduced exploration mode. A canonical
+  enabled process is retained alone only when Cycle 5.18 certifies its diamond
+  against every other enabled process; otherwise all branches remain. Coverage
+  construction maps every exhaustive schedule to a retained representative by
+  explicit adjacent swaps, rebuilding a native diamond at each evolving prefix.
+  Six pure schedules reduce to one with nine total witness swaps; five buffered
+  channel schedules reduce to one with complete constructive coverage.
+
+[FIX id:fix.concurrency.cycle-5-20-offline-wakeup-tree-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.20 partitions bounded exhaustive native schedules by connectivity
+  under freshly certified Cycle 5.18 adjacent swaps, retains one stable
+  representative per component, and inserts those representatives into a
+  prefix-sharing wakeup trie. The artifact commits equivalence-class and trie
+  node counts and is independently reconstructed. On the QTT-overlap corpus,
+  six schedules form two classes and seven trie nodes; Cycle 5.19 coverage
+  independently reconstructs all six from the two representatives. This is an
+  offline semantic oracle for later online wakeup insertion, not yet a claim of
+  optimal-DPOR complexity.
+
+[FIX id:fix.concurrency.cycle-5-21-streaming-wakeup-insertion-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.21 streams completed native executions into an explicit wakeup trie
+  without first retaining a global exhaustive exploration. Bounded adjacent-swap
+  search uses only fresh Cycle 5.18 diamonds to recognize an existing class;
+  otherwise the execution becomes a new representative and is inserted
+  immediately. The QTT-overlap regression succeeds with a retained-schedule
+  bound of two where the offline constructor fails, records six examined and
+  four redundant schedules, and retains the same two classes and seven nodes.
+  This is online insertion but still exhaustive DFS, not yet race-derived
+  wakeup obligations or Optimal-DPOR complexity.
+
+[FIX id:fix.concurrency.cycle-5-22-native-race-reversal-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.22 derives strict occurrence-level happens-before as the transitive
+  closure of process order and the shared QTT/effect/task/channel dependence
+  oracle. Cross-process cover edges become races only when the later process was
+  enabled before the earlier event. Each certificate retains the responsible
+  prefix and the full notdep(e,E).proc(e') reversal sequence, and independent
+  verification reconstructs the valid schedule, relation, reasons, and races.
+  QTT-place and scoped effect conflicts have parallel sanitizer regressions.
+  Prefix-local insertion and exploration remain the next explicit boundary.
+
+[FIX id:fix.concurrency.cycle-5-23-race-driven-wakeup-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.23 stores each Cycle 5.22 reversal as a prefix-indexed linear wakeup
+  obligation, replays its forced sequence through native enabledness, completes
+  the execution deterministically, and derives further races until every
+  obligation is discharged. The QTT and scoped-effect corpora each execute two
+  schedules instead of six while Cycle 5.19 independently covers all six from
+  the retained representatives. Obligation mutation and count exhaustion fail
+  closed under sanitizers. Sleep sets, weak-initial insertion, and the full
+  Optimal-DPOR theorem remain explicit future boundaries.
+
+[FIX id:fix.concurrency.cycle-5-24-weak-initial-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.24 certifies the non-transitive weak-initial relation v~[E]w by
+  enumerating bounded native completions on both sides of a fixed prefix and
+  constructing an exact path of Cycle 5.18 adjacent commutations between a
+  witness pair. Independent verification reconstructs positive and negative
+  decisions. The QTT regression accepts an unrelated/read pair and rejects the
+  causally conflicting write/read pair. Sleep-set-indexed ordered insertion is
+  the next explicit boundary.
+
+[FIX id:fix.concurrency.cycle-5-25-sleep-transfer-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.25 certifies Algorithm 2's prefix-local sleep update as
+  Sleep'={q in Sleep | E |= p diamond q}. It delegates every classification to
+  the existing native dependence judgment, retains independent processes in
+  stable input order, records removal reasons, and independently reconstructs
+  the result during verification. The QTT regression removes a conflicting
+  writer while retaining an unrelated sleeper. Prefix-indexed storage and
+  sleep-aware ordered wakeup insertion remain the next explicit boundary.
+
+[FIX id:fix.concurrency.cycle-5-26-wakeup-admissibility-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.26 certifies Definition 6.3 Property 1, WI[E](w) intersect Sleep is
+  empty, by checking every sleeping process independently with the bounded
+  Cycle 5.24 weak-initial judgment. Candidate executability is reconstructed
+  even for the vacuously admissible empty sleep set. Verification validates
+  nested certificate internals before replay, so hidden nested mutation fails
+  closed. Ordered insertion and Property 2 are the next explicit boundary.
+
+[FIX id:fix.concurrency.cycle-5-27-directed-initial-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.27 supplies the directed relation required by ordered insert[E]: the
+  finite right sequence is explored through bounded, Cycle 5.18-certified
+  adjacent commutations until an equivalent sequence beginning with the left
+  prefix is found. The exact swap path is retained and independently replayed.
+  The QTT regression accepts an unrelated swap and rejects a conflicting
+  writer/read reversal. With weak initiality, sleep admissibility, and directed
+  initiality now executable, ordered mutation is the next explicit boundary.
+
+[FIX id:fix.concurrency.cycle-5-28-ordered-wakeup-insert-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.28 implements ordered insert[E] over native wakeup nodes. Post-order
+  weak-initial search selects the smallest anchor; an existing leaf suppresses
+  insertion, while an internal anchor receives the shortest extension accepted
+  by the directed-initial oracle. Input and output tries independently enforce
+  sleep admissibility, structural leaves, and every Definition 6.3 Property 2
+  earlier-sibling obligation. QTT regressions cover append, suppression, replay,
+  and terminal mutation. Prefix-owned explorer integration is next.
+
+[FIX id:fix.concurrency.cycle-5-29-ordered-wakeup-audit-2026-08-25 date:2026-08-25 by:codex src:concurrency/native.c,concurrency/native.h,concurrency/README.org,tests/test_concurrency_native.py conf:high]
+  Cycle 5.29 adds an integrated explorer mode that reconstructs each race
+  obligation's prefix sleep set, requires certified ordered insertion, and
+  transfers sleep state across every forced edge before accepting the result.
+  The QTT corpus retains two representatives covering six exhaustive schedules,
+  with one insertion, one sleep transition, and zero blocked edges. Verification
+  reconstructs the entire audit. Cycle 5.23 still controls branch discovery;
+  recursive prefix-owned Algorithm 2 state is the next explicit boundary.
 
 * Research basis
 

@@ -489,6 +489,13 @@ LLVM function with no type tags or dispatch overhead.
 :CONFIDENCE: high
 :END:
 
+[FIX id:fix.codegen.initialized-fixed-array-storage-2026-08-25 date:2026-08-25 by:codex src:codegen.c,tests/wisp_initialized_buffer.mon,tests/test_wisp_initialized_buffer.py conf:high]
+  An explicitly sized initialized array is materialized as its declared
+  =[N x T]= global storage.  It is not first lowered into =arr.fat*= and then
+  stored into that global: doing so exposed address bits as array elements and
+  made values nondeterministic across executions.  Initializer elements are
+  cast to the declared element type and stored into their fixed slots.
+
 [OBS id:obs.codegen.fn.arr-fat-data src:codegen.h:129 conf:high]
   =arr_fat_data(CodegenContext *ctx, LLVMValueRef fat_ptr, Type *elem_type)=
   — Extracts the data pointer (=elem_type *=) from a fat array pointer struct.

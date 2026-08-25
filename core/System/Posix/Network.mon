@@ -13,15 +13,19 @@
 
 module System.Posix.Network
   [SockAddrIn
-   AF_INET SOCK_STREAM SOL_SOCKET SO_REUSEADDR
-   sys-socket sys-bind sys-listen sys-accept sys-reuse-address
-   sys-recv sys-send-from]
+   AF_INET SOCK_STREAM SOCK_CLOEXEC SOL_SOCKET SO_REUSEADDR SO_RCVTIMEO SHUT_WR
+   sys-socket sys-bind sys-listen sys-accept sys-accept-close-on-exec
+   sys-recv sys-send-from sys-send-text-from sys-shutdown-write sys-receive-timeout
+   sys-network-buffer-allocate sys-network-buffer-release]
 
 
 define AF_INET      2
 define SOCK_STREAM  1
+define SOCK_CLOEXEC 0x80000
 define SOL_SOCKET   1
 define SO_REUSEADDR 2
+define SO_RCVTIMEO  20
+define SHUT_WR      1
 
 
 layout SockAddrIn
@@ -29,6 +33,11 @@ layout SockAddrIn
   [port    :: U16]
   [address :: U32]
   [zero    :: U64]
+
+
+layout Timeval
+  [seconds      :: Int]
+  [microseconds :: Int]
 
 
 define sys-socket :: Int -> Int -> Int -foreign-> Int
@@ -66,6 +75,16 @@ define sys-accept :: Int -foreign-> Int
         syscall ret
 
 
+define sys-accept-close-on-exec :: Int -foreign-> Int
+  socket ->
+    asm mov 288    %rax
+        mov socket %rdi
+        mov 0      %rsi
+        mov 0      %rdx
+        mov 0x80000 %r10
+        syscall ret
+
+
 define sys-reuse-address :: Int -foreign-> Int
   socket ->
     asm mov 1      %rcx
@@ -79,6 +98,17 @@ define sys-reuse-address :: Int -foreign-> Int
         syscall
         add 8      %rsp
         ret
+
+
+define sys-receive-timeout :: Int -> *Timeval -foreign-> Int
+  socket timeout ->
+    asm mov timeout %r10
+        mov 54      %rax
+        mov socket  %rdi
+        mov 1       %rsi
+        mov 20      %rdx
+        mov 16      %r8
+        syscall ret
 
 
 define sys-recv :: Int -> *U8 -> Int -foreign-> Int
@@ -104,4 +134,46 @@ define sys-send-from :: Int -> *U8 -> Int -> Int -foreign-> Int
         mov 0x4000 %r10
         mov 0      %r8
         mov 0      %r9
+        syscall ret
+
+
+define sys-send-text-from :: Int -> String -> Int -> Int -foreign-> Int
+  socket text offset size ->
+    asm mov size   %r9
+        add text offset
+        mov 44     %rax
+        mov socket %rdi
+        mov text   %rsi
+        mov %r9    %rdx
+        mov 0x4000 %r10
+        mov 0      %r8
+        mov 0      %r9
+        syscall ret
+
+
+define sys-shutdown-write :: Int -foreign-> Int
+  socket ->
+    asm mov 48     %rax
+        mov socket %rdi
+        mov 1      %rsi
+        syscall ret
+
+
+define sys-network-buffer-allocate :: Int -foreign-> *U8
+  size ->
+    asm mov 9      %rax
+        mov size   %rsi
+        mov 0      %rdi
+        mov 3      %rdx
+        mov 0x22   %r10
+        mov -1     %r8
+        mov 0      %r9
+        syscall ret
+
+
+define sys-network-buffer-release :: *U8 -> Int -foreign-> Int
+  buffer size ->
+    asm mov 11     %rax
+        mov buffer %rdi
+        mov size   %rsi
         syscall ret

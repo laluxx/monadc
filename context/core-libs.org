@@ -2758,3 +2758,144 @@ filesystem objects.
   uses explicit mutable stream state beneath a native =while= loop, so one
   stack frame serves an arbitrarily long connection rather than recursing once
   per four-KiB chunk.
+
+[FIX id:fix.core-libs.network-owned-stream-buffer-2026-08-23 date:2026-08-23 by:codex src:core/Network/Socket.mon,core/System/Posix/Network.mon,asm.c,tests/test_foreign_pointer_return.py,tests/test_tcp_server.py conf:high]
+  =Network.Socket= exposes protocol-neutral, connection-owned =SocketBuffer=
+  values and typed receive outcomes for data, retry, EOF, and failure. Callers
+  explicitly release buffers, finish the write side, and close sockets; a
+  zero-byte send with bytes remaining is failure rather than silent data loss.
+
+  Listener and accepted descriptors request close-on-exec atomically. Restricted
+  runtimes that reject those flags fall back only for =EPERM=, =EINVAL=, or
+  =ENOSYS= and immediately apply =FD_CLOEXEC= before exposing the descriptor.
+  The live regression checks fragmentation, large streams, reset isolation,
+  descriptor ownership, and inheritable state through the host kernel.
+
+[FIX id:fix.core-libs.foreign-pointer-return-2026-08-23 date:2026-08-23 by:codex src:asm.c,tests/test_foreign_pointer_return.py conf:high]
+  Inline assembly functions returning =Pointer= now use an LLVM pointer result
+  instead of an integer result followed by runtime boxing. This preserves the
+  foreign ABI and prevents an assembly =ret= from bypassing a compiler-created
+  stack epilogue. The executable regression returns a raw byte pointer from
+  foreign assembly and passes it directly to =write(2)=.
+
+[DEC id:dec.core-libs.incremental-parser-framing-2026-08-23 date:2026-08-23 by:codex src:core/Text/Parser/Stream.mon,tests/core_text_parser_stream.mon conf:high]
+  Incremental delivery is represented by =ParserStreamReply=: partial state,
+  one complete delimiter-framed byte sequence plus untouched trailing bytes,
+  or an exact budget failure. The continuation owns a persistent =Byte= chain
+  rather than placing a list inside a layout. Protocol grammars choose their
+  delimiter and invoke strict =Text.Parser= parsing only after framing, so TCP
+  fragments never become grammar tokens and accumulated input is not reparsed
+  after every read.
+
+[FIX id:fix.core-libs.socket-buffer-byte-boundary-2026-08-23 date:2026-08-23 by:codex src:core/Network/Socket.mon,tests/test_tcp_server.py conf:high]
+  =buffer-bytes= copies the received prefix of an owned socket buffer into an
+  immutable =[Byte]= sequence. This is the explicit ownership boundary between
+  reusable kernel storage and persistent protocol parser state; applications
+  do not index raw pointers or misdescribe network octets as arbitrary Ints.
+
+[DEC id:dec.core-libs.strict-http-request-head-2026-08-23 date:2026-08-23 by:codex src:core/Web/HTTP.mon,tests/core_web_http.mon conf:high]
+  =Web.HTTP= owns strict HTTP/1.1 request-head meaning after incremental stream
+  framing. Request lines require exactly one SP between a token method, a
+  bounded target, and =HTTP/1.1=; every line uses CRLF; field names use HTTP
+  token syntax; field values reject control bytes and obsolete folding. Total
+  head, request-line, target, and header-count limits are explicit inputs, and
+  failures retain an HTTP status and source offset instead of collapsing into
+  a Boolean parse result.
+
+[FIX id:fix.compiler.adt-constructor-codegen-arity-2026-08-23 date:2026-08-23 by:codex src:codegen.c,tests/test_adt_constructor_arity.py conf:high]
+  Code generation validates an ADT constructor application's argument count
+  before constructing its LLVM call. Imported constructors could previously
+  reach codegen with a missing argument, leave part of the LLVM argument array
+  uninitialized, and segfault inside =LLVMBuildCall2=. The compiler now emits a
+  source diagnostic with expected and actual arity, and the regression proves
+  the process exits normally rather than crashing.
+
+[FIX id:fix.compiler.byte-pointer-generic-abi-2026-08-23 date:2026-08-23 by:codex src:codegen.c,dep.c,infer.c,tests/core_byte_collection.mon,tests/test_foreign_pointer_return.py conf:high]
+  Raw pointer indexing is typed by its pointee and lowers to an exact LLVM
+  element load, including =*U8 -> U8=. =Byte= casts truncate to one octet, and
+  primitive values are boxed whenever they cross an erased generic pointer
+  ABI, including a function's first call before its final declaration exists.
+  Executable regressions cover both foreign pointer dereference and =Byte=
+  collection construction.
+
+[DEC id:dec.core-libs.web-server-boundary-2026-08-23 date:2026-08-23 by:codex src:core/Web/Server.mon,core/Web/HTTP.mon,core/Text/Parser/Stream.mon,tests/test_web_server.py conf:high]
+  =Web.Server= owns bounded incremental request framing, strict HTTP decoding,
+  complete response transmission, shutdown, buffer release, and accepted
+  socket closure. Applications supply only a pure
+  =(HttpRequest -> HttpResponse)= route. The live loopback regression splits a
+  request across arbitrary TCP fragments, verifies exact status, headers, and
+  bodies, rejects malformed syntax, proves continued service, and checks that
+  accepted descriptors do not leak.
+
+[FIX id:fix.tests.core-artifact-preservation-2026-08-23 date:2026-08-23 by:codex src:tests/run_core.py,tests/test_run_core.py conf:high]
+  Core-test cleanup removes only artifacts created by the current test run.
+  Every pre-existing candidate path, including an untracked source directory
+  whose name resembles a generated module stem, is preserved. The regression
+  enumerates every artifact candidate before cleanup so a test command cannot
+  silently delete working-tree source again.
+
+[DEC id:dec.core-libs.http-message-framing-2026-08-23 date:2026-08-23 by:codex src:core/Web/HTTP.mon,core/Web/Server.mon,tests/core_web_http.mon,tests/test_web_server.py conf:high]
+  HTTP request decoding now covers the complete bounded message, not only its
+  head. Header lookup is ASCII case-insensitive; HTTP/1.1 requires exactly one
+  =Host=; duplicate =Host= and =Content-Length= fields are rejected; decimal
+  content lengths are strict and bounded before payload reads; and unsupported
+  transfer codings return 501. Bytes already received after the head delimiter
+  seed body collection, with later TCP fragments read until the declared body
+  is complete. The live regression proves a deliberately fragmented =POST=
+  body and the protocol-error paths through the host network stack.
+
+[FIX id:fix.core-libs.http-head-semantics-2026-08-23 date:2026-08-23 by:codex src:core/Web/Server.mon,tests/test_web_server.py conf:high]
+  =Web.Server= renders =HEAD= with the same representation metadata, including
+  the =Content-Length= of the corresponding handler response, while suppressing
+  the response body on the wire. Applications do not duplicate routes or know
+  about this transport-level method rule.
+
+[FIX id:fix.compiler.bool-call-native-tags-2026-08-23 date:2026-08-23 by:codex src:codegen.c,tests/test_bool_call_lowering.py,tests/test_how_to_examples.py conf:high]
+  Typed call lowering preserves Bool's native false=0/true=1 representation
+  when normalizing finite-set arguments. The generic finite-set ordinal rule
+  previously inverted =True= and =False= because Bool is declared in public
+  source order ={True False}=. A focused executable regression and the installed
+  WebHTML reader regression cover the compiler boundary.
+
+[FIX id:fix.core-libs.donut-angle-shipping-and-list-patterns-2026-08-23 date:2026-08-23 by:codex src:core/Math/Angle.mon,core/prelude/Data/List.mon,pmatch.c,tests/test_how_to_examples.py conf:high]
+  =Math.Angle= is a shipped source dependency of Donut and must exist in both
+  checkout and installed Core trees. The Donut executable regression fails
+  before compilation when that source is absent. =Data.List.intersperse= and
+  =intercalate= use the real singleton patterns =[x]= and =[values]=; cons-tail
+  syntax accepts only a tail binding or wildcard after =|=. Pattern recovery
+  diagnostics now include source path, line, and column rather than anonymous
+  stderr warnings, while public Donut compilation is required to emit none.
+
+[DEC id:dec.core-libs.http-isolated-workers-2026-08-23 date:2026-08-23 by:codex src:core/Web/Server.mon,core/System/Posix/Process.mon,tests/test_web_server.py conf:high]
+  HTTP connections execute in isolated worker processes because the current
+  Monad runtime and compiler retain process-global mutable state and do not yet
+  provide a safe shared-heap threading contract. A fixed pool of four workers
+  shares the listener and accepts complete connection lifetimes; this gives a
+  hard concurrency bound and lets the kernel backlog apply backpressure without
+  per-request process churn. Each worker asks Linux for a parent-death signal
+  and verifies its expected parent after installing that link, closing the
+  fork/termination race. The parent waits on the pool, and terminating it closes
+  the listener and removes every worker. The live regression proves stable pool
+  size, saturation backpressure, recovery after request deadlines, and clean
+  parent-triggered worker shutdown.
+
+[OBS id:obs.core-libs.foreign-forward-call-lowering-2026-08-23 date:2026-08-23 by:codex src:core/System/Posix/Process.mon conf:high]
+  A source call to a later-defined foreign function currently lowers through an
+  unresolved runtime closure instead of the eventual direct foreign symbol; in
+  the process boundary this returned =-1= without executing =wait4=. Keep raw
+  foreign seams above their readable wrappers until the compiler resolves
+  forward foreign calls correctly. This is a compiler target, not web policy.
+
+[DEC id:dec.core-libs.http-inactivity-deadline-2026-08-23 date:2026-08-23 by:codex src:core/System/Posix/Network.mon,core/Network/Socket.mon,core/Web/Server.mon,tests/test_web_server.py conf:high]
+  Each HTTP worker installs a kernel receive timeout before its first read.
+  =Network.Socket= distinguishes timeout from interruption, failure, EOF, and
+  ready bytes; =Web.Server= translates incomplete timed-out messages into 408
+  and still performs shutdown, buffer release, and socket close. The
+  =setsockopt= syscall boundary preserves the timeout pointer before overwriting
+  argument registers, preventing allocator-dependent =EFAULT= failures.
+[FIX id:fix.core-libs.graphics-vulkan-shader-lifecycle-2026-08-25 date:2026-08-25 by:codex src:core/Graphics/Vulkan.mon,tests/core_graphics_vulkan.mon,tests/test_core_graphics_vulkan.py conf:high]
+  =Graphics.Vulkan= begins as Core-owned checked resource plumbing.  Shader
+  creation consumes a pointer to contiguous =U32= SPIR-V words plus their word
+  count, constructs =VkShaderModuleCreateInfo= inside Core, and returns an
+  explicit success/failure value carrying the native =I32 VkResult=.  Matching
+  destruction is also Core-owned; tutorials must not duplicate this lifecycle.

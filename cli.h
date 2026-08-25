@@ -16,6 +16,7 @@ typedef enum {
     CMD_LSP,
     CMD_EVAL,
     CMD_DEBUG,
+    CMD_SPIRV,
 } CommandMode;
 
 typedef struct {
@@ -55,6 +56,7 @@ typedef struct {
     char *input_file;
     char *eval_code;
     char *package_name;
+    char *spirv_name;
 } CompilerFlags;
 
 /* print_usage is now defined in completion.c */

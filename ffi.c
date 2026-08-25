@@ -245,6 +245,42 @@ static void ffi_add_function(FFIContext *ctx, FFIFunction fn) {
     ctx->functions[ctx->function_count++] = fn;
 }
 
+/* C aggregates cross the foreign boundary by value.  Monad keeps layout
+ * values behind pointers internally, but exposing that representation in an
+ * LLVM function declaration changes the platform ABI and makes callees read
+ * pointer bits as fields. */
+static LLVMTypeRef ffi_abi_type_to_llvm(CodegenContext *cg, Type *type) {
+    if (!type || type->kind != TYPE_LAYOUT)
+        return type_to_llvm(cg, type);
+
+    Type *full = type;
+    if (type->layout_field_count == 0 && type->layout_name) {
+        Type *registered = env_lookup_layout(cg->env, type->layout_name);
+        if (registered)
+            full = registered;
+    }
+    if (full->layout_is_scalar && full->layout_field_count == 1)
+        return type_to_llvm(cg, full->layout_fields[0].type);
+
+    /* Clang's x86-64 C ABI coerces small plain aggregates into integer
+     * registers. Keep declarations compatible with the header-generated
+     * object code in both argument and return position. */
+    if (full->layout_total_size > 0 && full->layout_total_size <= 4)
+        return LLVMInt32TypeInContext(cg->context);
+    if (full->layout_total_size > 4 && full->layout_total_size <= 8)
+        return LLVMInt64TypeInContext(cg->context);
+
+    (void)type_to_llvm(cg, full);
+    if (full->layout_name) {
+        char name[256];
+        snprintf(name, sizeof(name), "layout.%s", full->layout_name);
+        LLVMTypeRef aggregate = LLVMGetTypeByName2(cg->context, name);
+        if (aggregate)
+            return aggregate;
+    }
+    return type_to_llvm(cg, type);
+}
+
 static void ffi_add_constant(FFIContext *ctx, FFIConstant c) {
     if (ctx->constant_count >= ctx->constant_cap) {
         ctx->constant_cap *= 2;
@@ -1565,14 +1601,14 @@ void ffi_inject_into_env(FFIContext *ffi, CodegenContext *cg) {
                     ep[j].type = type_clone(ptype);
                     continue;
                 }
-                pt[j] = ptr_t;
+                pt[j] = ffi_abi_type_to_llvm(cg, ptype);
             } else {
                 pt[j] = type_to_llvm(cg, ptype);
             }
         }
 
         LLVMTypeRef ret_llvm = f->return_type
-            ? type_to_llvm(cg, f->return_type)
+            ? ffi_abi_type_to_llvm(cg, f->return_type)
             : LLVMVoidTypeInContext(cg->context);
 
         LLVMTypeRef fn_type = LLVMFunctionType(ret_llvm, pt,

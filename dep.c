@@ -1542,6 +1542,7 @@ static Type *embedded_collection_elem(Type *t) {
     if (!t) return NULL;
     if (t->kind == TYPE_COLL) return t->element_type;
     if (t->kind == TYPE_ARR) return t->arr_element_type;
+    if (t->kind == TYPE_PTR) return t->element_type;
     if (t->kind == TYPE_LIST && t->list_count == 1) return t->list_elem;
     return NULL;
 }
@@ -2484,7 +2485,8 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
             // Handle collections acting as functions (indexing)
             if (fn_ty && fn_ty->kind == VAL_EMBED && fn_ty->embed_type) {
                 int k = fn_ty->embed_type->kind;
-                if (k == TYPE_COLL || k == TYPE_LIST || k == TYPE_ARR || k == TYPE_STRING || k == TYPE_MAP) {
+                if (k == TYPE_COLL || k == TYPE_LIST || k == TYPE_ARR ||
+                    k == TYPE_PTR || k == TYPE_STRING || k == TYPE_MAP) {
                     if (k != TYPE_MAP) {
                         if (!dep_check(ctx, t->app_args[i], val_embed(type_int()))) return NULL;
                     }
@@ -2492,6 +2494,8 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
                     if (k == TYPE_COLL) elem_type = fn_ty->embed_type->element_type;
                     else if (k == TYPE_LIST && fn_ty->embed_type->list_count == 1) elem_type = fn_ty->embed_type->list_elem;
                     else if (k == TYPE_ARR) elem_type = fn_ty->embed_type->arr_element_type;
+                    else if (k == TYPE_PTR) elem_type = fn_ty->embed_type->element_type;
+                    else if (k == TYPE_STRING) elem_type = type_char();
 
                     if (elem_type) {
                         fn_ty = val_embed(type_clone(elem_type));
@@ -3508,13 +3512,25 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
         }
 
     } else if (ast->type == AST_LIST) {
+        if (ast->list.count == 2 &&
+            ast->list.items[0]->type == AST_SYMBOL &&
+            strcmp(ast->list.items[0]->symbol, "*") == 0) {
+            Term *pointee = dep_term_of_type_ast(ctx, ast->list.items[1]);
+            if (pointee && pointee->kind == TERM_EMBED && pointee->embed_type)
+                res = term_embed(type_ptr(type_clone(pointee->embed_type)));
+            else
+                res = term_embed(type_ptr(type_unknown()));
+        }
+
         bool is_arrow = false;
         for (size_t i = 0; i < ast->list.count; i++) {
             if (ast->list.items[i]->type == AST_SYMBOL && strcmp(ast->list.items[i]->symbol, "->") == 0) {
                 is_arrow = true; break;
             }
         }
-        if (is_arrow) {
+        if (res) {
+            /* Prefix pointer sugar was fully elaborated above. */
+        } else if (is_arrow) {
             size_t arrow_idx = 0;
             for (size_t i = 0; i < ast->list.count; i++) {
                 if (ast->list.items[i]->type == AST_SYMBOL && strcmp(ast->list.items[i]->symbol, "->") == 0) {

@@ -557,6 +557,20 @@
   way. These should become explicit expected-failure or bug-fix fixtures when
   the C FFI implementation work starts, not green parser-only rows.
 
+[FIX id:fix.language.effect-arrow-wisp-arity-2026-08-23 date:2026-08-23 by:codex src:wisp.c,tests/test_forward_foreign_and_higher_order.py conf:high]
+  Wisp's whole-source arity prescan treats =TOK_EFFECT_ARROW= as a function
+  arrow everywhere ordinary =TOK_ARROW= is accepted. Later-defined foreign
+  functions therefore have their real arity before earlier bodies expand, and
+  recursive higher-order =-io->= signatures retain function-valued parameters
+  instead of flattening them into extra arguments.
+
+[FIX id:fix.language.ffi-void-and-unknown-abi-2026-08-23 date:2026-08-23 by:codex src:codegen.c,tests/test_how_to_examples.py conf:high]
+  FFI argument conversion permits absent inferred metadata when code generation
+  already produced a native value, treating it like unknown type evidence
+  instead of dereferencing null. Bare nullary C functions returning =void= emit
+  unnamed LLVM calls and a Unit sentinel, so LLVM never receives an illegal
+  named void instruction.
+
 * Codegen Diagnostics
 :PROPERTIES:
 :ID: monadc.context.language.codegen-diagnostics
@@ -3035,3 +3049,23 @@ Test-driven observations and failure records for the corresponding subsystem.
   Test-context anchor used by the categorized test suite. The concrete
   fixtures and TSV rows remain the source of executable truth; this node
   makes TEST-CONTEXT links resolvable and searchable from the context graph.
+
+[FIX id:fix.language.ffi-layout-value-abi-2026-08-24 date:2026-08-24 by:codex src:ffi.c,codegen.c conf:high]
+  Header-imported C layouts cross only the foreign boundary using the target C
+  aggregate ABI. Four- and eight-byte layouts use the integer-register
+  coercions emitted by Clang; larger layouts retain their aggregate LLVM type.
+  Monad heap-backed layout values are loaded before foreign calls, and foreign
+  aggregate returns are copied back into stable Monad layout storage. Internal
+  ADTs never enter this FFI conversion path.
+
+[FIX id:fix.language.runtime-array-pattern-element-evidence-2026-08-24 date:2026-08-24 by:codex src:codegen.c conf:high]
+  Pattern projection from a runtime-sized raw array uses the pattern head's
+  inferred scalar type when the bare =Arr= annotation has no element evidence.
+  It loads the native element width directly instead of interpreting raw
+  integers as boxed RuntimeValue pointers.
+
+[FIX id:fix.language.variadic-rest-signature-2026-08-24 date:2026-08-24 by:codex src:env.c,infer.c conf:high]
+  Explicit rest annotations participate in declared HM signatures as a
+  collection of the repeated element type. Collection/list unification keeps
+  repeated scalar types intact while still unwrapping a parenthesized nested
+  collection type, so =define first :: . Int -> Int= accepts scalar arguments.

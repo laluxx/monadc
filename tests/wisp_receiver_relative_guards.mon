@@ -9,6 +9,7 @@
 :TEST-CLI-TARGET wisp receiver-relative-guards
 
 import Data.Char
+import Text.LineEditor
 
 module Wisp.ReceiverRelativeGuards []
 
@@ -37,12 +38,18 @@ define selected-scalar? :: Int -> Bool
          | otherwise                 -> False
 
 
-define word-char? :: Int -> Bool
+define guard-word-char? :: Int -> Bool
   c | >= 0x30 and <= 0x39 -> True
     | >= 0x41 and <= 0x5a -> True
     | >= 0x61 and <= 0x7a -> True
     | = 0x5f              -> True
     | otherwise           -> False
+
+
+define editor-kill-key? :: Int -> Bool
+  key | = LineEditor.key-ctrl-k -> True
+      | = LineEditor.key-ctrl-u -> True
+      | otherwise               -> False
 
 
 define same-pair? :: Int -> Int -> Bool
@@ -71,9 +78,11 @@ tests
   assert-eq (selected-scalar? 0x2329) True "relative equality guard applies the subject"
   assert-eq (selected-scalar? 0x1f642) True "relative range guards work after an equality clause"
   assert-eq (selected-scalar? 0x20000) False "continuation guards preserve their subject"
-  assert-eq (word-char? 0x30) True "compound decimal range guards apply their receiver"
-  assert-eq (word-char? 0x5f) True "a receiver-relative equality can follow ranges"
-  assert-eq (word-char? 0x2f) False "the otherwise continuation remains exhaustive"
+  assert-eq (guard-word-char? 0x30) True "compound decimal range guards apply their receiver"
+  assert-eq (guard-word-char? 0x5f) True "a receiver-relative equality can follow ranges"
+  assert-eq (guard-word-char? 0x2f) False "the otherwise continuation remains exhaustive"
+  assert-eq (editor-kill-key? LineEditor.key-ctrl-k) True "relative guards preserve qualified constant operands"
+  assert-eq (editor-kill-key? LineEditor.key-ctrl-a) False "qualified relative guards retain their fallback"
   assert-eq (sample-visible? (GuardSample 0 0 1.0)) True "relative field guards access the unary subject"
   assert-eq (sample-visible? (GuardSample (0 - 1) 0 1.0)) False "relative field guards reject a negative field"
   assert-eq (sample-visible? (GuardSample 0 0 0.0)) False "continuation field guards retain the unary subject"

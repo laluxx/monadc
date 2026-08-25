@@ -1,0 +1,23 @@
+:TEST-ID tests.core.web-server
+:TEST-CONTEXT monadc.context.core-libs.web-server
+:TEST-PURPOSE HTTP responses render complete protocol-correct messages.
+:TEST-EXPECT compile, run, response rendering assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY web-server
+
+import Web.Server
+
+module Core.WebServer
+  []
+
+
+define rendered :: String
+  render-response (text-response 200 "OK" "hello")
+
+
+tests
+  assert-eq (starts-with? rendered "HTTP/1.1 200 OK\r\n") True "Responses begin with an HTTP status line"
+  assert-eq (contains? rendered "Content-Type: text/plain; charset=utf-8\r\n") True "Text responses declare their media type"
+  assert-eq (contains? rendered "Content-Length: 5\r\n") True "Content length is measured from the body"
+  assert-eq (contains? rendered "Connection: close\r\n\r\nhello") True "Headers terminate before the exact body"

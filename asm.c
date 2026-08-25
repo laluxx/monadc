@@ -496,9 +496,14 @@ LLVMValueRef codegen_inline_asm(LLVMContextRef context,
                                      params, param_count, naked);
 
     LLVMTypeRef llvm_ret_type;
-    if (return_type->kind == TYPE_FLOAT)     llvm_ret_type = LLVMDoubleTypeInContext(context);
-    else if (return_type->kind == TYPE_CHAR) llvm_ret_type = LLVMInt8TypeInContext(context);
-    else                                     llvm_ret_type = LLVMInt64TypeInContext(context);
+    if (return_type->kind == TYPE_FLOAT)
+        llvm_ret_type = LLVMDoubleTypeInContext(context);
+    else if (return_type->kind == TYPE_CHAR)
+        llvm_ret_type = LLVMInt8TypeInContext(context);
+    else if (return_type->kind == TYPE_PTR)
+        llvm_ret_type = LLVMPointerType(LLVMInt8TypeInContext(context), 0);
+    else
+        llvm_ret_type = LLVMInt64TypeInContext(context);
 
     if (naked) {
         // Raw asm: no inputs, no outputs, no constraints

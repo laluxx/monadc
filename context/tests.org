@@ -1347,6 +1347,30 @@ Test-driven observations and failure records for the corresponding subsystem.
   test mode, then imports it normally from the same cache and proves the
   production program neither executes nor links the embedded test entrypoint.
 
+[FIX id:fix.tests.donut-shipped-angle-guard-2026-08-23 date:2026-08-23 by:codex src:tests/test_how_to_examples.py,tests/test_run_core.py conf:high]
+  The Donut regression treats =core/Math/Angle.mon= as required distribution
+  input before compilation and rejects pattern-recovery warnings. Core-runner
+  artifact cleanup snapshots a pre-existing same-stem source directory before
+  executing a module and never removes it, covering the =Math.mon=/=Math/=
+  namespace shape as well as generated module artifacts.
+
+[FIX id:fix.tests.web-slow-client-and-worker-lifecycle-2026-08-23 date:2026-08-23 by:codex src:tests/test_web_server.py conf:high]
+  The live WebServer regression stops one client midway through its header,
+  requires a second health request to complete in under one second, requires
+  the stalled request to receive 408 after inactivity, and requires exactly
+  four persistent workers. It then saturates all workers, observes backlog
+  backpressure, proves recovery after the two-second deadlines, terminates the
+  parent, and requires every recorded worker PID to disappear. This covers the
+  concurrency bound, deadline classification, response cleanup, and process
+  lifecycle together.
+
+[FIX id:fix.tests.graphics-ffi-and-effect-forward-calls-2026-08-23 date:2026-08-23 by:codex src:tests/test_how_to_examples.py,tests/test_forward_foreign_and_higher_order.py conf:high]
+  Compiler regressions execute an earlier wrapper around a later =-foreign->=
+  definition and a recursive higher-order =-io->= function, both producing 42.
+  Public regressions also compile the unchanged Raylib and GLFW header-only
+  examples, covering block-until grouping, struct construction, pointer-return
+  inference, nullary C void calls, and real system-header/library discovery.
+
 [FIX id:fix.tests.standalone-prelude-topology-2026-08-14 date:2026-08-14 by:codex src:main.c,module.c,tests/test_module_test_artifact_isolation.py conf:high]
   A Core module passing under =tests/run_core.py= must also compile directly
   from its checkout with the installed compiler.  Relative dependency paths
@@ -1360,3 +1384,10 @@ Test-driven observations and failure records for the corresponding subsystem.
   beside a separate Core, places a newer orphan =Functor.module.o= in the
   checkout, and proves standalone =Sequence.mon= compilation still succeeds
   without consuming or overwriting the orphan.
+
+[FIX id:fix.tests.raylib-color-abi-2026-08-24 date:2026-08-24 by:codex src:tests/test_how_to_examples.py conf:high]
+  The Raylib regression executes =ColorToInt= on a constructed transparent
+  =Color= and on a =Color= returned by =Fade=. Both must print exactly zero,
+  covering deterministic C aggregate arguments and returns without a display.
+  The existing old-Core predicate-guard and variadic-signature fixtures cover
+  the adjacent raw-array element and rest-parameter inference repairs.

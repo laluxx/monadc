@@ -1,0 +1,1887 @@
+#+title: Monad Concurrency Research Core
+#+STARTUP: showeverything
+#+OPTIONS: toc:3 num:t
+#+FILETAGS: :monad:concurrency:qtt:structured-concurrency:research:
+
+* Purpose and claim boundary
+
+  This directory develops Monad's concurrency model as an executable calculus,
+  not as a collection of thread wrappers.  The source language should make task
+  lifetime and authority transfer checkable before a scheduler or operating
+  system is involved.
+
+  The current implementation proves the Cycle 1 authority-conservation law,
+  the Cycle 2 scoped-loan law, Cycle 3 cancellation/failure certification, and
+  Cycle 5.29 ordered-wakeup explorer audit.
+  Spawning either
+  transfers selected linear capabilities or delegates checked QTT loans;
+  joining consumes the child handle once, returns exclusive authority, ends
+  shared child grants, and certifies child completion before parent continuation.
+  It does not yet prove general race freedom, cancellation safety, deadlock
+  freedom, or memory-model correctness, and it does not run tasks in parallel.
+
+  That boundary matters.  A quantity is a usage fact, not by itself a proof that
+  a value may cross a thread boundary.  Monad therefore keeps four questions
+  distinct:
+
+  | Judgment  | Question                                                |
+  |-----------+---------------------------------------------------------|
+  | quantity  | How many times may the authority be used?               |
+  | place     | Which canonical storage location does it describe?      |
+  | mobility  | May this authority cross an execution-agent boundary?   |
+  | task tree | Which live task presently owns the authority?           |
+
+  Cycle 1 reuses =QttQuantity= and =QttPlace=.  It does not create another usage
+  or alias semantics beside QTT.
+
+* Semantic model
+
+  Let =T= be a finite task tree and let =A : Place ⇀ Task × Quantity × Mobility=
+  be the authority map.  =running(t)= and =joined(t)= are disjoint states.  Every
+  non-root task records exactly one parent.
+
+  The initial state contains one running root.  Initial capabilities belong to
+  that root and must be pairwise non-overlapping under the canonical QTT place
+  relation.
+
+** Spawn
+
+   For a fresh child =c= and selected places =P=:
+
+   #+begin_example
+   running(p)    fresh(c)
+   forall x in P. A(x) = (p, 1, transferable)
+   ------------------------------------------------------------ spawn
+   (T, A) -- spawn p c P --> (T + edge(p,c), A[x.owner := c | x in P])
+   #+end_example
+
+   The premises are checked before any transition is applied.  Repeated,
+   missing, unrestricted, or thread-affine captures fail closed.
+
+** Join
+
+   #+begin_example
+   running(p)    running(c)    parent(c) = p    children(c) = empty
+   ---------------------------------------------------------------- join
+   (T, A) -- join p c --> (T[c := joined], A[x.owner := p | owner(x) = c])
+   #+end_example
+
+   A joined task cannot be joined again.  Requiring the child to have no running
+   children makes traces properly nested and makes scope closure a structural
+   property rather than a cleanup convention.
+
+** Cycle 1 safety statement
+
+   For every trace accepted by =concurrency_verify_trace=:
+
+   1. the domain of =A= is invariant;
+   2. every capability has exactly one task owner at every transition;
+   3. only a capability with exact quantity one and =transferable= mobility
+      crosses a spawn edge;
+   4. every spawned task is joined exactly once by its recorded parent; and
+   5. successful trace completion leaves no live child.
+
+   The checker establishes these properties by replaying the trace from its
+   initial authority, rather than trusting a final-state annotation.  The C
+   implementation is the executable specification; mechanized metatheory is a
+   future cycle and must not be claimed prematurely.
+
+* Cycle log
+
+** Cycle 1 — linear authority across structured spawn/join
+
+   Status: implemented and independently tested.
+
+   Artifacts:
+
+   - =kernel.[ch]= define the task/capability state and fail-closed trace checker.
+   - =../tests/test_concurrency_kernel.py= compiles a sanitizer-backed independent
+     harness.
+   - Canonical places and exact quantities come directly from =../qtt/=.
+
+   The negative corpus rejects overlapping initial authority, forged capture,
+   thread-affine capture, non-linear capture, wrong-parent join, double join, and
+   scope exit with a live child.
+
+   Exit criterion: met.  Mutating a task edge, owner, mobility, quantity, capture,
+   or join structure changes verification from =CONCURRENCY_VALID= to a precise
+   error.
+
+** Cycle 2 — scoped loans and happens-before regions
+
+   Status: implemented and independently tested.
+
+   A concurrency loan is not a new borrow calculus.  It imports a QTT loan
+   identity, canonical place, and polarity, then adds the mobility evidence and
+   task holders needed at a spawn boundary.  Every imported loan must be covered
+   by an initial capability; QTT remains responsible for proving the underlying
+   lexical loan valid.
+
+*** Cross-task loan rule
+
+    Let =H(ell)= be the tasks currently holding loan =ell=.  For a fresh child
+    =c= of =p=:
+
+    #+begin_example
+    p in H(ell)    mobile(ell)    transferable(owner(place(ell)))
+    ---------------------------------------------------------------- shared-spawn
+    H(ell) := H(ell) union {c}
+
+    H(ell) = {p}    kind(ell) = exclusive    mobile(ell)
+    ---------------------------------------------------------------- exclusive-spawn
+    H(ell) := {c}
+    #+end_example
+
+    Shared delegation preserves read-only authority in the parent.  Exclusive
+    delegation transfers the unique holder, so the parent cannot use or
+    redelegate it until the child joins.  Capturing an owned capability whose
+    place overlaps any live lexical loan is rejected.
+
+*** Join and happens-before
+
+    #+begin_example
+    complete(c)    parent(c) = p    children(c) = empty
+    ---------------------------------------------------------------- join-hb
+    c synchronizes-before continuation(p)
+    shared holder c is removed
+    exclusive holder c is restored to p
+    #+end_example
+
+    The cross-task region is therefore the half-open interval from successful
+    spawn through successful join.  A child cannot outlive that edge because a
+    successful trace has no live child, and a parent cannot join while a nested
+    child remains live.  This is a structured operational happens-before
+    certificate, not yet a C11/POSIX memory-order proof.
+
+    The regression accepts shared sibling delegation and nested exclusive
+    transfer/return.  It rejects an overlapping shared/exclusive initial loan,
+    a forged loan identity, a thread-affine loan, an exclusive redelegation by a
+    task that no longer holds it, and movement of borrowed storage.
+
+    Exit criterion: met for structured normal completion.  Exceptional exits,
+    cancellation, lexical-loan endpoint import, atomics, and serialized portable
+    certificates remain outside this cycle.
+
+** Cycle 3 — typed effects and cancellation
+
+   Status: implemented through causal evidence and faithful Core lowering.
+
+*** Typed concurrency effects
+
+    =effect.[ch]= maps =spawn=, =cancel=, =checkpoint=, =fail=,
+    =cleanup-fail=, =cleanup-complete=, and =join= to exact =QttEffectAtom=s.
+    Each atom is scoped, has a generative
+    scope-capability identity, retains the canonical task type, and has a linear
+    resumption.  The effect verifier first checks the operational trace, then
+    requires every operation kind used by that trace to occur in the supplied
+    QTT effect row with the exact scope and type identities.
+
+    This is deliberately an open-row integration rather than a closed compiler
+    enumeration: concurrency atoms use the existing effect algebra, solver, and
+    generative capability equality.
+
+*** Level-triggered cancellation
+
+    Cancellation is a state transition, never asynchronous destruction:
+
+    #+begin_example
+    running(c) -- cancel(parent(c), c) --> cancel-requested(c)
+    cancel-requested(c) -- checkpoint(c) --> cleaning(c)
+    cleaning(c) -- cleanup-complete(c) --> cleanup-complete(c)
+    cleanup-complete(c) -- join(parent(c), c) --> joined(c)
+    #+end_example
+
+    Repeated =cancel= is idempotent before join.  A request remains pending until
+    a checkpoint observes it.  Cleanup is masked: checkpoints during cleanup do
+    not restart or abort cleanup, and a cleaning parent may cancel and join its
+    children.  Cleanup cannot complete while any child remains live.
+
+    Join rejects an unobserved request and incomplete cleanup.  Capability and
+    loan authority is untouched by cancellation and follows the already checked
+    join-return transition, so cancellation has no authority-discard edge.
+
+    The sanitizer corpus includes recursive cancellation: a cancelled parent
+    enters cleanup, cancels and joins its child, completes its own cleanup, and
+    is then joined by the root.  Reordering parent cleanup before the child join
+    fails closed.
+
+    Milestone 3.1 exit criterion: met.  The remaining Cycle 3 work is typed
+    failure-tree construction, exceptional cleanup outcomes, and portable
+    effect/cancellation certificates.  Those are not inferred from the current
+    status code and remain explicit nonclaims.
+
+*** Core-owned failure semantics and exceptional cleanup
+
+    Milestone 3.2 status: complete for executable evidence and Core lowering.
+
+    =../core/Control/Concurrent.mon= owns the source-visible semantic model:
+    stable task identities, polymorphic task outcomes, and non-empty causal
+    failure trees.  The compiler is not permitted to invent a second failure
+    representation; its future job is to lower Core operations into this
+    checker and optimize only equivalence-preserving IR.
+
+    The proof kernel now accepts two distinct exceptional events:
+
+    #+begin_example
+    running(t) -- fail(t) --> cleaning(t)
+    cleaning(t) -- cleanup-fail(t) --> cleaning(t)
+    cleaning(t) -- cleanup-complete(t) --> cleanup-complete(t)
+    #+end_example
+
+    A primary failure therefore cannot bypass cleanup, while a cleanup failure
+    remains subordinate and cannot replace the primary transition.  The
+    verification result counts primary and cleanup failures separately, and
+    rejects cleanup failure outside the masked cleanup region.  Cancellation
+    observed at a checkpoint is counted as a primary cause under the same
+    cleanup discipline.
+
+**** Causal certificate judgment
+
+     =failure.[ch]= builds and independently rechecks a canonical failure
+     certificate.  It does not define another effect system: construction first
+     invokes =concurrency_verify_trace_effects= with the existing
+     =QttEffectSolver= and =QttEffectRow=.  The certificate commits to that
+     row's canonical fingerprint and to the same generative scope-capability and
+     task-type identities.
+
+     Let =F= be the failure events of an accepted trace and let =grade(f)=1=.
+     The certificate establishes:
+
+     #+begin_example
+     effect-authorized(Sigma, trace)    operationally-valid(trace)
+     forall f in F. grade(f) = 1
+     total = sum[f in F] grade(f)
+     ---------------------------------------------------------------- fail-cert
+     Sigma |- trace => (F, parent, total)
+     #+end_example
+
+     Parent edges are derived, not trusted:
+
+     - a cleanup failure points to the unique primary cause of the same task;
+     - a task failure or observed cancellation points to the nearest ancestor
+       task having a primary cause; and
+     - absence of such an ancestor makes the node a forest root.
+
+     The relation is acyclic.  A primary-to-primary edge strictly decreases task
+     depth; a cleanup edge targets the primary node at the same task and primary
+     nodes never target cleanup nodes.  Canonical node order is lexicographic in
+     module identity, task identity, cause class, and within-task event step, so
+     unrelated sibling scheduling does not define presentation order.
+
+     QTT integration is conservation, not a new modality.  The existing
+     =N union {omega}= semiring proves that every exceptional cause occurs once
+     in the evidence and that aggregation neither duplicates nor erases it.
+     Mutating any node to grade =omega=, changing a causal edge, changing the
+     effect row, or changing a generative identity makes independent replay
+     reject the certificate.
+
+     The certificate is proof-carrying evidence in the narrow sense: a consumer
+     checks it by replaying a small trace kernel rather than trusting the
+     compiler that produced it.  It is not yet a mechanized metatheorem.
+     Messages remain a Core payload rather than proof identity: verified
+     evidence selects the cause structure, while the Core boundary attaches
+     presentation text.
+
+**** Faithful Core lowering
+
+     =Control.Concurrent.FailureEvidence= is the typed boundary between a
+     successfully replayed certificate and the public failure value.  Its two
+     constructors make the certificate distinction explicit: primary evidence
+     carries its certified cause, while cleanup evidence can lower only to
+     =CleanupFault=.  Thus a caller cannot manufacture an arbitrary primary
+     cause through the cleanup branch.
+
+     Lowering is the unique structural homomorphism over the evidence forest:
+
+     #+begin_example
+     lower(primary(t, k, m, cs)) = failure(t, k, m, map lower cs)
+     lower(cleanup(t, m, cs))    = failure(t, CleanupFault, m, map lower cs)
+     #+end_example
+
+     It preserves task identity, cause class, child order, cardinality, and
+     message attachment.  It neither verifies nor repairs evidence; callers
+     must cross the independent replay checker first.  The regression checks
+     nested cleanup structure, node conservation, and Core-owned messages.
+
+**** Canonical wire evidence
+
+     The certificate now has a versioned canonical encoding.  Version 1 starts
+     with =MCFC= and encodes every integer at fixed width in network byte order;
+     it never serializes C padding, native =size_t=, native enums, pointers, or
+     host endianness.  Reserved flags must be zero and the input length must be
+     exact.  Counts are overflow-checked before allocation, parent indices and
+     enum domains are validated, and the decoded fingerprint must agree with
+     the canonical in-memory certificate before decoding succeeds.
+
+     Decoding remains weaker than certification.  The consumer must still call
+     =concurrency_failure_verify= with the original trace, existing effect
+     solver and row, scope capability, and task type.  This preserves the
+     proof-carrying-code separation: transport parses evidence; the small
+     checker establishes the claim.
+
+     The sanitizer regression round-trips a nested task/cleanup certificate,
+     rejects truncation and unknown versions, then mutates every byte of the
+     encoded certificate.  No mutated payload may become certified by replay.
+
+     Byte portability and direct structural lowering into
+     =Control.Concurrent.FailureTree= are implemented.  A mechanized proof that
+     replay certification and lowering preserve all stated invariants remains
+     an explicit research boundary rather than an implementation claim.
+
+** Cycle 4 — protocol-indexed communication
+
+   Status: Cycle 4.7 E-Zap cancellation is coupled to masked structured cleanup;
+   a unified temporal interpreter and richer protocols remain.
+
+*** Cycle 4.1 — binary fidelity and bounded channel state
+
+    =channel.[ch]= define an independently replayed binary-session kernel.  A
+    channel starts with two distinct endpoint identities, one task owner per
+    endpoint, exact QTT quantity one, and explicitly supplied local protocols.
+    Construction rejects the pair unless the protocols are pointwise dual:
+
+    #+begin_example
+    dual(!A.S, ?A.dual(S))       dual(?A.S, !A.dual(S))
+    dual(End, End)
+    #+end_example
+
+    A successful buffered send advances only the sender protocol and appends
+    one payload-type identity to its directional FIFO.  Receive advances only
+    after removing the matching head.  Queue occupancy never exceeds the
+    declared capacity.  Capacity zero has no hidden buffer: it accepts only an
+    atomic rendezvous whose two owners simultaneously inhabit dual send/receive
+    states.
+
+    =close= consumes an endpoint only at =End=; normal completion requires both
+    endpoints closed and both directional queues empty.  Explicit endpoint
+    cancellation consumes both ends, clears pending type evidence, and makes a
+    later peer operation observably fail.  Cancellation is not implicit affine
+    dropping and does not claim delivery of queued values.
+
+    Channel operations extend the existing =QttEffectRow= through
+    =channel_effect.c= and the shared =effect.h= interface.  They are scoped,
+    have linear resumptions, and
+    retain the channel type identity and generative scope capability.  An
+    atomic rendezvous requires both =send= and =receive= atoms.  There is no
+    second effect solver.
+
+    The executable judgment is:
+
+    #+begin_example
+    dual(P, Q)    endpoints-used-once    bounded(trace, capacity)
+    protocol-faithful(trace, P, Q)    effects-authorize(Sigma, trace)
+    ---------------------------------------------------------------- channel-cert-4.1
+    Sigma |- trace : Channel(P, Q, capacity)
+    #+end_example
+
+    The sanitizer regression accepts buffered request/reply, zero-capacity
+    rendezvous, orderly close, and explicit cancellation.  It rejects
+    non-duality, unrestricted endpoints, wrong owners, payload-type mismatch,
+    overflow, non-rendezvous operations at capacity zero, early close, and use
+    after peer cancellation.
+
+    Exit criterion: met for finite, first-order binary protocols.  This is a
+    session-fidelity and bounded-state result, not a scheduler-progress or
+    deadlock-freedom theorem.  Endpoint delegation in payloads, labelled
+    choice, recursive protocols, integration with task cancellation cleanup,
+    portable certificates, and deterministic scheduling are explicit future
+    slices.
+
+*** Cycle 4.2 — higher-order delegation and in-flight authority
+
+    A message may now carry a linear endpoint authority.  This is not encoded
+    as an untyped payload flag: every delegated endpoint has a stable endpoint
+    identity, protocol type identity, canonical =QttPlace=, exact quantity one,
+    and one initial task owner.  Initial delegated authorities must be pairwise
+    non-overlapping according to the existing QTT place relation.
+
+    The replay kernel tracks one of three exclusive authority states:
+
+    #+begin_example
+    Owned(task)  |  InFlight(channel, direction, fifo-slot)  |  Cancelled
+    #+end_example
+
+    Buffered higher-order send requires =Owned(sender)= and atomically advances
+    the carrier protocol, appends the endpoint identity to exactly one FIFO
+    slot, and changes the authority to =InFlight=.  The sender therefore cannot
+    send or otherwise delegate it again.  Receive succeeds only when that exact
+    endpoint is at the FIFO head with the protocol type expected by the carrier;
+    it removes the slot and changes authority to =Owned(receiver)=.  A
+    zero-capacity rendezvous performs the same sender-to-receiver transfer as
+    one atomic transition and never constructs an in-flight state.
+
+    #+begin_example
+    owner(e)=s    grade(e)=1    protocol(c)=!type(e).P    space(c)>0
+    ---------------------------------------------------------------- delegate-send
+    owner(e):=queue(c,n)    protocol(c):=P
+
+    owner(e)=queue(c,head)    protocol(peer(c))=?type(e).Q
+    ---------------------------------------------------------------- delegate-receive
+    owner(e):=receiver    protocol(peer(c)):=Q
+    #+end_example
+
+    Explicit cancellation drains both carrier FIFOs.  Every endpoint authority
+    found in a drained slot moves from =InFlight= to =Cancelled= and is counted
+    as consumed evidence; it is never restored to the sender or silently
+    dropped.  This implements the local E-Zap obligation for the checked
+    carrier.  Recursively traversing buffers owned by a delegated endpoint is a
+    later whole-network certificate and is not claimed by this single-channel
+    kernel.
+
+    The conservation invariant for every accepted trace is:
+
+    #+begin_example
+    task-owned(E) + in-flight(E) + cancelled(E) = |E|
+    pairwise-disjoint(place(E))
+    transfers neither duplicate nor erase E
+    #+end_example
+
+    =tests/test_concurrency_delegation.py= checks buffered and rendezvous
+    transfer, QTT-grade rejection, overlapping/duplicate authority rejection,
+    sender reuse after enqueue, carrier/delegated protocol mismatch, wrong
+    ownership, and cancellation of an in-flight endpoint under ASan and UBSan.
+
+    Exit criterion: met for first-order carrier protocols transporting external
+    endpoint authorities.  Delegated endpoints do not yet become carrier traces
+    inside one network proof; labelled choice, recursion, whole-network E-Zap,
+    task-cleanup coupling, and portable authority certificates remain explicit
+    Cycle 4 boundaries.
+
+*** Cycle 4.3 — whole-network E-Zap closure certificate
+
+    =network.[ch]= lift cancellation from one carrier queue to a finite graph of
+    higher-order endpoints.  A snapshot contains the global grade-one authority
+    set, canonical QTT places, directional queue-containment edges, and one or
+    more explicitly cancelled roots.  An edge =a -[slot]-> b= means that one
+    queue slot owned by endpoint =a= uniquely holds endpoint =b= in flight.
+
+    Snapshot validation rejects overlapping QTT authority, unknown endpoints,
+    duplicate queue slots, and any endpoint claimed by two in-flight owners.
+    Cancellation is the least reachability closure:
+
+    #+begin_example
+    root(e)
+    ------------------------------- cancel-root
+    cancelled(e, 0)
+
+    cancelled(a, d)    queued(a, slot, b)
+    ------------------------------- e-zap-step
+    cancelled(b, d + 1)
+    #+end_example
+
+    Cyclic delegation graphs are permitted.  The certificate does not mirror a
+    traversal stack: it records shortest cancellation distance, orders nodes by
+    stable module/endpoint identity, and gives every non-root a canonical parent
+    at strictly smaller distance.  Proof edges are therefore acyclic even when
+    the authority graph is cyclic.
+
+    Each emitted cancellation node has exact QTT grade one.  The total grade is
+    the cardinality of the least reachable set, so an independently replayed
+    certificate cannot omit, duplicate, or invent a reachable endpoint.  The
+    certificate commits to the complete authority/queue/root snapshot,
+    including every canonical QTT projection component, through an
+    order-independent snapshot fingerprint and a canonical node fingerprint.
+
+    =tests/test_concurrency_network.py= constructs a cyclic network with an
+    unreachable endpoint, checks the exact three-node closure, and rejects
+    mutated grade/parent evidence, overlapping places, duplicate slots,
+    multiple in-flight owners, and unknown roots under ASan and UBSan.
+
+    Exit criterion: met for independently checked finite cancellation
+    snapshots, including cycles.  The snapshot is presently an input claim:
+    Cycle 4.3 does not yet certify that a set of interleaved channel protocol
+    traces produced exactly those queue edges.  Closing that trace-to-snapshot
+    bridge, canonical wire encoding, task-cleanup coupling, labelled choice,
+    and recursive session syntax remain explicit boundaries.
+
+*** Cycle 4.4 — interleaved trace-to-snapshot projection
+
+    =network_trace.[ch]= remove the caller-authored graph from the trusted
+    path.  One global trace names a channel for every operation and is replayed
+    in program order.  Channel protocols use the same validity, duality, and
+    action-matching predicates as the Cycle 4.1 checker; global endpoint
+    ownership uses the Cycle 4.2 grade-one authority representation.  Channel
+    endpoint declarations must agree with that global ledger before replay.
+
+    The implemented projection covers buffered higher-order sends followed by
+    an explicit cancellation frontier:
+
+    #+begin_example
+    owner(e)=actor    owner(c)=actor    protocol(c)=!type(e).P
+    space(c)>0
+    ---------------------------------------------------------------- project-send
+    owner(e):=queue(c,slot)    edge(c,slot,e)    protocol(c):=P
+
+    owner(c)=actor
+    ---------------------------------------------------------------- project-cancel
+    root(c)
+    #+end_example
+
+    Once cancellation begins, no later send is accepted.  This gives the
+    derived snapshot a single temporal cut: its edges are exactly the endpoint
+    authorities still in flight at that cut, and its roots are exactly the
+    cancellation events at the frontier.  The derived snapshot is then passed
+    to the independent Cycle 4.3 builder and verifier.  Thus a certificate for
+    =c -> e -> f= can no longer be obtained by merely asserting those two
+    containment edges; both must arise from protocol-correct, capacity-bounded,
+    ownership-preserving sends in one interleaving.
+
+    =tests/test_concurrency_network_trace.py= derives a two-channel nested
+    delegation graph, verifies its exact three-endpoint E-Zap closure, and
+    rejects temporal reordering, protocol mutation, and disagreement between a
+    channel endpoint owner and the global authority ledger under ASan and
+    UBSan.
+
+    Exit criterion: met for the stated projection.  Receive/dequeue and
+    zero-capacity rendezvous are added by Cycle 4.5 below.  Ordinary
+    non-endpoint payloads, close, multiple operational epochs, effect-row
+    authorization of the global trace, and direct coupling to task cleanup are
+    deliberately unsupported rather than simulated.
+
+*** Cycle 4.5 — FIFO dequeue and atomic rendezvous transfer
+
+    The global replay now consumes buffered delegation edges as well as
+    creating them.  A receive must name the endpoint at the head of the peer's
+    directional FIFO, match the receiver's next protocol action, and be
+    performed by the current carrier owner.  It removes exactly that edge,
+    compacts the remaining slot indices, and changes the delegated authority
+    from =InFlight= to =Owned(receiver)=:
+
+    #+begin_example
+    queue(c,0)=e    protocol(peer(c))=?type(e).Q
+    owner(peer(c))=receiver
+    ---------------------------------------------------------------- project-receive
+    dequeue(c,e)    owner(e):=receiver    protocol(peer(c)):=Q
+    #+end_example
+
+    For capacity zero, one rendezvous event proves both dual actions and both
+    current carrier owners in the same transition.  Delegated authority moves
+    directly from sender to receiver; no queue edge and no intermediate
+    in-flight state exist:
+
+    #+begin_example
+    protocol(a)=!type(e).P    protocol(b)=?type(e).Q
+    owner(a)=sender    owner(b)=receiver    owner(e)=sender
+    ---------------------------------------------------------------- project-rendezvous
+    owner(e):=receiver    protocol(a):=P    protocol(b):=Q
+    #+end_example
+
+    The sanitizer regression removes a buffered edge before cancellation and
+    proves that only the carrier remains in the E-Zap closure.  Its rendezvous
+    trace transfers an endpoint and immediately cancels that endpoint under the
+    receiver's identity, which would fail if replay retained either the sender
+    owner or an in-flight state.  Wrong FIFO identity and forged peer ownership
+    fail closed.
+
+    Exit criterion: met for higher-order buffered send/receive and atomic
+    rendezvous before a cancellation frontier.  Ordinary payloads and normal
+    close do not affect the authority graph but still need full protocol replay;
+    effect authorization and structured task-cleanup coupling remain the next
+    security-relevant integration boundaries.
+
+*** Cycle 4.6 — scoped effect authorization of global traces
+
+    Global protocol fidelity and linear authority conservation do not by
+    themselves authorize communication.  Every =ConcurrencyNetworkChannel=
+    therefore carries its generative scope capability and channel type identity,
+    and every accepted global trace supplies the existing =QttEffectSolver= and
+    open =QttEffectRow=.  There is no network-specific effect algebra.
+
+    =channel_effect.c= exposes one shared step-authorization judgment used by
+    both the local Cycle 4.1 checker and global replay:
+
+    #+begin_example
+    op(step)=operation    Channel.operation[scope, type] in Sigma
+    resumption(Channel.operation)=1    scoped(Channel.operation)
+    ---------------------------------------------------------------- authorize-step
+    Sigma |- step : Channel[scope, type]
+    #+end_example
+
+    Send requires =Channel.send=, receive requires =Channel.receive=,
+    cancellation requires =Channel.cancel=, and rendezvous requires both send
+    and receive for the same channel identity.  Atom equality is delegated to
+    the existing row solver, preserving capability identity, channel type,
+    constructor identity, scope, and linear resumption.  Duplicate labels and
+    open-row structure retain their established QTT semantics.
+
+    Replay validates protocol, FIFO, capacity, and authority transitions before
+    checking effects.  An invalid operational trace is therefore not
+    misreported as missing authority.  The snapshot and E-Zap certificate are
+    built only after every event is authorized.
+
+    The sanitizer regression supplies exact atoms for two independently typed
+    channels, rejects a mutated generative scope, and rejects a rendezvous row
+    containing send but not receive.  Existing local channel-effect tests use
+    the same step helper and guard against semantic drift.
+
+    Exit criterion: met for operations currently supported by global replay.
+    Normal close and ordinary payloads remain outside that replay.  The next
+    security boundary is coupling channel cancellation and recursively
+    cancelled in-flight endpoints to Cycle 3 masked cleanup and structured join.
+
+*** Cycle 4.7 — structured cleanup discharge certificate
+
+    =cleanup_bridge.[ch]= connect the independently checked session and task
+    calculi without merging either implementation.  The bridge first replays
+    the complete effect-authorized network trace and its E-Zap certificate, then
+    replays the existing Cycle 3 task trace.  A network cancellation root is
+    assigned to the task that actually performed its channel-cancel event.
+    Every recursively reachable endpoint inherits that root's cleanup task.
+
+    The task discharges the root only through the already valid structured
+    cancellation lifecycle:
+
+    #+begin_example
+    cancel(parent(t), t) < checkpoint(t) < cleanup-complete(t) < join(parent(t), t)
+    root(c)    actor(cancel-channel(c))=t    e in E-Zap*(c)
+    ---------------------------------------------------------------- cleanup-discharge
+    cleanup(t) discharges e : 1
+    #+end_example
+
+    The bridge does not introduce a second task state machine.  It first
+    requires =concurrency_verify_trace= to accept the task trace, then extracts
+    the ordered cancellation lifecycle as evidence.  Cycle 3 therefore remains
+    authoritative for parenthood, level-triggered observation, masked cleanup,
+    live-child exclusion, and structured join.
+
+    A portable-style certificate contains one discharge for every E-Zap node,
+    its canonical cancellation root, the responsible cleanup task, exact grade
+    one, total grade, and the underlying network-certificate fingerprint.
+    Verification rebuilds the bridge from both source traces and compares every
+    field and fingerprint.  A recursive endpoint cannot be omitted, assigned to
+    another task, or discharged without observed cancellation and completed
+    cleanup.
+
+    =tests/test_concurrency_cleanup_bridge.py= checks a child that delegates an
+    endpoint, cancels the carrier during its cleanup responsibility, and
+    discharges the two-node recursive closure before join.  It rejects a valid
+    task trace with no cancellation cleanup and a mutated descendant-to-task
+    assignment under ASan and UBSan.
+
+    Exit criterion: met for proof association across the two independently
+    ordered traces.  The traces do not yet share a clock, so this cycle does not
+    prove that the channel-cancel event physically occurred between checkpoint
+    and cleanup completion.  Cycle 5's deterministic operational interpreter
+    should combine task and channel events into one schedule and enforce that
+    temporal ordering before any parallel runtime is introduced.
+
+** Cycle 5 — deterministic operational interpreter
+
+   Status: Cycle 5.15 integrates cancellation and task dependence into native semantics;
+   reduction, minimization, deadlines, fibers, and parking remain.
+
+*** Cycle 5.1 — combined schedule and cleanup temporal cut
+
+    =deterministic.[ch]= interpret one explicit merge of the certified task and
+    channel projections.  A schedule event names the next index in exactly one
+    projection and carries a virtual-clock tick.  Replay accepts only a complete
+    stable merge: task indices and channel indices must each appear exactly once
+    and in source order, and virtual time may never move backwards.
+
+    #+begin_example
+    project-task(schedule)=task-trace
+    project-channel(schedule)=network-trace
+    monotone(tick(schedule))
+    ---------------------------------------------------------------- stable-merge
+    schedule : Merge(task-trace, network-trace)
+    #+end_example
+
+    Both projections remain owned by their existing independent checkers.  The
+    interpreter first obtains the Cycle 4.7 cleanup-discharge certificate, then
+    adds the temporal law that the separate traces could not express:
+
+    #+begin_example
+    cancel-task(parent(t),t) < checkpoint-observes(t)
+    checkpoint-observes(t) < cancel-channel(t,c) < cleanup-complete(t)
+    cleanup-complete(t) < join(parent(t),t)
+    ---------------------------------------------------------------- scheduled-discharge
+    schedule discharges E-Zap*(c)
+    #+end_example
+
+    The schedule certificate commits to the exact merge, final virtual tick,
+    and cleanup-certificate fingerprint.  Independent verification reruns the
+    interpreter and rejects field or fingerprint mutation.  The sanitizer
+    regression accepts cancellation during masked cleanup and rejects it before
+    the observing checkpoint, after cleanup completion, under regressing virtual
+    time, and after certificate mutation.
+
+    This milestone follows systematic concurrency testing's separation of a
+    deterministic replay substrate from later search.  It deliberately does not
+    claim CHESS-style preemption exploration or dynamic partial-order reduction:
+    no enabled-set computation, dependence relation, backtracking set, sleep
+    set, or trace minimizer exists yet.
+
+    Exit criterion: met for deterministic replay of the current finite task and
+    channel projections and the cleanup temporal cut.  Cycle 5.2 should define
+    executable enabledness and blocking for each certified operation.  Only
+    after that transition relation exists can DPOR soundly compare dependent
+    events or enumerate alternative schedules.
+
+*** Cycle 5.2 — executable cross-projection enabled sets
+
+    =concurrency_deterministic_enabled= computes the two scheduler choices at
+    any valid schedule prefix: the next task-projection event and the next
+    channel-projection event.  It first verifies that the prefix is a stable,
+    monotonic merge and independently rebuilds the Cycle 4.7 cleanup proof.
+    Every result carries an explicit reason rather than collapsing blocking into
+    a Boolean:
+
+    #+begin_example
+    Enabled
+    ProjectionComplete
+    TaskNotLive
+    TaskNotCleaning
+    AwaitsCleanupDischarge
+    #+end_example
+
+    Channel events are disabled until their actor exists in the combined task
+    history; rendezvous additionally requires a live peer.  A channel-cancel
+    event is enabled only while its actor is in masked cleanup after an observing
+    checkpoint.  Conversely, =cleanup-complete= and the following =join= are
+    disabled while that task still owns an unexecuted channel-cancellation root.
+
+    #+begin_example
+    cleaning(t)    pending-channel-cancel(t)
+    ------------------------------------------------ scheduler-cut
+    enabled(channel-cancel(t))    blocked(cleanup-complete(t))
+
+    cleaning(t)    discharged-channel-cancel(t)
+    ------------------------------------------------ scheduler-cut-discharged
+    enabled(cleanup-complete(t))
+    #+end_example
+
+    The deterministic interpreter now consults this judgment before every
+    selected event.  The sanitizer regression inspects enabled sets before task
+    creation, after cancellation observation, after cleanup work, and after
+    channel discharge, then retains the Cycle 5.1 invalid-schedule corpus.
+
+    Exit criterion: met for cross-projection task lifetime and cleanup blocking.
+    Local protocol, FIFO, capacity, and rendezvous enabledness is still inherited
+    from the already certified global channel projection; only its single next
+    event is considered.  Cycle 5.3 should expose the channel replay kernel as an
+    incremental machine so independently proposed channel events can report
+    =QueueFull=, =QueueEmpty=, =AwaitPeer=, or =ProtocolBlocked= without copying
+    session semantics into the scheduler.
+
+*** Cycle 5.3 — verifier-backed incremental channel machine
+
+    =channel_machine.c= exposes the local channel calculus as an opaque
+    incremental machine.  A caller may query a candidate transition without
+    mutation, commit it atomically when enabled, inspect the accepted-prefix
+    length, and determine terminal completion.  The result retains the precise
+    underlying channel error and maps scheduler-relevant failures to:
+
+    #+begin_example
+    QueueFull | QueueEmpty | AwaitPeer | ProtocolBlocked
+    Terminal | Invalid | OutOfMemory
+    #+end_example
+
+    The reference implementation deliberately does not copy the private queue,
+    endpoint-cursor, or delegation ledger structures.  For an accepted prefix
+    =p= and candidate =a= it asks the existing independent verifier to replay
+    =p ++ [a]=:
+
+    #+begin_example
+    verify(p ++ [a]) in {Incomplete, Valid}
+    ------------------------------------------------ enabled-reference
+    enabled(machine(p), a)
+
+    verify(p ++ [a]) = error
+    ------------------------------------------------ blocked-reference
+    blocked(machine(p), a, classify(error))
+    #+end_example
+
+    A rejected candidate is never appended.  A successful step grows owned
+    prefix storage only after the non-mutating query succeeds, so allocation
+    failure also leaves semantic state unchanged.  This provides a simple,
+    executable oracle for later optimization: a constant-time mutable machine
+    may replace replay only after differential tests establish identical
+    enabledness and final verification across generated traces.
+
+    The sanitizer regression fills a bounded queue, proves the rejected second
+    send does not change prefix length, dequeues and observes the sender become
+    enabled, tests an empty receive, rejects a payload at the wrong protocol
+    state, and distinguishes an isolated zero-capacity send from an atomic
+    rendezvous.
+
+    Exit criterion: met for local first-order and delegated channel candidates
+    accepted by the existing verifier.  Complexity is quadratic over a replayed
+    execution and the deterministic scheduler does not yet own one machine per
+    network channel.  Cycle 5.4 should integrate these machines into scheduler
+    enabled sets and differentially compare their accepted projection with
+    =concurrency_network_derive= before adding DPOR exploration.
+
+*** Cycle 5.4 — scheduler-local channel projection and differential replay
+
+    The deterministic scheduler now projects any proposed global channel event
+    onto its owning Cycle 5.3 reference machine.  The projection converts global
+    QTT authority declarations into the local higher-order representation,
+    replays only earlier events for the same channel, checks the candidate's
+    exact scoped effect atom, and returns the machine's enabledness result.
+
+    This query intentionally does not require the complete network trace to be
+    certified first.  It can expose =QueueEmpty= or =QueueFull= for a proposed
+    event instead of reducing every blocked candidate to =InvalidNetwork=.
+    Task lifetime and cleanup rules remain an additional conjunction:
+
+    #+begin_example
+    live(actor(a))    effects-authorize(a)
+    local-machine(channel(a), prefix) |- a enabled
+    ---------------------------------------------------------------- channel-enabled
+    scheduler(prefix) |- a enabled
+    #+end_example
+
+    During complete replay, every channel event must pass this local judgment.
+    The Cycle 4.7 bridge independently invokes =concurrency_network_derive= over
+    the accepted global projection.  Success therefore differentially checks
+    local per-channel replay and global authority/queue/cancellation replay on
+    the same ordered events.
+
+    The sanitizer regression accepts the initial delegated send, replaces it
+    with a protocol-correct receive on an empty queue and observes =QueueEmpty=
+    before whole-network certification, then restores and verifies the complete
+    deterministic schedule.
+
+    Exit criterion: met while carrier ownership remains compatible with its
+    declared local endpoint owner.  A carrier received from another channel can
+    acquire a dynamic global owner that the local Cycle 4.1 machine does not yet
+    import.  Cycle 5.5 should make ownership updates an explicit machine input
+    and prove conservation against the global ledger; weakening local owner
+    checks is forbidden.
+
+*** Cycle 5.5 — grade-one carrier ownership epochs
+
+    Dynamic carrier ownership is now an explicit input to the local channel
+    machine.  A transfer records its exact accepted-prefix index, endpoint,
+    old owner, new owner, and QTT quantity.  The verifier initializes ownership
+    from the channel definition and applies each sorted epoch immediately before
+    the named local step:
+
+    #+begin_example
+    owner_p(e)=a    q=1    a/=b
+    ------------------------------------------------ ownership-epoch
+    owner_(p ++ transfer(e,a,b,1))(e)=b
+    #+end_example
+
+    Thus replay before the epoch is checked against =a= and replay after it is
+    checked against =b=.  Mutating the endpoint definition would instead rewrite
+    history and is forbidden.  Non-linear, malformed, unknown-endpoint, and
+    wrong-source transfers fail without changing machine state.
+
+    Scheduler projection follows the globally ordered higher-order ledger.
+    Buffered send changes a carrier to =InFlight(channel, receiver-endpoint)=;
+    only the matching receive establishes the new owner.  A zero-capacity
+    rendezvous establishes it atomically.  The scheduler then inserts a
+    grade-one epoch into the carrier's own channel machine before replaying its
+    next local action.  Complete deterministic replay still invokes
+    =concurrency_network_derive= independently, so protocol, FIFO, authority,
+    effect, and cancellation conservation are checked by the global kernel as
+    well as local machine acceptance.
+
+    Sanitizer regressions prove direct and buffered transfer followed by use on
+    the received endpoint, rejection of the former owner, rejection of omega
+    and forged-source epochs, and non-mutation after rejection.
+
+    Exit criterion: met for finite replay of dynamically transferred carrier
+    endpoints.  Enabledness remains a quadratic reference implementation and
+    schedule exploration still proposes only the recorded next projection.
+    Cycle 5.6 should define event dependence from authority, channel, task, and
+    cleanup footprints before introducing DPOR backtracking.
+
+*** Cycle 5.6 — semantic footprints and conservative dependence
+
+    =dependence.[ch]= classify two projected events using one symmetric
+    footprint judgment.  This is the dependence oracle required by DPOR, not
+    yet a backtracking algorithm.  It follows Flanagan and Godefroid's
+    requirement that independence preserve enabledness and commute, while using
+    a conservative resource-conflict approximation whose false positives cost
+    exploration performance but cannot erase behavior.
+
+    Each footprint draws identities from existing semantic systems:
+
+    - execution actors and task-lifetime participants from the structured task
+      trace;
+    - channel identity, carrier endpoints, rendezvous peers, and delegated
+      endpoints from the session trace;
+    - canonical authority places and overlap from QTT;
+    - exact scope-capability/channel-type identities from the effect rows; and
+    - cleanup task identity shared by structured cleanup and channel cancel.
+
+    #+begin_example
+    dependent(a,b) iff
+      actor(a) intersects actor(b)
+      or lifetime(a) intersects actor(b) or lifetime(b) intersects actor(a)
+      or channel(a) = channel(b)
+      or exists p in authority(a), q in authority(b). overlaps_QTT(p,q)
+      or cleanup-task(a) = cleanup-task(b)
+      or scoped-effect-resource(a) = scoped-effect-resource(b)
+    #+end_example
+
+    Reasons are returned as a bit set: =TaskOrder=, =TaskLifetime=, =Channel=,
+    =Authority=, =Cleanup=, and =Effect=.  The result is symmetric by
+    construction.  Invalid projection indices fail closed rather than becoming
+    independent.  Task capture places are compared directly with global
+    endpoint authority places, so the oracle does not invent a second alias
+    relation beside =qtt_place_overlaps=.
+
+    The sanitizer regression proves independence for disjoint tasks, channels,
+    effects, and QTT places, then separately exercises same-channel order,
+    per-task order, spawn/lifetime interaction, delegated-authority conflict,
+    capture/place overlap, cleanup cancellation, symmetry, and malformed
+    projections.
+
+    Exit criterion: met for a conservative pairwise dependence oracle over the
+    currently executable task and channel operations.  It has not yet proved
+    that every pair classified independent commutes in the executable machine.
+    Cycle 5.7 should add adjacent-swap validation over co-enabled events and
+    compare both resulting certified states before any source-set or wakeup-tree
+    exploration is trusted.
+
+*** Cycle 5.7 — executable adjacent-swap commutation certificates
+
+    =commutation.[ch]= validate the diamond property required by the Cycle 5.6
+    independence approximation.  The current deterministic interpreter has two
+    internally ordered projections, so the only scheduler-level adjacent choice
+    is the next task event against the next channel event.  Reordering two task
+    events or two channel events would violate their independently certified
+    projection order and is not presented as concurrency.
+
+    For schedule prefix =p=, next task event =t=, and next channel event =c=:
+
+    #+begin_example
+    enabled_p(t)    enabled_p(c)    independent(t,c)
+    enabled_(p.t)(c)    enabled_(p.c)(t)
+    state(p.t.c) = state(p.c.t)
+    ------------------------------------------------ commute-certificate
+    p |- t <> c
+    #+end_example
+
+    Validation executes both branches through the existing deterministic
+    enabledness interpreter.  It checks the exact remaining projection index,
+    advances through the second event, and independently fingerprints both
+    resulting semantic states.  Schedule fingerprints are intentionally not
+    compared: they encode linearization order and must differ.  At this stage
+    interpreter state is completely determined by the accepted task/channel
+    projection prefixes, whose events retain task, QTT capture/loan, channel,
+    endpoint, payload, and delegation identities in the canonical state
+    fingerprint.
+
+    The certificate commits to the prefix, exact pair, both state fingerprints,
+    and its own fingerprint.  Verification rebuilds the full diamond rather
+    than trusting serialized fields.  Mutation fails independently.  A valid
+    but not co-enabled pair, a dependent pair, malformed projections, allocation
+    failure, and a failed diamond remain distinct outcomes.
+
+    The sanitizer regression certifies an independent task-spawn/channel-send
+    swap inside a complete structured-cancellation trace, rejects certificate
+    mutation, distinguishes a globally valid channel action whose actor is not
+    yet live, and rejects a task-lifetime-dependent pair.
+
+    Exit criterion: met for pairwise commutation of the current deterministic
+    task/channel projection choices.  This is executable evidence for observed
+    pairs, not a universal mechanized proof of the footprint relation and not a
+    schedule explorer.  Cycle 5.8 should build Source-DPOR backtracking/source
+    sets over these checked dependence and commutation judgments, retaining a
+    conservative fallback whenever a diamond is not certified.
+
+*** Cycle 5.8 — bounded certified binary source-set exploration
+
+    =exploration.[ch]= perform the first actual systematic schedule search.
+    Monad currently exposes two internally ordered scheduler processes—the task
+    projection and channel projection—so the state space is a finite acyclic
+    lattice indexed by =(task-prefix, channel-prefix)=.  This cycle specializes
+    source-set reduction to that binary model rather than pretending an
+    N-process wakeup-tree implementation already exists.
+
+    At each prefix, exhaustive mode explores every enabled projection.  Certified
+    source mode chooses the singleton canonical task source only when Cycle 5.7
+    rebuilds the complete task/channel commutation diamond.  Otherwise both
+    enabled choices enter the backtracking set:
+
+    #+begin_example
+    enabled(s)={t,c}    certify-commute(s,t,c)
+    ------------------------------------------------ certified-source
+    source(s)={t}    sleep(s,c)
+
+    enabled(s)={t,c}    not certify-commute(s,t,c)
+    ------------------------------------------------ conservative-backtrack
+    source(s)={t,c}
+    #+end_example
+
+    The DFS never reorders either source projection internally.  Every leaf is
+    passed through =concurrency_deterministic_run= and retains its independent
+    deterministic certificate.  The aggregate exploration records schedules,
+    branch count, certified commutations, pruned choices, conservative fallback
+    branches, configured mode and bound, and a fingerprint.  Verification
+    reruns the entire exploration and compares every event and leaf certificate.
+
+    Schedule enumeration is explicitly bounded by =max_schedules=.  Exceeding
+    the bound destroys partial results and reports =LimitExceeded=; allocation,
+    malformed projection, and true no-enabled-transition states have distinct
+    outcomes.  This prevents a test request from silently becoming unbounded
+    exponential allocation.
+
+    The sanitizer regression runs exhaustive and reduced exploration over the
+    same complete structured-cancellation program.  It proves that reduction
+    emits fewer schedules, exercises both certified pruning and conservative
+    fallback, independently verifies every representative, proves representative
+    schedule fingerprints distinct, rejects leaf and aggregate mutation, and
+    checks clean bound
+    exhaustion.
+
+    Exit criterion: met for bounded reduction over the current finite binary
+    projection model.  The reduced schedules are all certified, but the result
+    does not yet carry a proof that every exhaustive schedule belongs to the
+    Mazurkiewicz class of one retained representative.  Cycle 5.9 should build
+    and independently verify that equivalence-coverage map before generalizing
+    to N-process Source-DPOR or optimal wakeup trees.
+
+*** Cycle 5.9 — constructive Mazurkiewicz-class coverage
+
+    =coverage.[ch]= close Cycle 5.8's central proof gap.  A reduced schedule is
+    no longer accepted merely because it is certified or because the reduced
+    count is smaller.  Every exhaustive schedule receives a constructive witness
+    to one retained representative through a finite sequence of adjacent,
+    Cycle 5.7-certified task/channel transpositions.
+
+    The builder treats exhaustive schedules as vertices.  An edge exists only
+    when two schedules differ by one adjacent cross-projection swap and the
+    commutation checker certifies the exact source prefix.  Breadth-first search
+    yields a shortest discovered witness:
+
+    #+begin_example
+    sigma_0 = exhaustive(i)
+    forall k. certify-commute(prefix(sigma_k,p_k))
+              and sigma_(k+1) = swap(sigma_k,p_k)
+    sigma_n = reduced(r)
+    ------------------------------------------------ class-coverage
+    exhaustive(i) ~_Mazurkiewicz reduced(r)
+    #+end_example
+
+    Witnesses retain exhaustive and representative indices, both schedule
+    fingerprints, and the exact ordered swap positions.  Coverage commits to
+    both input exploration fingerprints, total schedules, total swaps, the
+    configured per-witness bound, and every witness field.
+
+    Independent verification first verifies both input explorations.  It then
+    copies each exhaustive schedule, rebuilds every commutation diamond against
+    the evolving prefix, applies the swap while preserving monotonic virtual
+    time positions, and finally requires event-for-event equality with the
+    named retained representative.  Invalid positions, same-projection swaps,
+    forged schedule identities, uncovered schedules, arithmetic overflow, and
+    mutation all fail closed.
+
+    The sanitizer regression proves coverage of the exhaustive differential
+    corpus, requires a witness for every exhaustive schedule and at least one
+    non-empty swap path, verifies the complete map, and rejects a mutated swap
+    position.
+
+    Exit criterion: met for constructive equivalence coverage in the current
+    bounded binary projection model.  This establishes reduction coverage for
+    the enumerated finite corpus; it is not an unbounded theorem and still does
+    not provide N-process source sets or wakeup trees.  Cycle 5.10 should replace
+    the two global projections with explicit process-keyed operational streams
+    while preserving these dependence, diamond, exploration, and coverage
+    checkers as the two-process reference oracle.
+
+*** Cycle 5.10 — certified process-keyed operational streams
+
+    =process.[ch]= replace scheduler choices that implicitly mean “the next
+    task event” or “the next channel event” with an explicit process identity
+    and process-local event index.  A process identity is generative in the
+    same module/local-id style as task, channel, scope, and QTT identities; zero
+    and duplicate identities fail closed.
+
+    A process program partitions the already checked operational events into
+    ordered streams.  Validation requires a bijection: every task and channel
+    projection event belongs to exactly one process, no event is duplicated,
+    and no event is omitted.  A schedule is then a linear extension of those
+    local orders:
+
+    #+begin_example
+    streams(p) = [e_(p,0), ..., e_(p,n)]
+    forall p,k. choice(p,k) precedes choice(p,k+1)
+    disjoint-union_p streams(p) = task-events union channel-events
+    ---------------------------------------------------------------- process-linearization
+    lower(choices) = certified-binary-schedule
+    #+end_example
+
+    The certificate commits to the complete process program, the complete
+    process-keyed schedule, and the independently produced Cycle 5 deterministic
+    certificate.  Verification reconstructs the lowering rather than trusting
+    stored process ownership or a compiler annotation.  The sanitizer corpus
+    uses three streams, including one that owns channel operations separately
+    from two task streams, and rejects local-order mutation, duplicate process
+    identity, incomplete event ownership, and certificate mutation.
+
+    This is a conservative bridge, not a semantic sleight of hand.  Explicit
+    N-process structure now exists, but accepted linearizations must still pass
+    the binary task/channel oracle.  We therefore do not yet claim N-process
+    enabled sets, Source-DPOR, wakeup-tree optimality, or runtime parallelism.
+
+    Exit criterion: met for certified N-process representation and faithful
+    lowering into the Cycle 5 binary reference semantics.  Cycle 5.11 should
+    lift enabledness to a process-indexed frontier and prove differential
+    agreement with the binary oracle for every representable two-projection
+    state before generalizing commutation or exploration.
+
+*** Cycle 5.11 — certified process-indexed enabled frontiers
+
+    Cycle 5.10 made processes explicit but only certified complete schedules.
+    Cycle 5.11 adds a checked frontier at every process-schedule prefix.  Each
+    frontier entry names a generative process identity, its next local index,
+    the underlying operational event, and one of three disjoint outcomes:
+
+    - the stream is complete;
+    - an earlier event in the same binary reference projection is pending; or
+    - the event is the projection head and is either enabled or semantically
+      blocked by the existing lifetime, cleanup, or channel machine.
+
+    #+begin_example
+    next_p = streams(p)[cursor(p)]
+    head_kind(next_p, binary-frontier)
+    enabled_binary(next_p)
+    ------------------------------------------------ process-enabled
+    enabled_process(p, next_p)
+    #+end_example
+
+    Construction lowers only the supplied prefix, preserving its process-local
+    order, then invokes =concurrency_deterministic_enabled=.  The result retains
+    that entire binary frontier as differential evidence.  Its fingerprint
+    covers process identities, cursors, operational events, block categories,
+    binary block reasons, local channel reason, enabled count, and both program
+    and prefix fingerprints.  Independent verification reconstructs the full
+    frontier and compares semantic fields without relying on C object padding.
+
+    The sanitizer regression checks every prefix of the three-stream Cycle 5.10
+    schedule.  For every process reported enabled, it independently requires
+    the same event to be the corresponding binary projection head and that the
+    binary oracle reports that head enabled.  It also distinguishes a later
+    process-local task event waiting on its projection predecessor and rejects
+    fingerprint mutation.
+
+    Exit criterion: met for process-indexed frontier construction and
+    differential agreement over every prefix in the certified three-stream
+    corpus.  The frontier deliberately remains a conservative refinement of
+    binary enabledness: at most the task head and channel head can be enabled.
+    It does not yet establish native N-process operational independence.
+    Cycle 5.12 should define process-level semantic dependence and adjacent
+    commutation over this frontier, with the Cycle 5.6–5.7 binary oracles used
+    as differential references wherever their domains overlap.
+
+*** Cycle 5.12 — process-keyed semantic dependence and commutation
+
+    =process_commutation.[ch]= lift the Cycle 5.6 dependence judgment and the
+    Cycle 5.7 executable diamond to pairs of generative process identities.
+    This is intentionally an evidence adapter, not another ownership, QTT,
+    effect, cleanup, or channel semantics.  The selected process cursors must
+    both be enabled in the independently certified Cycle 5.11 frontier.
+
+    #+begin_example
+    frontier(prefix)(p) = enabled(e_p)
+    frontier(prefix)(q) = enabled(e_q)       p != q
+    dependence_binary(e_p,e_q) = independent
+    diamond_binary(prefix,e_p,e_q) = certified
+    ------------------------------------------------ process-diamond
+    commute_process(prefix,p,q)
+    #+end_example
+
+    A certificate commits to both process identities, both local cursor
+    indices, both lowered operational events, the prefix and frontier
+    fingerprints, the complete semantic dependence result, and the complete
+    binary commutation certificate.  The binary certificate itself proves
+    preservation of reciprocal enabledness and equality of the resulting
+    semantic-state fingerprints in both execution orders.
+
+    Same-process selection, a process absent from the program, a process whose
+    cursor is not enabled, semantic dependence, a failed diamond, allocation
+    failure, and certificate mutation have distinct fail-closed outcomes.
+    Independent verification rebuilds the process frontier, dependence result,
+    and binary diamond and compares semantic fields explicitly.
+
+    The sanitizer corpus certifies both orientations of the known independent
+    root/I/O process pair, rejects selecting one process twice, rejects the pair
+    before the I/O cursor becomes enabled, and rejects a mutated local cursor.
+
+    Exit criterion: met for process-keyed dependence and executable adjacent
+    commutation wherever Cycle 5.11 exposes two enabled binary-reference heads.
+    This is not yet a native N-process diamond: the conservative frontier still
+    admits at most one task head and one channel head.  Cycle 5.13 should use
+    these process certificates to perform bounded process-keyed exploration and
+    compare its two-process specialization schedule-for-schedule with Cycle 5.8,
+    without claiming optimal N-process DPOR.
+
+*** Cycle 5.13 — native process-owned frontier and exhaustive exploration
+
+    =native.[ch]= cross the boundary that Cycles 5.10–5.12 deliberately did
+    not cross.  Enabledness is now derived directly from one cursor per process;
+    it does not ask for the next global task or channel projection.  Three
+    independent processes are simultaneously enabled in the executable corpus,
+    and bounded exhaustive exploration enumerates all six linearizations.
+
+    Native operations carry canonical QTT read/write places and the existing
+    =QttEffectAtom= vocabulary.  Dependence is conservative: overlapping writes
+    or read/write pairs depend under =qtt_place_overlaps=; operations sharing an
+    effect capability depend when either effect may mutate or externally
+    observe state.  Pure operations and disjoint place/effect capabilities
+    remain independent.  No parallel-specific effect algebra was introduced.
+
+    Programs require unique generative process identities, globally unique
+    operation identities, well-formed QTT places, and internally ordered local
+    choices.  Frontiers and complete explorations carry canonical fingerprints
+    and are independently reconstructed.  Bounds, malformed prefixes,
+    duplicate identities, time regression, allocation failure, and certificate
+    mutation fail closed.
+
+    Exit criterion: met for the first native N-process state space: three
+    co-enabled process operations and six certified exhaustive schedules,
+    including QTT-place and effect-capability dependence tests.  Task lifetime,
+    cancellation, channel machines, and reduced DPOR must now be moved from the
+    binary reference interpreter into this native transition system before it
+    can replace Cycle 5.1 operationally.
+
+*** Cycle 5.14 — native structured-task transitions through the authority kernel
+
+    The Cycle 1 authority checker now exposes
+    =concurrency_verify_trace_prefix=.  It executes the identical spawn, join,
+    cancellation, cleanup, QTT capability, and loan transition rules as complete
+    verification, but deliberately defers only the final scope-closure premise
+    that every child has joined.  Complete verification remains unchanged and
+    continues to reject live children.
+
+    Native operations may identify one transition in a complete
+    =ConcurrencyTrace= task model.  Program validation requires every modeled
+    transition to have exactly one process owner.  At a frontier, the native
+    interpreter constructs the task prefix selected so far, appends each
+    candidate independently, and asks the authority prefix checker whether that
+    transition is enabled.  The native layer therefore does not duplicate task
+    state, authority ownership, loan holders, cancellation, or cleanup rules.
+
+    The sanitizer corpus contains two independent spawn/join process chains and
+    a third ordinary process.  All three initial operations are co-enabled and
+    exhaustive native exploration accepts all 30 local-order-preserving
+    schedules.  Reversing one process to place =join= before its =spawn=
+    disables only that process while the unrelated spawn and ordinary operation
+    remain enabled.  The original kernel regression additionally proves that an
+    open spawn prefix is valid under prefix checking but remains a live-child
+    error under complete checking.
+
+    Exit criterion: met for native process-owned scheduling of structured
+    spawn/join transitions with QTT authority replay and unchanged closed-scope
+    enforcement.  Cancellation and cleanup rules already participate whenever
+    modeled, but the native corpus does not yet explore their interleavings;
+    channel transitions and task-aware dependence remain the next integration
+    boundary.
+
+*** Cycle 5.15 — native cancellation/cleanup exploration and task dependence
+
+    The native corpus now assigns one structured cancellation lifecycle across
+    separate parent and child process streams: spawn/cancel/join belong to the
+    parent stream, while checkpoint/cleanup-complete belong to the child.  A
+    third process contributes an unrelated operation.  Frontier enabledness
+    continues to come from =concurrency_verify_trace_prefix=, so cancellation
+    observation, masked cleanup, and join-after-cleanup are the original Cycle 3
+    rules rather than native approximations.
+
+    Exactly six completed schedules survive: the five task transitions have one
+    valid causal order, while the unrelated operation may occupy any of six
+    positions.  Taking the checkpoint before cancellation is a legal prefix but
+    leaves no later checkpoint to observe the request; those branches become
+    explicit certified dead ends.  Native exploration now records
+    =dead_end_count= in its fingerprint and independent replay.
+
+    Native task/task dependence delegates to the Cycle 5.6 semantic footprint
+    oracle.  Task order, task lifetime, cleanup, and QTT authority reasons are
+    translated into the native reason vocabulary.  The regression specifically
+    proves that the co-enabled cancel and checkpoint operations depend through
+    the child lifetime, while ordinary QTT place and existing effect-capability
+    dependence remain unchanged.
+
+    Exit criterion: met for bounded native cancellation, checkpoint, cleanup,
+    join exploration with visible dead ends and reused task dependence.  Native
+    channel-machine transitions remain the largest operational gap before the
+    binary combined interpreter can become only a reference oracle.
+
+*** Cycle 5.16 — native buffered-channel transitions and effect authorization
+
+    Native operations may now own exactly one step of a complete
+    =ConcurrencyNetworkTrace=.  Program validation gives every modeled network
+    step one unique process owner, just as Cycle 5.14 does for task steps.  At a
+    frontier, the selected native network operations are projected in their
+    actual schedule order, the candidate is appended, and
+    =concurrency_deterministic_channel_enabled= checks the resulting prefix.
+
+    This is deliberately an adapter over the existing semantics.  Queue bounds,
+    FIFO direction, protocol fidelity, dynamic endpoint authority, and scoped
+    send/receive effect authorization remain owned by the Cycle 4 channel
+    machine and effect solver.  The native scheduler owns only process cursors
+    and the interleaving choice.
+
+    The sanitizer corpus splits a capacity-one channel between sender and
+    receiver processes and adds an unrelated process.  Receive is initially
+    blocked on an empty queue.  After the first send, the sender's second send
+    is blocked on the full queue while receive and the unrelated operation are
+    enabled.  Exhaustive exploration accepts exactly five schedules: the four
+    channel steps have one FIFO-valid order, and the unrelated operation may be
+    inserted at any of five positions.  No valid branch dead-ends.
+
+    Native modeled-operation dependence now delegates every task/task,
+    task/channel, and channel/channel pair to the Cycle 5.6 oracle.  Channel
+    identity, endpoint/QTT authority, task lifetime, cleanup, and scoped effect
+    conflicts are translated into native reasons; local read/write footprints
+    remain an additional conservative layer.  A capacity-two differential
+    probe makes send and receive co-enabled and proves both the channel and
+    effect-capability dependence reasons.
+
+    Exit criterion: met for bounded buffered send/receive scheduling, local
+    blocking, scoped effect authorization, and native channel dependence.
+    Native task liveness and cleanup-discharge must next be conjoined with these
+    channel prefixes so the combined binary interpreter becomes a differential
+    oracle rather than the only owner of cross-domain temporal rules.
+
+*** Cycle 5.17 — native task/channel temporal integration
+
+    The combined interpreter's task-liveness and cleanup-discharge judgment is
+    now exposed as =concurrency_deterministic_temporal_enabled=.  It consumes an
+    arbitrary selected set of original task and network events plus one
+    candidate.  Unlike the old binary enabledness entry point, it does not
+    require either candidate to be a global projection head.  The original
+    deterministic interpreter calls this same query, so extraction did not
+    create a native-only approximation.
+
+    For a channel candidate, the selected task events determine whether its
+    actor and rendezvous peer are live.  Channel cancellation additionally
+    requires the actor to have observed cancellation at a checkpoint and to be
+    in masked cleanup.  For cleanup completion or join, every modeled channel
+    cancellation rooted in that child must already belong to the selected set.
+    Local protocol/FIFO readiness remains the independent Cycle 5.3 query, and
+    structured task legality remains the Cycle 1 prefix checker; native
+    enabledness is the conjunction of all three existing judgments.
+
+    The sanitizer regression distributes one cancellation lifecycle across a
+    parent task process, child task process, and channel process.  It proves
+    that endpoint cancellation is disabled before spawn and before checkpoint
+    observation, that cleanup completion is disabled before endpoint discharge,
+    and that it becomes enabled immediately after discharge.  Exhaustive native
+    exploration retains exactly one complete causal schedule and records the
+    premature-checkpoint branches as dead ends.
+
+    Exit criterion: met for native actor liveness, observed-cleanup channel
+    cancellation, and cleanup/join discharge ordering using one shared temporal
+    judgment.  The next cycle should construct native combined-state
+    fingerprints and executable N-process commutation diamonds, then use them
+    to begin sound schedule reduction rather than exhaustively enumerating every
+    independent placement.
+
+*** Cycle 5.18 — native executable commutation diamonds
+
+    =concurrency_native_commute= lifts commutation certification into the real
+    N-process transition system.  Two distinct process cursors must be
+    co-enabled and independent under the existing semantic dependence oracle.
+    Both adjacent orders are then executed through ordinary native frontiers;
+    each second operation must remain enabled after the first.
+
+    Equality after the diamond is stronger than comparing cursor vectors or
+    prefix hashes.  From each two-step result the checker recursively derives
+    the complete remaining enabled transition tree.  Every node commits to all
+    process identities and cursors, enabled operation identities, completion
+    versus deadlock, and the fingerprints of every enabled successor in stable
+    process order.  Thus the certificate compares finite future behavior,
+    including authority, cancellation, temporal cleanup, channel, and effect
+    blocking observed through the native frontier.  A caller-supplied state
+    bound fails closed before combinatorial exploration can escape its proof
+    budget.
+
+    Certificates retain both process and operation identities, the original
+    program and prefix fingerprints, the state bound, independently counted
+    forward/reverse state trees, both state fingerprints, and an aggregate
+    fingerprint.  Verification reconstructs the entire diamond and both future
+    trees.  Mutation, same-process selection, semantic dependence, loss of
+    reciprocal enabledness, allocation failure, and state-bound exhaustion are
+    distinct outcomes.
+
+    The sanitizer corpus certifies a pure three-process diamond and a structured
+    spawn against an independent pure process, rejects certificate mutation,
+    rejects same-process and cancellation-lifetime dependent pairs, and proves
+    bound exhaustion.  Two sibling spawns deliberately remain dependent because
+    the current conservative oracle records their shared parent actor; this
+    cycle does not weaken that safety judgment merely because one fixture could
+    commute.
+
+    Exit criterion: met for bounded executable native commutation with finite
+    continuation-tree equivalence and independent replay.  The next cycle may
+    use only these certificates to prune native exhaustive exploration, while
+    retaining exhaustive mode as the differential oracle and constructing an
+    explicit coverage witness for every removed schedule class.
+
+*** Cycle 5.19 — native certified reduction and constructive coverage
+
+    Native exploration now has two independently replayable modes.  Exhaustive
+    mode remains unchanged.  Certified-reduced mode examines a frontier's first
+    enabled process in stable program order and retains it alone only when a
+    Cycle 5.18 diamond certifies it against every other enabled process.  One
+    dependency, failed diamond, or loss of co-enabledness restores the entire
+    frontier.  Proof-bound exhaustion and allocation failure abort the search;
+    neither silently turns into pruning.
+
+    This is a conservative persistent-choice specialization, not a claim of
+    optimal DPOR.  Exploration evidence records its mode, commutation-state
+    bound, certified diamonds, pruned choices, fallback frontiers, schedules,
+    branches, and dead ends.  Independent verification reruns the selected mode
+    and compares every retained schedule and aggregate fingerprint.
+
+    =concurrency_native_coverage_build= supplies the missing constructive
+    theorem.  For every exhaustive schedule it performs a finite search over
+    neighboring exhaustive schedules.  An edge exists only when the two
+    adjacent process operations have a freshly reconstructed Cycle 5.18 native
+    diamond at that exact prefix.  Each witness stores the swap positions that
+    reach an actual reduced representative.  Verification replays every swap,
+    rebuilds every diamond, and demands exact representative equality.
+
+    The three-pure-process corpus reduces six schedules to one.  All six
+    exhaustive schedules are covered by explicit witnesses containing nine
+    certified adjacent swaps in total.  The buffered-channel corpus reduces the
+    five possible placements of its independent operation to one representative
+    while preserving all five through witnesses.  Certificate mutation and
+    state/swap bounds fail closed.
+
+    Exit criterion: met for bounded native schedule reduction with exhaustive
+    differential exploration and constructive Mazurkiewicz-class coverage on
+    both pure and channel-blocking corpora.  The algorithm deliberately remains
+    conservative and exponential in its proof oracles.  The next cycle should
+    replace the one-canonical-process specialization with native source sets or
+    wakeup trees while checking its retained classes against this exhaustive
+    coverage oracle.
+
+*** Cycle 5.20 — offline certified wakeup trees
+
+    Native exploration now has a prefix-sharing wakeup-tree representation.
+    This first implementation deliberately constructs it offline: it enumerates
+    the bounded exhaustive oracle, connects schedules only through adjacent
+    swaps carrying freshly built Cycle 5.18 commutation certificates, and
+    retains the first stable schedule in each connected component.  Inserting
+    those representatives into a trie shares their common prefixes.  The
+    certificate records the exact equivalence-class and trie-node counts in
+    addition to its schedules, bounds, program identity, and aggregate
+    fingerprint; independent verification reconstructs the whole artifact.
+
+    The algorithm is grounded in the wakeup-tree representation from Abdulla,
+    Aronis, Jonsson, and Sagonas, /Optimal Dynamic Partial Order Reduction/
+    (POPL 2014; journal account at https://doi.org/10.1145/3073408), but does
+    not yet claim their online optimal-DPOR algorithm.  Exhaustive enumeration
+    remains inside construction, making this a semantic and certificate
+    milestone rather than a complexity milestone.
+
+    The QTT-overlap regression is intentionally more discriminating than the
+    all-independent corpus: six exhaustive schedules form two certified
+    Mazurkiewicz classes, the earlier local reduction retains four schedules,
+    and the wakeup tree retains exactly two representatives in seven trie
+    nodes.  Cycle 5.19 coverage independently derives every one of the six
+    schedules from those representatives within two swaps.  Bounds and
+    certificate mutation continue to fail closed.
+
+    Exit criterion: met for a bounded, replayable wakeup-tree representation
+    containing exactly one representative per equivalence component proven by
+    native adjacent diamonds.  The next cycle should make wakeup insertion
+    online, deriving backtracking obligations while exploring, and retain this
+    offline constructor plus exhaustive coverage as its differential oracle.
+
+*** Cycle 5.21 — streaming certified wakeup insertion
+
+    =concurrency_native_explore_wakeup_tree_online= removes the offline
+    constructor's global exhaustive-exploration object.  Ordinary native DFS
+    streams each completed execution directly to the wakeup classifier.  The
+    classifier searches its bounded adjacent-swap component, admitting edges
+    only through freshly reconstructed Cycle 5.18 diamonds.  Reaching an
+    existing representative marks the execution redundant; exhausting the
+    component proves a new class and immediately inserts that execution into
+    the explicit parent-linked trie.
+
+    The distinction is executable rather than nominal.  On the QTT-overlap
+    corpus, a retained-schedule bound of two makes the Cycle 5.20 constructor
+    fail while the streaming constructor succeeds: it examines six schedules,
+    rejects four certified duplicates, and retains two representatives in the
+    same seven-node trie.  Cycle 5.19 independently covers all six exhaustive
+    schedules from those representatives.  A separate equivalence-search bound
+    prevents component search from inheriting an implicit unbounded queue;
+    exhaustion destroys the partial artifact and fails closed.
+
+    This cycle implements online trie insertion, not the full Optimal-DPOR
+    algorithm of Abdulla, Aronis, Jonsson, and Sagonas
+    (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf).  The DFS
+    still reaches every complete schedule before classifying it.  In the paper,
+    wakeup-tree leaves retain initial fragments of race reversals so future
+    exploration neither forgets the reversal sequence nor suffers sleep-set
+    blocking.  Monad does not claim that theorem until those obligations are
+    derived during prefix exploration and checked against this streaming oracle.
+
+    Exit criterion: met for bounded online class recognition, immediate
+    parent-linked wakeup insertion, independent replay, and exhaustive
+    differential coverage without materializing the exhaustive result inside
+    construction.  The next cycle should define native happens-before and race
+    detection over operation occurrences, then emit the first certified
+    race-reversal sequence as a wakeup obligation at the responsible prefix.
+
+*** Cycle 5.22 — native happens-before and race-reversal certificates
+
+    =concurrency_native_races= assigns every occurrence in a valid native
+    execution a strict happens-before relation.  Its generating edges are
+    process order and the existing semantic dependence oracle; the latter
+    already combines canonical QTT-place overlap, scoped effect capabilities,
+    structured task lifetime and cleanup, authority, and channels.  Transitive
+    closure produces one execution-order-respecting partial order without
+    introducing a second conflict semantics beside those subsystems.
+
+    Following Definition 3.1 and Section 3.3 of Abdulla, Aronis, Jonsson, and
+    Sagonas, /Optimal Dynamic Partial Order Reduction/
+    (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf), a native
+    race is a cross-process cover edge of that relation.  A race is emitted only
+    when the later occurrence was enabled immediately before the earlier one,
+    making reversal executable.  Its wakeup obligation retains the responsible
+    prefix and =notdep(e,E).proc(e')=: every intervening occurrence not ordered
+    after the earlier event, followed by the racing process occurrence.  This
+    preserves the sequence that a one-process backtrack set would forget.
+
+    The certificate commits to the complete relation matrix, edge count, race
+    endpoints, semantic conflict reasons, reversal prefixes and sequences,
+    program identity, schedule identity, and aggregate fingerprints.  Its
+    verifier independently validates the schedule through ordinary native
+    frontiers and reconstructs every edge and obligation.  Malformed schedules,
+    structural corruption, and mutation fail closed.
+
+    The QTT-overlap corpus orders a write before a later read while an unrelated
+    third process occurs between them.  It derives one race and the reversal
+    sequence =third.reading-process=; replacing the QTT conflict with the
+    existing scoped effect write/read capability derives the same shape with an
+    effect-specific reason.  Thus QTT and effects remain inputs to one causal
+    relation rather than parallel DPOR implementations.
+
+    Exit criterion: met for occurrence identity, strict native happens-before,
+    reversible cover-race detection, explicit race-reversal sequences, and
+    independent replay.  This cycle has not proved all seven abstract
+    happens-before-assignment laws for arbitrary native programs, nor does the
+    streaming explorer consume the obligations.  The next cycle should insert
+    these certified reversal sequences into prefix-local wakeup trees and use
+    them to drive exploration, retaining Cycle 5.21 as the differential oracle.
+
+*** Cycle 5.23 — race-driven prefix wakeup exploration
+
+    =concurrency_native_explore_race_wakeup= is the first native mode whose
+    future executions are selected by discovered races rather than by exhaustive
+    DFS.  It begins with one stable enabled execution, derives the independently
+    replayable Cycle 5.22 race certificate, and inserts each previously uncovered
+    =notdep(e,E).proc(e')= sequence at its responsible prefix.  Each obligation
+    owns the exact prefix and forced sequence, source-schedule and race
+    fingerprints, and a linear discharge state.
+
+    Discharge replays the prefix and forced sequence through ordinary native
+    frontiers.  Every process identity and local occurrence must be enabled at
+    the promised point; the remainder is completed in stable process order.
+    The resulting execution is checked against the bounded Cycle 5.21
+    equivalence classifier, inserted into the representative trie only when it
+    is a new class, and analyzed for further races.  An obligation already
+    represented by an explored schedule or already queued is not duplicated.
+    Exploration ends only when the finite obligation worklist is fully
+    discharged.
+
+    On the QTT-overlap corpus this is an actual exploration reduction: six
+    exhaustive schedules contain two Mazurkiewicz classes, while race-driven
+    exploration executes exactly two schedules, discharges one prefix-zero
+    reversal, and retains two representatives in seven trie nodes.  Cycle 5.19
+    independently reconstructs all six exhaustive schedules from those two.
+    Replacing the QTT read/write conflict with the existing scoped effect
+    capability produces the same operational reduction through the shared
+    semantic dependence oracle.
+
+    Obligation count is independently bounded.  A two-race fixture with a
+    one-obligation budget fails closed and frees the partial exploration;
+    discharge mutation is rejected by independent reconstruction.  The
+    sanitizer regression also covers ownership on this limit-exhaustion path.
+
+    This realizes the central race-reversal control-flow idea in the Optimal
+    DPOR work (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf),
+    but it is not yet the paper's complete ordered wakeup-tree algorithm.  Monad
+    still lacks sleep sets, the formal weak-initial insertion relation, and an
+    executable proof of all happens-before-assignment laws.  The current
+    equivalence classifier remains a bounded safety oracle rather than part of
+    an optimality theorem.
+
+    Exit criterion: met for certified prefix-indexed reversal storage, enabled
+    replay, linear discharge, race-driven discovery, bounded termination, and
+    exhaustive differential coverage on QTT and effect conflicts.  The next
+    cycle should add sleep sets and weak-initial redundancy checks, then make
+    ordered prefix wakeup insertion reject sleep-set-blocked branches before
+    they begin.
+
+*** Cycle 5.24 — bounded weak-initial certificates
+
+    =concurrency_native_weak_initial= makes the paper's sequence relation
+    =v ∼[E] w= executable without assuming transitivity.  Under one fixed native
+    prefix =E=, it enumerates the bounded complete executions beginning with
+    =v= and =w=.  A relation witness exists only when one completion from each
+    side is connected by a path of adjacent Cycle 5.18-certified commutations
+    that never crosses the fixed prefix.
+
+    The certificate stores both witness schedule indices, identities of =E=,
+    =v=, and =w=, the exact adjacent-swap path, all proof bounds, and aggregate
+    fingerprints.  Verification reconstructs the exhaustive bounded oracle and
+    the complete connectivity decision.  An unrelated result is therefore also
+    meaningful within its declared finite schedule and commutation bounds: no
+    compatible pair exists in that bounded native program.
+
+    This follows Lemma 6.1 and Definition 6.3 of Abdulla, Aronis, Jonsson, and
+    Sagonas (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf),
+    where weak-initial consistency determines whether an ordered wakeup-tree
+    leaf already represents a proposed sequence.  Monad deliberately does not
+    reduce the judgment to exact prefix equality or treat it as an equivalence
+    relation; the paper explicitly notes that =∼[E]= is not transitive.
+
+    The broader concurrency-theory map
+    (https://ncatlab.org/nlab/show/concurrency+theory#idea) treats concurrent
+    evolution as progress indexed by an irreversible directed object.  This
+    cycle models only finite interleavings of that evolution.  Its commutation
+    paths are an executable reduction oracle, not a claim that interleaving
+    schedules are the final denotational account of Monad concurrency; event
+    structures and directed models remain the semantic horizon.
+
+    The QTT-overlap regression proves that an unrelated process prefix and the
+    reading-process prefix are weak-initial compatible because their completions
+    reach one Mazurkiewicz class.  The conflicting write and read prefixes are
+    rejected because reversing their causal order reaches different classes.
+    Certificate mutation fails independent replay.
+
+    Exit criterion: met for bounded constructive =v ∼[E] w= decisions over the
+    real native semantics.  This cycle is an oracle milestone and still uses
+    exhaustive completion internally.  The next cycle should attach sleep sets
+    to every explored prefix and use this certificate to enforce both wakeup
+    tree conditions before ordered insertion or branch execution.
+
+*** Cycle 5.25 — certified prefix-local sleep-set transfer
+
+    =concurrency_native_sleep_step= makes Algorithm 2's recursive sleep-set
+    update executable and independently replayable:
+
+    =Sleep' = {q ∈ Sleep | E ⊨ p ♦ q}=.
+
+    For a selected enabled process =p= at native prefix =E=, every input
+    sleeper is classified by the existing =concurrency_native_dependence=
+    judgment. Independent processes are retained in stable input order;
+    dependent processes are removed with the exact QTT, effect, task, cleanup,
+    authority, or channel reason already produced by that shared oracle. No
+    second dependency relation exists inside the sleep-set subsystem.
+
+    The certificate owns the per-process decisions and retained set, plus the
+    selected process and program, prefix, input, and aggregate fingerprints.
+    Verification reconstructs the frontier and every decision. Duplicate
+    sleepers, choosing a sleeping process, disabled processes, malformed
+    prefixes, and certificate mutation fail closed.
+
+    The QTT-overlap regression starts with the writing and unrelated processes
+    asleep, then selects the reading process. The conflicting writer is removed
+    with a QTT-place reason while the unrelated process remains asleep. This is
+    exactly the sleep-set transfer at Algorithm 2 line 18 of Abdulla, Aronis,
+    Jonsson, and Sagonas
+    (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf).
+
+    Exit criterion: met for independently certified one-edge sleep-state
+    transfer over the real QTT/effect/task/network dependence relation. Sleep
+    sets are not yet stored at every explored prefix, and ordered wakeup-tree
+    insertion does not yet reject a sequence whose weak initials intersect the
+    current sleep set. That integration is the next explicit cycle boundary.
+
+*** Cycle 5.26 — certified sleep-admissible wakeup leaves
+
+    =concurrency_native_wakeup_admissible= implements Property 1 of
+    Definition 6.3 for a proposed wakeup leaf =w= after =⟨E, Sleep⟩=:
+
+    =WI[E](w) ∩ Sleep = ∅=.
+
+    Each sleeping process =q= is converted to its enabled next occurrence at
+    =E= and checked independently with the Cycle 5.24 certificate for
+    =q ∼[E] w=. This pointwise construction is essential because weak-initial
+    consistency is not transitive: Monad neither chooses a representative
+    sleeper nor approximates the intersection through pairwise dependence.
+
+    The certificate owns every nested weak-initial proof, records the first
+    blocking sleep index, and commits to the program, prefix, candidate,
+    ordered sleep set, proof bounds, and aggregate result. Verification checks
+    the internal fingerprint and logical result of every nested certificate
+    before reconstructing the entire decision. Thus mutating a nested relation
+    while leaving its stored fingerprint unchanged also fails closed.
+
+    Candidate executability is checked independently even for an empty sleep
+    set. This preserves the vacuous truth of the invariant at Algorithm 2's
+    initial call rather than accidentally rejecting =Explore(⟨⟩, ∅, ...)=.
+    The QTT regression accepts the writer-asleep/read candidate because their
+    order is causal, while it rejects the unrelated-process-asleep/read
+    candidate because an equivalent completion can begin with that sleeper.
+
+    This is the exact insertion precondition at Algorithm 2 line 7 of Abdulla,
+    Aronis, Jonsson, and Sagonas
+    (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf).
+
+    Exit criterion: met for bounded, independently replayable Property 1
+    decisions over native semantics, including empty sleep sets and adversarial
+    nested-certificate mutation. The next cycle should implement ordered
+    =insert[E]=, preserving old leaves and enforcing Definition 6.3 Property 2
+    at the insertion point.
+
+*** Cycle 5.27 — constructive directed-initial certificates
+
+    Re-reading the construction of =insert[E]= exposed a proof dependency that
+    weak initiality alone cannot discharge. After the smallest node =v= with
+    =v ∼[E] w= is found, the non-leaf case requires a shortest extension =w′=
+    satisfying the directed relation =w ⊑[E] v.w′=. Appending =w= directly
+    would be an unjustified shortcut and can violate Definition 6.3 Property 2.
+
+    =concurrency_native_initial= now certifies this directed relation. Starting
+    from the finite executable sequence on the right, it performs a bounded BFS
+    over adjacent Cycle 5.18-certified commutations. The relation holds exactly
+    when a reached equivalent sequence begins with the proposed left sequence.
+    Ordered insertion can therefore test candidate extensions and choose the
+    shortest successful one rather than assuming one. The certificate records
+    the reached state and exact swap path, all bounds and identities, and
+    independently replayable fingerprints.
+
+    Unlike Cycle 5.24 weak initiality, both sides are not independently extended
+    to arbitrary maximal executions. The right side is fixed, and only the left
+    is extended within that finite Mazurkiewicz trace. Keeping these judgments
+    distinct preserves the non-transitive theory used by the wakeup algorithm.
+
+    The QTT regression proves that the unrelated process is an initial prefix of
+    =reader.unrelated= through one certified swap, while the writer is not an
+    initial prefix of =reader.writer= because their QTT-place conflict prevents
+    that swap. Mutation of the constructive path fails independent replay.
+
+    This implements the directed relation used by Section 6 of Abdulla, Aronis,
+    Jonsson, and Sagonas
+    (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf).
+
+    Exit criterion: met for bounded constructive directed-initial decisions over
+    native QTT/effect/task/network commutations. Cycle 5.28 can now implement the
+    paper's ordered =insert[E]= without inventing a replacement for either
+    =∼[E]= or =⊑[E]=, and verify preservation of both wakeup-tree properties.
+
+*** Cycle 5.28 — certified ordered wakeup-tree insertion
+
+    =concurrency_native_wakeup_insert= now implements the Section 6
+    =insert[E]= construction over the native ordered wakeup trie. Existing
+    leaves are inserted in caller order, which defines sibling order and hence
+    the induced post-order. The algorithm traverses that post-order and uses
+    Cycle 5.24 to select the smallest node =v= satisfying =v ∼[E] w=.
+
+    If =v= is already a leaf, insertion is suppressed exactly as prescribed:
+    an earlier leaf already represents the candidate. Otherwise the algorithm
+    enumerates executable extensions below =v= by increasing length and uses
+    Cycle 5.27 to choose the first extension for which the candidate is directed
+    initial. That extension becomes a new last-ordered leaf; existing nodes and
+    leaves are never rewritten or demoted.
+
+    Both the input and output trie are checked rather than trusted. Every
+    terminal must be a structural leaf. Every leaf independently satisfies
+    =WI[E](w) ∩ Sleep = ∅= through Cycle 5.26. For each leaf and each ancestor,
+    every earlier sibling process is checked with Cycle 5.24 and must not be a
+    weak initial of the remaining leaf suffix. This is Definition 6.3 Property
+    2 directly, including internal anchors rather than only root branches.
+
+    The insertion certificate owns the resulting trie and commits to the input
+    leaves, prefix, sleep set, candidate, bounds, chosen anchor, suppression or
+    addition decision, and before/after node counts. Verification reconstructs
+    the entire mutation. Node or terminal mutation therefore fails closed.
+
+    The QTT regression exercises both branches. A reader is appended after an
+    earlier conflicting writer because the writer cannot weak-initially
+    represent it. The same reader is suppressed behind an earlier unrelated
+    leaf because their completions are equivalent. This follows Definition 6.3,
+    Lemma 6.4, and the insertion construction of Abdulla, Aronis, Jonsson, and
+    Sagonas
+    (https://user.it.uu.se/~parosha/publications/papers/popl2014.pdf).
+
+    Exit criterion: met for bounded ordered insertion, old-leaf preservation,
+    smallest-node suppression, shortest directed-valid extension, both wakeup
+    invariants, and independent replay. The next cycle should replace the
+    Cycle 5.23 obligation queue with prefix-owned sleep sets and these certified
+    ordered tries, then compare the resulting explorer against exhaustive and
+    race-driven differential oracles.
+
+*** Cycle 5.29 — prefix-sleep ordered-wakeup explorer audit
+
+    =concurrency_native_explore_ordered_wakeup= connects the formerly isolated
+    proof components to complete race-driven executions. For each Cycle 5.23
+    obligation, it reconstructs the responsible source schedule and derives the
+    sleep set at that prefix from already explored next-process branches.
+
+    Before the obligation is accepted, its reversal sequence must pass the
+    Cycle 5.28 ordered =insert[E]= construction under that exact sleep set. The
+    forced sequence is then replayed edge by edge. A selected process already
+    asleep is a sleep-set-blocked execution and fails closed; otherwise Cycle
+    5.25 transfers the sleep set through the selected transition using the
+    shared QTT/effect/task/network dependence oracle.
+
+    The exploration certificate records ordered insertions, suppressions,
+    certified sleep transitions, and blocked edges. Those counters participate
+    in the aggregate fingerprint and independent whole-explorer reconstruction.
+    A certified result requires every race obligation to have exactly one
+    ordered insertion decision and requires zero sleep-set-blocked edges.
+
+    The QTT-overlap regression explores two schedules for two Mazurkiewicz
+    classes, audits one root insertion, transfers the root sleep set through the
+    one-step reader reversal, encounters no sleep blocking, and retains
+    constructive coverage of all six exhaustive schedules. The representative
+    exploration bound remains two while the separate equivalence-oracle budget
+    is derived from =max_equivalence_states=; conflating those budgets had
+    initially caused a valid integrated proof to fail at two schedules.
+
+    Claim boundary: this is the first end-to-end safety and differential mode,
+    but it deliberately reuses Cycle 5.23 to discover and discharge the linear
+    obligation worklist before auditing it. It does not yet replace that queue
+    with Algorithm 2's recursive prefix-owned =sleep(E)= and =wut(E)= state, so
+    the full no-sleep-blocking theorem is not claimed for arbitrary programs.
+
+    Exit criterion: met for independently replayable ordered-insertion and
+    sleep-transfer auditing of every race-driven branch, zero blocked edges on
+    the QTT corpus, two-class reduction, and exhaustive coverage. The next cycle
+    should make prefix state first-class and let ordered wakeup leaves—not the
+    linear obligation queue—select the next execution.
+
+** Cycle 6 — parallel runtime substrate
+
+   Planned.  Implement workers, work distribution, parking, monotonic deadlines,
+   blocking-FFI isolation, shutdown, and platform backends.  Sanitizer stress and
+   deterministic differential traces are mandatory exit criteria.
+   The fiber architecture, QTT boundary, ABI choice, sanitizer protocol, stack
+   strategy, and portability gates are specified in [[file:FIBERS.org][FIBERS.org]].
+
+* Research basis
+
+  The direction combines, without conflating, several lines of work:
+
+  - Robert Atkey, /The Syntax and Semantics of Quantitative Type Theory/ (LICS
+    2018), for graded use;
+  - Edwin Brady, /Idris 2: Quantitative Type Theory in Practice/ (ECOOP 2021),
+    for practical quantitative elaboration;
+  - Plotkin and Pretnar's algebraic effects and handlers, for separating
+    concurrency operations from their interpreters;
+  - Daan Leijen, /Algebraic Effect Handlers with Resources and Deep
+    Finalization/ (MSR-TR-2018-10), for finalization that remains effective
+    across abortive and non-resuming operations;
+  - van der Rest, Reinders, Poulsen, and Hillerstrom, /A Calculus for Scoped
+    Effects & Handlers/ (JFP 2024), for treating scope delimiters as typed
+    operations rather than runtime conventions;
+  - George Necula, /Proof-Carrying Code/ (POPL 1997), for the architectural
+    separation between evidence production and a small independent checker;
+  - Honda, Vasconcelos, and Kubo, /Language Primitives and Type Discipline for
+    Structured Communication-Based Programming/ (ESOP 1998), and the corrected
+    Vasconcelos/Yoshida metatheory, for binary protocol duality and fidelity;
+  - Fowler, Lindley, Morris, and Decova, /Exceptional Asynchronous Session
+    Types/ (POPL 2019), for explicit rather than implicit endpoint cancellation;
+  - Wadler, /Propositions as Sessions/ (JFP 2014), for the linear-logic account
+    of transmitting channels as linear values;
+  - scoped or nursery-style structured concurrency, for tree-shaped lifetime
+    and failure propagation;
+  - concurrent separation logic, especially Iris and SteelCore, for ownership,
+    invariants, and later atomic reasoning; and
+  - graded and modal session types, for later protocol-indexed communication.
+
+  These are design inputs, not inherited proofs.  Every Monad claim must end at
+  an executable checker, a mechanized theorem, or an explicitly named boundary.

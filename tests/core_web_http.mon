@@ -1,0 +1,39 @@
+:TEST-ID tests.core.web-http
+:TEST-CONTEXT monadc.context.core-libs.web-http
+:TEST-PURPOSE HTTP/1.1 request heads parse strictly with structured resource failures.
+:TEST-EXPECT compile, run, HTTP grammar assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY web-http
+
+import Web.HTTP
+
+module Core.WebHttp
+  []
+
+
+define limits :: HttpLimits
+  HttpLimits 16384 8192 8192 32 1048576
+
+tests
+  assert-eq (http-decoded? (decode-request-head limits "GET / HTTP/1.1\r\nHost: x\r\n\r\n")) True "A strict HTTP/1.1 request head decodes"
+  assert-eq (request-method-or "" (decode-request-head limits "GET / HTTP/1.1\r\nHost: x\r\n\r\n")) "GET" "Method tokens retain their spelling"
+  assert-eq (request-target-or "" (decode-request-head limits "GET /hello?name=Monad HTTP/1.1\r\nHost: x\r\n\r\n")) "/hello?name=Monad" "Origin-form target is preserved"
+  assert-eq (request-header-count-or 0 (decode-request-head limits "GET / HTTP/1.1\r\nHost: localhost\r\nAccept: text/plain\r\n\r\n")) 2 "Header fields are counted"
+  assert-eq (request-header-or "" "host" (decode-request-head limits "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")) "localhost" "Header lookup is ASCII case-insensitive"
+  assert-eq (request-content-length-or -1 (decode-request-head limits "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\n")) 5 "Content-Length is parsed exactly"
+  assert-eq (request-body-or "" (decode-request-message limits "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello")) "hello" "A complete message retains its body"
+  assert-eq (request-target-or "" (decode-request-bytes limits ⌜0x47 0x45 0x54 0x20 0x2f 0x62 0x79 0x74 0x65 0x73 0x20 0x48 0x54 0x54 0x50 0x2f 0x31 0x2e 0x31 0x0d 0x0a 0x48 0x6f 0x73 0x74 0x3a 0x20 0x78 0x0d 0x0a 0x0d 0x0a⌝)) "/bytes" "Network bytes decode at the HTTP grammar boundary"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET  / HTTP/1.1\r\n\r\n")) 400 "Request-line separators are exactly one SP"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET / HTTP/1.0\r\n\r\n")) 505 "Unsupported HTTP versions are explicit"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET / HTTP/1.1\n\n")) 400 "Bare LF framing is rejected"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET / HTTP/1.1\r\n folded: no\r\n\r\n")) 400 "Obsolete folded fields are rejected"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET / HTTP/1.1\r\nBad Name: no\r\n\r\n")) 400 "Field names use token syntax"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET / HTTP/1.1\r\n\r\n")) 400 "HTTP/1.1 requires exactly one Host field"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "GET / HTTP/1.1\r\nHost: one\r\nHost: two\r\n\r\n")) 400 "Duplicate Host fields are rejected"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\n")) 400 "Duplicate Content-Length is rejected"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n")) 501 "Unsupported transfer coding is explicit"
+  assert-eq (http-decoded? (decode-request-head limits "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1x\r\n\r\n")) False "Invalid Content-Length does not decode"
+  assert-eq (http-error-code-or 0 (decode-request-head limits "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1x\r\n\r\n")) 400 "Content-Length is strict decimal syntax"
+  assert-eq (http-error-code-or 0 (decode-request-head (HttpLimits 64 32 7 1 8) "GET /toolong HTTP/1.1\r\nHost: x\r\n\r\n")) 414 "Request-target limits have a distinct status"
+  assert-eq (http-error-code-or 0 (decode-request-head (HttpLimits 128 64 32 8 4) "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n\r\n")) 413 "Body limits fail before reading a payload"

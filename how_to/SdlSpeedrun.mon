@@ -4,7 +4,8 @@ SDL_Init SDL_INIT_VIDEO
 
 define window SDL_CreateWindow "Hello" 640 480 0
 define renderer SDL_CreateRenderer window nil
-while True
+
+loop
   SDL_SetRenderDrawColor renderer 33 33 33 255
   SDL_RenderClear renderer
   SDL_RenderPresent renderer
@@ -14,22 +15,5 @@ SDL_DestroyRenderer renderer
 SDL_DestroyWindow window
 SDL_Quit
 
-
-;; TODO We don't have [[https://en.wikipedia.org/wiki/Algebraic_data_type][ADT's]] that we can map to C enums,
-;; So we can't properly use SDL yet..
-;;
-;; include <SDL3/SDL.h>
-;; SDL_Init SDL_INIT_VIDEO
-;; define window SDL_CreateWindow "Hello" 640 480 0
-;; define renderer SDL_CreateRenderer window nil
-;; define event SDL_Event
-;; until SDL_QuitRequested
-;;   SDL_SetRenderDrawColor renderer 33 33 33 255
-;;   SDL_RenderClear renderer
-;;   SDL_RenderPresent renderer
-;;   SDL_PumpEvents
-;; SDL_DestroyRenderer renderer
-;; SDL_DestroyWindow window
-;; SDL_Quit
 
 

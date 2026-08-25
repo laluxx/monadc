@@ -1,0 +1,434 @@
+;;; HTTP.mon --- strict bounded HTTP/1.1 request grammar
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "web http request parser security"
+
+;;; Commentary:
+
+ Web.HTTP parses one delimiter-framed HTTP/1.1 request head. Request-line
+ separators are one SP, line endings are CRLF, field names are tokens, and
+ obsolete folding is rejected. Transport fragmentation belongs to
+ Text.Parser.Stream; message meaning belongs here.
+
+;;; Code:
+
+import Data.Char
+import Data.Queue
+import Text.Format
+import Sequence
+
+module Web.HTTP
+  [HttpLimits HttpHeader HttpRequest HttpDecode HttpFailed HttpDecoded
+   decode-request-head decode-request-bytes decode-request-message
+   complete-request-body
+   http-decoded? http-error-code-or http-error-offset-or
+   request-or request-method-or request-target-or request-header-count-or
+   request-header-or request-content-length-or request-body-or]
+
+
+layout HttpLimits
+  [head-bytes         :: Int]
+  [request-line-bytes :: Int]
+  [target-bytes       :: Int]
+  [header-count       :: Int]
+  [body-bytes         :: Int]
+
+
+layout HttpHeader
+  [name  :: String]
+  [value :: String]
+
+
+layout HttpRequest
+  [method       :: String]
+  [target       :: String]
+  [version      :: String]
+  [headers      :: Queue HttpHeader]
+  [body         :: String]
+  [content-length :: Int]
+  [header-count :: Int]
+
+
+data HttpDecode
+  = HttpFailed Int Int
+  | HttpDecoded HttpRequest
+
+
+data HeaderDecode
+  = HeaderFailed Int Int
+  | HeadersDecoded (Queue HttpHeader) Int Int
+
+
+;;; Results and request observations
+
+define http-decoded? :: HttpDecode -> Bool
+  [HttpDecoded request] -> True
+  _ -> False
+
+
+define http-error-code-or :: Int -> HttpDecode -> Int
+  fallback [HttpFailed code offset] -> code
+  fallback _ -> fallback
+
+
+define http-error-offset-or :: Int -> HttpDecode -> Int
+  fallback [HttpFailed code offset] -> offset
+  fallback _ -> fallback
+
+
+define request-or :: HttpRequest -> HttpDecode -> HttpRequest
+  _ [HttpDecoded request] -> request
+  fallback _ -> fallback
+
+
+define request-method-or :: String -> HttpDecode -> String
+  fallback [HttpDecoded request] -> request.method
+  fallback _ -> fallback
+
+
+define request-target-or :: String -> HttpDecode -> String
+  fallback [HttpDecoded request] -> request.target
+  fallback _ -> fallback
+
+
+define request-header-count-or :: Int -> HttpDecode -> Int
+  fallback [HttpDecoded request] -> request.header-count
+  fallback _ -> fallback
+
+
+define request-content-length-or :: Int -> HttpDecode -> Int
+  fallback [HttpDecoded request] -> request.content-length
+  fallback _ -> fallback
+
+
+define request-body-or :: String -> HttpDecode -> String
+  fallback [HttpDecoded request] -> request.body
+  fallback _ -> fallback
+
+
+;;; Case-insensitive header lookup
+
+define ascii-lower-byte :: Int -> Int
+  byte | >= 0x41 and <= 0x5a -> byte + 0x20
+       | otherwise -> byte
+
+
+define ascii-lower-from :: String -> Int -> String
+  text index | (>= index (length text)) -> ""
+             | otherwise ->
+    (char->text (Char (ascii-lower-byte (http-byte text index)))) ++ (ascii-lower-from text (index + 1))
+
+
+define ascii-lower :: String -> String
+  text -> ascii-lower-from text 0
+
+
+define header-list-value-or :: String -> String -> [HttpHeader] -> String
+  fallback _ [] -> fallback
+  fallback name [header|rest]
+    | name = header.name -> header.value
+    | otherwise -> header-list-value-or fallback name rest
+
+
+define header-value-or :: String -> String -> Queue HttpHeader -> String
+  fallback name headers -> header-list-value-or fallback name (queue-to-list headers)
+
+
+define request-header-or :: String -> String -> HttpDecode -> String
+  fallback name [HttpDecoded request] ->
+    header-value-or fallback (ascii-lower name) request.headers
+  fallback _ _ -> fallback
+
+
+;;; HTTP text primitives
+
+define http-byte :: String -> Int -> Int
+  text index -> ord (text index)
+
+
+define http-slice :: String -> Int -> Int -> String
+  _ start finish | (>= start finish) -> ""
+  text start finish ->
+    (char->text (text start)) ++ (http-slice text (start + 1) finish)
+
+
+define find-byte :: String -> Int -> Int -> Int -> Int
+  _ index finish _ | (>= index finish) -> -1
+  text index finish expected
+    | (= (http-byte text index) expected) -> index
+    | otherwise -> find-byte text (index + 1) finish expected
+
+
+define crlf-at? :: String -> Int -> Int -> Bool
+  _ index size | (>= (index + 1) size) -> False
+  text index size ->
+    (= (http-byte text index) 0x0d) and (= (http-byte text (index + 1)) 0x0a)
+
+
+define find-crlf :: String -> Int -> Int -> Int
+  text index size
+    | (>= (index + 1) size)       -> -1
+    | (crlf-at? text index size)  -> index
+    | otherwise                   -> find-crlf text (index + 1) size
+
+
+define tchar? :: Int -> Bool
+  byte | >= 0x30 and <= 0x39 -> True
+       | >= 0x41 and <= 0x5a -> True
+       | >= 0x61 and <= 0x7a -> True
+       | = 0x21 -> True
+       | = 0x23 -> True
+       | = 0x24 -> True
+       | = 0x25 -> True
+       | = 0x26 -> True
+       | = 0x27 -> True
+       | = 0x2a -> True
+       | = 0x2b -> True
+       | = 0x2d -> True
+       | = 0x2e -> True
+       | = 0x5e -> True
+       | = 0x5f -> True
+       | = 0x60 -> True
+       | = 0x7c -> True
+       | = 0x7e -> True
+       | otherwise -> False
+
+
+define token-rest? :: String -> Int -> Int -> Bool
+  _ index finish | (>= index finish) -> True
+  text index finish | (tchar? (http-byte text index)) ->
+    token-rest? text (index + 1) finish
+  _ _ _ -> False
+
+
+define token-range? :: String -> Int -> Int -> Bool
+  _ start finish | (>= start finish) -> False
+  text start finish -> token-rest? text start finish
+
+
+define field-value? :: String -> Int -> Int -> Bool
+  _ index finish | (>= index finish) -> True
+  text index finish
+    | (= (http-byte text index) 0x09) -> field-value? text (index + 1) finish
+    | (>= (http-byte text index) 0x20) and (!= (http-byte text index) 0x7f) ->
+        field-value? text (index + 1) finish
+    | otherwise -> False
+
+
+define skip-optional-space :: String -> Int -> Int -> Int
+  _ index finish | (>= index finish) -> index
+  text index finish
+    | (http-byte text index) = 0x20 -> skip-optional-space text (index + 1) finish
+    | (http-byte text index) = 0x09 -> skip-optional-space text (index + 1) finish
+    | otherwise -> index
+
+
+define trim-optional-space :: String -> Int -> Int -> Int
+  _ start finish | (<= finish start) -> start
+  text start finish
+    | (http-byte text (finish - 1)) = 0x20 -> trim-optional-space text start (finish - 1)
+    | (http-byte text (finish - 1)) = 0x09 -> trim-optional-space text start (finish - 1)
+    | otherwise -> finish
+
+
+;;; Message framing fields
+
+define decimal-range? :: String -> Int -> Int -> Bool
+  _ index finish | (>= index finish) -> True
+  text index finish
+    | byte-digit? (http-byte text index) -> (decimal-range? text (index + 1) finish)
+    | otherwise -> False
+
+
+define decimal-step :: String -> Int -> Int -> Int -> Int -> Int
+  _ _ _ limit next | (> next limit) -> limit + 1
+  text index finish limit next ->
+    decimal-up-to text (index + 1) finish limit next
+
+
+define decimal-up-to :: String -> Int -> Int -> Int -> Int -> Int
+  _ index finish _ value | (>= index finish) -> value
+  text index finish limit value ->
+    def next ((value * 10) + (digit->int (text index)))
+    decimal-step text index finish limit next
+
+
+define header-list-count-named :: String -> [HttpHeader] -> Int
+  _ [] -> 0
+  name [header|rest]
+    | name = header.name -> 1 + (header-list-count-named name rest)
+    | otherwise -> header-list-count-named name rest
+
+
+define header-count-named :: String -> Queue HttpHeader -> Int
+  name headers -> header-list-count-named name (queue-to-list headers)
+
+
+define content-length-value :: HttpLimits -> String -> Int -> Int -> Int
+  _ _ start finish | (>= start finish) -> -1
+  _ text start finish | not (decimal-range? text start finish) -> -1
+  limits text start finish -> decimal-up-to text start finish limits.body-bytes 0
+
+
+define checked-content-length-value :: HttpLimits -> Queue HttpHeader -> Int -> Int -> Int -> HeaderDecode
+  _ _ _ start value | (< value 0) -> HeaderFailed 400 start
+  limits _ _ start value | (> value limits.body-bytes) -> HeaderFailed 413 start
+  _ headers count _ value -> HeadersDecoded headers count value
+
+
+define checked-content-length :: HttpLimits -> String -> Int -> Int -> Queue HttpHeader -> Int -> HeaderDecode
+  limits text start finish headers count ->
+    def value (content-length-value limits text start finish)
+    checked-content-length-value limits headers count start value
+
+
+define finish-headers :: HttpLimits -> String -> Queue HttpHeader -> Int -> Int -> HeaderDecode
+  limits text headers count offset
+    | (header-count-named "host"              headers) != 1 -> HeaderFailed 400 offset
+    | (header-count-named "content-length"    headers) > 1  -> HeaderFailed 400 offset
+    | (header-count-named "transfer-encoding" headers) > 0  -> HeaderFailed 501 offset
+    | (header-count-named "content-length"    headers) = 0  -> HeadersDecoded headers count 0
+    | otherwise ->
+        def value (header-value-or "" "content-length" headers)
+        checked-content-length limits value 0 (length value) headers count
+
+
+;;; Header grammar
+
+define scan-header-line :: HttpLimits -> String -> Int -> Int -> Int -> Queue HttpHeader -> Int -> HeaderDecode
+  limits text offset finish size headers count ->
+    def colon (find-byte text offset finish 0x3a)
+    def value-start (skip-optional-space text (colon + 1) finish)
+    def value-finish (trim-optional-space text value-start finish)
+    def header-name (ascii-lower (http-slice text offset colon))
+    def header (HttpHeader header-name (http-slice text value-start value-finish))
+    scan-headers limits text (finish + 2) size (enqueue headers header) (count + 1)
+
+
+define scan-headers :: HttpLimits -> String -> Int -> Int -> Queue HttpHeader -> Int -> HeaderDecode
+  limits text offset size headers count
+    | crlf-at? text offset size ->
+        if (= (offset + 2) size) then finish-headers limits text headers count offset
+        else HeaderFailed 400 offset
+    | (>= count limits.header-count) -> HeaderFailed 431 offset
+    | (find-crlf text offset size) < 0 -> HeaderFailed 400 offset
+    | ((find-crlf text offset size) - offset) > limits.request-line-bytes ->
+        HeaderFailed 431 offset
+    | (http-byte text offset) = 0x20 -> HeaderFailed 400 offset
+    | (http-byte text offset) = 0x09 -> HeaderFailed 400 offset
+    | (find-byte text offset (find-crlf text offset size) 0x3a) < 0 ->
+        HeaderFailed 400 offset
+    | not (token-range? text offset (find-byte text offset (find-crlf text offset size) 0x3a)) ->
+        HeaderFailed 400 offset
+    | not (field-value? text ((find-byte text offset (find-crlf text offset size) 0x3a) + 1) (find-crlf text offset size)) ->
+        HeaderFailed 400 offset
+    | otherwise ->
+        scan-header-line limits text offset (find-crlf text offset size) size headers count
+
+
+;;; Request-line grammar
+
+define make-request :: String -> Int -> Int -> Queue HttpHeader -> Int -> Int -> HttpRequest
+  text first-space second-space headers content-length count ->
+    def method (http-slice text 0 first-space)
+    def target (http-slice text (first-space + 1) second-space)
+    HttpRequest method target "HTTP/1.1" headers "" content-length count
+
+
+define finish-request-headers :: String -> Int -> Int -> HeaderDecode -> HttpDecode
+  _ _ _ [HeaderFailed code offset] -> HttpFailed code offset
+  text first-space second-space [HeadersDecoded headers count content-length] ->
+    HttpDecoded (make-request text first-space second-space headers content-length count)
+
+
+define finish-request :: HttpLimits -> String -> Int -> Int -> Int -> Int -> HttpDecode
+  limits text first-space second-space finish size ->
+    def headers (scan-headers limits text (finish + 2) size EmptyQueue 0)
+    (finish-request-headers text first-space second-space headers)
+
+
+define parse-request-parts :: HttpLimits -> String -> Int -> Int -> Int -> Int -> HttpDecode
+  limits text first-space second-space finish size
+    | second-space <= (first-space + 1) -> HttpFailed 400 (first-space + 1)
+    | (second-space + 9) != finish      -> HttpFailed 400 second-space
+    | not (token-range? text 0 first-space) -> HttpFailed 400 0
+    | (second-space - first-space - 1) > limits.target-bytes ->
+        HttpFailed 414 (first-space + 1)
+    | (http-slice text (second-space + 1) finish) != "HTTP/1.1" ->
+        HttpFailed 505 (second-space + 1)
+    | otherwise -> finish-request limits text first-space second-space finish size
+
+
+define parse-request-line :: HttpLimits -> String -> Int -> Int -> HttpDecode
+  limits text finish size ->
+    parse-request-line-from limits text finish size (find-byte text 0 finish 0x20)
+
+
+define parse-request-line-from :: HttpLimits -> String -> Int -> Int -> Int -> HttpDecode
+  limits text finish size first-space ->
+    if (<= first-space 0) then HttpFailed 400 0 else
+      (parse-request-parts limits text first-space
+        (find-byte text (first-space + 1) finish 0x20) finish size)
+
+
+define decode-request-head :: HttpLimits -> String -> HttpDecode
+  :doc "Decode one complete, CRLF-delimited HTTP/1.1 request head under LIMITS."
+  limits text
+    | (> (length text) limits.head-bytes) -> HttpFailed 431 limits.head-bytes
+    | (< (find-crlf text 0 (length text)) 0) -> HttpFailed 400 (length text)
+    | (> (find-crlf text 0 (length text)) limits.request-line-bytes) -> HttpFailed 414 0
+    | otherwise -> parse-request-line limits text (find-crlf text 0 (length text)) (length text)
+
+
+;;; Bytes and complete messages
+
+define http-bytes-text :: [Byte] -> String
+  [] -> ""
+  [byte|rest] -> (char->text (Char byte)) ++ (http-bytes-text rest)
+
+
+define decode-request-bytes :: HttpLimits -> [Byte] -> HttpDecode
+  :doc "Decode one complete HTTP/1.1 request head from network BYTES."
+  limits bytes -> decode-request-head limits (http-bytes-text bytes)
+
+
+define request-with-body :: HttpDecode -> String -> HttpDecode
+  [HttpDecoded request] body
+    | (length body) != request.content-length -> HttpFailed 400 (length body)
+    | otherwise ->
+        def complete (HttpRequest request.method request.target request.version request.headers body request.content-length request.header-count)
+        HttpDecoded complete
+  failed _ -> failed
+
+
+define complete-request-body :: HttpDecode -> [Byte] -> HttpDecode
+  :doc "Attach one exact, already bounded network body to a decoded request head."
+  request bytes -> request-with-body request (http-bytes-text bytes)
+
+
+define head-ending-at? :: String -> Int -> Int -> Bool
+  _ index size | (>= (index + 3) size) -> False
+  text index size ->
+    (crlf-at? text index size) and (crlf-at? text (index + 2) size)
+
+
+define find-head-ending :: String -> Int -> Int -> Int
+  _ index size | (>= (index + 3) size) -> -1
+  text index size
+    | head-ending-at? text index size -> index
+    | otherwise -> find-head-ending text (index + 1) size
+
+
+define decode-request-message-from :: HttpLimits -> String -> Int -> HttpDecode
+  _ _ ending | (< ending 0) -> HttpFailed 400 0
+  limits text ending ->
+    def body-start (ending + 4)
+    def head (http-slice text 0 body-start)
+    def body (http-slice text body-start (length text))
+    request-with-body (decode-request-head limits head) body
+
+
+define decode-request-message :: HttpLimits -> String -> HttpDecode
+  :doc "Decode one complete HTTP/1.1 request head and fixed-length body."
+  limits text -> decode-request-message-from limits text (find-head-ending text 0 (length text))

@@ -18,6 +18,22 @@ def load_core_runner():
 
 
 class CoreRunnerDiscoveryTests(unittest.TestCase):
+    def test_cleanup_preserves_every_preexisting_artifact_candidate(self):
+        runner_mod = load_core_runner()
+        with tempfile.TemporaryDirectory() as td:
+            core = Path(td) / "core"
+            module = core / "Math.mon"
+            source_directory = core / "Math"
+            source_directory.mkdir(parents=True)
+            module.write_text("module Math\n", encoding="utf-8")
+            sentinel = source_directory / "Angle.mon"
+            sentinel.write_text("module Math.Angle\n", encoding="utf-8")
+
+            before = runner_mod.artifact_snapshot(module)
+            runner_mod.cleanup_artifacts(module, before)
+
+            self.assertTrue(sentinel.exists())
+
     def test_discovery_ignores_editor_lock_symlinks(self):
         runner_mod = load_core_runner()
         with tempfile.TemporaryDirectory() as td:

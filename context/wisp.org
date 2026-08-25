@@ -1116,3 +1116,11 @@ Test-driven observations and failure records for the corresponding subsystem.
   following constructor clause vanished and authors had to duplicate it.
   =TcpServer.accept-one= is the executable regression: its failure branch has
   a multiline close sequence immediately followed by the successful pattern.
+
+[FIX id:fix.wisp.relative-guard-qualified-operand-2026-08-24 date:2026-08-24 by:codex src:wisp.c,core/IO/Readline.mon,tests/wisp_receiver_relative_guards.mon conf:high]
+  Receiver-relative guard field expansion recognizes a leading field only at an
+  expression boundary. A dot inside a qualified name such as
+  =LineEditor.key-ctrl-k= remains qualification, so =key | =
+  LineEditor.key-ctrl-k= lowers to =(= key LineEditor.key-ctrl-k)= instead of
+  inventing the module prefix =LineEditorkey=. The real Readline module and the
+  focused guard fixture compile this preferred style directly.

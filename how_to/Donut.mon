@@ -180,8 +180,8 @@ define char-buffer :: [2kb]
 
 
 define clear-buffers :: Int -> Int
-  index | index >= (screen-width * screen-height) -> 0
-  index ->
+  index | >= (screen-width * screen-height) -> 0
+        | otherwise ->
     def output-index (index + (index / screen-width))
     def depth-status (set! (depth-buffer index) (0.0 - 1000000.0))
     def char-status (set! (char-buffer output-index) 32)
@@ -191,30 +191,22 @@ define clear-buffers :: Int -> Int
 
 define clear-row-end :: Int -> Int -> Int
   index output-index | (index % screen-width) = (screen-width - 1) -> set! (char-buffer (output-index + 1)) 10
-  index output-index -> 0
+                     | otherwise -> 0
 
 
 define update-buffers :: Sample -> Int
   sample | not (visible? sample) -> 0
-  sample | sample.depth <= (depth-buffer (pixel-index sample)) -> 0
-  sample ->
+         | not (nearer? sample)  -> 0
+         | otherwise ->
     def index (pixel-index sample)
     def output-index ((sample.yp * frame-row-width) + sample.xp)
     def depth-status (set! (depth-buffer index) sample.depth)
     def char-status (set! (char-buffer output-index) (shade-byte (clamp-shade-index (Int (sample.luminance * 8.0)))))
     char-status
 
-;; TODO The function should be rewritten as:
 
-;; define update-buffers :: Sample -> Int
-;;   sample | not visible? -> 0
-;;   sample | .depth <= depth-buffer[pixel-index sample] -> 0
-;;   sample ->
-;;     def index (pixel-index sample)
-;;     def output-index ((.yp * frame-row-width) + .xp)
-;;     depth-buffer[index] <- .depth
-;;     char-buffer[output-index] <-
-;;       (shade-byte (clamp-shade-index (Int (.luminance * 8.0))))
+define nearer? :: Sample -> Bool
+  sample -> sample.depth > (depth-buffer (pixel-index sample))
 
 
 define shade-byte :: Int -> Int

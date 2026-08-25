@@ -16,12 +16,23 @@ import System.Posix.Network
 import System.Posix.FileDescriptor
 
 module Network.Socket
-  [Socket SocketResult SocketFailure SocketReady
-   listen-loopback accept-client send-all echo-stream close-socket]
+  [Socket SocketBuffer SocketResult SocketFailure SocketReady
+   SocketRead SocketReadFailure SocketReadRetry SocketReadTimeout SocketReadEOF SocketReadReady
+   listen-loopback accept-client
+   make-socket-buffer release-socket-buffer buffer-bytes receive
+   read-failed? read-retry? read-timeout? read-eof? read-ready? read-count-or
+   set-receive-timeout
+   send-buffer
+   send-text shutdown-write close-socket]
 
 
 layout Socket
   [descriptor :: Int]
+
+
+layout SocketBuffer
+  [bytes    :: *U8]
+  [capacity :: Int]
 
 
 data SocketResult
@@ -29,12 +40,43 @@ data SocketResult
   | SocketReady Socket
 
 
-layout StreamState
-  [running :: Bool]
-  [status  :: Int]
+data SocketRead
+  = SocketReadFailure Int
+  | SocketReadRetry Int
+  | SocketReadTimeout Int
+  | SocketReadEOF Int
+  | SocketReadReady Int
 
 
-define echo-buffer :: [4kb]
+define read-failed? :: SocketRead -> Bool
+  [SocketReadFailure status] -> True
+  _ -> False
+
+
+define read-retry? :: SocketRead -> Bool
+  [SocketReadRetry status] -> True
+  _ -> False
+
+
+define read-timeout? :: SocketRead -> Bool
+  [SocketReadTimeout status] -> True
+  _ -> False
+
+
+define read-eof? :: SocketRead -> Bool
+  [SocketReadEOF status] -> True
+  _ -> False
+
+
+define read-ready? :: SocketRead -> Bool
+  [SocketReadReady count] -> True
+  _ -> False
+
+
+define read-count-or :: Int -> SocketRead -> Int
+  _ [SocketReadReady count] -> count
+  fallback _ -> fallback
+
 
 define network-port :: Int -> Int
   :doc "Encode a host-order TCP port in network byte order."
@@ -46,10 +88,59 @@ define close-socket :: Socket -io-> Int
   socket -> sys-close socket.descriptor
 
 
+define shutdown-write :: Socket -io-> Int
+  :doc "Finish sending on SOCKET while leaving its read side open."
+  socket -> sys-shutdown-write socket.descriptor
+
+
+define make-socket-buffer :: Int -io-> SocketBuffer
+  :doc "Allocate a connection-owned byte buffer with CAPACITY bytes."
+  capacity -> SocketBuffer (sys-network-buffer-allocate capacity) capacity
+
+
+define release-socket-buffer :: SocketBuffer -io-> Int
+  :doc "Release BUFFER exactly once after its connection is finished."
+  buffer -> sys-network-buffer-release buffer.bytes buffer.capacity
+
+
+define set-receive-timeout :: Socket -> Int -io-> Int
+  :doc "Limit one blocking receive on SOCKET to SECONDS of inactivity."
+  socket seconds ->
+    def timeout (Timeval seconds 0)
+    sys-receive-timeout socket.descriptor &timeout
+
+
+define pointer-byte :: *U8 -> Int -> U8
+  bytes index -> (bytes index)
+
+
+define buffer-byte :: SocketBuffer -> Int -> U8
+  buffer index -> pointer-byte buffer.bytes index
+
+
+define buffer-bytes-from :: SocketBuffer -> Int -> Int -> [Byte]
+  _ index count | (>= index count) -> []
+  buffer index count ->
+    prepend (Byte (buffer-byte buffer index)) (buffer-bytes-from buffer (index + 1) count)
+
+
+define buffer-bytes :: SocketBuffer -> Int -> [Byte]
+  :doc "Copy the first COUNT received octets from BUFFER into an immutable byte sequence."
+  _ count | (<= count 0) -> []
+  buffer count -> buffer-bytes-from buffer 0 count
+
+
 define listener-failure :: Int -> Int -io-> SocketResult
   descriptor status ->
     def closed (sys-close descriptor)
     SocketFailure status
+
+
+define enable-socket-close-on-exec :: Int -io-> Int
+  descriptor ->
+    def flags (sys-fcntl descriptor F_GETFD 0)
+    if flags < 0 then flags
+    else sys-fcntl descriptor F_SETFD (bit-or flags FD_CLOEXEC)
 
 
 define listener-result :: Int -> Int -> Int -> Int -io-> SocketResult
@@ -60,10 +151,9 @@ define listener-result :: Int -> Int -> Int -> Int -io-> SocketResult
     | otherwise           -> SocketReady (Socket descriptor)
 
 
-define listen-loopback :: Int -io-> SocketResult
-  :doc "Listen for TCP connections on 127.0.0.1 at PORT."
-  port ->
-    def descriptor (sys-socket AF_INET SOCK_STREAM 0)
+define listen-descriptor :: Int -> Int -io-> SocketResult
+  _ descriptor | (< descriptor 0) -> SocketFailure descriptor
+  port descriptor ->
     def configured (sys-reuse-address descriptor)
     def address (SockAddrIn AF_INET (network-port port) 0x0100007f 0)
     def bound (sys-bind descriptor &address 16)
@@ -71,59 +161,120 @@ define listen-loopback :: Int -io-> SocketResult
     listener-result descriptor configured bound listening
 
 
+define configure-listener :: Int -> Int -> Int -io-> SocketResult
+  _ descriptor status | (< status 0) -> listener-failure descriptor status
+  port descriptor _ -> listen-descriptor port descriptor
+
+
+define listen-portable-result :: Int -> Int -io-> SocketResult
+  port descriptor | (< descriptor 0) -> SocketFailure descriptor
+                  | otherwise ->
+    configure-listener port descriptor (enable-socket-close-on-exec descriptor)
+
+
+define listen-portable :: Int -io-> SocketResult
+  port ->
+    def descriptor (sys-socket AF_INET SOCK_STREAM 0)
+    listen-portable-result port descriptor
+
+
+define listen-atomic-result :: Int -> Int -io-> SocketResult
+  port status | (= status -1)  -> listen-portable port
+              | (= status -22) -> listen-portable port
+              | (= status -38) -> listen-portable port
+              | otherwise      -> listen-descriptor port status
+
+
+define listen-loopback :: Int -io-> SocketResult
+  :doc "Listen for TCP connections on 127.0.0.1 at PORT."
+  port ->
+    def descriptor (sys-socket AF_INET (bit-or SOCK_STREAM SOCK_CLOEXEC) 0)
+    listen-atomic-result port descriptor
+
+
+define accept-configured :: Int -> Int -io-> SocketResult
+  descriptor status | (< status 0) -> listener-failure descriptor status
+                    | otherwise    -> SocketReady (Socket descriptor)
+
+
+define accept-portable-result :: Socket -> Int -io-> SocketResult
+  listener descriptor | (= descriptor -4) -> accept-portable-result listener (sys-accept listener.descriptor)
+                      | (< descriptor 0)  -> SocketFailure descriptor
+                      | otherwise -> accept-configured descriptor (enable-socket-close-on-exec descriptor)
+
+
+define accept-portable :: Socket -io-> SocketResult
+  listener -> accept-portable-result listener (sys-accept listener.descriptor)
+
+
 define accept-result :: Socket -> Int -io-> SocketResult
-  listener descriptor | (= descriptor -4) -> accept-client listener
-  _ descriptor        | (< descriptor 0)  -> SocketFailure descriptor
-  _ descriptor                            -> SocketReady (Socket descriptor)
+  listener descriptor | (= descriptor -4) -> accept-result listener (sys-accept-close-on-exec listener.descriptor)
+                      | (= descriptor -1)  -> accept-portable listener
+                      | (= descriptor -22) -> accept-portable listener
+                      | (= descriptor -38) -> accept-portable listener
+                      | (< descriptor 0)   -> SocketFailure descriptor
+                      | otherwise          -> SocketReady (Socket descriptor)
 
 
 define accept-client :: Socket -io-> SocketResult
   :doc "Block until LISTENER accepts one client, retrying interruption."
-  listener -> accept-result listener (sys-accept listener.descriptor)
+  listener -> accept-result listener (sys-accept-close-on-exec listener.descriptor)
 
 
-define send-all-result :: Socket -> Int -> Int -> Int -io-> Int
-  client offset remaining sent | (= sent -4) ->
-    send-all-from client offset remaining
-  _ _ _ sent | (<= sent 0) -> sent
-  _ _ remaining sent | (>= sent remaining) -> 0
-  client offset remaining sent ->
-    send-all-from client (offset + sent) (remaining - sent)
+define send-all-result :: Socket -> SocketBuffer -> Int -> Int -> Int -io-> Int
+  client buffer offset remaining sent | (= sent -4) ->
+    send-all-from client buffer offset remaining
+  _ _ _ _ sent | (< sent 0) -> sent
+  _ _ _ _ 0 -> -32
+  _ _ _ remaining sent | (>= sent remaining) -> 0
+  client buffer offset remaining sent ->
+    send-all-from client buffer (offset + sent) (remaining - sent)
 
 
-define send-all-from :: Socket -> Int -> Int -io-> Int
-  client offset remaining ->
-    def sent (sys-send-from client.descriptor &echo-buffer offset remaining)
-    send-all-result client offset remaining sent
+define send-all-from :: Socket -> SocketBuffer -> Int -> Int -io-> Int
+  client buffer offset remaining ->
+    def sent (sys-send-from client.descriptor buffer.bytes offset remaining)
+    send-all-result client buffer offset remaining sent
 
 
-define send-all :: Socket -> Int -io-> Int
-  :doc "Send COUNT buffered bytes to CLIENT, retrying until complete."
-  client count | (<= count 0) -> count
-  client count -> send-all-from client 0 count
+define send-buffer :: Socket -> SocketBuffer -> Int -io-> Int
+  :doc "Send COUNT bytes from BUFFER, retrying partial writes."
+  _ _ count | (<= count 0) -> count
+  client buffer count -> send-all-from client buffer 0 count
 
 
-define echo-chunk :: Socket -> Int -io-> Int
-  _ count      | (= count -4) -> 1
-  _ count      | (< count 0)  -> count
-  _ 0                         -> 0
-  client count ->
-    def sent (send-all client count)
-    if sent < 0 then sent else 1
+define send-all-text-result :: Socket -> String -> Int -> Int -> Int -io-> Int
+  client text offset remaining sent | (= sent -4) ->
+    send-all-text-from client text offset remaining
+  _ _ _ _ sent | (< sent 0) -> sent
+  _ _ _ _ 0 -> -32
+  _ _ _ remaining sent | (>= sent remaining) -> 0
+  client text offset remaining sent ->
+    send-all-text-from client text (offset + sent) (remaining - sent)
 
 
-define echo-step :: Socket -> StreamState -io-> Int
-  client state ->
-    def count (sys-recv client.descriptor &echo-buffer 4096)
-    def status (echo-chunk client count)
-    set! state.status status
-    set! state.running (= status 1)
-    status
+define send-all-text-from :: Socket -> String -> Int -> Int -io-> Int
+  client text offset remaining ->
+    def sent (sys-send-text-from client.descriptor text offset remaining)
+    send-all-text-result client text offset remaining sent
 
 
-define echo-stream :: Socket -io-> Int
-  :doc "Echo CLIENT until orderly EOF, completing every write."
-  client ->
-    def state (StreamState True 0)
-    while state.running (echo-step client state)
-    state.status
+define send-text :: Socket -> String -io-> Int
+  :doc "Send the contiguous bytes of TEXT completely to SOCKET."
+  _ "" -> 0
+  client text -> send-all-text-from client text 0 (length text)
+
+
+define receive-result :: Socket -> SocketBuffer -> Int -io-> SocketRead
+  _ _ count | (= count -4)  -> SocketReadRetry count
+            | (= count -11) -> SocketReadTimeout count
+            | (< count 0)   -> SocketReadFailure count
+            | (= count 0)   -> SocketReadEOF 0
+            | otherwise     -> SocketReadReady count
+
+
+define receive :: Socket -> SocketBuffer -io-> SocketRead
+  :doc "Read one stream fragment into BUFFER and distinguish data, retry, EOF, and failure."
+  client buffer ->
+    def count (sys-recv client.descriptor buffer.bytes buffer.capacity)
+    receive-result client buffer count

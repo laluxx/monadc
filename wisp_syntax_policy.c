@@ -4,15 +4,15 @@
 
 int wisp_syntax_operator_precedence(const char *name) {
     if (!name) return -1;
-    if (strcmp(name, "|>") == 0) return 1;
+    if (strcmp(name, "|>")  == 0) return 1;
     if (strcmp(name, "or")  == 0) return 1;
     if (strcmp(name, "and") == 0) return 2;
-    if (strcmp(name, "=")  == 0 || strcmp(name, "!=") == 0 ||
-        strcmp(name, "<")  == 0 || strcmp(name, ">")  == 0 ||
-        strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0) return 3;
-    if (strcmp(name, "+") == 0 || strcmp(name, "-") == 0 ||
-        strcmp(name, "mod") == 0 || strcmp(name, "%") == 0) return 4;
-    if (strcmp(name, "*") == 0 || strcmp(name, "/") == 0) return 5;
+    if (strcmp(name, "=")   == 0 || strcmp(name, "!=") == 0 ||
+        strcmp(name, "<")   == 0 || strcmp(name, ">")  == 0 ||
+        strcmp(name, "<=")  == 0 || strcmp(name, ">=") == 0) return 3;
+    if (strcmp(name, "+")   == 0 || strcmp(name, "-")  == 0 ||
+        strcmp(name, "mod") == 0 || strcmp(name, "%")  == 0) return 4;
+    if (strcmp(name, "*")   == 0 || strcmp(name, "/")  == 0) return 5;
     return 6;
 }
 
@@ -62,20 +62,20 @@ bool wisp_syntax_group_contains_quote(const char *text) {
 
 bool wisp_syntax_is_infix_operator(const char *text) {
     return text &&
-           (strcmp(text, "&") == 0 ||
-            strcmp(text, "+") == 0 ||
-            strcmp(text, "-") == 0 ||
-            strcmp(text, "*") == 0 ||
-            strcmp(text, "/") == 0 ||
-            strcmp(text, "%") == 0 ||
-            strcmp(text, "=") == 0 ||
-            strcmp(text, "!=") == 0 ||
-            strcmp(text, "<") == 0 ||
-            strcmp(text, ">") == 0 ||
-            strcmp(text, "<=") == 0 ||
-            strcmp(text, ">=") == 0 ||
-            strcmp(text, "++") == 0 ||
+           (strcmp(text, "&")   == 0 ||
+            strcmp(text, "+")   == 0 ||
+            strcmp(text, "-")   == 0 ||
+            strcmp(text, "*")   == 0 ||
+            strcmp(text, "/")   == 0 ||
+            strcmp(text, "%")   == 0 ||
+            strcmp(text, "=")   == 0 ||
+            strcmp(text, "!=")  == 0 ||
+            strcmp(text, "<")   == 0 ||
+            strcmp(text, ">")   == 0 ||
+            strcmp(text, "<=")  == 0 ||
+            strcmp(text, ">=")  == 0 ||
+            strcmp(text, "++")  == 0 ||
             strcmp(text, "and") == 0 ||
-            strcmp(text, "or") == 0 ||
+            strcmp(text, "or")  == 0 ||
             strcmp(text, "mod") == 0);
 }

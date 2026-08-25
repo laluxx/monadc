@@ -1,0 +1,14 @@
+:TEST-ID tests.core.graphics-vulkan
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-CONTEXT monadc.context.core-libs.graphics-vulkan
+:TEST-PURPOSE Core owns checked Vulkan shader-module lifecycle instead of tutorials repeating raw FFI plumbing.
+:TEST-EXPECT compile,run
+
+import Graphics.Vulkan
+
+module Main
+
+
+show (shader-failed? (VulkanShaderFailure (I32 -7)))
+show (shader-status-or (I32 0) (VulkanShaderFailure (I32 -7)))

@@ -740,7 +740,8 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
          * coercion would bind a shared type var to both String and an
          * arrow type, creating a cycle in subst_apply.                  */
         if ((a->kind == TYPE_COLL || a->kind == TYPE_LIST ||
-             a->kind == TYPE_ARR || a->kind == TYPE_STRING) &&
+             a->kind == TYPE_ARR || a->kind == TYPE_PTR ||
+             a->kind == TYPE_STRING) &&
             b->kind == TYPE_ARROW) {
             /* Collection indexing coercion: Coll a ~ (Int -> a)
              * Only applies to actual collection types, never to String.
@@ -763,7 +764,8 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                 goto skip_coll_as_fn_ab;
             if (bp && (bp->kind == TYPE_ARROW || bp->kind == TYPE_FN ||
                        bp->kind == TYPE_COLL  || bp->kind == TYPE_LIST ||
-                       bp->kind == TYPE_ARR   || bp->kind == TYPE_STRING ||
+                       bp->kind == TYPE_ARR   || bp->kind == TYPE_PTR ||
+                       bp->kind == TYPE_STRING ||
                        type_is_bool(bp)        || bp->kind == TYPE_FLOAT)) {
                 goto skip_coll_as_fn_ab;
             }
@@ -772,13 +774,15 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                 if (!ok) return false;
                 if (a->kind == TYPE_COLL) return infer_unify_one(ctx, a->element_type, b->arrow_ret, line, col);
                 if (a->kind == TYPE_ARR) return infer_unify_one(ctx, a->arr_element_type, b->arrow_ret, line, col);
+                if (a->kind == TYPE_PTR) return infer_unify_one(ctx, a->element_type, b->arrow_ret, line, col);
                 if (a->kind == TYPE_STRING) return infer_unify_one(ctx, type_char(), b->arrow_ret, line, col);
                 return true;
             }
             skip_coll_as_fn_ab:;
         }
         if ((b->kind == TYPE_COLL || b->kind == TYPE_LIST ||
-             b->kind == TYPE_ARR || b->kind == TYPE_STRING) &&
+             b->kind == TYPE_ARR || b->kind == TYPE_PTR ||
+             b->kind == TYPE_STRING) &&
             a->kind == TYPE_ARROW) {
             Type *ap = subst_apply_shallow(ctx->subst, a->arrow_param);
             if (a->arrow_effect_name ||
@@ -786,7 +790,8 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                 goto skip_coll_as_fn_ba;
             if (ap && (ap->kind == TYPE_ARROW || ap->kind == TYPE_FN ||
                        ap->kind == TYPE_COLL  || ap->kind == TYPE_LIST ||
-                       ap->kind == TYPE_ARR   || ap->kind == TYPE_STRING ||
+                       ap->kind == TYPE_ARR   || ap->kind == TYPE_PTR ||
+                       ap->kind == TYPE_STRING ||
                        type_is_bool(ap)        || ap->kind == TYPE_FLOAT)) {
                 goto skip_coll_as_fn_ba;
             }
@@ -795,6 +800,7 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
                 if (!ok) return false;
                 if (b->kind == TYPE_COLL) return infer_unify_one(ctx, a->arrow_ret, b->element_type, line, col);
                 if (b->kind == TYPE_ARR) return infer_unify_one(ctx, a->arrow_ret, b->arr_element_type, line, col);
+                if (b->kind == TYPE_PTR) return infer_unify_one(ctx, a->arrow_ret, b->element_type, line, col);
                 if (b->kind == TYPE_STRING) return infer_unify_one(ctx, a->arrow_ret, type_char(), line, col);
                 return true;
             }
@@ -841,9 +847,23 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
          * or (Coll :: a). Unwrap it before collection compatibility below;
          * otherwise Coll ~ (Coll :: a) is mistaken for collection element
          * unification and tries to solve a ~ Coll :: a. */
-        if (a->kind == TYPE_LIST && a->list_count == 1 && b->kind != TYPE_LIST)
+        Type *a_single = a->kind == TYPE_LIST && a->list_count == 1
+            ? a->list_types[0] : NULL;
+        Type *b_single = b->kind == TYPE_LIST && b->list_count == 1
+            ? b->list_types[0] : NULL;
+        bool a_single_is_collection = a_single &&
+            (a_single->kind == TYPE_COLL || a_single->kind == TYPE_LIST ||
+             a_single->kind == TYPE_ARR || a_single->kind == TYPE_SET ||
+             a_single->kind == TYPE_MAP || a_single->kind == TYPE_STRING);
+        bool b_single_is_collection = b_single &&
+            (b_single->kind == TYPE_COLL || b_single->kind == TYPE_LIST ||
+             b_single->kind == TYPE_ARR || b_single->kind == TYPE_SET ||
+             b_single->kind == TYPE_MAP || b_single->kind == TYPE_STRING);
+        if (a_single && b->kind != TYPE_LIST &&
+            (b->kind != TYPE_COLL || a_single_is_collection))
             return infer_unify_one_internal(ctx, a->list_types[0], b, line, col);
-        if (b->kind == TYPE_LIST && b->list_count == 1 && a->kind != TYPE_LIST)
+        if (b_single && a->kind != TYPE_LIST &&
+            (a->kind != TYPE_COLL || b_single_is_collection))
             return infer_unify_one_internal(ctx, a, b->list_types[0], line, col);
 
         /* TYPE_COLL is compatible with any collection type.  A TYPE_LIST with
@@ -4861,6 +4881,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         head_t->kind == TYPE_STRING ||
                         head_t->kind == TYPE_COLL ||
                         head_t->kind == TYPE_ARR ||
+                        head_t->kind == TYPE_PTR ||
                         head_t->kind == TYPE_SET ||
                         head_t->kind == TYPE_MAP;
                 }
@@ -4913,10 +4934,17 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         break;
                     }
 
+                    if (head_t->kind == TYPE_PTR && head_t->element_type) {
+                        result = subst_apply(ctx->subst,
+                                             head_t->element_type);
+                        break;
+                    }
+
                     if (head_t->kind == TYPE_SET ||
                         head_t->kind == TYPE_MAP ||
                         head_t->kind == TYPE_COLL ||
                         head_t->kind == TYPE_ARR ||
+                        head_t->kind == TYPE_PTR ||
                         head_t->kind == TYPE_LIST) {
                         result = infer_fresh(ctx);
                         break;
@@ -4959,7 +4987,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                                head_t->kind == TYPE_SET     ||
                                head_t->kind == TYPE_MAP     ||
                                head_t->kind == TYPE_STRING  ||
-                               head_t->kind == TYPE_COLL)) {
+                               head_t->kind == TYPE_COLL    ||
+                               head_t->kind == TYPE_PTR)) {
                     infer_expr(ctx, ast->list.items[1]);
 
                     if (head_t->kind == TYPE_STRING)
@@ -4968,6 +4997,8 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         result = subst_apply(ctx->subst, head_t->element_type);
                     else if (head_t->kind == TYPE_ARR && head_t->arr_element_type)
                         result = subst_apply(ctx->subst, head_t->arr_element_type);
+                    else if (head_t->kind == TYPE_PTR && head_t->element_type)
+                        result = subst_apply(ctx->subst, head_t->element_type);
                     else
                         result = infer_fresh(ctx);
                     break;

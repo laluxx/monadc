@@ -1,0 +1,18 @@
+:TEST-ID tests.wisp.initialized-buffer
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-CONTEXT monadc.context.reader.buffer-types
+:TEST-PURPOSE A sized buffer annotation accepts its literal initializer on the following line.
+:TEST-EXPECT compile,run
+
+module Main
+
+
+define words :: [4 U32]
+[
+  0x07230203 0x00010000 0x000d000b 0x0000002d
+]
+
+
+show (count words)
+show (words 0)

@@ -1,0 +1,22 @@
+;;; Triangle.mon --- the first Vulkan program
+
+import Graphics
+import Graphics.Vulkan
+import shaders.TriangleFrag
+import shaders.TriangleVert
+
+module Main
+
+
+define triangle :: VulkanProgram
+  vulkan-program
+    "Monad — Vulkan Triangle"
+    960
+    540
+    &triangle-vertex-shader
+    (count triangle-vertex-shader)
+    &triangle-fragment-shader
+    (count triangle-fragment-shader)
+
+
+run-vulkan-2d triangle

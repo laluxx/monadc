@@ -23,8 +23,14 @@ define magnitude :: Int -> Int
              else value
 
 
+define continued-else :: Int -> Int
+  value -> if value < 0 then 0 else
+             value + 1
+
+
 tests
   assert-eq (status-result -7) (Left -7) "multiline then branch preserves its value"
   assert-eq (status-result 7) (Right 7) "multiline else branch preserves its value"
   assert-eq (magnitude -9) 9 "multiline branches accept infix bodies"
   assert-eq (magnitude 9) 9 "multiline conditional returns its else body"
+  assert-eq (continued-else 4) 5 "an else expression may continue on the next line"

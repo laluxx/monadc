@@ -1,0 +1,169 @@
+;;; Concurrent.mon --- structured concurrency semantics
+
+:author "Laluxx"
+:version "0.1.0"
+:keywords "concurrency structured tasks cancellation failures outcomes"
+:reference-qtt "https://bentnib.org/quantitative-type-theory.pdf"
+:reference-idris2-qtt "https://doi.org/10.4230/LIPIcs.ECOOP.2021.9"
+:reference-algebraic-effects "https://arxiv.org/abs/1312.1399"
+:reference-scoped-effects "https://doi.org/10.1145/3731678"
+:reference-deep-finalization "https://www.microsoft.com/en-us/research/publication/algebraic-effect-handlers-resources-deep-finalization/"
+:reference-structured-concurrency "https://openjdk.org/jeps/505"
+:reference-proof-carrying-code "https://people.eecs.berkeley.edu/~necula/Papers/pcc.pdf"
+
+;;; Commentary:
+
+ Control.Concurrent owns the public semantic values shared by every scheduler:
+ stable task identities, explicit outcomes, and non-empty failure trees.
+
+ Execution operations will join this module only when the compiler can lower
+ their scoped effects into certified concurrency IR. This module contains no
+ scheduler placeholders and exposes no runtime escape hatches.
+
+ FailureEvidence is accepted only after the independent certificate checker
+ succeeds. Lowering is deliberately structural: proof evidence determines the
+ causal shape, while Core owns human-facing message attachment. See the
+ proof-carrying-code and deep-finalization references above.
+
+;;; Code:
+
+module Control.Concurrent
+  [TaskIdentity
+   FailureCause Cancelled Fault CleanupFault
+   FailureEvidence PrimaryEvidence CleanupEvidence
+   FailureTree Failure
+   TaskOutcome TaskCompleted TaskFailedWith
+   failure-leaf failure-with-children failure-from-evidence failure-forest-from-evidence
+   failure-evidence-count failure-count failure-cleanup? failure-cancelled?
+   failure-task-number failure-message
+   outcome-completed? outcome-failed? outcome-value-or]
+
+
+type FailureCause {Cancelled Fault CleanupFault}
+
+
+layout TaskIdentity
+  number :: Int
+
+
+data FailureTree
+  = Failure TaskIdentity FailureCause String [FailureTree]
+
+
+data FailureEvidence
+  = PrimaryEvidence TaskIdentity FailureCause String [FailureEvidence]
+  | CleanupEvidence TaskIdentity String [FailureEvidence]
+
+
+data TaskOutcome a
+  = TaskCompleted  a
+  | TaskFailedWith FailureTree
+
+
+;;; Construction
+
+define failure-leaf :: TaskIdentity -> FailureCause -> String -> FailureTree
+  :doc "Construct a failure with no subordinate task or cleanup failures."
+  task cause message -> Failure task cause message []
+
+
+define failure-with-children :: TaskIdentity -> FailureCause -> String -> [FailureTree] -> FailureTree
+  :doc "Construct a non-empty failure node retaining its causal children."
+  task cause message children -> Failure task cause message children
+
+
+define failure-forest-from-evidence :: [FailureEvidence] -> [FailureTree]
+  :doc "Lower a verified causal forest without changing its node structure."
+  []              -> []
+  [evidence|rest] -> prepend (failure-from-evidence evidence) (failure-forest-from-evidence rest)
+
+
+define failure-from-evidence :: FailureEvidence -> FailureTree
+  :doc "Lower one verified cause, preserving task, kind, message, and children."
+  [PrimaryEvidence task cause message children] ->
+    Failure task cause message (failure-forest-from-evidence children)
+  [CleanupEvidence task message children] ->
+    Failure task CleanupFault message (failure-forest-from-evidence children)
+
+
+;;; Observation
+
+define failure-evidence-children-count :: [FailureEvidence] -> Int
+  []           -> 0
+  [child|rest] -> (failure-evidence-count child) + (failure-evidence-children-count rest)
+
+
+define failure-evidence-count :: FailureEvidence -> Int
+  :doc "Count every cause in verified evidence before Core lowering."
+  [PrimaryEvidence _ _ _ children] -> 1 + failure-evidence-children-count children
+  [CleanupEvidence _ _ children]   -> 1 + failure-evidence-children-count children
+
+define failure-children-count :: [FailureTree] -> Int
+  []           -> 0
+  [child|rest] -> (failure-count child) + (failure-children-count rest)
+
+
+define failure-count :: FailureTree -> Int
+  :doc "Count every node in a non-empty structured failure tree."
+  [Failure _ _ _ children] -> 1 + failure-children-count children
+
+
+define failure-cause-cleanup? :: FailureCause -> Bool
+  cause -> (= cause CleanupFault)
+
+
+define failure-children-cleanup? :: [FailureTree] -> Bool
+  []           -> False
+  [child|rest] -> or (failure-cleanup? child) (failure-children-cleanup? rest)
+
+
+define failure-cleanup? :: FailureTree -> Bool
+  :doc "Report whether this failure tree contains a cleanup failure."
+  [Failure _ cause _ children] -> (failure-cause-cleanup? cause) or (failure-children-cleanup? children)
+
+
+define failure-cause-cancelled? :: FailureCause -> Bool
+  cause -> (= cause Cancelled)
+
+
+define failure-children-cancelled? :: [FailureTree] -> Bool
+  []           -> False
+  [child|rest] -> or (failure-cancelled? child) (failure-children-cancelled? rest)
+
+
+define failure-cancelled? :: FailureTree -> Bool
+  :doc "Report whether cancellation occurs anywhere in this failure tree."
+  [Failure _ cause _ children] -> (failure-cause-cancelled? cause) or (failure-children-cancelled? children)
+
+
+define task-number :: TaskIdentity -> Int
+  task -> task.number
+
+
+define failure-task :: FailureTree -> TaskIdentity
+  [Failure task _ _ _] -> task
+
+
+define failure-task-number :: FailureTree -> Int
+  :doc "Return the stable numeric identity of the failure tree's root task."
+  failure -> task-number (failure-task failure)
+
+
+define failure-message :: FailureTree -> String
+  :doc "Return the Core-owned diagnostic message attached to a failure."
+  [Failure _ _ message _] -> message
+
+
+define outcome-completed? :: TaskOutcome a -> Bool
+  [TaskCompleted _]  -> True
+  [TaskFailedWith _] -> False
+
+
+define outcome-failed? :: TaskOutcome a -> Bool
+  [TaskCompleted _]  -> False
+  [TaskFailedWith _] -> True
+
+
+define outcome-value-or :: a -> TaskOutcome a -> a
+  _        [TaskCompleted value] -> value
+  fallback [TaskFailedWith _]    -> fallback

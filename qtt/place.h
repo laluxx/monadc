@@ -100,7 +100,9 @@ static inline bool qtt_place_overlaps(QttPlace left, QttPlace right) {
 /* A reborrow may preserve or narrow authority, never widen it.  Legacy flat
  * projections have no prefix evidence, so only equality proves containment. */
 static inline bool qtt_place_contains(QttPlace parent, QttPlace child) {
-    if (!qtt_core_var_equal(parent.root, child.root)) return false;
+    if (parent.root.module_id != child.root.module_id ||
+        parent.root.binder_id != child.root.binder_id)
+        return false;
     bool parent_root = parent.projection_id == 0 &&
                        parent.projection_depth == 0;
     if (parent_root) return true;

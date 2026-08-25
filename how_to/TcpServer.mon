@@ -19,12 +19,38 @@ define server-port :: Int
   39127
 
 
+layout ClientState
+  [running  :: Bool]
+  [status   :: Int]
+
+
+define continue-client :: Socket -> SocketBuffer -> ClientState -> SocketRead -io-> Int
+  _ _ state [SocketReadFailure status] ->
+    set! state.status status
+    set! state.running False
+    status
+  _ _ _ [SocketReadRetry status] -> status
+  _ _ state [SocketReadEOF status] ->
+    set! state.status 0
+    set! state.running False
+    0
+  client buffer state [SocketReadReady count] ->
+    def status (send-buffer client buffer count)
+    set! state.status status
+    set! state.running (>= status 0)
+    status
+
+
 define serve-client :: Socket -io-> Int
   :doc "Echo one client stream and always close its socket."
   client ->
-    def status (echo-stream client)
+    def buffer (make-socket-buffer 4096)
+    def state (ClientState True 0)
+    while state.running (continue-client client buffer state (receive client buffer))
+    def shutdown (shutdown-write client)
+    def released (release-socket-buffer buffer)
     def closed (close-socket client)
-    status
+    state.status
 
 
 define continue-server? :: Socket -> SocketResult -io-> Bool
