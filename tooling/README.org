@@ -78,6 +78,13 @@ explanation, completeness proposition, and zero or more edits. Every edit has
 an applicability classification. Only machine-applicable edits participate in
 unattended =--fix=.
 
+Missing mandatory effect-arrow annotations belong to the effect phase. Their
+structured code is =effect/missing-arrow-annotation= and their safe edit
+replaces the plain arrow at the reported stage with the inferred compact
+effect arrow. The CLI still reaches this judgment through the legacy reader
+diagnostic bridge. LSP integration must connect semantic compiler diagnostics
+to =lsp_analyze_file=; it must not duplicate effect inference as textual lint.
+
 * Core judgments
 
 Linting is a family of judgments over successively stronger compiler contexts:
@@ -278,6 +285,23 @@ those phases.
 - Comment attachment and conservation.
 - Configurable map layouts, blank-line policies, doc widths, and stable minimal
   edits.
+
+*** Implemented slice — reversible control-flow notation
+
+The compiler CLI owns the first formatter slice through =tooling/format.[ch]=:
+
+#+begin_example
+monad format --control-flow=glyph path
+monad format --control-flow=ascii path
+monad format --control-flow=glyph --check core
+monad format --control-flow=glyph --write core
+#+end_example
+
+Single-file formatting writes to stdout by default. =--check= never changes
+source and exits nonzero when canonical output differs; =--write= publishes
+each changed file through a same-directory temporary file and rename. Pipes
+inside delimiters, strings, characters, and comments remain data. Executable
+tests enforce idempotence and the canonical ASCII/glyph round trip.
 
 ** Cycle 6 — typed Monad policy
 

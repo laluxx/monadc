@@ -383,6 +383,14 @@
   and =ffi_parse_header= is re-run.  The cache format is a binary dump of
   the serialised =FFIFunction=/=FFIConstant=/=FFIStruct= arrays.
 
+[FIX id:fix.ffi.atomic-integrity-checked-cache-2026-08-31 date:2026-08-31 by:codex src:ffi.c,tests/test_vulkan_triangle.py conf:high]
+  FFI cache version 2 ends with a fixed integrity footer and is published by
+  renaming a completed per-process temporary file. The loader validates the
+  footer before trusting any serialized counts. A truncated or interrupted
+  cache is therefore treated as a miss and reparsed instead of allocating from
+  incomplete data and segfaulting. The Vulkan triangle regression deliberately
+  truncates its largest generated FFI cache and verifies successful recovery.
+
 [INF id:inf.context.ffi.codegen-connect from:obs.context.ffi.func-inject-env conf:high]
   connects-to -> `monadc.context.language.cffi-runtime` (the reader expands
   =(include ...)= into =ffi_parse_header= + =ffi_inject_into_env= calls) ·
@@ -410,7 +418,7 @@
 | Owned phase | C header parsing and FFIContext construction (Phase 0 pre-pass), FFI type mapping from C types to Monad types, function arity registration for Wisp, cache serialization/deserialization. |
 | Inputs | C header files via (include ...) directives, FFIContext for parsed header state, header file modification times for cache invalidation. |
 | Outputs | EnvEntry for FFI functions/constants/structs, arity table entries registered with wisp_register_arity, g_ffi_link_libs accumulated for final link step, cached FFIContext snapshots. |
-| Invariants | FFI cache is invalidated when header mtime changes; arity registration completes before Wisp expansion begins; FFI functions are injected with is_ffi=true marker; header parse errors are reported but non-fatal. |
+| Invariants | FFI cache is invalidated when header mtime changes or its integrity footer is absent; cache publication is atomic; arity registration completes before Wisp expansion begins; FFI functions are injected with is_ffi=true marker; header parse errors are reported but non-fatal. |
 | Test hooks | FFI header parse fixtures, include/parse round-trip tests, cache invalidation tests, arity registration coverage. |
 | Failure symptoms | Header parse failure, C type to Monad type mapping mismatch, cache staleness (header newer than cache), arity registration collision, missing link library. |
 | Context neighbors | wisp, reader, codegen-ops, language, env, buildsystem |

@@ -61,6 +61,8 @@ typedef struct TCInstance {
     LLVMValueRef *method_funcs;  // LLVM functions implementing each method
     char        **method_symbols; // stable names across LLVM module lifetimes
     int           method_count;
+    bool          is_template;    // constrained/applied instance awaiting specialization
+    AST          *source_ast;     // owned template AST for later monomorphization
 } TCInstance;
 
 /// Type Class Registry
@@ -142,6 +144,20 @@ const char *tc_method_class(TypeClassRegistry *reg, const char *method_name);
 // Parse and return the declared result type of a class method. Caller owns it.
 Type *tc_method_result_type(TypeClassRegistry *reg, const char *class_name,
                             const char *method_name);
+// Specialize a class-owned type expression for one concrete instance.
+// Caller owns the returned string; NULL reports an invalid/oversized request.
+char *tc_specialize_type_expression(TypeClassRegistry *reg,
+                                    const char *class_name,
+                                    const char *instance_type,
+                                    const char *expression);
+// Return a method's result after specializing it for a concrete instance.
+// Caller owns the returned Type.
+Type *tc_instance_method_result_type(TypeClassRegistry *reg,
+                                     const char *class_name,
+                                     const char *instance_type,
+                                     const char *method_name);
+int tc_method_arity(TypeClassRegistry *reg, const char *class_name,
+                    const char *method_name);
 
 /// Dictionary type generation
 //

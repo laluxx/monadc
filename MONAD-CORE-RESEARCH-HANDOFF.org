@@ -1,0 +1,1398 @@
+#+TITLE: Monad Core — Evaluation / Sequence / Unicode Research Handoff
+#+AUTHOR: OpenAI / GPT-5.6 Sol
+#+DATE: 2026-09-06
+#+STARTUP: showall
+#+OPTIONS: toc:3 num:t
+#+FILETAGS: :monad:core:compiler:sequence:lazy:strict:unicode:research:
+
+* Purpose
+
+This document is the handoff specification for continuing the Monad Core
+research/refactor after the evaluation/sequence work developed through Cycles
+1–11.
+
+The goal is not to preserve every experiment.  The goal is to preserve the
+semantic conclusions that survived repeated stress tests and to give the next
+Core/compiler engineer an implementation order that does not accidentally
+reintroduce duplicated abstractions.
+
+The governing principle is:
+
+  Core owns semantics.
+  The compiler owns representation, specialization, proof checking, lowering,
+  and normalization.
+
+The second governing principle is:
+
+  One semantic fact has one owner.
+
+Do not add a new public abstraction merely because the compiler needs a richer
+internal representation.
+
+* Safe baseline
+
+The latest fully materialized and mechanically verified Core archive available
+from this research session is:
+
+  monad-core-latest-verified-research-baseline.tar.gz
+
+SHA-256:
+
+  6975aa2f9894d50fe175b745cda8fd301f0bb708b9d66b26d27e5929f41bc805
+
+This corresponds to the fully packaged Cycle-6 state.  Cycles 7–11 developed
+additional semantic decisions and partial source work, but their full source tree
+was not persisted as a recoverable verified archive in the final environment.
+Therefore the correct continuation procedure is:
+
+  1. Start from the verified Cycle-6 archive.
+  2. Re-apply Cycles 7–11 using this document as the specification.
+  3. Do not reconstruct missing source by guessing from old intermediate drafts.
+  4. Package only after the full verification gate near the end of this document.
+
+* Architectural freeze candidates
+
+The following decisions have survived enough cycles that they should be treated
+as architectural defaults.  Change them only with a concrete counterexample and
+an explicit replacement theorem.
+
+** Shape and evaluation are orthogonal
+
+Do not create independent strict/lazy versions of every data structure.
+
+The intended model is:
+
+  shape × evaluation strategy × semantic evidence
+
+Examples:
+
+  Sequence + Strict  = a strict sequence
+  Sequence + Lazy    = a lazy sequence
+  Tree     + Strict  = a strict tree
+  Tree     + Lazy    = a lazy tree
+
+There should be no semantic classes named:
+
+  LazySequence
+  StrictSequence
+  LazyTree
+  StrictTree
+
+A short constraint/type alias may eventually exist for convenience, but it must
+not own methods, laws, or semantics.
+
+** Evaluation is small and general
+
+The intended Core abstraction is approximately:
+
+#+BEGIN_SRC monad
+class Applicative e => Evaluation e where
+  defer  :: (() -> a) -> e a
+  demand :: e a -> a
+#+END_SRC
+
+`defer` receives a thunk because `pure :: a -> e a` cannot express delayed
+execution in an eager language: its argument has already been evaluated.
+
+`Strict` is the immediate/identity-like strategy.
+
+`Lazy` is the compiler-supported call-by-need strategy.
+
+Do not make Unicode, Sequence, Tree, Producer, grapheme segmentation, or
+terminal width compiler primitives merely because they use Evaluation.
+
+** Strict
+
+Semantically:
+
+  Strict A ≅ A
+
+It exists as an evaluation strategy so that data shape can be parameterized over
+immediate versus suspended recursive positions.
+
+The compiler should erase Strict aggressively when safe.  Source-level `Strict`
+is not the same thing as compiler strictness analysis.  A compiler may prove a
+Lazy computation may be evaluated earlier, but that is an optimization theorem;
+it does not mean the source type was Strict.
+
+** Lazy
+
+`Lazy A` is an operational call-by-need suspension.
+
+Required semantics:
+
+  - construction does not evaluate the delayed body;
+  - first demand evaluates the body;
+  - subsequent unrestricted demands share the result;
+  - recursive demand of the currently evaluating thunk is divergence / a
+    black-hole condition, never a fabricated value;
+  - shared demand is thread-safe where unrestricted sharing is permitted;
+  - QTT usage is preserved: a thunk capturing a quantity-1 value is itself
+    quantity-1 unless duplication is proven lawful;
+  - compiler optimization may erase thunk allocation, but not change demanded
+    observable behavior or illegally duplicate linear state.
+
+Do not equate `Lazy A` with "productive A" or "total A".  A Lazy computation may
+diverge.
+
+** Total-demand evidence
+
+A useful value-level refinement discovered in later cycles is conceptually:
+
+  TotalDemand E A
+
+It means that this particular `E A` value is proven total when demanded.
+
+This is distinct from:
+
+  Lazy A
+
+which only says the computation is suspended/call-by-need.
+
+Do not add a second runtime observation method merely to carry productivity
+proofs.  Prefer erased/compiler-checked semantic certificates plus local
+constructive evidence such as TotalDemand where an actual continuation must be
+known demand-total.
+
+** Sequence is a state coalgebra, not a container class
+
+The minimal semantic Sequence is over the actual state type S, not necessarily
+a `Type -> Type` constructor.
+
+Conceptually:
+
+  S -> 1 + A × E S
+
+The intended shape is approximately:
+
+#+BEGIN_SRC monad
+class Evaluation (Strategy s) => Sequence s where
+  type Element s
+  type Strategy s
+
+  uncons :: s -> (Element s, Strategy s s)?
+#+END_SRC
+
+This permits monomorphic/fixed-element sequential states such as:
+
+  String
+  UTF-8 decoder cursors
+  ranges
+  compressed cursors
+  parser token cursors
+  database-page cursors
+
+without forcing meaningless phantom type parameters.
+
+`Functor` remains independent.  A polymorphic container may be both Functor and
+Sequence, but Sequence itself does not imply functoriality.
+
+** Sequence does not own Skip
+
+The extensional meaning of a sequence is:
+
+  1 + A × E S
+
+There is no Skip in the semantic Sequence interface.
+
+`Skip` belongs to the intensional producer/fusion machine because filtering,
+stateful warm-up, decimation, etc. need silent progress.
+
+This distinction is important:
+
+  Sequence = semantic observation
+  Producer = representation-changing machine / fusion calculus
+
+Do not move Skip back into Sequence merely because it is convenient for
+optimizers.
+
+** Producer is existential
+
+The public Core fusion machine should hide its internal state:
+
+  Producer E A ≅ exists S. (S -> Step E S A) × S
+
+with:
+
+#+BEGIN_SRC monad
+data Step e s a
+  = Stop
+  | Skip  (e s)
+  | Yield a (e s)
+#+END_SRC
+
+The existential state is important.  It lets arbitrary transformations change
+private state without leaking that state parameter into every public view type.
+
+Producer is not a second sequence hierarchy.
+
+** Sequence lowering is derived
+
+A Sequence may expose an optimization bridge:
+
+#+BEGIN_SRC monad
+lower :: s -> Producer (Strategy s) (Element s)
+#+END_SRC
+
+but `lower` must have a default implementation derived mechanically from
+`uncons`.  Therefore an ordinary user-defined Sequence still defines semantics
+exactly once.
+
+Producer-backed views may override `lower` by returning their existing producer.
+
+Law/contract:
+
+  lower construction is total and demand-neutral.
+
+Constructing the producer must not:
+
+  - observe a sequence element;
+  - demand a lazy continuation;
+  - perform effects;
+  - diverge;
+  - duplicate a quantity-1 value.
+
+This is necessary for left-biased operations such as append: merely preparing an
+unreachable right producer must not observe the right source.
+
+** Production-rate algebra
+
+The Producer stress tests suggested three useful operational families.
+
+One-to-one:
+
+  map
+  map-accumulate
+  enumerate
+
+Zero-or-one:
+
+  filter
+  map-filter-accumulate
+  stateful filtering
+  warm-up
+  decimation
+  sliding-window front ends
+
+Zero-to-many:
+
+  flat-map
+  concat-map
+  nesting
+
+Do not introduce separate LazyFilter, WindowSequence, NestedSequence, etc. just
+to represent these rate families.
+
+A general stateful `map-filter-accumulate` is preferable to special-purpose
+window/warm-up abstractions when it expresses the same semantics.
+
+** Complete fusion belongs to compiler normalization
+
+Core semantic fusion means transforms compose into one Producer machine without
+materializing intermediate Sequences.
+
+Complete representation fusion is a stronger compiler obligation.
+
+For a statically closed/specialized producer pipeline P, the compiler normalizer
+N should target a first-order state machine and satisfy, conceptually:
+
+  observe (N P) ≃d observe P
+  N (N P) =nf N P
+
+where `≃d` preserves:
+
+  - visible values and termination;
+  - demanded divergence;
+  - evaluation-order distinctions relevant to divergence;
+  - Lazy demand boundaries;
+  - QTT resource usage.
+
+For a statically known pipeline, the normal form should contain no artifacts
+whose only purpose was Core-level composition:
+
+  no Producer packages
+  no Step allocation
+  no View wrappers
+  no transform-only tuples
+  no transform-only higher-order closures
+
+A genuinely first-class Producer that escapes dynamically may remain allocated.
+
+Do not expose the compiler's richer normalization IR as another public sequence
+abstraction unless ordinary source semantics genuinely require it.
+
+** Evidence classes are proofs, not method bags
+
+The intended semantic refinements are approximately:
+
+  ProductiveSequence
+  FiniteSequence
+  InfiniteSequence
+
+They should be compiler-checked/erased semantic certificates, not compatibility
+classes containing length, reverse, filter, zip, etc.
+
+Productivity means every finite requested prefix can be obtained through finitely
+many terminating demand/observation steps.
+
+It does NOT mean every unbounded consumer terminates.  Searching an infinite
+productive sequence for an absent value may diverge.
+
+Finiteness is a well-foundedness theorem, not a request to first traverse the
+runtime value to compute a bound.  Do not force a lazy or linear source merely to
+produce proof evidence.
+
+Evidence preservation through transforms should be conservative and sound.
+Examples discovered in the research:
+
+  map:
+    productive -> productive
+    finite     -> finite
+    infinite   -> infinite
+
+  take:
+    productive -> finite
+
+  drop:
+    productive -> productive
+    finite     -> finite
+    infinite   -> infinite
+
+  filter:
+    finite -> finite
+
+  drop-while:
+    finite -> finite
+
+  append:
+    productive × productive -> productive
+    finite × finite         -> finite
+    infinite-left × compatible-right -> infinite
+
+  zip:
+    productive × productive -> productive
+    finite × finite         -> finite
+    infinite × infinite     -> infinite
+
+Do not contort typeclass resolution into a complete theorem prover.  Encode
+simple, sound sufficient rules.  A future compiler theorem engine may derive
+stronger facts.
+
+** Evidence provenance should be semantic, not operation-name duplication
+
+Later work replaced one phantom proof tag per operation with semantic evidence
+profiles such as:
+
+  PreservingTransform
+  BoundedTransform
+  PrefixTransform
+  StarvingTransform
+
+and operation-specific tags only where binary/nesting proof rules genuinely
+differ.
+
+Do not reintroduce MapView/FilterView/TakeView/... runtime families solely so
+typeclass instances remember provenance.  Prefer one runtime View/Producer plus
+erased semantic provenance.
+
+** CorecursiveSequence is the independent dual capability
+
+The historical `MaterializedSequence` class should remain deleted.
+
+It mixed unrelated facts:
+
+  length
+  reverse
+  indexing
+  filter
+  slicing
+  zip
+  append
+  same-representation construction
+
+The one genuinely independent dual capability discovered later is one-layer
+embedding/reconstruction:
+
+  embed-sequence : 1 + A × E S -> S
+
+Conceptually:
+
+#+BEGIN_SRC monad
+class Sequence s => CorecursiveSequence s where
+  embed-sequence :: (Element s, Strategy s s)? -> s
+#+END_SRC
+
+The exact signature may use an explicit layer type if that reads more cleanly.
+
+Projection/embedding laws are demand-sensitive/extensional, not representation
+identity.
+
+This permits generic rebuilding into strict or lazy target representations,
+with the TARGET strategy controlling when recursive rebuilding happens.
+
+Do not recreate `MaterializedSequence` under another name.
+
+* Text ontology to finish after the verified baseline
+
+Cycles 7–11 discovered that the old Core blurred Byte, Char, UTF-8, and String.
+The intended model is:
+
+  Byte    = one octet (0..255)
+  Char    = one Unicode scalar value
+  [Byte]  = arbitrary binary/octet data
+  String  = well-formed Unicode text, compactly representable as UTF-8
+
+A Unicode scalar is:
+
+  0 <= value <= 0x10FFFF
+  excluding 0xD800..0xDFFF
+
+`Char` is NOT a grapheme cluster.
+
+A grapheme cluster is a higher-level sequence of one or more Char values.
+
+Do not make grapheme clusters compiler primitives.
+
+** String sequence semantics
+
+String should implement:
+
+  Sequence String
+  Element String  = Char
+  Strategy String = Strict
+
+Therefore textual length counts Char/scalar observations.
+
+For example:
+
+  "Aλ🙂"
+
+has:
+
+  3 Unicode scalar values
+  7 UTF-8 octets
+
+These are different operations and must have different owners/names.
+
+Do not preserve a generic `length` whose meaning sometimes means encoded byte
+count.
+
+** One UTF-8 owner
+
+Introduce/finish a single `Text.UTF8` module that owns:
+
+  encode one Char to UTF-8 bytes
+  decode one UTF-8 prefix
+  validate raw UTF-8 bytes
+  incremental malformed/incomplete classification
+
+A good canonical observer is conceptually:
+
+  decode-utf8-prefix :: [Byte] -> (Char, Int)?
+
+For incremental input, use a richer result:
+
+  Decoded Char width
+  Incomplete
+  Malformed maximal-subpart-width
+
+Do not independently re-recognize the prefix grammar in Data.String, JSON,
+Readline, or HTTP.
+
+** Maximal-subpart malformed UTF-8 recovery
+
+Finish the incremental decoder according to Unicode Core Specification §3.9.
+
+The critical requirement is that malformed recovery consume exactly the maximal
+ill-formed subpart and not swallow a following byte that can begin a valid
+subsequence.
+
+Terminal input should maintain a tiny pending byte buffer and reprocess successor
+bytes where necessary.
+
+Malformed terminal input may be mapped to U+FFFD according to the chosen
+recovery policy, but the policy must not manufacture invalid String values.
+
+** HTTP is octet-framed
+
+HTTP/1.1 parsing must operate on `[Byte]`, not by constructing String before
+message framing.
+
+Normative reason: RFC 9112 requires parsing HTTP messages as octet sequences and
+warns against Unicode parsing before delineation.
+
+Keep opaque header values and request bodies as bytes where the protocol permits
+arbitrary octets.
+
+Convert ASCII-only fields to String only after validating their grammar.
+
+Do not add a `ByteString` type merely to fix HTTP unless the Core gains multiple
+real consumers that need a distinct byte-sequence representation.  `[Byte]` is
+already semantically honest.
+
+** Raw IO types
+
+File/socket/console APIs that transfer octets should use:
+
+  Byte
+  [Byte]
+
+not `[Int]` by convention.
+
+Do not mechanically replace every `[Int]`; integer/scalar/editor/domain data that
+is genuinely Int should remain Int.
+
+* Unicode architecture
+
+The intended separation is:
+
+  Text.Unicode.Properties
+      version-pinned Unicode facts / generated tables
+
+  Text.Unicode
+      Unicode algorithms, especially UAX #29 grapheme segmentation
+
+  Text.Unicode.Word
+      UAX #29 default word-boundary algorithm
+
+  Text.TerminalWidth
+      explicit terminal-cell policy/profile
+
+  Text.LineEditor
+      editing policy over grapheme/word boundaries
+
+The compiler should not know Unicode property tables or grapheme algorithms.
+
+** Unicode property data
+
+The normative generator must parse official Unicode 17 data files directly.
+Relevant inputs include:
+
+  GraphemeBreakProperty.txt
+  WordBreakProperty.txt
+  DerivedCoreProperties.txt
+  emoji-data.txt
+  EastAsianWidth.txt
+
+Properties needed by the implemented algorithms include at least:
+
+  Grapheme_Cluster_Break
+  Word_Break
+  Indic_Conjunct_Break
+  Extended_Pictographic
+  Emoji_Presentation
+  East_Asian_Width
+
+Generated tables are facts.  Core algorithms give those facts semantics.
+
+An independent library such as Python regex may be used for differential testing
+but must not be described as the normative source of the checked-in release
+snapshot.
+
+** Grapheme segmentation
+
+Implement Unicode 17 UAX #29 default extended grapheme clusters faithfully.
+
+The algorithm must include, among other rules/state:
+
+  CR / LF / Control
+  Hangul syllable rules
+  Extend / ZWJ
+  SpacingMark
+  Prepend
+  GB9c Indic conjunct behavior
+  exact Extended_Pictographic Extend* ZWJ context for GB11
+  Regional Indicator parity for GB12/GB13
+
+A finite deterministic state machine is a good Core representation.
+
+Run the official Unicode GraphemeBreakTest.txt as a release/conformance gate.
+
+Randomized differential tests are useful but are not a substitute for the
+official conformance corpus.
+
+** Grapheme is not Char
+
+Keep:
+
+  Char = scalar
+
+A Grapheme is a higher-level segment made of one or more Char values.
+
+The line editor cursor should move/delete at extended grapheme boundaries, not
+byte or scalar positions.
+
+** Word segmentation
+
+Implement the UAX #29 default word-boundary algorithm separately from editor word
+policy.
+
+`Text.Unicode.Word` owns default boundaries.
+
+`Text.LineEditor` chooses which default segments count as significant navigation
+words for commands such as forward-word/backward-word.
+
+Do not claim Unicode default word segmentation is locale/dictionary perfect for
+all languages.  Unicode explicitly allows/requires tailoring for scripts and
+applications where dictionary segmentation is necessary.
+
+Run official WordBreakTest.txt as a conformance gate.
+
+** Terminal width
+
+Do not present `display-width :: String -> Int` as a universal Unicode theorem.
+
+East_Asian_Width is a Unicode property, not a complete terminal layout model.
+
+Put terminal-cell policy in `Text.TerminalWidth`, with explicit profiles, e.g.:
+
+  standard profile: ambiguous width 1, emoji width 2
+  CJK profile:      ambiguous width 2, emoji width 2
+
+Applications may define different policies.
+
+* Line editor / terminal input architecture
+
+The intended pipeline is:
+
+  terminal octets
+      -> UTF-8 incremental decoder
+      -> Char
+      -> typed EditorKey event
+      -> grapheme-aware EditorState
+
+Do not insert a raw byte directly into String.
+
+** Typed key model
+
+Replace magic integer key namespaces with an ADT conceptually like:
+
+#+BEGIN_SRC monad
+data EditorKey
+  = InsertCharacter Char
+  | Submit
+  | EndOfInput
+  | DeleteBackward
+  | DeleteForward
+  | MoveForward
+  | MoveBackward
+  | MoveWordForward
+  | MoveWordBackward
+  | MoveHome
+  | MoveEnd
+  | HistoryPrevious
+  | HistoryNext
+  | ...
+#+END_SRC
+
+Keep escape-sequence decoding in IO.Readline / terminal boundary code.
+
+Keep editing semantics in the pure line-editor module.
+
+** One editor state transition
+
+Do not maintain independent `apply-key-text` and `apply-key-cursor` functions.
+Use one pure transition:
+
+  apply-key : EditorKey -> EditorState -> EditorState
+
+so text and cursor cannot diverge semantically.
+
+Editor cursor positions should always satisfy the grapheme-boundary invariant.
+
+Test insertion cases that merge adjacent grapheme clusters as well as deletion of
+whole combining/emoji/Indic clusters.
+
+* Compiler engineer roadmap
+
+The compiler work should be staged.  Do not attempt all research features at
+once.
+
+** Phase 0 — Preserve the semantic boundary
+
+Before implementing new features, add regression tests asserting that these are
+NOT compiler-known semantic abstractions:
+
+  Sequence
+  Producer
+  BinaryTree
+  grapheme segmentation
+  Unicode properties
+  terminal width
+  HTTP
+
+The compiler may optimize them through ordinary specialization/inlining/dataflow,
+but must not require hard-coded recognition for correctness.
+
+** Phase 1 — Associated type support needed by Sequence
+
+Implement/strengthen the type-system machinery required for:
+
+  type Element s
+  type Strategy s
+
+and constraints equivalent to:
+
+  Evaluation (Strategy s)
+
+Requirements:
+
+  - associated type reduction after instance resolution;
+  - equality constraints between associated strategies where binary operations
+    require compatible evaluation;
+  - diagnostics that report the owning associated type, not low-level solver
+    internals;
+  - specialization should see reduced associated types.
+
+Do not special-case Sequence while implementing this.  Associated types must be
+a general language mechanism.
+
+** Phase 2 — Strict
+
+Implement Strict as ordinary/near-ordinary representation that erases to its
+payload where legal.
+
+Prove/test:
+
+  demand (defer thunk) has immediate evaluation semantics
+  Functor/Applicative laws under ordinary purity assumptions
+  no runtime wrapper remains after straightforward specialization
+
+Avoid encoding compiler strictness analysis into the Strict source type.
+
+** Phase 3 — Lazy substrate
+
+This is the main unavoidable compiler substrate.
+
+Implement:
+
+  Lazy A
+  delay special form / equivalent elaborated construct
+  force / demand
+
+Required runtime/compiler behavior:
+
+  - delayed body not evaluated at construction;
+  - at-most-once evaluation under unrestricted sharing;
+  - black-hole detection for recursive self-demand;
+  - thread-safe shared forcing;
+  - exception/effect policy explicitly defined;
+  - no accidental duplication of quantity-1 environments or results;
+  - optimization may stack-promote/eliminate thunks when observationally safe.
+
+The delayed body should interact with the effect system deliberately.  Do not
+silently make IO/mutation shareable just because it appears under Lazy.
+
+** Phase 4 — QTT interaction
+
+The quantity system must infer the usage of a Lazy value from its captured
+environment/result.
+
+Key rule:
+
+  a thunk capturing a linear value must not become duplicable merely because the
+  outer type constructor is Lazy.
+
+Test:
+
+  - unrestricted persistent tails may be shared;
+  - quantity-1 tails move exactly once;
+  - forcing a one-shot thunk twice is rejected statically where possible;
+  - fusion never duplicates a linear source continuation;
+  - closure conversion preserves quantity annotations.
+
+** Phase 5 — Effect/divergence tracking
+
+The research relies on distinguishing:
+
+  total one-step observation
+  possibly divergent repeated observation
+  productive finite-demand behavior
+
+If Monad tracks `diverge` as an effect, make these distinctions expressible.
+
+Do not claim:
+
+  ProductiveSequence => every consumer terminates.
+
+Only bounded finite demands are discharged by productivity evidence.  Whole
+traversal requires finiteness evidence; unbounded searches may still diverge on
+infinite productive inputs.
+
+** Phase 6 — Sequence baseline
+
+Once associated types/Evaluation compile, implement the minimal state-level
+Sequence without optimizer magic.
+
+Verify ordinary user instances such as:
+
+  strict list state
+  String state
+  a monomorphic integer range
+  an application-defined cursor
+
+The compiler should not require the state to be a `Type -> Type` constructor.
+
+** Phase 7 — Producer as ordinary Core
+
+Compile Producer and Step as ordinary language definitions first.
+
+Establish semantic tests for:
+
+  map
+  filter
+  take/drop
+  take/drop-while
+  append
+  zip
+  map-accumulate
+  map-filter-accumulate
+  scan
+  enumerate
+  intersperse
+  flat-map
+
+Before optimization, verify demand behavior explicitly.
+
+Important examples:
+
+  - filter False over an infinite productive source can diverge before the first
+    visible result;
+  - an infinite left append never demands the right source;
+  - an infinite flat-map inner branch never demands the unreachable outer tail;
+  - scan emits the seed before observing the source;
+  - intersperse does not demand an extra source element merely to emit the
+    separator.
+
+** Phase 8 — Specialization/dictionary elimination
+
+Producer fusion depends on specializing through generic dictionaries and
+associated types.
+
+Implement/strengthen:
+
+  - instance dictionary specialization;
+  - inlining after associated type reduction;
+  - existential-state unpacking;
+  - closure conversion that exposes producer transition state;
+  - dead dictionary elimination.
+
+The compiler must give user-defined Sequence instances the same optimization
+opportunities as Core-defined instances.
+
+** Phase 9 — Producer normalization
+
+This is where the compiler may become research-heavy.
+
+Do not rely on incidental inlining alone for the "complete fusion" claim.
+Introduce a compiler-internal normalization stage for statically known Producer
+pipelines.
+
+Recommended research direction:
+
+  - normalize the compositional producer calculus to first-order state machines;
+  - use production-rate information internally where useful;
+  - make normalization terminating and deterministic;
+  - target an idempotent normal form;
+  - preserve demand refinement and QTT usage;
+  - eliminate transform-only existentials/closures/tuples.
+
+Potential internal concepts inspired by complete-fusion work may include linear
+versus nested rates and explicit state products.  These should stay compiler IR
+unless source programs genuinely need them.
+
+Regression condition for closed pipelines:
+
+  after normalization, IR contains no allocations/constructors that exist only
+  because Core expressed map/filter/flat-map/etc. through Producer.
+
+** Phase 10 — Proof/certificate checking
+
+Treat ProductiveSequence / FiniteSequence / InfiniteSequence as semantic proof
+interfaces rather than trust-me marker instances.
+
+Start conservatively:
+
+  - compiler validates known Core proof rules;
+  - obviously constructive representations such as productive unfolds carry
+    explicit total-demand continuation evidence;
+  - transformed view provenance propagates only sound sufficient theorems.
+
+Do not attempt a complete productivity theorem prover in the first compiler
+implementation.
+
+Later research can investigate:
+
+  guarded recursion
+  clocks/later modalities
+  sized types
+  dependent refinement evidence
+  automatic theorem derivation
+
+without changing the ordinary Sequence API.
+
+** Phase 11 — CorecursiveSequence / rebuild
+
+After Sequence is stable, implement the dual embedding capability and generic
+rebuilding.
+
+Test that:
+
+  same source + target Strict => strict materialization
+  same source + target Lazy   => delayed recursive rebuilding
+
+The compiler should merely optimize ordinary definitions; no rebuild primitive is
+required.
+
+** Phase 12 — Byte / Char compiler boundary
+
+Compiler/runtime primitives should understand only the minimum necessary:
+
+  Byte = 0..255
+  Char = Unicode scalar value
+  String representation invariant / primitive compact representation as needed
+
+The compiler does NOT need to know:
+
+  grapheme clusters
+  UAX #29
+  word segmentation
+  emoji properties
+  terminal widths
+
+Character literal parsing should validate Unicode scalar values.
+
+Decide and document the runtime representation of Char (usually a scalar integer
+representation is sufficient).
+
+** Phase 13 — String observation correctness
+
+Ensure String iteration/Sequence observation returns Unicode scalar `Char`
+values, not UTF-8 bytes.
+
+Any primitive operations exposing compact String bytes must stay internal to the
+String/UTF-8 implementation boundary.
+
+Audit:
+
+  equality
+  ordering
+  literal construction
+  pattern matching if supported
+  printing
+  FFI boundaries
+  serialization
+
+for scalar-vs-byte assumptions.
+
+* Core continuation roadmap from Cycle 6 baseline
+
+Apply the unfinished cycles in this order.
+
+** Continuation A — Finish Cycle 7 consolidation
+
+1. Delete `MaterializedSequence`.
+2. Add `CorecursiveSequence` as the one independent construction dual.
+3. Move generic finite observations to `Data.Sequence.Consumer`.
+4. Keep representation-changing transformations in `Data.Sequence.Transform`.
+5. Keep append associativity owned by `Semigroup`.
+6. Make list instances delegate to generic sequence consumers/transforms where
+   semantics are identical.
+7. Keep truly list-specific algorithms in Data.List.
+8. Re-audit all duplicate algorithms after the move.
+
+Freeze criterion for this continuation:
+
+  no class remains whose methods are merely "things lists happen to support".
+
+** Continuation B — Finish Cycle 8 text/octet migration
+
+1. Make Char a Unicode scalar type.
+2. Introduce canonical Text.UTF8.
+3. Make String Sequence Element=Char Strategy=Strict.
+4. Remove arbitrary byte slicing that returns String.
+5. Convert HTTP framing/body/header byte paths to [Byte].
+6. Convert parser primitive input to Byte.
+7. Make JSON explicitly cross through Text.UTF8 for non-ASCII string content.
+8. Make Web.HTML traverse Char, not compact String bytes.
+9. Convert actual byte IO APIs to Byte/[Byte].
+10. Audit every remaining `[Int]` by semantics, not by text replacement.
+
+** Continuation C — Finish Cycle 9 Unicode property/algorithm split
+
+1. Generate Unicode 17 property tables from official UCD files.
+2. Keep table generation deterministic and version-pinned.
+3. Implement UAX #29 grapheme segmentation in ordinary Core.
+4. Run official GraphemeBreakTest.txt.
+5. Add differential randomized testing against an independent oracle.
+6. Introduce explicit Text.TerminalWidth policies.
+
+** Continuation D — Finish Cycle 10 typed grapheme-aware editor
+
+1. Introduce typed EditorKey ADT.
+2. Decode terminal UTF-8 to Char before insertion.
+3. Keep one pure apply-key EditorState transition.
+4. Measure/move/delete by grapheme boundaries.
+5. Keep history/kill-ring values as String/text, not byte/scalar integer buffers.
+6. Repaint using explicit terminal width policy.
+7. Remove old magic key integers.
+
+** Continuation E — Finish Cycle 11 malformed recovery + word navigation
+
+1. Implement incremental UTF-8 result type:
+
+     Decoded Char width
+     Incomplete
+     Malformed maximal-subpart-width
+
+2. Add terminal pending-byte/pushback behavior so malformed prefixes do not
+   consume the next independent byte.
+3. Add official-UCD Word_Break data generation.
+4. Implement UAX #29 default word-boundary algorithm in Text.Unicode.Word.
+5. Make editor word navigation a policy over those default segments.
+6. Run official WordBreakTest.txt.
+7. Keep locale/dictionary tailoring explicit/outside the default algorithm.
+
+* Required research references
+
+These are the main papers/specifications that shaped the architecture and should
+remain linked from relevant module commentary or research notes.
+
+** Evaluation / call-by-need
+
+John Launchbury, "A Natural Semantics for Lazy Evaluation", POPL 1993.
+https://doi.org/10.1145/158511.158618
+
+Zena M. Ariola and Matthias Felleisen, call-by-need calculi/equational semantics.
+Use the exact bibliography entry selected by the implementation engineer when
+writing the final module commentary.
+
+Paul Blain Levy, "Call-by-Push-Value: A Subsuming Paradigm", TLCA 1999.
+https://doi.org/10.1007/3-540-48959-2_17
+
+** Coalgebra / recursion schemes / containers
+
+J.J.M.M. Rutten, "Universal Coalgebra: a Theory of Systems", TCS 249(1), 2000.
+https://doi.org/10.1016/S0304-3975(00)00056-6
+
+Erik Meijer, Maarten Fokkinga, Ross Paterson,
+"Functional Programming with Bananas, Lenses, Envelopes and Barbed Wire",
+FPCA 1991.
+https://doi.org/10.1007/3540543961_7
+
+Michael Abbott, Thorsten Altenkirch, Neil Ghani,
+"Containers: Constructing Strictly Positive Types", TCS 342(1), 2005.
+https://doi.org/10.1016/j.tcs.2005.06.002
+
+** Guarded recursion / productivity
+
+Robert Atkey and Conor McBride,
+"Productive Coprogramming with Guarded Recursion".
+https://bentnib.org/productive.html
+
+Aleš Bizjak et al., "Guarded Dependent Type Theory with Coinductive Types".
+https://arxiv.org/abs/1601.01586
+
+Sized/guarded termination literature should be consulted before turning current
+proof certificates into a richer automatic proof system.
+
+** Fusion
+
+Duncan Coutts, Roman Leshchinskiy, Don Stewart,
+"Stream Fusion: From Lists to Streams to Nothing at All".
+
+Oleg Kiselyov, Aggelos Biboudis, Nick Palladinos, Yannis Smaragdakis,
+"Stream Fusion, to Completeness", POPL 2017.
+https://doi.org/10.1145/3009837.3009880
+https://arxiv.org/abs/1612.06668
+
+Oleg Kiselyov, Shinya Kobayashi, Nick Palladinos,
+"Complete Fusion for Stateful Streams".
+https://arxiv.org/abs/2412.15768
+
+** Unicode / protocols
+
+Unicode Standard 17.0.0.
+https://www.unicode.org/versions/Unicode17.0.0/
+
+UAX #29, Unicode Text Segmentation.
+https://www.unicode.org/reports/tr29/
+
+UAX #11, East Asian Width.
+https://www.unicode.org/reports/tr11/
+
+RFC 3629, UTF-8.
+https://www.rfc-editor.org/rfc/rfc3629.html
+
+RFC 9112, HTTP/1.1.
+https://www.rfc-editor.org/rfc/rfc9112.html
+
+RFC 9110, HTTP Semantics.
+https://www.rfc-editor.org/rfc/rfc9110.html
+
+* Source style requirements
+
+Treat the foundational modules as executable papers.
+
+** Headings
+
+Use a small number of real `;;;` headings forming a linear narrative.
+
+Good:
+
+#+BEGIN_SRC monad
+;;; Lazy Views
+;;
+;; Views never materialize an intermediate collection. ...
+#+END_SRC
+
+Do not make every local helper/operation a `;;;` heading.
+
+The user should be able to move heading-to-heading and read the module as a book.
+
+Inside `;;; Commentary:` prefer prose directly in the commentary format expected
+by the repository.  Do not turn every paragraph into a wall of `;;` if the
+reader/commentary syntax does not require it.
+
+** Pattern matching
+
+Use direct constructor clauses when the function argument itself is being
+matched.
+
+Avoid:
+
+#+BEGIN_SRC monad
+source ->
+  (match source with
+    | ...)
+#+END_SRC
+
+when direct clauses express the same thing.
+
+An explicit match is legitimate for a genuinely computed scrutinee where it is
+clearer than introducing helper-wall indirection.
+
+Do not optimize for "zero match expressions" at the expense of readability.
+
+** Top-level spacing
+
+Use exactly two blank lines between top-level declarations, consistent with the
+repository style record.
+
+** Runtime escape hatches
+
+Do not introduce private `__rt_*` wrappers for operations already expressible
+through public Core vocabulary.
+
+If the public operator/literal is broken, fix its owner/compiler support rather
+than hiding the problem in a flagship module.
+
+** Semantic constants
+
+Values are values.  Do not add dummy `()` arguments merely to make constants
+look like callbacks.
+
+** Optional values
+
+Use first-class `T?` / `nil` for ordinary zero-or-one observations.
+
+Keep `Maybe` for APIs intentionally exposing its Functor/Applicative/Monad
+algebra, not merely because something may be absent.
+
+** Generated data
+
+Large Unicode property tables may be generated and machine-oriented.  Keep the
+algorithm modules readable; do not inline generated interval walls into the
+human-facing state-machine logic.
+
+* Test strategy
+
+** Semantic Sequence tests
+
+For every user/Core Sequence instance:
+
+  - uncons agrees with the intended visible order;
+  - lower agrees demand-sensitively with uncons;
+  - constructing lower performs no observation/demand;
+  - Strict/Lazy versions of the same shape differ only by evaluation strategy;
+  - QTT usage is preserved.
+
+** Transform demand tests
+
+Include explicit tests for:
+
+  filter False (repeat x)
+      may never produce a visible result
+
+  take n productive
+      is finite
+
+  append infinite left right
+      never demands right
+
+  flat-map with infinite first inner
+      never demands outer tail
+
+  scan seed source
+      emits seed before source demand
+
+  intersperse separator
+      does not demand another source element merely to emit separator
+
+** Fusion IR tests
+
+For closed specialized pipelines, inspect compiler IR after producer
+normalization and assert absence of composition-only allocations.
+
+Tests should cover:
+
+  map/filter/take
+  zip at differing production rates
+  stateful map/filter
+  scan
+  intersperse
+  flat-map/nesting
+
+** Unicode conformance tests
+
+Release gates:
+
+  official GraphemeBreakTest.txt passes 100%
+  official WordBreakTest.txt passes 100%
+  UTF-8 malformed/maximal-subpart corpus passes
+  randomized differential tests against an independent implementation pass
+
+Version-pin test data to the same Unicode version as generated properties.
+
+** Editor tests
+
+Cover at least:
+
+  combining-mark grapheme
+  emoji ZWJ cluster
+  Regional Indicator flag
+  Indic conjunct
+  Hangul composition cluster
+  insertion that merges two prior grapheme boundaries
+  deletion of a full grapheme
+  forward/backward word with Unicode word segmentation
+  malformed UTF-8 followed by valid ASCII/UTF-8 byte (pushback correctness)
+
+* Final verification gate before any future archive is called "freeze"
+
+Run ALL of the following against the exact packaged/extracted tree.
+
+** Structure
+
+  - no missing Core imports
+  - no import cycles
+  - no duplicate module declarations
+  - no stale deleted modules imported
+
+** DRY/legacy grep
+
+There should be no live semantic abstractions named:
+
+  LazySequence
+  StrictSequence
+  MaterializedSequence
+
+There should be no parallel operation families such as:
+
+  map-lazy
+  filter-lazy
+  take-lazy
+  zip-lazy
+
+Any historical mentions should occur only in research/commentary explaining what
+was removed.
+
+** Byte/Char/String ontology grep
+
+Check:
+
+  - raw network/file byte buffers are Byte/[Byte], not Int/[Int] by convention;
+  - no public arbitrary byte slicing returns String;
+  - no raw terminal byte is inserted directly into String;
+  - no second UTF-8 decoder exists outside Text.UTF8;
+  - no Web.HTML/String routine walks compact String bytes as semantic characters;
+  - Char literals reject surrogate code points.
+
+** Source shape
+
+For all touched flagship modules:
+
+  - no TODO/FIXME placeholders;
+  - no unreasonable line widths;
+  - no wall of `;;;` local headings;
+  - no unnecessary match wrappers;
+  - no accidental runtime escape-hatch wrappers;
+  - two blank lines between top-level declarations.
+
+** Artifact verification
+
+  1. Build tar archive.
+  2. Compute SHA-256.
+  3. Extract archive into a fresh directory.
+  4. Re-run structure/DRY/ontology/style checks on the extracted copy.
+  5. Compare extracted files byte-for-byte against the audited working tree.
+  6. Only then label the archive a freeze candidate.
+
+* When to freeze
+
+Freeze when continuing a cycle stops finding architectural contradictions and
+mostly finds only:
+
+  - implementation work already implied by established abstractions;
+  - optimization engineering;
+  - versioned data updates;
+  - optional library surface expansion;
+  - application-specific tailoring.
+
+Do NOT keep changing the architecture merely because another mathematically
+interesting abstraction exists in the literature.
+
+A good stop point has these properties:
+
+  1. Shape/evaluation/evidence are orthogonal and tested by at least Sequence and
+     Tree.
+  2. There is one Sequence semantics.
+  3. There is one Lazy semantics.
+  4. There is one Strict semantics.
+  5. Producer is clearly an optimization/representation-changing calculus, not a
+     second Sequence hierarchy.
+  6. Old materialized collection bags are gone.
+  7. Text/octet/scalar boundaries are honest.
+  8. Unicode algorithms are Core, generated Unicode facts are data, and the
+     compiler does not know grapheme rules.
+  9. The compiler contract is demanding but minimal.
+ 10. Remaining work is compiler/runtime implementation and conformance testing,
+     not semantic ownership redesign.
+
+At that point: stop redesigning, freeze the Core specification, and implement.
+
+* Final warning to the compiler engineer
+
+Do not "simplify" the architecture by moving semantic knowledge into compiler
+intrinsics.
+
+The compiler may recognize patterns for optimization, but correctness must remain
+explainable by ordinary Core definitions whenever possible.
+
+In particular, do not make the compiler own:
+
+  Sequence traversal laws
+  Producer operation semantics
+  Tree traversal semantics
+  UTF-8 validation rules beyond minimal String representation support
+  grapheme clustering
+  word segmentation
+  terminal width
+  HTTP framing
+
+The most valuable result of this research is not that Monad has many clever
+features.  It is that a very small set of compiler capabilities should allow
+ordinary Monad source to define sophisticated abstractions with native-quality
+performance.
+
+That is the standard to preserve.

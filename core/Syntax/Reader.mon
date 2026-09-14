@@ -1,8 +1,8 @@
 ;;; Reader.mon --- First-class source syntax and reader descriptions
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "syntax token source span reader parser DSL hygiene"
+:author   Laluxx
+:version  0.3.0
+:keywords syntax token source span reader parser DSL hygiene
 
 ;;; Commentary:
 
@@ -14,47 +14,47 @@
  is deliberately not presented as a mutable language value.
 
  Functions returning Syntax execute in the deterministic expansion phase.
- Their kernel includes ordinary `if`, `begin`, numeric arithmetic and
- comparison, lexical bindings (through ordinary `let`), and the immutable
- constructors `syntax-list`, `syntax-array`, `syntax-symbol`,
- `syntax-string`, and `syntax-number`. Unknown calls remain object-language
+ Their kernel includes ordinary =if=, =begin=, numeric arithmetic and
+ comparison, lexical bindings (through ordinary =let=), and the immutable
+ constructors =syntax-list=, =syntax-array=, =syntax-symbol=,
+ =syntax-string=, and =syntax-number=. Unknown calls remain object-language
  syntax, which is the staging boundary used by embedded languages. Expansion
  has deterministic step and nesting limits, so a recursive transformer
  reports a compiler diagnostic instead of exhausting the host stack.
 
- Structural inspection uses `syntax-list?`, `syntax-symbol?`,
- `syntax-string?`, `syntax-number?`, `syntax-list-length`, `syntax-list-ref`,
- `syntax-list-tail`, `syntax-list-cons`, `syntax-array?`,
- `syntax-array-length`, `syntax-array-ref`, and `syntax-symbol-text`.
- `syntax-keyword` constructs keyword Syntax from computed text, while
- `syntax-list-append` composes generated argument sequences without exposing
+ Structural inspection uses =syntax-list?=, =syntax-symbol?=,
+ =syntax-string?=, =syntax-number?=, =syntax-list-length=, =syntax-list-ref=,
+ =syntax-list-tail=, =syntax-list-cons=, =syntax-array?=,
+ =syntax-array-length=, =syntax-array-ref=, and =syntax-symbol-text=.
+ =syntax-keyword= constructs keyword Syntax from computed text, while
+ =syntax-list-append= composes generated argument sequences without exposing
  mutable AST storage.
 
- A top-level `reader-block PATTERN TARGET` declaration gives TARGET ownership
- of a following indented region. The initial pattern form is `KEYWORD_`: the
+ A top-level =reader-block PATTERN TARGET= declaration gives TARGET ownership
+ of a following indented region. The initial pattern form is =KEYWORD_=: the
  hole supplies the remaining header forms as transformer arguments, followed
- by one neutral block Syntax value. Its children are `reader-line`,
- `reader-blank`, and `reader-comment` forms. A block may appear anywhere an
- expression may appear, including as the indented value of a typed `define`.
+ by one neutral block Syntax value. Its children are =reader-line=,
+ =reader-blank=, and =reader-comment= forms. A block may appear anywhere an
+ expression may appear, including as the indented value of a typed =define=.
  Its baseline is the claiming line and the region ends at the corresponding
  dedent. Every body line records indentation relative to that baseline;
  indentation; executable lines retain their ordinary parsed Syntax, and
  comments retain their original text. The compiler groups source structure
  but assigns no object-language meaning to it.
- `syntax-source-file`, `syntax-source-line`,
- `syntax-source-column`, and `syntax-source-end-column` preserve the
- connection to source. `syntax-error` raises a user diagnostic at a selected
- syntax value. Quasiquote evaluates `unquote` holes at the appropriate nesting
- depth and `unquote-splicing` flattens list Syntax. `syntax-kind` integrates
- with ordinary Monad `match`. `syntax-gensym` and `syntax-introduce` create
- fresh hygienic identifiers; `syntax-capture` explicitly requests an
+ =syntax-source-file=, =syntax-source-line=,
+ =syntax-source-column=, and =syntax-source-end-column= preserve the
+ connection to source. =syntax-error= raises a user diagnostic at a selected
+ syntax value. Quasiquote evaluates =unquote= holes at the appropriate nesting
+ depth and =unquote-splicing= flattens list Syntax. =syntax-kind= integrates
+ with ordinary Monad =match=. =syntax-gensym= and =syntax-introduce= create
+ fresh hygienic identifiers; =syntax-capture= explicitly requests an
  unscoped use-site name.
- Immutable lexical contexts are created with `syntax-fresh-context`, attached
- with `syntax-add-context`, inspected with `syntax-context`, and removed
- explicitly with `syntax-remove-context`. Context metadata survives AST
+ Immutable lexical contexts are created with =syntax-fresh-context=, attached
+ with =syntax-add-context=, inspected with =syntax-context=, and removed
+ explicitly with =syntax-remove-context=. Context metadata survives AST
  cloning and appears in expansion traces.
 
- Use `import for-syntax Module.Name` when a direct dependency should
+ Use =import for-syntax Module.Name= when a direct dependency should
  contribute readers and Syntax transformers without exposing runtime
  definitions. Reader grammars are not re-exported transitively: every client
  that uses a grammar imports its owner explicitly. Two directly imported
@@ -67,20 +67,30 @@
  transformers retain their definition-site phase environment, so their
  implementation may be factored into private compile-time helpers safely.
 
- SourceSpan uses one-based, half-open coordinates.  START identifies the
+ SourceSpan uses one-based, half-open coordinates. START identifies the
  first source position and END identifies the position immediately following
  the represented text.
 
+ The constructors in this module remain representation constructors rather than
+ policy-enforcing smart constructors: compiler-generated and recovery syntax may
+ need to preserve temporarily incomplete descriptions. The corresponding
+ =*-valid?= observations centralize the invariants required when a value crosses
+ into the live reader registry. In particular, tokens need a nonempty source
+ lexeme and valid span, while mixfix rules need nonempty pattern/target names and
+ nonnegative binding power.
+
 ;;; Code:
 
+import Data.Bool
+
 module Syntax.Reader
-  [SourceSpan source-span
+  [SourceSpan source-span source-span-valid?
    TokenKind IdentifierToken OperatorToken LiteralToken DelimiterToken
-   Token token
+   Token token token-valid?
    Associativity LeftAssociative RightAssociative
    ReaderRule
-   mixfix-rule
-   ReaderDescription reader-description]
+   mixfix-rule reader-rule-valid?
+   ReaderDescription reader-description reader-description-valid?]
 
 
 layout SourceSpan
@@ -126,15 +136,50 @@ define source-span :: String -> Int -> Int -> Int -> Int -> SourceSpan
   file start-line start-column end-line end-column -> SourceSpan file start-line start-column end-line end-column
 
 
+define source-position-before-or-equal? :: Int -> Int -> Int -> Int -> Bool
+  start-line start-column end-line end-column
+    | (< start-line end-line) -> True
+    | (> start-line end-line) -> False
+    | otherwise               -> (<= start-column end-column)
+
+
+define source-span-valid? :: SourceSpan -> Bool
+  span ->
+    and?
+      (and? (> span.start-line 0) (> span.start-column 0))
+      (and?
+        (and? (> span.end-line 0) (> span.end-column 0))
+        (source-position-before-or-equal?
+          span.start-line span.start-column span.end-line span.end-column))
+
+
 define token :: TokenKind -> String -> SourceSpan -> Token
   kind lexeme span -> Token kind lexeme span
+
+
+define token-valid? :: Token -> Bool
+  value ->
+    and? (> (length value.lexeme) 0) (source-span-valid? value.span)
+
 
 define mixfix-rule :: String -> String -> Int -> Associativity -> ReaderRule
   pattern target binding-power associativity -> ReaderRule pattern target binding-power associativity
 
 
+define reader-rule-valid? :: ReaderRule -> Bool
+  rule ->
+    and?
+      (and? (> (length rule.pattern) 0) (> (length rule.target) 0))
+      (>= rule.binding-power 0)
+
+
 define reader-description :: String -> String -> String -> ReaderDescription
   name result-type rule-source -> ReaderDescription name result-type rule-source
+
+
+define reader-description-valid? :: ReaderDescription -> Bool
+  description ->
+    and? (> (length description.name) 0) (> (length description.result-type) 0)
 
 
 tests
@@ -142,4 +187,20 @@ tests
   define example-span (source-span "Example.mon" 2 3 2 4)
   assert-eq example-span.start-line 2 "source spans preserve one-based start lines"
   assert-eq example-span.end-column 4 "source spans preserve half-open end columns"
+  assert-eq (source-span-valid? example-span) True "well-ordered one-based source spans are valid"
+  assert-eq (source-span-valid? (source-span "Example.mon" 2 4 2 3)) False "source spans reject backwards end positions"
+  assert-eq (source-span-valid? (source-span "Example.mon" 0 1 1 1)) False "source spans reject zero-based lines"
   :source-coordinates:
+
+  :description-invariants:
+  define example-token (token IdentifierToken "name" example-span)
+  define example-rule (mixfix-rule "if_then_else_" "if-expression" 10 RightAssociative)
+  define example-reader (reader-description "ControlSyntax" "Expression" "if_then_else_")
+  assert-eq (token-valid? example-token) True "tokens validate their lexeme and source span together"
+  assert-eq (token-valid? (token IdentifierToken "" example-span)) False "empty token lexemes are rejected at registry boundaries"
+  assert-eq (reader-rule-valid? example-rule) True "well-formed reader rules validate"
+  assert-eq (reader-rule-valid? (mixfix-rule "" "target" 10 LeftAssociative)) False "reader rules require a pattern"
+  assert-eq (reader-rule-valid? (mixfix-rule "x_" "target" -1 LeftAssociative)) False "reader rules reject negative binding power"
+  assert-eq (reader-description-valid? example-reader) True "reader descriptions require identity and result type"
+  assert-eq (reader-description-valid? (reader-description "" "Expression" "x_")) False "reader descriptions reject empty names"
+  :description-invariants:

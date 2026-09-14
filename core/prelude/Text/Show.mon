@@ -1,19 +1,19 @@
 ;;; Show.mon --- Text rendering typeclass
 
-:author "Laluxx"
-:version "1.2.0"
-:keywords "show render string typeclass executable law"
+:author   Laluxx
+:version  1.2.0
+:keywords show render string typeclass executable law
 
 ;;; Commentary:
 
  Show is a text/rendering abstraction, not a generic prelude bucket entry.
- The builtin `show` remains available for concrete values; this module names
+ The builtin =show= remains available for concrete values; this module names
  the class contract that instances should satisfy. The executable law makes
- `showsPrec` the compositional basis and requires the pure `render`
+ =showsPrec= the compositional basis and requires the pure =render=
  operation to agree with precedence zero and an empty suffix.
- Implementations only need to define `render` for precedence-insensitive
+ Implementations only need to define =render= for precedence-insensitive
  values: the class supplies the canonical difference-list-style
- `showsPrec` composition automatically.
+ =showsPrec= composition automatically.
 
 ;;; Code:
 
@@ -42,9 +42,6 @@ instance Show ShowSample
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Show registers Show"
-  :registration:
 
   :deriving:
   assert-eq (render ShowRed) "ShowRed" "Show derives nullary constructor name"

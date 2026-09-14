@@ -1,8 +1,9 @@
 ;;; Float.mon --- Float-specific predicates
+:bootstrap primitive
 
-;; Author: Laluxx
-;; Version: 0.2.0
-;; Keywords: float primitive predicates
+:author   Laluxx
+:version  0.3.0
+:keywords float primitive predicates ieee
 
 ;;; Commentary:
 

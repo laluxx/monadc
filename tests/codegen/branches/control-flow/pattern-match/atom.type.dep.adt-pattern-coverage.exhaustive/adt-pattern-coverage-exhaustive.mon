@@ -1,0 +1,22 @@
+:TEST-ID tests.codegen.type.dep.adt-pattern-coverage.exhaustive
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET adt-pattern-coverage
+:TEST-QUALITY semantic-regression
+:TEST-CONTEXT monadc.context.pmatch.adt-coverage
+:TEST-PURPOSE Dependent coverage accepts every constructor, including a payload constructor.
+:TEST-EXPECT compile, run
+:TEST-MENU branches/control-flow/pattern-match/atom.type.dep.adt-pattern-coverage.exhaustive
+:TEST-MENU-PATH codegen/branches/control-flow/pattern-match/atom.type.dep.adt-pattern-coverage.exhaustive
+:TEST-ATOM-LEAF atom.type.dep.adt-pattern-coverage.exhaustive
+:TEST-CLI-TARGET codegen branches control-flow pattern-match
+
+(module Main)
+(data Maybe Nothing | Just Int)
+(define (value-or-zero [value : Maybe] -> Int)
+  Nothing  -> 0
+  (Just x) -> x)
+(assert-eq (value-or-zero (Just 7)) 7 "exhaustive ADT match")
+

@@ -496,6 +496,23 @@ LLVM function with no type tags or dispatch overhead.
   made values nondeterministic across executions.  Initializer elements are
   cast to the declared element type and stored into their fixed slots.
 
+[FIX id:fix.codegen.foreign-layout-fixed-array-index-2026-08-31 date:2026-08-31 by:codex src:codegen.c,env.c,tests/wisp_foreign_layout_buffer.mon,tests/test_foreign_layout_buffer.py conf:high]
+  Indexing fixed storage of a non-scalar foreign layout returns the address of
+  the inline element, matching the pointer-shaped representation used by
+  layout field access, calls, and bindings.  Loading the aggregate and then
+  treating its leading bytes as an address made Vulkan queue flags such as
+  =0x000000100000000f= become invalid pointers.  Layout lookup scans for the
+  exact =ENV_LAYOUT= entry even when another environment entry has the same
+  name; scalar foreign typedefs therefore retain value semantics.
+
+[FIX id:fix.codegen.foreign-layout-native-flow-2026-08-31 date:2026-08-31 by:codex src:codegen.c,tests/wisp_foreign_layout_buffer.mon,tests/test_foreign_layout_buffer.py conf:high]
+  Concrete foreign-layout values keep their native address representation
+  through calls to later-defined functions, nested inline-field projection,
+  and assignment into fixed inline arrays.  Only genuinely quantified calls
+  box layouts as =RT_OPAQUE=.  This prevents struct headers, nested extents,
+  and Vulkan pipeline-stage arrays from being mistaken for runtime boxes or
+  pointer values.
+
 [OBS id:obs.codegen.fn.arr-fat-data src:codegen.h:129 conf:high]
   =arr_fat_data(CodegenContext *ctx, LLVMValueRef fat_ptr, Type *elem_type)=
   — Extracts the data pointer (=elem_type *=) from a fat array pointer struct.
@@ -861,3 +878,30 @@ LLVM function with no type tags or dispatch overhead.
   as =ParseReply a= must retain the generic closure path. Collection-pattern
   heads are unboxed according to their inferred scalar type instead of being
   routed through opaque-pointer unboxing.
+[FIX id:fix.codegen.polymorphic-erased-payload-boundaries-2026-08-31 date:2026-08-31 by:codex src:codegen.c,tests/test_how_to_examples.py conf:high]
+  Imported polymorphic ADT constructors carry quantified fields as boxed
+  =RuntimeValue*= payloads.  A nominal specialization must normalize its merged
+  return with =rt_unbox_opaque= (which also passes raw nominal pointers through),
+  and typed closure trampolines must unbox boxed String/Path arguments before
+  calling their native =char *= targets.  Otherwise generic parser accessors and
+  callbacks can expose RuntimeValue tags or addresses as source-level ADTs and
+  strings.  The Scheme how-to runtime test covers both boundaries with
+  =(+ 3 3)=, nested =(+ 3 (+ 3 3))=, and a Unicode symbol. Partial-application
+  curry trampolines use the same typed ABI argument conversion as ordinary
+  closure trampolines; otherwise a nested nominal parser result is boxed twice.
+
+[FIX id:fix.codegen.singleton-expression-grouping-2026-08-31 date:2026-08-31 by:codex src:codegen.c,how_to/LambdaCalculus.mon,tests/test_lambda_calculus.py conf:high]
+  A singleton list containing a non-symbol expression is grouping, not a
+  zero-argument closure call. Pattern-match substitution can turn a grouped
+  pattern variable into =((__field_Constructor_n value))=; calling that native
+  nominal field through =rt_closure_calln= caused the LambdaCalculus evaluator
+  to abort or segfault. Codegen now unwraps the grouping. The example also uses
+  predictive dispatch for recursive term/atom parsing and consumes parentheses
+  directly, avoiding speculative recursive parser branches. Coverage includes
+  both =\x. x 4= (an abstraction) and =(\x. x) 4= (identity application).
+[FIX id:fix.codegen-native-fixed-array-nth-2026-09-11 date:2026-09-11 by:codex src:codegen.c,how_to/Donut.mon,tests/test_how_to_examples.py conf:high]
+  =nth= over a statically sized native array lowers directly to a bounds check,
+  GEP, and typed load. It must not enter the polymorphic collection fallback,
+  which materializes a boxed copy of the entire array and leaks that temporary
+  representation in tight read loops. The Donut depth-buffer scan is the
+  end-to-end performance and memory regression.

@@ -1,0 +1,14 @@
+import Data.Functor
+import Data.Set
+
+module Main
+
+define triple :: Int -> Int
+  n -> 3 * n
+
+show (map triple [1 2 3])
+show ({1 2 3} ∩ {3 4 5})
+show {1..300}
+show {x : Int | x > 2}
+show 9_223_372_036_854_775_807
+show &"ciao"

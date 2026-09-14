@@ -1,0 +1,32 @@
+:TEST-ID tests.type.judgment.first-class
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY type-system
+:TEST-SUBSET judgments
+:TEST-QUALITY semantic-regression
+:TEST-CODEGEN-ATOM atom.type.judgment.first-class
+:TEST-CONTEXT monadc.context.type-theory.first-class-judgments
+:TEST-PURPOSE Explicit judgments produce values that can be bound, passed, returned, compared, and shown.
+:TEST-ATOM Gamma turnstile expression colon type, with optional definitional equality.
+:TEST-EXPECT compile
+:TEST-COVERAGE reader.c:explicit judgment parser, dep.c:sealed derivation ownership and checking, codegen.c:first-class Derivation value, runtime.c:proof identity and rendering
+:TEST-USES-ATOM atom.type.judgment.first-class
+:TEST-MENU branches/type-system/judgments/atom.type.judgment.first-class
+:TEST-MENU-PATH codegen/branches/type-system/judgments/atom.type.judgment.first-class
+:TEST-ATOM-LEAF atom.type.judgment.first-class
+:TEST-CLI-TARGET codegen branches type-system judgments
+
+(module Main)
+x = 3
+(show *context*)
+proof = {x: Int} ⊢ x + 3 : Int
+compact-context = {x:Int,y:Float,z:Bool} ⊢ x : Int
+spaced-context = {x : Int, y : Float, z : Bool} ⊢ x : Int
+(define preserve-proof (lambda ([p : Proof] -> Proof) p))
+(define returned-proof (preserve-proof proof))
+(tests (= returned-proof proof))
+(show (= returned-proof proof))
+(show returned-proof)
+(show compact-context)
+(show spaced-context)

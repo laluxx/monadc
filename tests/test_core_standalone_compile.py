@@ -12,26 +12,16 @@ MONAD = resolve_monad_binary()
 
 
 class CoreStandaloneCompileTests(unittest.TestCase):
-    def test_touched_core_modules_compile_with_a_fresh_compiler_home(self):
-        modules = (
-            "core/prelude/Control/Applicative.mon",
-            "core/prelude/Control/Category.mon",
-            "core/prelude/Control/Monad.mon",
-            "core/prelude/Data/Bool.mon",
-            "core/prelude/Data/Either.mon",
-            "core/prelude/Data/Eq.mon",
-            "core/prelude/Data/Functor.mon",
-            "core/prelude/Data/Maybe.mon",
-            "core/prelude/Data/Ord.mon",
-            "core/prelude/Data/Profunctor.mon",
-            "core/prelude/Numeric.mon",
-            "core/prelude/Data/Semigroup.mon",
-            "core/prelude/Text/LineEditor.mon",
-            "core/Text/Parser.mon",
-            "core/Data/Json.mon",
-            "core/IO.mon",
-            "core/IO/Readline.mon",
-            "core/prelude/Test/QuickCheck.mon",
+    def test_all_core_modules_compile_with_a_fresh_compiler_home(self):
+        modules = tuple(
+            str(path.relative_to(ROOT))
+            for path in sorted((ROOT / "core").rglob("*.mon"))
+        )
+
+        self.assertEqual(
+            len(modules),
+            77,
+            "the standardized verified Core baseline contains 77 modules",
         )
 
         for module in modules:

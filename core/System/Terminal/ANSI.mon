@@ -1,11 +1,24 @@
 ;;; ANSI.mon --- named ANSI terminal controls
 
+:author   Laluxx
+:version  1.0.0
+:keywords terminal ansi escape cursor animation io
+
+;;; Commentary:
+
+ This module owns the small, deterministic ANSI control vocabulary used by
+ terminal applications. Constants are plain text; effectful helpers do exactly
+ one descriptor write and return the underlying write status unchanged.
+
+;;; Code:
+
 import IO
 
 module System.Terminal.ANSI
   [escape cursor-home clear-screen hide-cursor show-cursor
    animation-start animation-end
    home-terminal begin-terminal-animation end-terminal-animation]
+
 
 define escape          :: String "\x1b["
 define cursor-home     :: String "\x1b[H"
@@ -15,15 +28,22 @@ define show-cursor     :: String "\x1b[?25h"
 define animation-start :: String "\x1b[2J\x1b[?25l"
 define animation-end   :: String "\x1b[?25h\n"
 
+
 define home-terminal :: Int -io-> Int
   descriptor -> write-text descriptor cursor-home
+
 
 define begin-terminal-animation :: Int -io-> Int
   descriptor -> write-text descriptor animation-start
 
+
 define end-terminal-animation :: Int -io-> Int
   descriptor -> write-text descriptor animation-end
 
+
 tests
+  assert-eq (length escape) 2 "ANSI escape introducer width"
   assert-eq (length cursor-home) 3 "ANSI cursor home width"
+  assert-eq (length clear-screen) 4 "ANSI clear-screen width"
   assert-eq (length hide-cursor) 6 "ANSI hide cursor width"
+  assert-eq (length show-cursor) 6 "ANSI show cursor width"

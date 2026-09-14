@@ -1,8 +1,8 @@
 ;;; HTTP.mon --- strict bounded HTTP/1.1 request grammar
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "web http request parser security"
+:author   Laluxx
+:version  0.2.0
+:keywords web http request parser security
 
 ;;; Commentary:
 
@@ -10,6 +10,12 @@
  separators are one SP, line endings are CRLF, field names are tokens, and
  obsolete folding is rejected. Transport fragmentation belongs to
  Text.Parser.Stream; message meaning belongs here.
+
+ Framing-sensitive fields are intentionally strict: Host occurs exactly once,
+ Content-Length occurs at most once and is decimal/bounded, and
+ Transfer-Encoding is rejected rather than combined with Content-Length.
+ These invariants make request-body length unambiguous before Web.Server reads
+ additional bytes from the connection.
 
 ;;; Code:
 
@@ -360,16 +366,16 @@ define parse-request-parts :: HttpLimits -> String -> Int -> Int -> Int -> Int -
     | otherwise -> finish-request limits text first-space second-space finish size
 
 
+define parse-request-line-from :: HttpLimits -> String -> Int -> Int -> Int -> HttpDecode
+  _ _ _ _ first-space | first-space <= 0 -> HttpFailed 400 0
+  limits text finish size first-space ->
+    parse-request-parts limits text first-space
+      (find-byte text (first-space + 1) finish 0x20) finish size
+
+
 define parse-request-line :: HttpLimits -> String -> Int -> Int -> HttpDecode
   limits text finish size ->
     parse-request-line-from limits text finish size (find-byte text 0 finish 0x20)
-
-
-define parse-request-line-from :: HttpLimits -> String -> Int -> Int -> Int -> HttpDecode
-  limits text finish size first-space ->
-    if (<= first-space 0) then HttpFailed 400 0 else
-      (parse-request-parts limits text first-space
-        (find-byte text (first-space + 1) finish 0x20) finish size)
 
 
 define decode-request-head :: HttpLimits -> String -> HttpDecode
@@ -432,3 +438,47 @@ define decode-request-message-from :: HttpLimits -> String -> Int -> HttpDecode
 define decode-request-message :: HttpLimits -> String -> HttpDecode
   :doc "Decode one complete HTTP/1.1 request head and fixed-length body."
   limits text -> decode-request-message-from limits text (find-head-ending text 0 (length text))
+
+
+define http-test-limits :: HttpLimits
+  HttpLimits 1024 256 128 16 64
+
+
+tests
+  :valid-request:
+  def basic-request
+    (decode-request-head http-test-limits "GET /hello HTTP/1.1\r\nHost: example.test\r\n\r\n")
+  assert-eq (http-decoded? basic-request) True "Web.HTTP decodes a canonical HTTP/1.1 request"
+  assert-eq (request-method-or "" basic-request) "GET" "Web.HTTP preserves the method"
+  assert-eq (request-target-or "" basic-request) "/hello" "Web.HTTP preserves the target"
+  assert-eq (request-header-or "" "HOST" basic-request) "example.test" "Web.HTTP header lookup is ASCII case-insensitive"
+  :valid-request:
+
+  :framing-rejections:
+  def missing-host
+    (decode-request-head http-test-limits "GET / HTTP/1.1\r\n\r\n")
+  assert-eq (http-error-code-or 0 missing-host) 400 "Web.HTTP requires exactly one Host header"
+
+  def duplicate-length
+    (decode-request-head http-test-limits "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\n")
+  assert-eq (http-error-code-or 0 duplicate-length) 400 "Web.HTTP rejects duplicate Content-Length"
+
+  def transfer-encoding
+    (decode-request-head http-test-limits "POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n")
+  assert-eq (http-error-code-or 0 transfer-encoding) 501 "Web.HTTP rejects unsupported Transfer-Encoding"
+
+  def folded-header
+    (decode-request-head http-test-limits "GET / HTTP/1.1\r\nHost: x\r\n folded\r\n\r\n")
+  assert-eq (http-error-code-or 0 folded-header) 400 "Web.HTTP rejects obsolete line folding"
+  :framing-rejections:
+
+  :body:
+  def body-request
+    (decode-request-message http-test-limits "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\ntest")
+  assert-eq (http-decoded? body-request) True "Web.HTTP accepts an exact fixed-length body"
+  assert-eq (request-body-or "" body-request) "test" "Web.HTTP preserves a fixed-length body"
+
+  def short-body
+    (decode-request-message http-test-limits "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\nabc")
+  assert-eq (http-error-code-or 0 short-body) 400 "Web.HTTP rejects a short fixed-length body"
+  :body:

@@ -34,6 +34,7 @@ typedef struct Spine       Spine;
 typedef struct Value       Value;
 typedef struct Closure     Closure;
 typedef struct DepError    DepError;
+typedef struct DepDerivation DepDerivation;
 
 extern bool g_trace_enabled;
 
@@ -584,20 +585,41 @@ typedef struct DepCtxEntry {
     struct DepCtxEntry *next;
 } DepCtxEntry;
 
+typedef struct DepAdtType DepAdtType;
+
 struct DepCtx {
     DepCtxEntry  *locals;   // telescope: innermost entry first
     int           depth;    // number of local binders = current level
     DepEnv       *globals;  // global definitions
     MetaCtx      *mctx;     // metavariable table (shared across ctx)
     EvalEnv      *env;      // semantic environment for NbE
+    DepAdtType   *adt_types;// ADT constructors available to coverage checking
+    bool          owns_adt_types;
+    bool          reject_unbound; // fail instead of inventing an inference meta
     const char   *filename; // for error messages
     bool          had_error;
-    char          error_msg[512];
+    char          error_msg[2048];
+
+    /* Structured provenance for the first atomic checking failure.  These
+     * are borrowed kernel objects whose lifetime is bounded by the check.
+     * They explain a derivation but are not themselves trusted evidence. */
+    Term         *trace_application;
+    int           trace_argument_index;
+    Term         *failure_term;
+    Term         *failure_application;
+    int           failure_argument_index;
+    Value        *failure_expected;
+    Value        *failure_actual;
+    const char   *failure_local_name;
+    Value        *failure_local_type;
+    DepDerivation *last_derivation; /* owned by the root context */
 };
 
 DepCtx *dep_ctx_create(const char *filename);
 DepCtx *dep_ctx_child(DepCtx *parent);          // push a new scope
 void    dep_ctx_free(DepCtx *ctx);
+void    dep_register_data_type(DepCtx *ctx, const AST *data_ast);
+bool    dep_is_indexed_family(const DepCtx *ctx, const char *name);
 //
 // Push a local binding (x : A) into the context.
 // Internally:
@@ -676,6 +698,11 @@ DepEnvEntry *dep_env_lookup(DepEnv *env, const char *name);
 //
 Value *dep_infer(DepCtx *ctx, Term *t);
 bool   dep_check(DepCtx *ctx, Term *t, Value *expected_type);
+bool   dep_check_surface_judgment(DepCtx *base, AST *judgment,
+                                  char *error, size_t error_size);
+DepDerivation *dep_take_surface_derivation(DepCtx *ctx);
+const char *dep_derivation_conclusion(const DepDerivation *derivation);
+void dep_derivation_free(DepDerivation *derivation);
 //
 //  dep_infer_type: infer the *kind* of A (where A is already known to
 //  be a type).  Returns the universe level, or -1 on error.

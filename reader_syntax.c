@@ -6,7 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum { RS_BINDER, RS_PREFIX, RS_POSTFIX, RS_INFIX } RSRuleKind;
+typedef enum {
+    RS_BINDER, RS_CIRCUMFIX, RS_PREFIX, RS_POSTFIX, RS_INFIX
+} RSRuleKind;
 
 typedef struct {
     RSRuleKind kind;
@@ -31,6 +33,32 @@ static MONAD_THREAD_LOCAL RSReader *g_readers;
 static MONAD_THREAD_LOCAL size_t g_reader_count;
 static MONAD_THREAD_LOCAL size_t g_reader_capacity;
 static MONAD_THREAD_LOCAL int g_cleanup_registered;
+
+typedef struct {
+    char *open;
+    char *close;
+    char *target;
+    char *owner_file;
+    int source_line;
+} RSTypeRule;
+
+static MONAD_THREAD_LOCAL RSTypeRule *g_type_rules;
+static MONAD_THREAD_LOCAL size_t g_type_rule_count;
+static MONAD_THREAD_LOCAL size_t g_type_rule_capacity;
+
+typedef struct {
+    char *open;
+    char *close;
+    char *empty_target;
+    char *elements_target;
+    char *filter_target;
+    char *owner_file;
+    int source_line;
+} RSTermRule;
+
+static MONAD_THREAD_LOCAL RSTermRule *g_term_rules;
+static MONAD_THREAD_LOCAL size_t g_term_rule_count;
+static MONAD_THREAD_LOCAL size_t g_term_rule_capacity;
 
 typedef struct {
     char *keyword;
@@ -115,6 +143,139 @@ static int owner_is_active(const char *owner_file) {
     if (strcmp(g_scope->owner_file, owner_file) == 0) return 1;
     for (size_t i = 0; i < g_scope->allowed_count; i++)
         if (strcmp(g_scope->allowed_files[i], owner_file) == 0) return 1;
+    return 0;
+}
+
+static int register_type_syntax(const char *pattern, const char *target,
+                                const char *filename, int source_line) {
+    const char *hole = strchr(pattern, '_');
+    if (!hole || strchr(hole + 1, '_') || hole == pattern || !hole[1]) {
+        fprintf(stderr,
+                "%s:%d:1: error: invalid type-syntax pattern '%s'\n"
+                "  expected: OPEN_CLOSE TARGET\n",
+                filename ? filename : "<input>", source_line, pattern);
+        return -1;
+    }
+    char *open = strndup(pattern, (size_t)(hole - pattern));
+    char *close = strdup(hole + 1);
+    char *owner = owner_key(filename);
+    if (!open || !close || !owner) {
+        free(open); free(close); free(owner);
+        return 0;
+    }
+    for (size_t i = 0; i < g_type_rule_count; i++) {
+        RSTypeRule *prior = &g_type_rules[i];
+        if (strcmp(prior->open, open) || strcmp(prior->close, close) ||
+            strcmp(prior->owner_file, owner))
+            continue;
+        if (!strcmp(prior->target, target)) {
+            free(open); free(close); free(owner);
+            return 1;
+        }
+        fprintf(stderr,
+                "%s:%d:1: error: conflicting type-syntax '%s'\n"
+                "  previous declaration: %s:%d\n",
+                filename ? filename : "<input>", source_line, pattern,
+                prior->owner_file, prior->source_line);
+        free(open); free(close); free(owner);
+        return -1;
+    }
+    if (g_type_rule_count == g_type_rule_capacity) {
+        size_t capacity = g_type_rule_capacity ? g_type_rule_capacity * 2 : 8;
+        RSTypeRule *next = realloc(g_type_rules, capacity * sizeof(*next));
+        if (!next) { free(open); free(close); free(owner); return 0; }
+        g_type_rules = next;
+        g_type_rule_capacity = capacity;
+    }
+    RSTypeRule *rule = &g_type_rules[g_type_rule_count++];
+    rule->open = open;
+    rule->close = close;
+    rule->target = strdup(target);
+    rule->owner_file = owner;
+    rule->source_line = source_line;
+    return rule->target != NULL;
+}
+
+char *reader_type_syntax_expand(const char *type_text) {
+    if (!type_text) return NULL;
+    const char *start = type_text;
+    while (*start && isspace((unsigned char)*start)) start++;
+    const char *end = type_text + strlen(type_text);
+    while (end > start && isspace((unsigned char)end[-1])) end--;
+    for (size_t i = 0; i < g_type_rule_count; i++) {
+        RSTypeRule *rule = &g_type_rules[i];
+        if (!owner_is_active(rule->owner_file)) continue;
+        size_t open_len = strlen(rule->open);
+        size_t close_len = strlen(rule->close);
+        if ((size_t)(end - start) <= open_len + close_len ||
+            memcmp(start, rule->open, open_len) ||
+            memcmp(end - close_len, rule->close, close_len))
+            continue;
+        const char *inner = start + open_len;
+        const char *inner_end = end - close_len;
+        while (inner < inner_end && isspace((unsigned char)*inner)) inner++;
+        while (inner_end > inner && isspace((unsigned char)inner_end[-1])) inner_end--;
+        size_t size = strlen(rule->target) + 1 + (size_t)(inner_end - inner) + 1;
+        char *expanded = malloc(size);
+        if (!expanded) return NULL;
+        snprintf(expanded, size, "%s %.*s", rule->target,
+                 (int)(inner_end - inner), inner);
+        return expanded;
+    }
+    return NULL;
+}
+
+int reader_type_syntax_is_active(const char *open, const char *close) {
+    if (!open || !close) return 0;
+    for (size_t i = 0; i < g_type_rule_count; i++) {
+        RSTypeRule *rule = &g_type_rules[i];
+        if (owner_is_active(rule->owner_file) &&
+            !strcmp(rule->open, open) && !strcmp(rule->close, close))
+            return 1;
+    }
+    return 0;
+}
+
+static int register_term_syntax(const char *pattern, const char *empty_target,
+                                const char *elements_target,
+                                const char *filter_target,
+                                const char *filename, int source_line) {
+    const char *hole = strchr(pattern, '_');
+    if (!hole || strchr(hole + 1, '_') || hole == pattern || !hole[1])
+        return -1;
+    if (g_term_rule_count == g_term_rule_capacity) {
+        size_t capacity = g_term_rule_capacity ? g_term_rule_capacity * 2 : 8;
+        RSTermRule *next = realloc(g_term_rules, capacity * sizeof(*next));
+        if (!next) return 0;
+        g_term_rules = next;
+        g_term_rule_capacity = capacity;
+    }
+    RSTermRule *rule = &g_term_rules[g_term_rule_count++];
+    rule->open = strndup(pattern, (size_t)(hole - pattern));
+    rule->close = strdup(hole + 1);
+    rule->empty_target = strdup(empty_target);
+    rule->elements_target = strdup(elements_target);
+    rule->filter_target = strdup(filter_target);
+    rule->owner_file = owner_key(filename);
+    rule->source_line = source_line;
+    return rule->open && rule->close && rule->empty_target &&
+           rule->elements_target && rule->filter_target && rule->owner_file;
+}
+
+int reader_term_syntax_lookup(const char *open, const char *close,
+                              const char **empty_target,
+                              const char **elements_target,
+                              const char **filter_target) {
+    for (size_t i = 0; i < g_term_rule_count; i++) {
+        RSTermRule *rule = &g_term_rules[i];
+        if (!owner_is_active(rule->owner_file) || strcmp(rule->open, open) ||
+            strcmp(rule->close, close))
+            continue;
+        if (empty_target) *empty_target = rule->empty_target;
+        if (elements_target) *elements_target = rule->elements_target;
+        if (filter_target) *filter_target = rule->filter_target;
+        return 1;
+    }
     return 0;
 }
 
@@ -319,6 +480,35 @@ static char *parse_primary(RSParser *p) {
         return NULL;
     }
 
+    RSRule *circumfix = match_rule(p, RS_CIRCUMFIX);
+    if (circumfix) {
+        p->cursor += strlen(circumfix->token);
+        const char *close = strstr(p->cursor, circumfix->delimiter);
+        if (!close || close > p->end) {
+            snprintf(p->error, sizeof(p->error),
+                     "circumfix '%s' requires closing '%s'",
+                     circumfix->token, circumfix->delimiter);
+            return NULL;
+        }
+        RSParser inner = *p;
+        inner.end = close;
+        char *operand = parse_expression(&inner, 0);
+        skip_space(&inner);
+        if (!operand || inner.cursor != inner.end) {
+            free(operand);
+            snprintf(p->error, sizeof(p->error), "%s",
+                     inner.error[0] ? inner.error :
+                     "unexpected trailing input in circumfix expression");
+            return NULL;
+        }
+        p->cursor = close + strlen(circumfix->delimiter);
+        size_t size = strlen(circumfix->target) + strlen(operand) + 4;
+        char *out = malloc(size);
+        snprintf(out, size, "(%s %s)", circumfix->target, operand);
+        free(operand);
+        return out;
+    }
+
     RSRule *binder = match_rule(p, RS_BINDER);
     if (binder) {
         p->cursor += strlen(binder->token);
@@ -383,7 +573,8 @@ static char *parse_primary(RSParser *p) {
             RSRule *r = &p->reader->rules[i];
             size_t n = strlen(r->token);
             if ((r->kind == RS_PREFIX || r->kind == RS_POSTFIX ||
-                 r->kind == RS_INFIX || r->kind == RS_BINDER) &&
+                 r->kind == RS_INFIX || r->kind == RS_BINDER ||
+                 r->kind == RS_CIRCUMFIX) &&
                 p->cursor > start && (size_t)(p->end - p->cursor) >= n &&
                 memcmp(p->cursor, r->token, n) == 0) {
                 is_operator = 1;
@@ -442,6 +633,7 @@ static int line_indent(const char *start, const char *end) {
 static const char *rule_kind_name(RSRuleKind kind) {
     switch (kind) {
     case RS_BINDER: return "binder";
+    case RS_CIRCUMFIX: return "circumfix";
     case RS_PREFIX: return "prefix";
     case RS_POSTFIX:return "postfix";
     case RS_INFIX:  return "infix";
@@ -487,9 +679,20 @@ static int parse_declaration_line(RSReader *reader, const char *start,
         const char *first_hole = strchr(pattern, '_');
         const char *second_hole = first_hole ? strchr(first_hole + 1, '_') : NULL;
         const char *third_hole = second_hole ? strchr(second_hole + 1, '_') : NULL;
+        const char *value_hole = strchr(pattern, '$');
         target = words[1];
 
-        if (first_hole && !third_hole) {
+        /* '$' is the explicit expression placeholder.  In particular,
+         * OPEN$CLOSE is circumfix notation; '_' remains reserved for the
+         * operator-spacing roles used by prefix/postfix/infix declarations. */
+        if (value_hole && !strchr(value_hole + 1, '$') &&
+            !first_hole && word_count == 2 && value_hole != pattern &&
+            value_hole != pattern + pattern_length - 1) {
+            parsed_kind = RS_CIRCUMFIX;
+            surface = strndup(pattern, (size_t)(value_hole - pattern));
+            delimiter = strdup(value_hole + 1);
+            valid = surface && surface[0] && delimiter && delimiter[0];
+        } else if (!value_hole && first_hole && !third_hole) {
             if (!second_hole && word_count == 2 && first_hole == pattern + pattern_length - 1 && first_hole != pattern) {
                 parsed_kind = RS_PREFIX;
                 surface = strndup(pattern, (size_t)(first_hole - pattern));
@@ -549,6 +752,7 @@ static int parse_declaration_line(RSReader *reader, const char *start,
                 "%s:%d:3: error: invalid reader-syntax rule '%s'\n"
                 "  expected: OP_ TARGET\n"
                 "            _OP TARGET\n"
+                "            OPEN$CLOSE TARGET\n"
                 "            _OP_ TARGET BINDING-POWER (left|right)\n"
                 "            BINDER_DELIMITER_ TARGET BINDING-POWER\n",
                 filename ? filename : "<input>", line_number, original);
@@ -618,6 +822,40 @@ static char *scan_declarations(const char *source, const char *filename) {
         char *end = strchr(line, '\n');
         if (!end) end = line + strlen(line);
         char type[64];
+        char type_pattern[128];
+        char type_target[128];
+        char type_extra[2];
+        char *type_declaration = slice_dup(line, end);
+        int type_fields = sscanf(type_declaration,
+                                 "type-syntax %127s %127s %1s",
+                                 type_pattern, type_target, type_extra);
+        free(type_declaration);
+        if (type_fields == 2 && line_indent(line, end) == 0) {
+            int registered = register_type_syntax(type_pattern, type_target,
+                                                  filename, line_number);
+            if (registered <= 0) { free(out); return NULL; }
+            memset(line, ' ', (size_t)(end - line));
+            line = *end ? end + 1 : end;
+            line_number++;
+            continue;
+        }
+        char term_pattern[128], term_empty[128], term_elements[128];
+        char term_filter[128], term_extra[2];
+        char *term_declaration = slice_dup(line, end);
+        int term_fields = sscanf(term_declaration,
+            "term-syntax %127s %127s %127s %127s %1s",
+            term_pattern, term_empty, term_elements, term_filter, term_extra);
+        free(term_declaration);
+        if (term_fields == 4 && line_indent(line, end) == 0) {
+            int registered = register_term_syntax(
+                term_pattern, term_empty, term_elements, term_filter,
+                filename, line_number);
+            if (registered <= 0) { free(out); return NULL; }
+            memset(line, ' ', (size_t)(end - line));
+            line = *end ? end + 1 : end;
+            line_number++;
+            continue;
+        }
         char block_pattern[128];
         char block_target[128];
         char block_extra[2];
@@ -999,6 +1237,28 @@ void reader_syntax_clear(void) {
     g_readers = NULL;
     g_reader_count = 0;
     g_reader_capacity = 0;
+    for (size_t i = 0; i < g_type_rule_count; i++) {
+        free(g_type_rules[i].open);
+        free(g_type_rules[i].close);
+        free(g_type_rules[i].target);
+        free(g_type_rules[i].owner_file);
+    }
+    free(g_type_rules);
+    g_type_rules = NULL;
+    g_type_rule_count = 0;
+    g_type_rule_capacity = 0;
+    for (size_t i = 0; i < g_term_rule_count; i++) {
+        free(g_term_rules[i].open);
+        free(g_term_rules[i].close);
+        free(g_term_rules[i].empty_target);
+        free(g_term_rules[i].elements_target);
+        free(g_term_rules[i].filter_target);
+        free(g_term_rules[i].owner_file);
+    }
+    free(g_term_rules);
+    g_term_rules = NULL;
+    g_term_rule_count = 0;
+    g_term_rule_capacity = 0;
     for (size_t i = 0; i < g_block_reader_count; i++) {
         free(g_block_readers[i].keyword);
         free(g_block_readers[i].target);

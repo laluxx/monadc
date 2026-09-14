@@ -1,0 +1,22 @@
+:TEST-ID tests.codegen.type.dep.adt-pattern-coverage.non-exhaustive
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET adt-pattern-coverage
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.pmatch.adt-coverage
+:TEST-PURPOSE Dependent coverage checking rejects a function missing an ADT constructor.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR non-exhaustive patterns for TrafficLight; missing: Yellow
+:TEST-CODEGEN-PATH types.dep.adt-pattern-coverage
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.adt-pattern-coverage.non-exhaustive
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.adt-pattern-coverage.non-exhaustive
+:TEST-ATOM-LEAF atom.type.dep.adt-pattern-coverage.non-exhaustive
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+(data TrafficLight Red | Yellow | Green)
+(define (stop? [light : TrafficLight] -> Bool)
+  Red   -> True
+  Green -> False)

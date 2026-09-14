@@ -1,8 +1,8 @@
 ;;; Console.mon --- structured standard-stream IO
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "io console stdin stdout stderr lines effects"
+:author   Laluxx
+:version  0.2.0
+:keywords io console stdin stdout stderr lines effects
 
 ;;; Commentary:
 
@@ -27,17 +27,25 @@ define read-stdin-byte :: () -io-> Either IOError Int
 
 
 define write-stdout :: String -io-> Either IOError Int
-  text -> write-text-result stdout text
+  text -> write-text-all-result stdout text
 
 
 define write-stderr :: String -io-> Either IOError Int
-  text -> write-text-result stderr text
+  text -> write-text-all-result stderr text
+
+
+define finish-line-write :: Int -> Either IOError Int -> Either IOError Int
+  _ [Left error] -> Left error
+  count [Right newline-count] ->
+    if (= newline-count 0) then Left IOWriteNoProgress else Right (count + newline-count)
 
 
 define write-line-to :: Int -> String -io-> Either IOError Int
-  descriptor text -> def count (write-text descriptor text)
-                     def status (write-byte descriptor 10)
-                     (if (< count 0) (Left (IOStatus count)) (if (< status 0) (Left (IOStatus status)) (Right (+ count status))))
+  descriptor text ->
+    def body (write-text-all-result descriptor text)
+    (match body with
+     | (Left error) -> (Left error)
+     | (Right count) -> (finish-line-write count (write-byte-result descriptor 10)))
 
 
 define write-line :: String -io-> Either IOError Int

@@ -1840,7 +1840,8 @@ void ffi_dump(FFIContext *ctx) {
 // If the header mtime matches, we skip the clang parse entirely.
 //
 #define FFI_CACHE_MAGIC 0x464649C0  /* "FFI\xC0" */
-#define FFI_CACHE_VERSION 1
+#define FFI_CACHE_VERSION 2
+#define FFI_CACHE_FOOTER 0xC0FF1E5A
 
 static char *ffi_cache_path(const char *header_path) {
     const char *home = getenv("HOME");
@@ -1954,9 +1955,11 @@ static Type *read_type(FILE *f) {
 bool ffi_cache_save(FFIContext *ctx, const char *header_path) {
     ffi_cache_mkdir();
     char *path = ffi_cache_path(header_path);
-    FILE *f = fopen(path, "wb");
-    free(path);
-    if (!f) return false;
+    char temporary[640];
+    snprintf(temporary, sizeof(temporary), "%s.tmp.%ld", path,
+             (long)getpid());
+    FILE *f = fopen(temporary, "wb");
+    if (!f) { free(path); return false; }
 
     /* Header */
     uint32_t magic = FFI_CACHE_MAGIC;
@@ -2026,7 +2029,17 @@ bool ffi_cache_save(FFIContext *ctx, const char *header_path) {
     for (int i = 0; i < ctx->included_count; i++)
         write_str(f, ctx->included[i]);
 
-    fclose(f);
+    uint32_t footer = FFI_CACHE_FOOTER;
+    fwrite(&footer, 4, 1, f);
+    bool complete = !ferror(f);
+    if (fflush(f) != 0) complete = false;
+    if (fclose(f) != 0) complete = false;
+    if (!complete || rename(temporary, path) != 0) {
+        unlink(temporary);
+        free(path);
+        return false;
+    }
+    free(path);
     printf("FFI: cache saved (%d fns, %d consts, %d structs)\n",
            ctx->function_count, ctx->constant_count, ctx->struct_count);
     return true;
@@ -2043,6 +2056,19 @@ bool ffi_cache_load(FFIContext *ctx, const char *header_path) {
     if (fread(&magic, 4, 1, f) != 1 || magic != FFI_CACHE_MAGIC) { fclose(f); return false; }
     if (fread(&ver,   4, 1, f) != 1 || ver   != FFI_CACHE_VERSION) { fclose(f); return false; }
     if (fread(&cached_mtime, 8, 1, f) != 1) { fclose(f); return false; }
+
+    /* A cache becomes visible only after save writes this footer and atomically
+     * renames the temporary file. Reject old, truncated, or interrupted files
+     * before trusting any serialized allocation counts. */
+    long payload_start = ftell(f);
+    if (payload_start < 0 || fseek(f, -4, SEEK_END) != 0) {
+        fclose(f); return false;
+    }
+    uint32_t footer;
+    if (fread(&footer, 4, 1, f) != 1 || footer != FFI_CACHE_FOOTER ||
+        fseek(f, payload_start, SEEK_SET) != 0) {
+        fclose(f); return false;
+    }
 
     /* Check mtime of the top-level header */
     int64_t current_mtime = (int64_t)ffi_header_mtime(header_path);

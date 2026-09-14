@@ -1,0 +1,66 @@
+;;; Nat.mon --- Peano naturals for dependent indices
+
+:author   Laluxx
+:version  1.0.0
+:keywords natural peano dependent index proof
+
+;;; Commentary:
+
+ Nat is the structural natural used when a value belongs in a type index.
+ Runtime Int remains the ordinary machine integer; Nat exists so inductive
+ proofs and indexed data can expose zero/successor structure to unification.
+
+ The conversion helpers below are intentionally structural. They provide a
+ small executable reference semantics for indexed modules without turning Nat
+ into a second general-purpose numeric hierarchy.
+
+;;; Code:
+
+import Data.Bool
+
+module Data.Nat
+  [Nat Z S nat-zero? nat-pred? nat-to-int nat-add nat-mul]
+
+
+data Nat :: Type
+  Z : Nat
+  S : Nat -> Nat
+
+
+define nat-zero? :: Nat -> Bool
+  Z     -> True
+  [S _] -> False
+
+
+define nat-pred? :: Nat -> Nat?
+  Z     -> nil
+  [S n] -> n
+
+
+define nat-to-int :: Nat -> Int
+  Z     -> 0
+  [S n] -> 1 + (nat-to-int n)
+
+
+define nat-add :: Nat -> Nat -> Nat
+  Z right     -> right
+  [S left] right -> S (nat-add left right)
+
+
+define nat-mul :: Nat -> Nat -> Nat
+  Z _         -> Z
+  [S left] right -> nat-add right (nat-mul left right)
+
+
+tests
+  :structure:
+  assert-eq (nat-zero? Z) True "Nat recognizes zero"
+  assert-eq (nat-zero? (S Z)) False "Nat recognizes successor"
+  assert-eq (show (nat-pred? Z)) "nil" "Nat predecessor is partial at zero"
+  assert-eq (nat-to-int (S (S (S Z)))) 3 "Nat converts structurally to Int"
+  :structure:
+
+  :arithmetic:
+  assert-eq (nat-to-int (nat-add (S (S Z)) (S (S (S Z))))) 5 "Nat structural addition"
+  assert-eq (nat-to-int (nat-mul (S (S Z)) (S (S (S Z))))) 6 "Nat structural multiplication"
+  :arithmetic:

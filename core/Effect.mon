@@ -1,8 +1,8 @@
 ;;; Effect.mon --- the standard effect basis
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "effects operations resumptions capabilities"
+:author   Laluxx
+:version  0.3.0
+:keywords effects operations resumptions capabilities
 
 ;;; Commentary:
 
@@ -11,8 +11,8 @@
 
    (effect Name Trait Operation Resumes Scoped [Input Output])
 
- `Resumes` is a quantity: 0 means abortive, 1 means one-shot, and omega
- means unrestricted. `Scoped` says whether the operation introduces a
+ =Resumes= is a quantity: 0 means abortive, 1 means one-shot, and omega
+ means unrestricted. =Scoped= says whether the operation introduces a
  capability whose identity must not escape. Input and Output describe the
  operation itself, not the type of a handled computation.
 
@@ -22,7 +22,7 @@
 
  Read it as: under global signatures Sigma, modal context Psi, and
  quantitative resources Gamma, expression e returns A, performs epsilon,
- and leaves resource demand Delta. A function arrow `A -e-> B` stores
+ and leaves resource demand Delta. A function arrow =A -e-> B= stores
  epsilon latently until application.
 
  Effect rows obey join and handling:
@@ -33,6 +33,28 @@
 
  Traits form a Core-declared preorder below. For example, allocation implies
  state, and state implies io. No effect names are built into the compiler.
+
+ Operation identity, trait inclusion, resumption multiplicity, and capability
+ scoping are independent axes. Sharing a trait does not make operations
+ interchangeable, and an unrestricted resumption is never inferred merely
+ because its trait is =control=. The declarations below are therefore the
+ normative standard basis, not a closed compiler enumeration.
+
+;;; Higher-Order Effect Boundary
+
+ The compact source surface currently records a latent effect on an ordinary
+ function arrow, but it cannot yet quantify over the latent row of a callback.
+ A library signature such as =(() -> a)= must therefore be read as a genuinely
+ pure callback; Core must not document such a value as though it were silently
+ effect-polymorphic. Owned-resource combinators use pure callbacks until the
+ language has a source-level higher-order row abstraction.
+
+ The eventual higher-order contract must preserve four facts simultaneously:
+ the callback's row, effects performed by the owner itself, resumption quantity,
+ and scoped capability identity/quantity. In particular, abstracting over a row
+ must never make a scoped or quantity-1 capability escapable or duplicable. This
+ is a missing *expression surface*, not permission for individual libraries to
+ invent incompatible callback-effect conventions.
 
 ;;; Code:
 

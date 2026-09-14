@@ -379,6 +379,30 @@ def copy_file(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
+def copy_file_unique(src: Path, dst: Path) -> bool:
+    """Copy src only when dst does not already contain the same file."""
+    if not src.exists() or not src.is_file():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        try:
+            if src.stat().st_size == dst.stat().st_size and file_sha256(src) == file_sha256(dst):
+                return False
+        except OSError:
+            pass
+        die(f"vendor filename collision: {src} and {dst}")
+    shutil.copy2(src, dst)
+    return True
+
+
+def relative_symlink(target: Path, link: Path) -> None:
+    """Create a relocatable symlink inside an artifact tree."""
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if link.exists() or link.is_symlink():
+        link.unlink()
+    link.symlink_to(os.path.relpath(target, link.parent))
+
+
 def copytree_replace(src: Path, dst: Path, ignore=None) -> None:
     if not src.exists():
         return
@@ -567,16 +591,11 @@ def dependency_paths(binary: Path) -> list[Path]:
     return ldd_paths(binary) or otool_paths(binary)
 
 
-def copy_binary_rootfs(binary: Path, rootfs: Path, *, include_system: bool = True) -> list[Path]:
-    copied: list[Path] = []
-    rootfs.mkdir(parents=True, exist_ok=True)
-    for dst in (rootfs / "bin" / binary.name, rootfs / "usr" / "bin" / binary.name):
-        copy_file(binary, dst)
-        chmod_executable(dst)
-        copied.append(dst)
-        log("VENDOR", f"  copied {binary} -> {rel(dst)}")
+def dependency_closure(binary: Path, *, include_system: bool = True) -> list[Path]:
+    """Return the transitive dynamic-library closure, deduplicated by real path."""
     queue = dependency_paths(binary)
     seen: set[str] = set()
+    out: list[Path] = []
     while queue:
         dep = queue.pop(0)
         try:
@@ -587,14 +606,11 @@ def copy_binary_rootfs(binary: Path, rootfs: Path, *, include_system: bool = Tru
         if key in seen:
             continue
         seen.add(key)
-        if not include_system and re.search(r"/(libc|libm|libdl|libpthread|librt|ld-linux|libSystem)", real.name):
+        if not include_system and re.search(r"^(?:libc|libm|libdl|libpthread|librt|ld-linux|libSystem)", real.name):
             continue
         if not real.exists() or not real.is_file():
             continue
-        dst = rootfs / str(dep).lstrip("/")
-        copy_file(real, dst)
-        copied.append(dst)
-        log("VENDOR", f"  copied {real} -> {rel(dst)}")
+        out.append(real)
         for more in dependency_paths(real):
             try:
                 more_key = str(more.resolve())
@@ -602,32 +618,58 @@ def copy_binary_rootfs(binary: Path, rootfs: Path, *, include_system: bool = Tru
                 more_key = str(more)
             if more_key not in seen:
                 queue.append(more)
-    usr_lib = rootfs / "usr" / "lib"
-    if usr_lib.exists() and not (rootfs / "lib").exists():
-        copytree_replace(usr_lib, rootfs / "lib")
-    usr_lib64 = rootfs / "usr" / "lib64"
-    if usr_lib64.exists() and not (rootfs / "lib64").exists():
-        copytree_replace(usr_lib64, rootfs / "lib64")
+    return out
+
+
+def copy_runtime_flat(binary: Path, bin_dir: Path, lib_dir: Path, *, include_system: bool = True) -> tuple[Path, list[Path]]:
+    """Create the minimal runnable layout: one binary and one copy of each shared lib."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    binary_dst = bin_dir / binary.name
+    copy_file(binary, binary_dst)
+    chmod_executable(binary_dst)
+    copied: list[Path] = []
+    for dep in dependency_closure(binary, include_system=include_system):
+        dst = lib_dir / dep.name
+        if copy_file_unique(dep, dst):
+            copied.append(dst)
+            log("VENDOR", f"  lib {dep.name}")
+    return binary_dst, copied
+
+
+def copy_binary_rootfs(binary: Path, rootfs: Path, *, include_system: bool = True) -> list[Path]:
+    """Optional chroot view. Not used by the default lean vendor layout."""
+    copied: list[Path] = []
+    rootfs.mkdir(parents=True, exist_ok=True)
+    dst = rootfs / "bin" / binary.name
+    copy_file(binary, dst)
+    chmod_executable(dst)
+    copied.append(dst)
+    for dep in dependency_closure(binary, include_system=include_system):
+        # Preserve the dependency's resolved absolute location once.  Do not mirror
+        # usr/lib into lib and do not create a second flat copy.
+        dep_dst = rootfs / str(dep).lstrip("/")
+        copy_file(dep, dep_dst)
+        copied.append(dep_dst)
     return copied
 
 
-def flatten_host_libs(rootfs: Path, lib_host: Path) -> list[str]:
-    lib_host.mkdir(parents=True, exist_ok=True)
-    names: list[str] = []
-    for top in ("lib", "lib64", "usr/lib", "usr/lib64"):
-        d = rootfs / top
-        if not d.exists():
-            continue
-        for p in d.rglob("*"):
-            if p.is_file() and (".so" in p.name or p.suffix in (".dylib", ".dll")):
-                dst = lib_host / p.name
-                if not dst.exists():
-                    copy_file(p, dst)
-                    names.append(p.name)
-    return sorted(dict.fromkeys(names))
-
-
 ### LLVM vendor
+
+def llvm_library_matches(name: str, major: str) -> bool:
+    """Accept generic linker names and libraries belonging to the active LLVM major only."""
+    if not name.startswith(("libLLVM", "libclang")):
+        return False
+    if name in {"libLLVM.so", "libclang.so", "libclang-cpp.so", "libLLVM.dylib", "libclang.dylib", "libclang-cpp.dylib"}:
+        return True
+    return bool(re.search(rf"(?:^|[-.]){re.escape(major)}(?:[.-]|$)", name))
+
+
+def llvm_required_link_names(llvm_libs: str) -> list[str]:
+    names = set(detected_link_libraries())
+    names.update(re.findall(r"(?:^|\s)-l([^\s]+)", llvm_libs))
+    return sorted(name for name in names if name.startswith(("LLVM", "clang")))
+
 
 def bundle_llvm(vendor_dir: Path) -> None:
     cfg = llvm_config_path()
@@ -635,6 +677,7 @@ def bundle_llvm(vendor_dir: Path) -> None:
         log("VENDOR", "no llvm-config found; skipping LLVM/Clang headers", "1;33")
         return
     version = run_capture([cfg, "--version"]).stdout.strip() or "unknown"
+    major = version.split(".", 1)[0]
     inc_s = run_capture([cfg, "--includedir"]).stdout.strip().splitlines()
     lib_s = run_capture([cfg, "--libdir"]).stdout.strip().splitlines()
     cflags = run_capture([cfg, "--cflags"]).stdout.strip()
@@ -646,29 +689,76 @@ def bundle_llvm(vendor_dir: Path) -> None:
     inc = Path(inc_s[0])
     libdir = Path(lib_s[0]) if lib_s else Path()
     vendor_include = vendor_dir / "include"
-    vendor_lib = vendor_dir / "lib" / "host"
+    vendor_lib = vendor_dir / "lib"
     vendor_bin = vendor_dir / "bin"
-    for sub in ("llvm-c", "clang-c", "llvm", "clang"):
+
+    # monadc is C: the C API headers are sufficient by default.  Shipping the
+    # llvm/ and clang/ C++ trees costs tens of megabytes and is opt-in.
+    header_sets = ["llvm-c", "clang-c"]
+    if env_flag("MAKE_VENDOR_LLVM_CPP_HEADERS", False):
+        header_sets += ["llvm", "clang"]
+    for sub in header_sets:
         src = inc / sub
         if src.exists():
             copytree_replace(src, vendor_include / sub)
+
+    # Copy only libraries that the project or active llvm-config actually asks
+    # the linker for. This deliberately avoids unrelated libclang-cpp and old
+    # LLVM installations. Versioned payload bytes are stored once; linker names
+    # are tiny relocatable symlinks.
+    required = llvm_required_link_names(libs)
     if libdir.exists():
-        for pattern in ("libLLVM*.so*", "libclang*.so*", "libLLVM*.dylib", "libclang*.dylib"):
-            for p in libdir.glob(pattern):
-                if p.is_file() or p.is_symlink():
-                    try:
-                        src = p.resolve()
-                    except Exception:
-                        src = p
-                    copy_file(src, vendor_lib / src.name)
-    major = version.split(".", 1)[0]
-    for cand in (inc.parent / "lib" / "clang" / major / "include", libdir.parent / "lib" / "clang" / major / "include", libdir / "clang" / major / "include", Path("/usr/lib") / "clang" / major / "include"):
-        if cand.exists() and any(cand.iterdir()):
-            copytree_replace(cand, vendor_include / "clang-builtins")
-            break
-    escaped_cflags = cflags.replace('"', '\\"')
-    escaped_ldflags = ldflags.replace('"', '\\"')
-    escaped_libs = libs.replace('"', '\\"')
+        for link_name in required:
+            generic_names = [f"lib{link_name}.so", f"lib{link_name}.dylib"]
+            source: Path | None = None
+            alias_name = ""
+            for generic in generic_names:
+                cand = libdir / generic
+                if cand.exists() or cand.is_symlink():
+                    source = cand
+                    alias_name = generic
+                    break
+            if source is None:
+                matches = [
+                    cand for cand in sorted(libdir.glob(f"lib{link_name}.*"))
+                    if (cand.is_file() or cand.is_symlink()) and llvm_library_matches(cand.name, major)
+                ]
+                if matches:
+                    source = matches[0]
+                    alias_name = generic_names[0] if ".so" in source.name else generic_names[1]
+            if source is None:
+                warn(f"vendor: linker library -l{link_name} not found in {libdir}")
+                continue
+            try:
+                real = source.resolve()
+            except Exception:
+                real = source
+            if not real.exists() or not real.is_file():
+                continue
+            if not llvm_library_matches(real.name, major) and real.name.startswith(("libLLVM", "libclang")):
+                warn(f"vendor: ignoring non-active LLVM library {real.name}")
+                continue
+            payload = vendor_lib / real.name
+            copy_file_unique(real, payload)
+            alias = vendor_lib / alias_name
+            if alias.name != payload.name and not alias.exists() and not alias.is_symlink():
+                relative_symlink(payload, alias)
+
+    if not env_flag("MAKE_VENDOR_NO_CLANG_BUILTINS", False):
+        for cand in (
+            inc.parent / "lib" / "clang" / major / "include",
+            libdir.parent / "lib" / "clang" / major / "include",
+            libdir / "clang" / major / "include",
+            Path("/usr/lib") / "clang" / major / "include",
+        ):
+            if cand.exists() and any(cand.iterdir()):
+                copytree_replace(cand, vendor_include / "clang-builtins")
+                break
+
+    escaped_cflags = cflags.replace('"', '\"')
+    portable_ldflags = re.sub(r"(?:^|\s)-L\S+", "", ldflags).strip()
+    escaped_ldflags = portable_ldflags.replace('"', '\"')
+    escaped_libs = libs.replace('"', '\"')
     vendor_bin.mkdir(parents=True, exist_ok=True)
     script = f'''#!/usr/bin/env sh
 ### Generated by ./make vendor
@@ -676,9 +766,9 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/..
 case "${{1:-}}" in
   --version) echo "{version}" ;;
   --includedir) echo "$here/include" ;;
-  --libdir) echo "$here/lib/host" ;;
+  --libdir) echo "$here/lib" ;;
   --cflags) echo "{escaped_cflags}" | sed "s|-I[^ ]*|-I$here/include|g" ;;
-  --ldflags) echo "-L$here/lib/host {escaped_ldflags}" ;;
+  --ldflags) echo "-L$here/lib {escaped_ldflags}" ;;
   --libs) echo "{escaped_libs}" ;;
   --system-libs) echo "" ;;
   *) exit 1 ;;
@@ -687,7 +777,8 @@ esac
     path = vendor_bin / "llvm-config"
     path.write_text(script, encoding="utf-8")
     chmod_executable(path)
-    log("VENDOR", f"vendored llvm-config ({version}) + LLVM/Clang headers")
+    detail = ", ".join(f"-l{name}" for name in required) or "runtime closure only"
+    log("VENDOR", f"vendored llvm-config {version}: {detail}")
 
 
 ### Dependency sources
@@ -789,13 +880,12 @@ def bundle_dependency_sources(vendor_dir: Path) -> dict[str, object]:
 
 def write_vendor_env(vendor_dir: Path, binary_name: str) -> None:
     text = f'''#!/usr/bin/env sh
-### Source this to use vendored compiler dependencies
+### Source this to use the lean vendored compiler environment
 here=$(CDPATH= cd -- "$(dirname -- "${{BASH_SOURCE:-$0}}")" && pwd)
-export VENDOR_ROOTFS="$here/rootfs"
-export PATH="$here/bin:$here/rootfs/bin:$here/rootfs/usr/bin${{PATH:+:$PATH}}"
-export LD_LIBRARY_PATH="$here/lib/host:$here/rootfs/lib:$here/rootfs/lib64:$here/rootfs/usr/lib:$here/rootfs/usr/lib64${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
-export DYLD_LIBRARY_PATH="$here/lib/host${{DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}}"
-export LIBRARY_PATH="$here/lib/host${{LIBRARY_PATH:+:$LIBRARY_PATH}}"
+export PATH="$here/bin${{PATH:+:$PATH}}"
+export LD_LIBRARY_PATH="$here/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
+export DYLD_LIBRARY_PATH="$here/lib${{DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}}"
+export LIBRARY_PATH="$here/lib${{LIBRARY_PATH:+:$LIBRARY_PATH}}"
 export CPATH="$here/include${{CPATH:+:$CPATH}}"
 if [ -x "$here/bin/llvm-config" ]; then export LLVM_CONFIG="$here/bin/llvm-config"; fi
 echo "{PROJECT.name} vendor environment loaded"
@@ -807,8 +897,8 @@ echo "{PROJECT.name} vendor environment loaded"
     run_path.write_text(f'''#!/usr/bin/env sh
 ### Generated by ./make vendor
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-export LD_LIBRARY_PATH="$here/lib/host:$here/rootfs/lib:$here/rootfs/lib64:$here/rootfs/usr/lib:$here/rootfs/usr/lib64${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
-exec "$here/rootfs/bin/{binary_name}" "$@"
+export LD_LIBRARY_PATH="$here/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
+exec "$here/bin/{binary_name}" "$@"
 ''', encoding="utf-8")
     chmod_executable(run_path)
 
@@ -817,15 +907,20 @@ def run_vendor(args: list[str], jobs: int) -> int:
     if args and args[0] in ("-h", "--help", "help"):
         print(c("1;36", f"{PROJECT.name} vendor"))
         print("Usage:")
-        print("  ./make vendor                         build/find project binary and vendor it")
-        print("  ./make vendor <command-or-path> [dir] copy arbitrary binary + ldd closure")
+        print("  ./make vendor                         minimal flat runtime + build deps")
+        print("  ./make vendor <command-or-path> [dir] vendor an arbitrary binary")
+        print("  MAKE_VENDOR_ROOTFS=1 ./make vendor   additionally build a chroot view")
         print("")
         print("Output:")
-        print("  build/vendor/rootfs                   chroot-like binary/dependency tree")
-        print("  build/vendor/lib/host                 flat host library path for LD_LIBRARY_PATH")
-        print("  build/vendor/include                  LLVM/Clang headers when detected")
-        print("  build/vendor/bin/llvm-config          wrapper pointing at vendored paths")
-        print("  build/vendor/src/DEPENDENCIES.json    source dependency manifest")
+        print("  build/vendor/bin                     binary + llvm-config wrapper")
+        print("  build/vendor/lib                     one copy of each runtime/LLVM library")
+        print("  build/vendor/include                 C API headers; C++ headers are opt-in")
+        print("  build/vendor/src/DEPENDENCIES.json   source dependency manifest")
+        print("")
+        print("Size controls:")
+        print("  MAKE_VENDOR_LLVM_CPP_HEADERS=1       include llvm/ and clang/ C++ headers")
+        print("  MAKE_VENDOR_NO_CLANG_BUILTINS=1      omit Clang resource headers")
+        print("  MAKE_VENDOR_NO_SYSTEM_LIBS=1         omit libc/libm/etc from runtime closure")
         return 0
     if args:
         binary = resolve_program(args[0])
@@ -834,25 +929,32 @@ def run_vendor(args: list[str], jobs: int) -> int:
         binary = find_binary(build_if_missing=True, jobs=jobs)
         vendor_dir = VENDOR_DIR
     shutil.rmtree(vendor_dir, ignore_errors=True)
-    rootfs = vendor_dir / "rootfs"
-    lib_host = vendor_dir / "lib" / "host"
     bin_dir = vendor_dir / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
+    lib_dir = vendor_dir / "lib"
     log("VENDOR", f"using {rel(vendor_dir)}")
     log("VENDOR", f"binary {binary}")
-    copied = copy_binary_rootfs(binary, rootfs, include_system=not env_flag("MAKE_VENDOR_NO_SYSTEM_LIBS", False))
-    copy_file(binary, bin_dir / binary.name)
-    chmod_executable(bin_dir / binary.name)
-    flat = flatten_host_libs(rootfs, lib_host)
+    binary_dst, runtime_libs = copy_runtime_flat(
+        binary, bin_dir, lib_dir, include_system=not env_flag("MAKE_VENDOR_NO_SYSTEM_LIBS", False)
+    )
     bundle_llvm(vendor_dir)
     source_info = bundle_dependency_sources(vendor_dir)
     write_vendor_env(vendor_dir, binary.name)
-    write_manifest(vendor_dir, {"binary": str(binary), "rootfs_files": [str(p.relative_to(vendor_dir)) for p in copied if p.exists()], "flat_host_libs": flat, "dependency_sources": source_info})
-    log("VENDOR", f"copied {len(copied)} rootfs files")
-    log("VENDOR", f"flat host libs: {len(flat)}")
+    rootfs_files: list[str] = []
+    if env_flag("MAKE_VENDOR_ROOTFS", False):
+        rootfs = vendor_dir / "rootfs"
+        copied = copy_binary_rootfs(binary, rootfs, include_system=not env_flag("MAKE_VENDOR_NO_SYSTEM_LIBS", False))
+        rootfs_files = [str(p.relative_to(vendor_dir)) for p in copied if p.exists()]
+        log("VENDOR", f"optional rootfs files: {len(copied)}")
+    write_manifest(vendor_dir, {
+        "binary": str(binary),
+        "runtime_binary": str(binary_dst.relative_to(vendor_dir)),
+        "runtime_libs": [str(p.relative_to(vendor_dir)) for p in runtime_libs],
+        "rootfs_files": rootfs_files,
+        "dependency_sources": source_info,
+    })
+    log("VENDOR", f"runtime libs: {len(runtime_libs)} unique files")
     ok(f"vendor ready: {rel(vendor_dir)}")
-    print(c("90", f"You can inspect it with: find {rel(rootfs)} -maxdepth 3 -type f"))
-    print(c("90", f"Chroot-style run idea: sudo chroot {rel(rootfs)} /bin/{binary.name}"))
+    print(c("90", f"Run with: {rel(vendor_dir / 'run')} --help"))
     return 0
 
 
@@ -870,21 +972,27 @@ def run_static(args: list[str], jobs: int) -> int:
     if cmd == "bin":
         binary = find_binary(build_if_missing=True, jobs=jobs)
         shutil.rmtree(STATIC_DIR, ignore_errors=True)
-        copy_file(binary, STATIC_DIR / "bin" / binary.name)
-        chmod_executable(STATIC_DIR / "bin" / binary.name)
-        copied = copy_binary_rootfs(binary, STATIC_DIR / "rootfs", include_system=not env_flag("MAKE_STATIC_NO_SYSTEM_LIBS", False))
-        flat = flatten_host_libs(STATIC_DIR / "rootfs", STATIC_DIR / "lib" / "host")
+        binary_dst, libs = copy_runtime_flat(
+            binary,
+            STATIC_DIR / "bin",
+            STATIC_DIR / "lib",
+            include_system=not env_flag("MAKE_STATIC_NO_SYSTEM_LIBS", False),
+        )
         run_script = STATIC_DIR / "run"
         run_script.write_text(f'''#!/usr/bin/env sh
 ### Generated by ./make static bin
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-export LD_LIBRARY_PATH="$here/lib/host:$here/rootfs/lib:$here/rootfs/lib64:$here/rootfs/usr/lib:$here/rootfs/usr/lib64${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="$here/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
 exec "$here/bin/{binary.name}" "$@"
 ''', encoding="utf-8")
         chmod_executable(run_script)
-        write_manifest(STATIC_DIR, {"binary": str(binary), "rootfs_files": [str(p.relative_to(STATIC_DIR)) for p in copied if p.exists()], "flat_host_libs": flat})
+        write_manifest(STATIC_DIR, {
+            "binary": str(binary),
+            "runtime_binary": str(binary_dst.relative_to(STATIC_DIR)),
+            "runtime_libs": [str(p.relative_to(STATIC_DIR)) for p in libs],
+        })
         log("STATIC", f"binary {rel(binary)}")
-        log("STATIC", f"bundled {len(flat)} shared libs")
+        log("STATIC", f"bundled {len(libs)} unique shared libs")
         ok(f"static ready: {rel(STATIC_DIR)}")
         return 0
     if cmd == "check":
@@ -935,9 +1043,9 @@ This package was produced by ./make tar.
 ## Included
 
 - Project source tree.
-- build/vendor/rootfs with the compiler/tool binary and its ldd dependency closure.
-- build/vendor/lib/host with a flat runtime library path.
-- build/vendor/include and build/vendor/bin/llvm-config when LLVM/Clang was detected.
+- build/vendor/bin with the compiler/tool binary and llvm-config wrapper.
+- build/vendor/lib with one deduplicated runtime/LLVM library closure.
+- build/vendor/include with LLVM/Clang C API headers when detected.
 - build/vendor/src/DEPENDENCIES.json with dependency source metadata.
 - build/static when built with --with-binaries.
 - MANIFEST.json with hashes.
@@ -964,9 +1072,12 @@ make all
 build/vendor/run --help 2>/dev/null || build/vendor/run
 ```
 
-## Chroot-style experiment
+## Optional chroot view
+
+Generate it only when needed:
 
 ```sh
+MAKE_VENDOR_ROOTFS=1 ./make vendor
 sudo chroot build/vendor/rootfs /bin/{target}
 ```
 '''
@@ -1084,7 +1195,7 @@ def print_help() -> None:
     print("")
     groups = (
         ("Build", (("all", "run Makefile all target"), ("release", "run Makefile release target"), ("debug", "run Makefile debug target or all"), ("asan", "run Makefile asan target"), ("test", "run Makefile test target"), ("clean", "run Makefile clean target"))),
-        ("Portable", (("vendor", "copy compiler binary + ldd closure into build/vendor"), ("vendor <cmd> [dir]", "copy arbitrary command like the bash concept"), ("static bin", "build build/static portable folder"), ("bin-static", "alias for static bin"), ("tar", f"create build/dist/{PROJECT.name}-source.tar.gz"), ("tar --with-binaries", f"create build/dist/{PROJECT.name}-static.tar.gz"))),
+        ("Portable", (("vendor", "minimal flat compiler/runtime bundle in build/vendor"), ("vendor <cmd> [dir]", "copy arbitrary command like the bash concept"), ("static bin", "build build/static portable folder"), ("bin-static", "alias for static bin"), ("tar", f"create build/dist/{PROJECT.name}-source.tar.gz"), ("tar --with-binaries", f"create build/dist/{PROJECT.name}-static.tar.gz"))),
         ("Info", (("doctor", "check tools and detected dependencies"), ("env", "print resolved environment"), ("targets", "list Makefile targets"), ("help", "show help"))),
     )
     for title, rows in groups:
@@ -1099,7 +1210,10 @@ def print_help() -> None:
     print("  MAKE_VENDOR_SOURCE_DIRS=a:b         dependency source trees to include")
     print("  MAKE_VENDOR_SOURCE_ARCHIVES=a:b     dependency source archives to include")
     print("  MAKE_VENDOR_FETCH_SOURCES=1         try apt-get source for detected deps")
-    print("  MAKE_VENDOR_NO_SYSTEM_LIBS=1        omit libc/libm/etc from rootfs copy")
+    print("  MAKE_VENDOR_NO_SYSTEM_LIBS=1        omit libc/libm/etc from runtime bundle")
+    print("  MAKE_VENDOR_LLVM_CPP_HEADERS=1      include large LLVM/Clang C++ headers")
+    print("  MAKE_VENDOR_NO_CLANG_BUILTINS=1     omit Clang resource headers")
+    print("  MAKE_VENDOR_ROOTFS=1                also build an optional chroot tree")
 
 
 def list_make_targets(_args: list[str], _jobs: int) -> int:

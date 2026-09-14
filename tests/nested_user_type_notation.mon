@@ -1,0 +1,37 @@
+module Main
+
+import Test.QuickCheck
+
+type-syntax {_} Set
+
+data Set a
+  = SetValue [a]
+
+define [none :: {a}] (SetValue [])
+define [empty-set :: {a}] (SetValue [])
+
+data Box a
+  = BoxValue a [a]
+
+define fold-left :: (b -> a -> b) -> b -> [a] -> b
+  _ acc [] -> acc
+  f acc [x|xs] -> fold-left f (f acc x) xs
+
+define intersect :: Eq a => {a} -> {a} -> {a}
+  first second -> first
+
+define fold-presentations :: Box {a} -> {a}
+  [BoxValue first rest] -> fold-left intersect first rest
+
+define duplicate :: {a} -> ({a}, {a})
+  value -> (value, value)
+
+define choose-none :: Int -> {a}
+  _ -> none
+
+define constrained-none :: Eq a => Int -> {a}
+  _ -> none
+
+define arbitrary-none :: Arbitrary a => Int -> Int -> Int -> {a}
+  _ _ 0 -> empty-set
+  _ _ _ -> empty-set

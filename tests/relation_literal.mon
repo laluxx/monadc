@@ -1,0 +1,33 @@
+:TEST-ID tests.language.relation.literal
+:TEST-CONTEXT monadc.info.relation
+:TEST-PURPOSE Brace-arrow literals preserve one-to-many pairs and are callable as ground relations.
+:TEST-EXPECT run
+:TEST-TIER regression
+:TEST-STATUS active
+
+module RelationLiteral
+
+import Data.Relation
+
+define likes :: {Symbol -> Symbol}
+{ 'alice -> 'pizza
+  'bob   -> 'sushi
+  'alice -> 'sushi }
+
+define symbolic-likes :: {'a -> 'b}
+{ 'alice -> 'pizza }
+
+define repeated-likes :: {Symbol -> Symbol}
+{ 'alice -> 'pizza
+  'alice -> 'pizza }
+
+tests
+  assert-eq (likes 'alice 'pizza) True "relations are callable as ground predicates"
+  assert-eq (likes 'alice 'sushi) True "one left endpoint may have several rights"
+  assert-eq (relates? likes 'bob 'pizza) False "core ground membership distinguishes symbols"
+  assert-eq (likes 'bob 'pizza) False "absent relation facts are false"
+  assert-eq (relation-size likes) 3 "relation literals preserve one-to-many pairs"
+  assert-eq (symbolic-likes 'alice 'pizza) True "quoted endpoint notation denotes symbolic roles"
+  assert-eq (likes who 'pizza) ['alice] "an unbound left endpoint queries matching facts"
+  assert-eq (likes 'alice food) ['pizza 'sushi] "an unbound right endpoint queries matching facts"
+  assert-eq (repeated-likes 'alice food) ['pizza] "queries do not repeat an extensional fact"

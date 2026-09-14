@@ -1,8 +1,8 @@
 ;;; Directory.mon --- portable structured directory IO
 
-:author "Laluxx"
-:version "0.2.0"
-:keywords "io directory path metadata listing"
+:author   Laluxx
+:version  0.3.0
+:keywords io directory path metadata listing
 
 ;;; Commentary:
 
@@ -11,7 +11,9 @@
 
  DirectoryEntry is a live identity: asking it a question performs IO.
  DirectoryEntrySnapshot is an immutable observation: creating it performs
- IO once, while every accessor and aggregation over it is pure.
+ IO once, while every accessor and aggregation over it is pure. Snapshotting
+ preserves the host enumeration order; aggregations never smuggle sentinel
+ timestamps into non-empty data.
 
 ;;; Code:
 
@@ -31,7 +33,7 @@ module IO.Directory
    directory-snapshot-links directory-snapshot-modified-seconds
    directory-snapshot-names directory-snapshot-contains-path?
    directory-snapshot-total-size directory-snapshot-total-links
-   directory-snapshot-latest-modified-seconds]
+   directory-snapshot-latest-modified-seconds? directory-snapshot-latest-modified-seconds]
 
 
 ;;; Entry identity
@@ -117,13 +119,13 @@ define snapshot-entry :: DirectoryEntry -io-> Either IOError DirectoryEntrySnaps
 
 
 define snapshot-into :: [DirectoryEntry] -> [DirectoryEntrySnapshot] -io-> Either IOError [DirectoryEntrySnapshot]
-  [] captured -> Right captured
-  [entry|remaining] captured -> (match (snapshot-entry entry) with
+  [] reversed -> Right (reverse reversed)
+  [entry|remaining] reversed -> (match (snapshot-entry entry) with
                                 | (Left error) -> (Left error)
                                 | (Right snapshot) ->
                                     (snapshot-into
                                       remaining
-                                      (prepend snapshot captured)))
+                                      (prepend snapshot reversed)))
 
 
 define snapshot-scanned-directory :: Either IOError [DirectoryEntry] -io-> Either IOError [DirectoryEntrySnapshot]
@@ -195,6 +197,37 @@ define later-of :: Int -> Int -> Int
   left right -> if left > right then left else right
 
 
+define latest-modified-from :: [DirectoryEntrySnapshot] -> Int -> Int
+  [] latest -> latest
+  [entry|remaining] latest ->
+    latest-modified-from remaining (later-of entry.modified-seconds latest)
+
+
+define directory-snapshot-latest-modified-seconds? :: [DirectoryEntrySnapshot] -> Int?
+  [] -> nil
+  [entry|remaining] -> latest-modified-from remaining entry.modified-seconds
+
+
+;; Compatibility observation: empty input retains the historical zero result,
+;; while every non-empty input now computes from an actual timestamp rather
+;; than accidentally treating epoch zero as a synthetic member of the set.
 define directory-snapshot-latest-modified-seconds :: [DirectoryEntrySnapshot] -> Int
   [] -> 0
-  [entry|remaining] -> later-of entry.modified-seconds (directory-snapshot-latest-modified-seconds remaining)
+  [entry|remaining] -> latest-modified-from remaining entry.modified-seconds
+
+
+define directory-test-old :: DirectoryEntrySnapshot
+  DirectoryEntrySnapshot "old" "/old" 3 0 1 -20
+
+define directory-test-new :: DirectoryEntrySnapshot
+  DirectoryEntrySnapshot "new" "/new" 5 0 2 -5
+
+
+tests
+  :snapshot-aggregation:
+  assert-eq (directory-snapshot-total-size (list directory-test-old directory-test-new)) 8 "Directory snapshot size aggregates purely"
+  assert-eq (directory-snapshot-total-links (list directory-test-old directory-test-new)) 3 "Directory snapshot link count aggregates purely"
+  assert-eq (show (directory-snapshot-latest-modified-seconds? [])) "nil" "Directory latest timestamp is total on empty input"
+  assert-eq (show (directory-snapshot-latest-modified-seconds? (list directory-test-old directory-test-new))) "-5" "Directory latest timestamp handles pre-epoch values"
+  assert-eq (directory-snapshot-latest-modified-seconds (list directory-test-old directory-test-new)) -5 "Directory compatibility latest no longer injects epoch zero"
+  :snapshot-aggregation:

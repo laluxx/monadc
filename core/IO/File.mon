@@ -1,8 +1,8 @@
 ;;; File.mon --- structured effect-typed file IO
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "io files handles seek flush ownership"
+:author   Laluxx
+:version  0.4.0
+:keywords io files handles seek flush ownership
 
 ;;; Commentary:
 
@@ -12,11 +12,16 @@
  linear ownership, although source-level exactly-once enforcement remains a
  later proof layer.
 
- `with-file` is the owned-handle boundary for higher-order workflows. The
- callback borrows the handle for the dynamic extent of the scope; Core closes
- it exactly once after the callback returns. A callback failure remains
- authoritative, while a cleanup failure replaces an otherwise successful
- result.
+ =with-file-pure= is the source-level higher-order boundary Core can state
+ honestly today: its callback is pure and borrows the handle for the dynamic
+ extent of the scope. =with-file= remains its compatibility name. Effectful
+ borrowed callbacks require a higher-order effect-polymorphic arrow that the
+ current source syntax cannot yet express; Core does not pretend the present
+ pure callback type proves that stronger contract.
+
+ Core closes the handle after every callback result. If both the callback and
+ close fail, =IOCombinedFailure primary cleanup= preserves both causes. A close
+ failure replaces an otherwise successful result, so no cleanup error is lost.
 
 ;;; Code:
 
@@ -32,7 +37,7 @@ module IO.File
    PathKind RegularFile Directory SymbolicLink Other
    FileHandle FileMetadata
    standard-input standard-output standard-error
-   file-descriptor open-file with-file close-file flush-file seek-file file-position
+   file-descriptor open-file with-file-pure with-file close-file flush-file seek-file file-position
    duplicate-file-descriptor redirect-file-handle
    file-status-flags set-file-status-flags
    file-descriptor-flags set-file-descriptor-flags
@@ -117,6 +122,12 @@ define redirect-file-handle :: FileHandle -> FileHandle -io-> Either IOError Int
 
 ;;; Status and inheritance flags
 
+
+define clear-status-bit :: Int -> Int -> Int
+  flags bit ->
+    flags & (~ bit)
+
+
 define file-status-flags :: FileHandle -io-> Either IOError Int
   handle -> status-result (sys-fcntl handle.descriptor F_GETFL 0)
 
@@ -142,7 +153,7 @@ define enable-nonblocking :: FileHandle -io-> Either IOError Int
 define disable-nonblocking :: FileHandle -io-> Either IOError Int
   handle -> def flags (sys-fcntl handle.descriptor F_GETFL 0)
             if flags < 0 then Left (IOStatus flags)
-            else status-result (sys-fcntl handle.descriptor F_SETFL (& flags (0 - 2049)))
+            else status-result (sys-fcntl handle.descriptor F_SETFL (clear-status-bit flags O_NONBLOCK))
 
 
 define nonblocking-status :: FileHandle -io-> Either IOError Int
@@ -160,7 +171,7 @@ define enable-close-on-exec :: FileHandle -io-> Either IOError Int
 define disable-close-on-exec :: FileHandle -io-> Either IOError Int
   handle -> def flags (sys-fcntl handle.descriptor F_GETFD 0)
             if flags < 0 then Left (IOStatus flags)
-            else status-result (sys-fcntl handle.descriptor F_SETFD (& flags (0 - 2)))
+            else status-result (sys-fcntl handle.descriptor F_SETFD (clear-status-bit flags FD_CLOEXEC))
 
 
 define close-on-exec-status :: FileHandle -io-> Either IOError Int
@@ -189,8 +200,14 @@ define finish-file-scope-success :: a -> Either IOError Int -> Either IOError a
 
 
 define finish-file-scope :: Either IOError a -> Either IOError Int -> Either IOError a
-  [Left error] _ -> Left error
+  [Left primary] [Left cleanup] -> Left (IOCombinedFailure primary cleanup)
+  [Left error] [Right _] -> Left error
   [Right value] closed -> finish-file-scope-success value closed
+
+
+define combined-file-scope-error? :: Either IOError a -> Bool
+  [Left (IOCombinedFailure _ _)] -> True
+  _ -> False
 
 
 define run-file-scope :: FileHandle -> (FileHandle -> Either IOError a) -io-> Either IOError a
@@ -204,9 +221,15 @@ define enter-file-scope :: Either IOError FileHandle -> (FileHandle -> Either IO
   [Right handle] use -> run-file-scope handle use
 
 
-define with-file :: Path -> OpenMode -> (FileHandle -> Either IOError a) -io-> Either IOError a
+define with-file-pure :: Path -> OpenMode -> (FileHandle -> Either IOError a) -io-> Either IOError a
   path mode use -> def opened (open-file path mode)
                    enter-file-scope opened use
+
+
+;; Compatibility spelling retained until the higher-order effect surface can
+;; distinguish a pure borrowed callback from an effect-polymorphic one.
+define with-file :: Path -> OpenMode -> (FileHandle -> Either IOError a) -io-> Either IOError a
+  path mode use -> with-file-pure path mode use
 
 
 define flush-file :: FileHandle -io-> Either IOError Int
@@ -240,7 +263,7 @@ define write-file-byte :: FileHandle -> Int -io-> Either IOError Int
 
 
 define write-file-text :: FileHandle -> String -io-> Either IOError Int
-  handle text -> write-text-result handle.descriptor text
+  handle text -> write-text-all-result handle.descriptor text
 
 
 ;;; Borrowed-handle streaming
@@ -272,11 +295,15 @@ define read-file-bytes :: Path -io-> Either IOError [Int]
           (match opened with | (Left error) -> (Left error) | (Right handle) -> (read-open-bytes-and-close handle))
 
 
+define read-prefix-step :: FileHandle -> Int -> [Int] -> Either IOError Int -io-> Either IOError [Int]
+  _ _ bytes [Left error] -> finish-read-error error bytes
+  handle remaining bytes [Right byte] -> read-prefix-loop handle (remaining - 1) (snoc bytes byte)
+
+
 define read-prefix-loop :: FileHandle -> Int -> [Int] -io-> Either IOError [Int]
   handle remaining bytes
     | remaining <= 0 -> Right bytes
-    | otherwise      -> def result (read-file-byte handle)
-                            (match result with | (Left error) -> (finish-read-error error bytes) | (Right byte) -> (read-prefix-loop handle (remaining - 1) (snoc bytes byte)))
+    | otherwise      -> read-prefix-step handle remaining bytes (read-file-byte handle)
 
 
 define read-prefix-opened :: FileHandle -> Int -io-> Either IOError [Int]
@@ -296,8 +323,17 @@ define finish-copy-read-error :: IOError -> Int -> Either IOError Int
 
 
 define copy-loop :: FileHandle -> FileHandle -> Int -io-> Either IOError Int
-  source target copied -> def input (read-file-byte source)
-                          (match input with | (Left error) -> (finish-copy-read-error error copied) | (Right byte) -> (with [status (write-byte target.descriptor byte)] (if (< status 0) (Left (IOStatus status)) (copy-loop source target (copied + status)))))
+  source target copied ->
+    def input (read-file-byte source)
+    (match input with
+     | (Left error) -> (finish-copy-read-error error copied)
+     | (Right byte) ->
+         (match (write-byte-result target.descriptor byte) with
+          | (Left error) -> (Left error)
+          | (Right count) ->
+              (if (= count 0)
+                  (Left IOWriteNoProgress)
+                  (copy-loop source target (copied + count)))))
 
 
 define finish-copy :: Either IOError Int -> FileHandle -> FileHandle -io-> Either IOError Int
@@ -559,3 +595,16 @@ define standard-output :: () -> FileHandle
 
 define standard-error :: () -> FileHandle
   _ -> FileHandle stderr
+
+
+tests
+  :scope-errors:
+  assert-eq (combined-file-scope-error? (finish-file-scope (Left (IOStatus -5)) (Left (IOStatus -9)))) True "File scope preserves primary and cleanup failures"
+  assert-eq (combined-file-scope-error? (finish-file-scope (Left (IOStatus -5)) (Right 0))) False "File scope does not manufacture combined failures"
+  :scope-errors:
+
+  :flag-algebra:
+  assert-eq (clear-status-bit (bit-or O_NONBLOCK O_APPEND) O_NONBLOCK) O_APPEND "IO.File clears O_NONBLOCK without magic masks"
+  assert-eq (clear-status-bit O_APPEND O_NONBLOCK) O_APPEND "IO.File clearing an absent bit is idempotent"
+  assert-eq (clear-status-bit (bit-or FD_CLOEXEC 4) FD_CLOEXEC) 4 "IO.File clears FD_CLOEXEC independently"
+  :flag-algebra:

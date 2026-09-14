@@ -1,8 +1,8 @@
 ;;; Json.mon --- Strict JSON values and decoding
 
-:author "Laluxx"
-:version "0.4.0"
-:keywords "json rfc8259 parser serialization data interchange"
+:author   Laluxx
+:version  0.4.0
+:keywords json rfc8259 parser serialization data interchange
 :reference-rfc8259 "https://www.rfc-editor.org/rfc/rfc8259.html"
 :reference-ijson "https://www.rfc-editor.org/rfc/rfc7493.html"
 :reference-jcs "https://www.rfc-editor.org/rfc/rfc8785.html"
@@ -206,13 +206,7 @@ define json-object-count-or :: Int -> Json -> Int
 ;;; Document boundary
 
 define json-default-budget :: ParserBudget
-  (ParserBudget
-    :input-bytes 16777216
-    :nesting 256
-    :tokens 1048576
-    :string-bytes 1048576
-    :number-digits 1024
-    :collection-items 1048576)
+  ParserBudget 16777216 256 1048576 1048576 1024 1048576
 
 
 define decode-json :: [Int] -> JsonDecode
@@ -280,9 +274,7 @@ define decode-json-value :: Int -> [Int] -> ParseReply Json
     | bytes[0] = 0x22          -> decode-json-string offset bytes
     | bytes[0] = 0x5b          -> decode-json-array offset bytes
     | bytes[0] = 0x7b          -> decode-json-object offset bytes
-    | otherwise ->
-        (decode-json-number offset bytes
-          (parser-decimal-lexeme-up-to 1024 64 21 offset bytes))
+    | otherwise -> decode-json-number offset bytes (parser-decimal-lexeme-up-to 1024 64 21 offset bytes)
 
 
 define decode-json-literal :: Json -> [Int] -> Int -> Int -> [Int] -> ParseReply Json

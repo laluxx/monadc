@@ -1,8 +1,8 @@
 ;;; Angle.mon --- Angle units, normalization, and trigonometry
 
-:author "Laluxx"
-:version "1.0.0"
-:keywords "math angle radians degrees turns trigonometry"
+:author   Laluxx
+:version  1.0.0
+:keywords math angle radians degrees turns trigonometry
 
 ;;; Commentary:
 

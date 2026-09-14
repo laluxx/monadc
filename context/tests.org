@@ -46,6 +46,21 @@
 This file records the test metadata format and the relationship between tests
 and the repository context corpus.
 
+* Language Semantics Fixtures
+:PROPERTIES:
+:ID: monadc.context.tests.language-semantics-fixtures
+:CUSTOM_ID: language-semantics-fixtures
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-09-12
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.tests.language-semantics-use-monad-2026-09-12 date:2026-09-12 by:human src:user-request conf:high]
+  Test language syntax, typing, equality, elaboration, and runtime semantics with
+  native =.mon= fixtures. Reserve Python tests for the test harness, CLI, process,
+  platform, or integration behavior that cannot be expressed as a Monad program.
+
 * LLM Orientation
 :PROPERTIES:
 :ID: monadc.context.tests.llm-orientation

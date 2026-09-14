@@ -47,6 +47,14 @@
   terminal rendering, and scratch experiments. These serve as both
   documentation and integration test cases for the compiler.
 
+[FIX id:fix.how-to.vulkan-triangle-wsi-2026-08-31 date:2026-08-31 by:codex src:core/Graphics/Vulkan.mon,how_to/triangle/Triangle.mon,tests/test_vulkan_triangle.py conf:high]
+  The Triangle base selects a graphics queue with surface-specific Vulkan
+  presentation support, accepts up to 64 reported surface formats, waits for
+  a non-zero GLFW framebuffer configure event, clamps variable swapchain
+  extents, and uses one render-finished semaphore per swapchain image.  Run
+  with =VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation= during development;
+  validation is optional so systems without the SDK layer remain supported.
+
 [LINK id:link.how-to.to-language]
   Examples demonstrate the surface syntax from =language.org=: wisp forms,
   pattern matching, data declarations, layout structs, module imports,
@@ -63,6 +71,15 @@
   counts and seeds, and explains minimized counterexamples and replay. The
   ordinary how-to compilation regression includes it, and the example is also
   executed with =monad test= during focused verification.
+
+[FIX id:fix.how-to-evaluation-strategies-2026-09-10 date:2026-09-10 by:codex src:how_to/Lazyness.mon,how_to/Strictness.mon,tests/test_how_to_examples.py conf:high]
+  =how_to/Lazyness.mon= and =how_to/Strictness.mon= are executable companion
+  chapters for Monad's call-by-need and immediate evaluation strategies. They
+  explain timing, sharing, shallow wrappers, the =Evaluation= boundary, and
+  =TotalDemand= in prose while keeping the runnable examples focused on the
+  supported =delay=/=force= and =strict=/=run-strict= surfaces. Both files are
+  part of the public how-to compilation regression and carry focused =tests=
+  blocks for their observable behavior.
 
 [FIX id:fix.how-to.rule-101-example-2026-08-21 date:2026-08-21 by:codex src:how_to/101.mon,tests/test_how_to_examples.py conf:high]
   =how_to/101.mon= is an executable Rule 101 cellular-automaton example. Its
@@ -388,6 +405,28 @@
   without handwritten bindings or source casts. Wisp block =until= is distinct
   from parenthesized polymorphic =Function.until=: it lowers to a =while not=
   loop and owns every indented drawing/event expression.
+
+[FIX id:fix.how-to.vulkan-triangle-immediate-api-2026-08-30 date:2026-08-30 by:codex src:how_to/triangle/Triangle.mon,core/Graphics/Vulkan.mon,tests/test_vulkan_triangle.py conf:high]
+  The Vulkan triangle is an application-owned loop rather than a single
+  =run-vulkan-2d= call.  =Graphics.Vulkan= exposes the raylib-shaped lifecycle
+  =init-window=, =window-should-close?=, =begin-drawing=, =draw-triangle=,
+  =end-drawing=, and =close-window= while retaining ownership of GLFW polling,
+  swapchain images, render-pass recording, queue submission, presentation, and
+  destruction.  Stateful no-argument imports use an ignored =0= argument until
+  Monad supports imported effectful nullaries as functions rather than values.
+  Shader modules live below the capitalized =Shaders/= module path, explicitly
+  export their embedded SPIR-V buffers, and are validated by the focused test.
+
+[FIX id:fix.how-to.vulkan-triangle-clean-nullary-api-2026-08-30 date:2026-08-30 by:codex src:how_to/triangle/Triangle.mon,core/Graphics/Vulkan.mon,tests/test_vulkan_triangle.py conf:high]
+  The public immediate-mode lifecycle is genuinely nullary where its operations
+  take no application data: =window-should-close?=, =begin-drawing=,
+  =draw-triangle=, =end-drawing=, and =close-window= are called without sentinel
+  arguments.  The earlier ignored-=0= workaround is superseded.  Shader loading
+  is named generically as =load-shader= and accepts an embedded SPIR-V vertex and
+  fragment pair without scene-specific naming.  Initialization requests Vulkan
+  1.3, searches for a queue family supporting both graphics and GLFW presentation,
+  chooses a supported sRGB surface format when available, and respects the
+  surface's minimum and maximum swapchain image counts.
 
 [OBS id:obs.ffi.sdl src:how_to/SdlSpeedrun.mon:1-35 conf:high]
   SDL speedrun: SDL_Init, SDL_CreateWindow/Renderer, while True loop
@@ -840,10 +879,67 @@
   =Graphics.Vulkan= and contains no =VkShaderModuleCreateInfo= plumbing.
 
 [FIX id:fix.how-to.compiler-spirv-module-tool-2026-08-25 date:2026-08-25 by:codex src:spirv.c,spirv.h,cli.c,cli.h,main.c,completion.c,tests/test_spirv_include.py conf:high]
-  =monad spirv shader.frag -o Shader.mon= is a deliberately small asset tool.
-  It invokes =glslc= for Vulkan 1.3, validates the result with =spirv-val=, and
-  writes an ordinary Monad module containing the shader's byte-size constant
-  and fixed =[N U32]= word buffer. The binding name defaults to the shader's
-  filename without its extension; =--name= is only an explicit override. No
-  shader syntax, dependency rule, or file-loading plumbing was added to the
-  language itself.
+  =monad spirv shader.frag= is a deliberately small asset tool.  Without =-o=,
+  the output module is named after the shader stage, so =Triangle.frag=
+  derives =TriangleFrag.mon= and =Triangle.vert= derives =TriangleVert.mon=
+  and the two never overwrite one another.  It invokes =glslc= for Vulkan 1.3,
+  validates the result with =spirv-val=, and writes an ordinary Monad module
+  containing the shader's byte-size constant and fixed =[N U32]= word buffer.
+  The binding name defaults to the shader's filename without its extension;
+  =--name= is only an explicit override. No shader syntax, dependency rule, or
+  file-loading plumbing was added to the language itself.
+
+[FIX id:fix.how-to.chip8-compiling-chapter-2026-08-30 date:2026-08-30 by:codex src:how_to/Chip8/,tests/test_how_to_examples.py conf:high]
+  The multi-module CHIP-8 chapter is compiled from its own directory by an
+  integration regression. Fixed buffers declare =Int= elements when their
+  public APIs perform arithmetic, Raylib includes follow module declarations,
+  parenthesized expressions use prefix =if= syntax, and Bool-returning helpers
+  use predicate names. The built-in ROM path is self-contained. External ROM
+  loading streams real ROM bytes into program memory through the POSIX
+  descriptor boundary and is exercised by a runtime integration test. Imported
+  polymorphic ADT constructors rebuild their LLVM declarations from the
+  exported principal scheme, preserving their erased payload ABI.
+  The executable defaults to =BuiltinDemo= so a first run always has executable
+  bytecode and visible framebuffer output. External games remain explicit via
+  =RomFile "game.ch8"=. Raylib framebuffer helpers carry =-io->= arrows rather
+  than pretending recursive drawing is pure, and a headless runtime probe
+  verifies the bundled ROM reaches Display with a lit pixel and no CPU fault.
+  Pixel rendering keeps the void =DrawRectangle= FFI call in a sequential
+  effectful clause returning =0=; it is never used as one arm of an
+  =Int=-valued conditional, which previously left only the directly rendered
+  header visible. The remaining blank-frame defect was a boxed typeclass
+  =div= result being consumed as an unboxed row coordinate. CHIP-8 arithmetic
+  is concretely =Int=, so it now uses the native =/= operator. The framebuffer
+  regression follows the renderer's linear-index-to-row calculation, and a
+  debugger-backed GUI run reached =DrawRectangle= with the expected first lit
+  pixel at =(0, 192)= with scale =12=.
+
+[FIX id:fix.how-to.chip8-explicit-state-effects-2026-08-31 date:2026-08-31 by:codex src:how_to/Chip8/Machine.mon,how_to/Chip8/Opcodes.mon,how_to/Chip8/Rom.mon,tests/test_how_to_examples.py conf:high]
+  CHIP-8 helpers that mutate RAM, registers, display, keypad, stack, or CPU
+  fields carry an explicit qualified effect row: =-e-> ... where e has
+  state.write=. The effect is propagated through opcode dispatch, drawing, and
+  ROM-copy helpers until it reaches the existing =-io->= application boundary.
+  Former effectful nullary values take an ignored =Int= trigger, matching the
+  chapter's existing command-helper convention and preventing mutation during
+  module initialization. The compile, external-ROM, and framebuffer integration
+  tests enforce both the contracts and runtime behavior.
+[FIX id:fix.how-to-donut-bounded-sample-storage-2026-09-11 date:2026-09-11 by:codex src:how_to/Donut.mon,codegen.c,tests/test_how_to_examples.py conf:high]
+  Donut's strictly sequential raster scan reuses one =Sample= layout instead
+  of heap-allocating a record for every torus point. Together with native
+  fixed-array =nth= code generation, this changes the animation from roughly
+  one gigabyte of resident-memory growth per second to a stable footprint.
+
+[FIX id:fix.how-to-donut-unit-buffer-update-2026-09-11 date:2026-09-11 by:codex src:how_to/Donut.mon,tests/test_how_to_examples.py conf:high]
+  =update-buffers= returns =()=: its only result is the =state.write= effect.
+  Donut keeps effectful local definitions in source order and then continues
+  directly; dummy sequencing wrappers are not required.  This applies across
+  buffer clearing, phi/theta traversal, frame preparation, terminal output,
+  animation recursion, and shutdown.  The executable frame regression proves
+  the writes remain visible without those trampolines.  Arithmetic sequencing
+  fictions such as =status - status= are absent as well.
+
+  The animation entry point is genuinely nullary:
+  =define start-animation :: -io-> Int= and a bare =start-animation= call.
+  It performs terminal setup, rendering, and teardown as ordered local effects,
+  then returns =0= as the executable status rather than leaking a terminal
+  write byte count as the process exit code.

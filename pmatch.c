@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 /// TODO [0/2]
 // - [ ] First optimize the normal path, then
@@ -16,6 +17,28 @@ static char *my_strdup(const char *s) {
     char *r = malloc(strlen(s) + 1);
     strcpy(r, s);
     return r;
+}
+
+void pmatch_field_accessor_name(char *buffer, size_t capacity,
+                                const char *constructor, int field_index) {
+    size_t at = 0;
+    int written = snprintf(buffer, capacity, "__field_");
+    if (written < 0 || capacity == 0) return;
+    at = (size_t)written < capacity ? (size_t)written : capacity - 1;
+    for (const unsigned char *p = (const unsigned char *)constructor;
+         *p && at + 1 < capacity; p++) {
+        if (isalnum(*p) || *p == '_') {
+            buffer[at++] = (char)*p;
+            buffer[at] = '\0';
+        } else {
+            written = snprintf(buffer + at, capacity - at, "_x%02x", *p);
+            if (written < 0) break;
+            size_t room = capacity - at;
+            at += (size_t)written < room ? (size_t)written : room - 1;
+        }
+    }
+    if (at < capacity)
+        snprintf(buffer + at, capacity - at, "_%d", field_index);
 }
 
 /// Pattern Parser
@@ -123,11 +146,13 @@ ASTPattern parse_single_pattern(Parser *p) {
         TokenType close_tok = parser_at(p, TOK_LBRACKET) ? TOK_RBRACKET : TOK_RPAREN;
         parser_advance(p); // consume '[' or '('
 
-        // Peek: only treat as constructor pattern if first token inside is uppercase
-        if (parser_at(p, TOK_SYMBOL) &&
-            p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') {
+        // Uppercase and declared symbolic constructors share the same pattern form.
+        bool symbolic_dot = parser_at(p, TOK_DOT);
+        if ((parser_at(p, TOK_SYMBOL) &&
+             p->current.value[0] >= 'A' && p->current.value[0] <= 'Z') ||
+            symbolic_dot) {
             pat.kind     = PAT_CONSTRUCTOR;
-            pat.var_name = my_strdup(p->current.value);
+            pat.var_name = my_strdup(symbolic_dot ? "." : p->current.value);
             parser_advance(p);
 
             // Parse field patterns until ']' or ')'
@@ -234,6 +259,35 @@ ASTPattern parse_single_pattern(Parser *p) {
                     parser_get_filename(), p->current.line, p->current.column);
         } else {
             parser_advance(p);
+        }
+        if (!tail && count > 0 && elems[0].kind == PAT_VAR &&
+            elems[0].var_name && strcmp(elems[0].var_name, ".") == 0) {
+            free(elems[0].var_name);
+            pat.kind = PAT_CONSTRUCTOR;
+            pat.var_name = my_strdup(".");
+            pat.ctor_field_count = count - 1;
+            if (count > 1) {
+                pat.ctor_fields = malloc(sizeof(ASTPattern) * (size_t)(count - 1));
+                memcpy(pat.ctor_fields, elems + 1,
+                       sizeof(ASTPattern) * (size_t)(count - 1));
+            }
+            free(elems);
+            return pat;
+        }
+        /* Binary symbolic constructors use ordinary infix spelling inside
+         * patterns too: [x . xs] is the pattern form of [x . xs] as an
+         * expression, and is equivalent to the prefix pattern [. x xs]. */
+        if (!tail && count == 3 && elems[1].kind == PAT_VAR &&
+            elems[1].var_name && strcmp(elems[1].var_name, ".") == 0) {
+            free(elems[1].var_name);
+            pat.kind = PAT_CONSTRUCTOR;
+            pat.var_name = my_strdup(".");
+            pat.ctor_field_count = 2;
+            pat.ctor_fields = malloc(sizeof(ASTPattern) * 2);
+            pat.ctor_fields[0] = elems[0];
+            pat.ctor_fields[1] = elems[2];
+            free(elems);
+            return pat;
         }
         pat.kind          = PAT_LIST;
         pat.elements      = elems;
@@ -670,9 +724,11 @@ static AST *make_list_length(const char *param_name) {
     return make_list(items, 2);
 }
 
-// Helper: (count param)
+// Helper: (__rt_count param)
 static AST *make_count(const char *param_name) {
-    AST *items[] = {sym("count"), sym(param_name)};
+    /* Pattern lowering is compiler-internal and must not depend on the
+     * user-facing `count` binding being imported into a REPL session. */
+    AST *items[] = {sym("__rt_count"), sym(param_name)};
     return make_list(items, 2);
 }
 
@@ -761,6 +817,12 @@ static bool pmatch_type_name_is_collection(const char *tn) {
     if (strncmp(tn, "List", 4) == 0 &&
         (tn[4] == '\0' || tn[4] == ' ' || tn[4] == '\t' ||
          tn[4] == ':'  || tn[4] == ')')) {
+        return true;
+    }
+
+    if (strncmp(tn, "String", 6) == 0 &&
+        (tn[6] == '\0' || tn[6] == ' ' || tn[6] == '\t' ||
+         tn[6] == ':'  || tn[6] == ')')) {
         return true;
     }
 
@@ -1101,7 +1163,7 @@ static void build_pattern_conditions(
 
             /* Use typed accessor __field_CtorName_fi instead of generic __adt_field */
             char acc_sym[256];
-            snprintf(acc_sym, sizeof(acc_sym), "__field_%s_%d", pat->var_name, fi);
+            pmatch_field_accessor_name(acc_sym, sizeof(acc_sym), pat->var_name, fi);
             AST *field_call = ast_new_list();
             ast_list_append(field_call, sym(acc_sym));
             ast_list_append(field_call, sym(param_name));
@@ -1164,8 +1226,8 @@ static void build_pattern_conditions(
                     char nfi_buf[16];
                     snprintf(nfi_buf, sizeof(nfi_buf), "%d", nfi);
                     char nacc_sym[256];
-                    snprintf(nacc_sym, sizeof(nacc_sym), "__field_%s_%d",
-                             fp->var_name, nfi);
+                    pmatch_field_accessor_name(nacc_sym, sizeof(nacc_sym),
+                                               fp->var_name, nfi);
                     AST *nfield_call = ast_new_list();
                     ast_list_append(nfield_call, sym(nacc_sym));
                     ast_list_append(nfield_call, sym(nested_param));
@@ -1192,6 +1254,24 @@ static void build_pattern_conditions(
                         break;
                     }
                 }
+                break;
+            }
+
+            case PAT_LIST:
+            case PAT_LIST_EMPTY: {
+                /* A constructor field may itself be structurally matched,
+                 * e.g. [SetValue [first|rest]].  Name the projected field and
+                 * feed that name back through the ordinary pattern compiler
+                 * so nested lists bind variables and contribute their length
+                 * guards just like top-level list patterns. */
+                char *nested_list = malloc(256);
+                snprintf(nested_list, 256, "__nested_list_%s_%d",
+                         pat->var_name, fi);
+                PUSH_BIND(nested_list, field_call);
+                build_pattern_conditions(fp, nested_list, NULL,
+                                         guard_parts, guard_count,
+                                         bind_names, bind_exprs,
+                                         bind_count, bind_cap);
                 break;
             }
 
@@ -1288,7 +1368,9 @@ static void build_pattern_conditions(
                 if (!ep->tail) {
                     char buf[32];
                     snprintf(buf, sizeof(buf), "%d", nn);
-                    AST *cnt_items[] = {sym("count"), ast_clone(elem_expr)};
+                    AST *cnt_items[] = {
+                        sym("__rt_count"), ast_clone(elem_expr)
+                    };
                     AST *cnt = make_list(cnt_items, 2);
                     AST *eq_items[] = {sym("="), cnt,
                                        ast_new_number((double)nn, buf)};
@@ -1443,6 +1525,39 @@ void pmatch_validate_ignored_signature_params(AST *pm,
 AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
     if (!node || node->type != AST_PMATCH) return node;
 
+    /* Empty brackets are overloaded between the collection literal and a
+     * nullary `[]` ADT constructor.  A nominally typed pattern parameter is
+     * authoritative: lower it with constructor tags, not collection length.
+     * The dependent coverage pass independently validates that `[]` belongs
+     * to the indexed family and is possible at the scrutinee index. */
+    for (int ci = 0; ci < node->pmatch.clause_count; ci++) {
+        ASTPMatchClause *cl = &node->pmatch.clauses[ci];
+        bool has_nominal_scrutinee = false;
+        int count = cl->pattern_count < param_count
+                  ? cl->pattern_count : param_count;
+        for (int pi = 0; pi < count; pi++) {
+            ASTPattern *pattern = &cl->patterns[pi];
+            const char *annotation = params && params[pi].type_name
+                                   ? params[pi].type_name : NULL;
+            if (pattern->kind != PAT_LIST_EMPTY || !annotation ||
+                pmatch_type_name_is_collection(annotation))
+                continue;
+            const char *head = annotation;
+            while (*head == '(' || *head == ' ' || *head == '\t') head++;
+            if (*head < 'A' || *head > 'Z') continue;
+            has_nominal_scrutinee = true;
+            pattern->kind = PAT_CONSTRUCTOR;
+            free(pattern->var_name);
+            pattern->var_name = my_strdup("[]");
+        }
+        if (has_nominal_scrutinee && cl->body &&
+            cl->body->type == AST_ARRAY &&
+            cl->body->array.element_count == 0) {
+            ast_free(cl->body);
+            cl->body = ast_new_symbol("[]");
+        }
+    }
+
     // Build (cond [guard body] ... [else (undefined)]) then desugar
     // into if-chains via desugar_cond_ast. make_let already calls
     // desugar_let_ast so bindings are handled correctly.
@@ -1477,6 +1592,9 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
             AST *pattern_guard = (guard_count == 0)
                 ? NULL
                 : make_and(guard_parts, guard_count);
+            if (pattern_guard && bind_count > 0)
+                pattern_guard = make_let(bind_names, bind_exprs,
+                                         bind_count, pattern_guard);
 
             for (int gi = 0; gi < cl->guard_count; gi++) {
                 AST *gcond = ast_clone(cl->guard_conds[gi]);
@@ -1540,6 +1658,8 @@ AST *pmatch_desugar(AST *node, ASTParam *params, int param_count) {
             AST *guard = (guard_count == 0)
                 ? sym("else")
                 : make_and(guard_parts, guard_count);
+            if (guard_count > 0 && bind_count > 0)
+                guard = make_let(bind_names, bind_exprs, bind_count, guard);
 
             AST *body = ast_clone(cl->body);
 

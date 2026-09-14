@@ -1,0 +1,76 @@
+;;; Vec.mon --- Length-indexed vectors
+
+:author   Laluxx
+:version  1.1.0
+:keywords vector dependent length total head tail functor foldable
+
+;;; Commentary:
+
+ Vec n a is a structurally length-indexed sequence. Constructor-result
+ unification makes head and tail total on Vec (S n) a: there is no empty case
+ to handle because [] cannot inhabit a successor length.
+
+ Vec is intentionally not forced through the regular Sequence coalgebra.
+ Observing a non-empty vector changes the index from S n to n, which is an
+ indexed-family transition rather than S -> F S. This keeps the distinction
+ described by Sequence's indexed boundary explicit.
+
+;;; Code:
+
+import Data.Nat
+import Data.Functor
+import Data.Foldable
+import Sequence
+
+module Data.Vec
+  [Vec vec-head vec-tail vec-to-list]
+
+
+data Vec :: Nat -> Type -> Type
+  [] : Vec Z t
+  .  : t -> Vec n t -> Vec (S n) t
+
+
+method vec-head :: Vec (S n) t -> t
+  [x . _] -> x
+
+
+method vec-tail :: Vec (S n) t -> Vec n t
+  [_ . xs] -> xs
+
+
+method vec-map :: (a -> b) -> Vec n a -> Vec n b
+  _ []        -> []
+  f [x . xs]  -> (f x) . (vec-map f xs)
+
+
+method vec-to-list :: Vec n a -> [a]
+  []       -> []
+  [x . xs] -> prepend x (vec-to-list xs)
+
+
+instance Functor (Vec n)
+  map f values -> vec-map f values
+
+
+instance Foldable (Vec n)
+  foldl _ acc [] -> acc
+  foldl f acc [x . xs] -> foldl f (f acc x) xs
+  foldr _ acc [] -> acc
+  foldr f acc [x . xs] -> f x (foldr f acc xs)
+
+
+define vec-test-pair :: Vec (S (S Z)) Int
+  [1 . [2 . []]]
+
+
+tests
+  :total-observation:
+  assert-eq (vec-head vec-test-pair) 1 "Vec head is total on successor length"
+  assert-eq (show (vec-to-list (vec-tail vec-test-pair))) "(2)" "Vec tail lowers the index"
+  :total-observation:
+
+  :mapping:
+  assert-eq (show (vec-to-list (map (lambda (x) (+ x 1)) vec-test-pair))) "(2 3)" "Vec Functor preserves length"
+  assert-eq (foldl (lambda (sum value) (sum + value)) 0 vec-test-pair) 3 "Vec Foldable visits every indexed element"
+  :mapping:

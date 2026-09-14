@@ -1,8 +1,8 @@
 ;;; Modal.mon --- First-order modal logic and labelled analytic tableaux
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "logic first-order modal Kripke semantics labelled analytic tableau"
+:author   Laluxx
+:version  0.3.0
+:keywords logic first-order modal Kripke semantics labelled analytic tableau
 
 ;;; Commentary:
 
@@ -15,8 +15,24 @@
 
  A labelled tableau records Formula@World assertions and accessibility edges.
  Each entry retains the analytic-tableau rule and its premise line numbers.
- An open saturated branch describes a countermodel; a closed tableau is a
- validity certificate only when every branch closes.  The requested branch
+ An open saturated propositional branch determines a countervaluation; a
+ closed tableau is a validity certificate only when every branch closes.
+ Quantifier and modal saturation require world/domain bookkeeping that the
+ bounded search engine in this module does not yet implement. Public =prove=
+ therefore returns Inconclusive for those frontiers instead of treating a
+ partially expanded branch as a proof or countermodel. DomainPolicy is retained
+ in SearchOptions and appears in that explicit frontier diagnosis rather than
+ being silently ignored.
+
+ The public Tableau is presently a *linear branch certificate*. A linear closed
+ search therefore records the formulas that were actually asserted and the real
+ contradictory line numbers. If propositional validity requires branching, the
+ search may establish that every explored branch closes, but Core returns
+ Inconclusive rather than stuffing multiple branches into one fake linear
+ tableau. A future proof-tree representation can recover that completeness
+ without weakening certificate meaning.
+
+ The requested branch
  closes because line 6 and line 8 contain ¬Fa and Fa at the same world v.
  Instantiating line 2 with the parameter introduced at v uses constant-domain
  semantics: every world has the same domain, and parameters rigidly designate
@@ -26,7 +42,7 @@
  The constructors are ordinary core values. Unicode functions ∀, ∃, □, ◇,
  ¬, ∧, and ∨ are conveniences over those constructors. The reader declaration
  below maps mathematical notation to these same functions only when the
- enclosing definition explicitly expects Formula. Thus `->` keeps its normal
+ enclosing definition explicitly expects Formula. Thus =->= keeps its normal
  meanings in types, clauses, patterns, and iteration syntax.
 
 ;;; Code:
@@ -43,6 +59,7 @@ reader-syntax Formula
 
 import Text.Unicode
 import Data.Semigroup
+import Sequence
 
 module Logic.FirstOrder.Modal
   [Term Variable Constant Function
@@ -51,11 +68,12 @@ module Logic.FirstOrder.Modal
    TableauRule Assumption FromNegatedImplication FromNegatedNecessity
    FromNegatedUniversal FromUniversal FromNecessity
    TableauEntry FormulaAt Accessibility
-   BranchStatus OpenBranch ClosedBranch
+   BranchStatus OpenBranch ClosedBranch IncompleteBranch
    Tableau
    DomainPolicy ConstantDomains IncreasingDomains DecreasingDomains VaryingDomains
+   SearchOptions search-options
    ProofResult Valid Countermodel Inconclusive
-   prove proof-valid? proof-countermodel? proof-inconclusive? prove-valid?
+   prove-with prove proof-tableau proof-valid? proof-countermodel? proof-inconclusive? prove-valid?
    ∀ ∃ □ ◇ ¬ ∧ ∨ implies
    barcan-formula
    barcan-tableau
@@ -102,6 +120,7 @@ data TableauEntry
 data BranchStatus
   = OpenBranch
   | ClosedBranch Int Int
+  | IncompleteBranch
 
 
 layout Tableau
@@ -125,8 +144,8 @@ data ProofResult
   | Inconclusive Tableau String
 
 data SearchOutcome
-  = SearchClosed
-  | SearchOpen
+  = SearchClosed [[Formula]]
+  | SearchOpen [Formula]
   | SearchLimited
 
 
@@ -213,7 +232,7 @@ define render-term :: Term -> String
 
 define render-predicate :: String -> [Term] -> String
   name []            -> name
-  name [argument|[]] -> concat name (render-term argument)
+  name [argument] -> concat name (render-term argument)
   name arguments     -> concat name (concat "(" (concat (render-term-list arguments) ")"))
 
 
@@ -269,8 +288,9 @@ define render-entry-lines :: [TableauEntry] -> String
 
 
 define render-status :: BranchStatus -> String
-  [OpenBranch] -> "OPEN: a countermodel can be extracted from this branch."
+  [OpenBranch] -> "OPEN: a countermodel can be extracted from this saturated branch."
   [ClosedBranch first second] -> ("CLOSED: contradictory lines " ++ (natural-text first) ++ " and " ++ (natural-text second) ++ ".")
+  [IncompleteBranch] -> "INCOMPLETE: this tableau is diagnostic evidence, not a proof or countermodel."
 
 
 define render-tableau :: Tableau -> String
@@ -281,10 +301,42 @@ define tableau-closed? :: Tableau -> Bool
   tableau.status
     | [ClosedBranch _ _] -> True
     | OpenBranch         -> False
+    | IncompleteBranch   -> False
 
 
 define predicate-application1 :: String -> Term -> Formula
   predicate term -> (Predicate predicate (list term))
+
+
+define propositional-fragment? :: Formula -> Bool
+  [Predicate _ _]          -> True
+  [Equality _ _]           -> True
+  [Negation body]          -> propositional-fragment? body
+  [Conjunction left right] -> both-propositional? left right
+  [Disjunction left right] -> both-propositional? left right
+  [Implication left right] -> both-propositional? left right
+  [Universal _ _]          -> False
+  [Existential _ _]        -> False
+  [Necessity _]            -> False
+  [Possibility _]          -> False
+
+define both-propositional? :: Formula -> Formula -> Bool
+  left right | propositional-fragment? left -> propositional-fragment? right
+  _ _ -> False
+
+
+define domain-policy-text :: DomainPolicy -> String
+  [ConstantDomains]   -> "constant domains"
+  [IncreasingDomains] -> "increasing domains"
+  [DecreasingDomains] -> "decreasing domains"
+  [VaryingDomains]    -> "varying domains"
+
+
+define unsupported-frontier-message :: DomainPolicy -> String
+  policy ->
+    concat "bounded proof search currently saturates only the propositional fragment; "
+      (concat (domain-policy-text policy)
+        " requires quantified/modal world and domain saturation")
 
 ;;; Total bounded proof search
 
@@ -331,12 +383,12 @@ define prepend-formula :: Formula -> [Formula] -> [Formula]
   formula formulas -> prepend formula formulas
 
 define combine-search :: SearchOutcome -> SearchOutcome -> SearchOutcome
-  [SearchOpen] right -> SearchOpen
-  [SearchClosed] [SearchClosed] -> SearchClosed
-  [SearchClosed] [SearchOpen] -> SearchOpen
-  [SearchClosed] [SearchLimited] -> SearchLimited
-  [SearchLimited] [SearchOpen] -> SearchOpen
-  [SearchLimited] right -> SearchLimited
+  [SearchOpen branch] _ -> SearchOpen branch
+  [SearchClosed _] [SearchOpen branch] -> SearchOpen branch
+  [SearchClosed left] [SearchClosed right] -> SearchClosed (concat left right)
+  [SearchClosed _] [SearchLimited] -> SearchLimited
+  [SearchLimited] [SearchOpen branch] -> SearchOpen branch
+  [SearchLimited] _ -> SearchLimited
 
 define search-negated-formula :: Formula -> Int -> [Formula] -> [Formula] -> SearchOutcome
   [Negation body] fuel pending settled -> (search-formulas (fuel - 1) (prepend-formula body pending) settled)
@@ -360,23 +412,119 @@ define search-formula :: Formula -> Int -> [Formula] -> [Formula] -> SearchOutco
   [Possibility _] fuel pending settled -> SearchLimited
   formula fuel pending settled -> (search-formulas (fuel - 1) pending (prepend-formula formula settled))
 
+define reverse-formulas-onto :: [Formula] -> [Formula] -> [Formula]
+  [] result -> result
+  [formula|rest] result -> reverse-formulas-onto rest (prepend-formula formula result)
+
+define reverse-formulas :: [Formula] -> [Formula]
+  formulas -> reverse-formulas-onto formulas (list)
+
+
+define search-branch-formulas :: [Formula] -> [Formula] -> [Formula]
+  pending settled -> concat (reverse-formulas settled) pending
+
+
+define search-settled :: [Formula] -> SearchOutcome
+  branch | closed-formulas? branch -> SearchClosed (list branch)
+  branch -> SearchOpen branch
+
+define search-current :: Formula -> [Formula] -> Int -> [Formula] -> [Formula] -> SearchOutcome
+  _ _ _ _ branch | closed-formulas? branch -> SearchClosed (list branch)
+  formula rest fuel settled _ -> search-formula formula fuel rest settled
+
+
 define search-pending :: [Formula] -> Int -> [Formula] -> SearchOutcome
-  [] fuel settled -> (if (closed-formulas? settled) SearchClosed SearchOpen)
-  [formula|rest] fuel settled -> (if (closed-formulas? (prepend-formula formula settled)) SearchClosed (search-formula formula fuel rest settled))
+  [] _ settled -> search-settled (reverse-formulas settled)
+  [formula|rest] fuel settled -> search-current formula rest fuel settled (search-branch-formulas (prepend-formula formula rest) settled)
 
 define search-formulas :: Int -> [Formula] -> [Formula] -> SearchOutcome
   fuel pending settled -> (if (fuel <= 0) SearchLimited (search-pending pending fuel settled))
 
+define branch-formula-entries :: Int -> [Formula] -> [TableauEntry]
+  _ [] -> []
+  number [formula|rest] ->
+    prepend
+      (FormulaAt number "w" formula Assumption)
+      (branch-formula-entries (number + 1) rest)
+
+
+define formula-line-at :: Formula -> [Formula] -> Int -> Int?
+  _ [] _ -> nil
+  target [candidate|_] line | formula-same? target candidate -> line
+  target [_|rest] line -> formula-line-at target rest (line + 1)
+
+
+define complementary-formula :: Formula -> Formula
+  [Negation body] -> body
+  formula -> Negation formula
+
+
+define contradiction-lines-result :: [Formula] -> Int -> Int? -> (Int, Int)?
+  rest line nil -> contradiction-lines-at rest (line + 1)
+  _ line other -> (line, other)
+
+
+define contradiction-lines-at :: [Formula] -> Int -> (Int, Int)?
+  [] _ -> nil
+  [formula|rest] line -> contradiction-lines-result rest line (formula-line-at (complementary-formula formula) rest (line + 1))
+
+
+define closed-branch-from-lines :: [Formula] -> (Int, Int)? -> Tableau
+  formulas nil -> Tableau (branch-formula-entries 1 formulas) IncompleteBranch
+  formulas lines -> Tableau (branch-formula-entries 1 formulas) (ClosedBranch (lines 0) (lines 1))
+
+
+define closed-branch-tableau :: [Formula] -> Tableau
+  formulas -> closed-branch-from-lines formulas (contradiction-lines-at formulas 1)
+
+
+define open-branch-tableau :: [Formula] -> Tableau
+  formulas -> Tableau (branch-formula-entries 1 formulas) OpenBranch
+
+
+define first-closed-tableau :: [[Formula]] -> Tableau
+  [] -> Tableau (list) IncompleteBranch
+  [branch|_] -> closed-branch-tableau branch
+
+
+define proof-from-closed-branches :: [[Formula]] -> ProofResult
+  [] -> Inconclusive (Tableau (list) IncompleteBranch) "proof search reported no closed branch"
+  [branch] -> Valid (closed-branch-tableau branch)
+  branches ->
+    Inconclusive
+      (first-closed-tableau branches)
+      "all explored propositional branches close, but the current linear Tableau cannot certify a branching proof"
+
+
 define proof-from-search :: SearchOutcome -> ProofResult
-  [SearchClosed] -> (Valid (Tableau (list) (ClosedBranch 0 0)))
-  [SearchOpen] -> (Countermodel (Tableau (list) OpenBranch))
-  [SearchLimited] -> (Inconclusive (Tableau (list) OpenBranch) "search frontier requires quantifier/modal saturation or more steps")
+  [SearchClosed branches] -> proof-from-closed-branches branches
+  [SearchOpen branch] -> Countermodel (open-branch-tableau branch)
+  [SearchLimited] -> Inconclusive (Tableau (list) IncompleteBranch) "bounded propositional search exhausted its step budget"
+
+
+define search-options-step-limit :: SearchOptions -> Int
+  options -> options.step-limit
+
+define search-options-domain-policy :: SearchOptions -> DomainPolicy
+  options -> options.domain-policy
+
 
 define prove-with :: SearchOptions -> Formula -> ProofResult
-  options formula -> (proof-from-search (search-formulas options.step-limit (prepend-formula (Negation formula) (list)) (list)))
+  options formula | propositional-fragment? formula ->
+    proof-from-search
+      (search-formulas (search-options-step-limit options) (prepend-formula (Negation formula) (list)) (list))
+  options _ ->
+    Inconclusive (Tableau (list) IncompleteBranch) (unsupported-frontier-message (search-options-domain-policy options))
+
 
 define prove :: DomainPolicy -> Int -> Formula -> ProofResult
-  domain-policy step-limit formula -> (proof-from-search (search-formulas step-limit (prepend-formula (Negation formula) (list)) (list)))
+  domain-policy step-limit formula -> prove-with (search-options domain-policy step-limit) formula
+
+
+define proof-tableau :: ProofResult -> Tableau
+  [Valid tableau]          -> tableau
+  [Countermodel tableau]   -> tableau
+  [Inconclusive tableau _] -> tableau
 
 define proof-valid? :: ProofResult -> Bool
   [Valid _] -> True
@@ -415,13 +563,17 @@ define barcan-tableau :: String -> Tableau
 define render-barcan-tableau :: String -> String
   predicate -> render-tableau (barcan-tableau predicate)
 
-tests [9/9]
+tests [13/13]
   :bounded-proof-search:
   assert-eq (proof-valid? (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "P" [])))) True "identity implication closes for an arbitrary atom"
+  assert-eq (tableau-closed? (proof-tableau (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "P" []))))) True "valid linear proofs retain an actual closed branch certificate"
   assert-eq (proof-valid? (prove ConstantDomains 128 (implies (Predicate "P" [(Constant "a")]) (Predicate "P" [(Constant "a")])))) True "identity implication closes for a first-order atom"
   assert-eq (proof-countermodel? (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "Q" [])))) True "an open saturated propositional branch yields a countermodel outcome"
+  assert-eq ((length (proof-tableau (prove ConstantDomains 128 (implies (Predicate "P" []) (Predicate "Q" []))).entries) > 0)) True "countermodel outcomes retain the saturated propositional branch"
   assert-eq (proof-inconclusive? (prove ConstantDomains 0 (Predicate "P" []))) True "a zero search budget is explicit rather than misclassified"
   assert-eq (proof-inconclusive? (prove ConstantDomains 128 (Universal "x" (Predicate "P" [(Variable "x")])))) True "an unsaturated quantifier frontier is explicit"
+  assert-eq (proof-inconclusive? (prove VaryingDomains 128 (Necessity (Predicate "P" [])))) True "modal saturation is never guessed under varying domains"
+  assert-eq (proof-inconclusive? (prove ConstantDomains 128 (Disjunction (Predicate "P" []) (Negation (Predicate "P" []))))) True "branching tautologies are not misrepresented by a linear proof certificate"
   assert-eq (formula-same? (Predicate "F" [(Variable "x")]) (Predicate "Fx" [])) False "structural keys cannot collide with pretty-printed surface notation"
   :bounded-proof-search:
 

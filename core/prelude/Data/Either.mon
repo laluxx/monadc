@@ -1,8 +1,8 @@
 ;;; Either.mon --- Typed alternatives and errors
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "either result error bifunctor typed-alternative"
+:author   Laluxx
+:version  1.2.0
+:keywords either result error bifunctor typed-alternative
 
 ;;; Commentary:
 
@@ -10,14 +10,18 @@
  a success value on the Right. It is the public Result-like building block for
  core code that needs more information than Maybe can carry.
 
- Its instance supplies only the primitive two-sided Bifunctor mapping.
- One-sided mappings are inherited from Data.Functor, keeping their laws and
- implementation at the abstraction that owns them.
+ Bifunctor owns two-sided mapping. For a fixed Left type, Either is also a
+ conventional fail-fast Functor and Applicative: the first Left in evaluation
+ order wins, while Right values compose normally. A fully generic Monad
+ instance is intentionally absent because Core Monad currently requires
+ =fail :: String -> m a=; an arbitrary Left type cannot lawfully manufacture
+ a value from String.
 
 ;;; Code:
 
 import Data.Bool
 import Data.Functor
+import Control.Applicative
 
 module Data.Either
   [Either Left Right
@@ -38,6 +42,21 @@ define bimap-either :: (e -> f) -> (a -> b) -> Either e a -> Either f b
 
 instance Bifunctor Either
   bimap f g value -> bimap-either f g value
+
+
+define apply-either :: Either e (a -> b) -> Either e a -> Either e b
+  [Left error] _          -> Left error
+  [Right _] [Left error]  -> Left error
+  [Right f] [Right value] -> Right (f value)
+
+
+instance Functor (Either e)
+  map f value -> bimap-either (lambda (error) error) f value
+
+
+instance Applicative (Either e)
+  pure value -> Right value
+  applyA fvalue value -> apply-either fvalue value
 
 
 method either :: Either e a -> (e -> c) -> (a -> c) -> c
@@ -104,3 +123,11 @@ tests
   assert-eq (show (second-map (lambda (x) (x + 1)) (Right 4))) "(Right 5)" "Either inherits Bifunctor second-map"
   assert-eq (show (second-map (lambda (x) (x + 1)) (Left 9)))  "(Left 9)"  "Either second-map preserves Left"
   :bifunctor-defaults:
+
+
+  :applicative:
+  assert-eq (show (map (lambda (x) (x + 1)) (Right 4))) "(Right 5)" "Either fixed-left Functor maps Right"
+  assert-eq (show (map (lambda (x) (x + 1)) (Left "bad"))) "(Left bad)" "Either fixed-left Functor preserves Left"
+  assert-eq (show (liftA2 (lambda (x y) (x + y)) (Right 2) (Right 3))) "(Right 5)" "Either inherits Applicative lifting"
+  assert-eq (show (applyA (Left "function") (Left "argument"))) "(Left function)" "Either Applicative is deliberately fail-fast"
+  :applicative:

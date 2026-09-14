@@ -1,0 +1,941 @@
+;;; LambdaCalculus.mon --- The untyped lambda calculus, from syntax to β-normal form
+
+:author   Laluxx
+:version  0.1.0
+:keywords how-to lambda-calculus substitution alpha-equivalence beta-reduction repl
+
+;;; Commentary:
+
+ This file implements the pure untyped λ-calculus as an executable piece of
+ mathematics.  The object language has exactly three forms:
+
+     M, N ::= x              variable
+            | λx. M          abstraction
+            | M N            application
+
+ There are deliberately no primitive integers, booleans, strings, effects,
+ or arithmetic operations.  A token such as 4 is therefore just a variable
+ name.  Data and computation can later be represented internally by Church
+ encodings rather than smuggled into the calculus as host-language features.
+
+ The concrete syntax accepts either ASCII \ or Unicode λ:
+
+     \x.x
+     \x. x 4
+     λx. x 4
+     (\x.x) y
+
+ Application associates to the left:
+
+     M N P  =  (M N) P
+
+ and an abstraction extends as far to the right as possible:
+
+     λx. M N  =  λx. (M N)
+
+ Parentheses are the only grouping syntax.  In particular, an abstraction in
+ function or argument position is parenthesized explicitly.
+
+ The semantic core follows the standard definitions closely:
+
+     FV(x)       = {x}
+     FV(M N)     = FV(M) ∪ FV(N)
+     FV(λx. M)   = FV(M) \ {x}
+
+ Capture-avoiding substitution M[x := N] performs α-conversion exactly when
+ a binder of M would otherwise capture a free variable of N.
+
+ β-reduction is the single computational rule:
+
+     (λx. M) N  →β  M[x := N]
+
+ The reducer uses full normal order: the leftmost outermost redex is selected
+ first, and reduction continues beneath abstractions.  By the standardization
+ theorem, if a term has a β-normal form, normal-order reduction will find it.
+ The REPL nevertheless uses a finite step budget: exhausting that budget is an
+ operational warning, not a proof that the term diverges.
+
+ Try:
+
+     monad LambdaCalculus.mon && ./LambdaCalculus
+
+ REPL commands:
+
+     :step  M          perform one normal-order β-step
+     :trace M          show the reduction sequence
+     :free  M          show FV(M)
+     :alpha M = N      decide α-equivalence
+     :help             show the command summary
+     :quit             leave the REPL
+
+;;; Code:
+
+import Text.Parser
+import Text.Format
+import Text.Unicode
+import Data.Char
+import Sequence
+import IO
+import IO.Readline
+
+module Main
+
+
+;;; Terms
+
+;; The abstract syntax is the mathematical grammar itself.
+
+data Term
+  = Variable    String
+  | Abstraction String Term
+  | Application Term Term
+
+
+;;; Finite sets of names
+
+| Sets are represented by duplicate-free lists.  Their order is observational
+| only: none of the semantic definitions below depends on it.
+
+define name-member? :: String -> [String] -> Bool
+  _ [] -> False
+  name [candidate|rest]
+    | name = candidate -> True
+    | otherwise        -> name-member? name rest
+
+
+define name-insert :: String -> [String] -> [String]
+  name names
+    | name-member? name names -> names
+    | otherwise               -> snoc names name
+
+
+define names-union :: [String] -> [String] -> [String]
+  result [] -> result
+  result [name|rest] -> names-union (name-insert name result) rest
+
+
+define names-remove :: String -> [String] -> [String]
+  _ [] -> []
+  name [candidate|rest]
+    | name = candidate -> names-remove name rest
+    | otherwise        -> prepend candidate (names-remove name rest)
+
+
+;;; Free and occurring variables
+
+| These equations are exactly the inductive definition of FV.
+
+define free-variables :: Term -> [String]
+  [Variable name] -> list name
+  [Application function argument] ->
+    names-union (free-variables function) (free-variables argument)
+  [Abstraction binder body] ->
+    names-remove binder (free-variables body)
+
+
+| all-variables is not a semantic notion; it is a freshness aid.  It includes
+| both free and bound names so generated binders never collide textually with
+| names already present in either side of a substitution.
+
+define all-variables :: Term -> [String]
+  [Variable name] -> list name
+  [Application function argument] ->
+    names-union (all-variables function) (all-variables argument)
+  [Abstraction binder body] ->
+    name-insert binder (all-variables body)
+
+
+define fresh-name-from :: String -> [String] -> String
+  candidate forbidden
+    | name-member? candidate forbidden -> fresh-name-from (candidate ++ "'") forbidden
+    | otherwise                        -> candidate
+
+
+define fresh-name :: String -> [String] -> String
+  basis forbidden -> fresh-name-from (basis ++ "'") forbidden
+
+
+;;; α-equivalence
+
+| α-equivalence identifies terms that differ only in the names chosen for
+| bound variables.  The environment records corresponding binders from the two
+| terms.  Newer bindings are prepended, so lexical shadowing falls out of the
+| traversal rather than becoming a special case.
+
+layout AlphaBinding
+  [left  :: String]
+  [right :: String]
+
+
+define alpha-variable-equivalent? :: String -> String -> [AlphaBinding] -> Bool
+  left right [] -> (= left right)
+  left right [binding|rest]
+    | left = binding.left  -> (= right binding.right)
+    | right = binding.right -> False
+    | otherwise             -> alpha-variable-equivalent? left right rest
+
+
+define both-alpha-equivalent? :: Bool -> Bool -> Bool
+  left right -> left and right
+
+
+define alpha-equivalent-under? :: Term -> Term -> [AlphaBinding] -> Bool
+  [Variable left] [Variable right] environment ->
+    alpha-variable-equivalent? left right environment
+
+  [Application left-function left-argument] [Application right-function right-argument] environment ->
+    (both-alpha-equivalent?
+      (alpha-equivalent-under? left-function right-function environment)
+      (alpha-equivalent-under? left-argument right-argument environment))
+
+  [Abstraction left-binder left-body] [Abstraction right-binder right-body] environment ->
+    alpha-equivalent-under?
+      left-body
+      right-body
+      (prepend (AlphaBinding left-binder right-binder) environment)
+
+  _ _ _ -> False
+
+
+define alpha-equivalent? :: Term -> Term -> Bool
+  left right -> alpha-equivalent-under? left right []
+
+
+;;; Capture-avoiding substitution
+
+| substitute x N M computes M[x := N].
+|
+| For abstractions λy.M:
+|
+|   * y = x       : x is shadowed, so substitution stops.
+|   * x ∉ FV(M)   : there is nothing to substitute.
+|   * y ∉ FV(N)   : recurse directly beneath the binder.
+|   * y ∈ FV(N)   : choose fresh z, α-convert y to z, then continue.
+|
+| The last case is the one that separates substitution from naive textual
+| replacement: it is precisely what prevents variable capture.
+
+define substitution-forbidden-names :: String -> String -> Term -> Term -> [String]
+  variable binder body replacement ->
+    names-union
+      (list variable binder)
+      (names-union (all-variables body) (all-variables replacement))
+
+
+define fresh-substitution-name :: String -> String -> Term -> Term -> String
+  variable binder body replacement ->
+    fresh-name binder (substitution-forbidden-names variable binder body replacement)
+
+
+define rename-bound-variable :: String -> String -> Term -> Term
+  old-name new-name [Variable name]
+    | name = old-name -> Variable new-name
+    | otherwise       -> Variable name
+
+  old-name new-name [Application function argument] ->
+    (Application
+      (rename-bound-variable old-name new-name function)
+      (rename-bound-variable old-name new-name argument))
+
+  old-name new-name [Abstraction binder body]
+    | binder = old-name -> Abstraction binder body
+    | otherwise ->
+        Abstraction binder (rename-bound-variable old-name new-name body)
+
+
+define substitute :: String -> Term -> Term -> Term
+  variable replacement [Variable name]
+    | name = variable -> replacement
+    | otherwise       -> Variable name
+
+  variable replacement [Application function argument] ->
+    (Application
+      (substitute variable replacement function)
+      (substitute variable replacement argument))
+
+  variable replacement [Abstraction binder body]
+    | binder = variable -> Abstraction binder body
+    | not (name-member? variable (free-variables body)) -> Abstraction binder body
+    | not (name-member? binder (free-variables replacement)) ->
+        Abstraction binder (substitute variable replacement body)
+    | otherwise ->
+        (Abstraction
+          (fresh-substitution-name variable binder body replacement)
+          (substitute
+            variable
+            replacement
+            (rename-bound-variable
+              binder
+              (fresh-substitution-name variable binder body replacement)
+              body)))
+
+
+;;; One β-step: full normal order
+
+| A reduction result carries the term in both cases.  Keeping irreducibility
+| explicit makes "one step" a mathematical operation rather than a sentinel.
+
+data Reduction
+  = Irreducible Term
+  | Contracted  Term
+
+
+define beta-under-abstraction :: String -> Term -> Reduction -> Reduction
+  binder _ [Contracted body] -> Contracted (Abstraction binder body)
+  binder body [Irreducible _] -> Irreducible (Abstraction binder body)
+
+
+define beta-in-argument :: Term -> Term -> Reduction -> Reduction
+  function _ [Contracted argument] -> Contracted (Application function argument)
+  function argument [Irreducible _] -> Irreducible (Application function argument)
+
+
+define beta-after-function :: (Term -> Reduction) -> Term -> Term -> Reduction -> Reduction
+  _ _ argument [Contracted function] -> Contracted (Application function argument)
+  reduce function argument [Irreducible _] ->
+    beta-in-argument function argument (reduce argument)
+
+
+define beta-application :: (Term -> Reduction) -> Term -> Term -> Reduction
+  _ [Abstraction binder body] argument ->
+    Contracted (substitute binder argument body)
+  reduce function argument ->
+    beta-after-function reduce function argument (reduce function)
+
+
+define beta-step :: Term -> Reduction
+  [Variable name] -> Irreducible (Variable name)
+  [Abstraction binder body] ->
+    beta-under-abstraction binder body (beta-step body)
+  [Application function argument] ->
+    beta-application beta-step function argument
+
+
+;;; β-normalization
+
+| The step budget keeps Ω and other non-normalizing terms from trapping the
+| interactive session forever.  StepLimit says only that this evaluator chose
+| to stop; it makes no semantic claim about the existence of a normal form.
+
+data Normalization
+  = NormalForm Term Int
+  | StepLimit  Term Int
+
+
+define normalize-after-step :: (Int -> Int -> Term -> Normalization) -> Int -> Int -> Term -> Reduction -> Normalization
+  _ _ steps term [Irreducible _] -> NormalForm term steps
+  normalize fuel steps term [Contracted next]
+    | fuel <= 0 -> StepLimit term steps
+    | otherwise -> normalize (fuel - 1) (steps + 1) next
+
+
+define normalize-loop :: Int -> Int -> Term -> Normalization
+  fuel steps term ->
+    normalize-after-step normalize-loop fuel steps term (beta-step term)
+
+
+define normalize-up-to :: Int -> Term -> Normalization
+  fuel term -> normalize-loop fuel 0 term
+
+
+define normalization-term :: Normalization -> Term
+  [NormalForm term _] -> term
+  [StepLimit term _]  -> term
+
+
+define normalization-steps :: Normalization -> Int
+  [NormalForm _ steps] -> steps
+  [StepLimit _ steps]  -> steps
+
+
+;;; Canonical rendering
+
+| Precedence levels:
+|
+|     abstraction  0
+|     application  1
+|     variable     2
+|
+| Output always uses λ even when input used \; the printer therefore gives
+| every parsed term one canonical concrete representation.
+
+define render-term-in :: Int -> Term -> String
+  _ [Variable name] -> name
+
+  context [Abstraction binder body]
+    | context > 0 -> "(" ++ "λ" ++ binder ++ ". " ++ (render-term-in 0 body) ++ ")"
+    | otherwise   -> "λ" ++ binder ++ ". " ++ (render-term-in 0 body)
+
+  context [Application function argument]
+    | context > 1 -> "(" ++ (render-term-in 1 function) ++ " " ++ (render-term-in 2 argument) ++ ")"
+    | otherwise   -> (render-term-in 1 function) ++ " " ++ (render-term-in 2 argument)
+
+
+define render-term :: Term -> String
+  term -> render-term-in 0 term
+
+
+define render-name-set-tail :: [String] -> String
+  [] -> ""
+  [name] -> name
+  [name|rest] -> (name ++ ", " ++ (render-name-set-tail rest))
+
+
+define render-name-set :: [String] -> String
+  names -> ("{" ++ (render-name-set-tail names) ++ "}")
+
+
+;;; Reading λ-terms
+
+| Concrete grammar, with application factored out to encode precedence:
+|
+|   term        ::= abstraction | application
+|   abstraction ::= ("\\" | "λ") variable "." term
+|   application ::= atom atom*
+|   atom        ::= variable | "(" term ")"
+|
+| Notice that abstraction is not an atom.  Thus f (λx.x) is accepted while
+| f λx.x is rejected; the parenthesis makes the intended scope explicit.
+|
+| '=' is reserved by the REPL's :alpha command and is therefore not a variable
+| character.  Digits are ordinary variable characters: 4 is a name, not data.
+
+define lambda-variable-character? :: Char -> Bool
+  character | blank?         -> False
+            | linebreak?     -> False
+            | = '('          -> False
+            | = ')'          -> False
+            | = Char 0x5c    -> False
+            | = Char 0x03bb  -> False
+            | = Char 0x2e    -> False
+            | = Char 0x3d    -> False
+            | otherwise      -> True
+
+
+define lambda-variable-value :: String -> Term
+  name -> Variable name
+
+
+define lambda-variable-scalars-parser :: Int -> Int -> [Int] -> ParseReply [Int]
+  code offset input ->
+    (parser-lexeme
+      (parser-some-up-to 256 1005 (parser-satisfy lambda-variable-character?))
+      code offset input)
+
+
+define lambda-name-reply :: ParseReply [Int] -> ParseReply String
+  [Parsed scalars offset consumed] ->
+    Parsed (scalars->text scalars) offset consumed
+  [Rejected failure consumed] -> Rejected failure consumed
+
+
+define lambda-name-parser-unlabelled :: Int -> Int -> [Int] -> ParseReply String
+  code offset input ->
+    lambda-name-reply (lambda-variable-scalars-parser code offset input)
+
+
+define lambda-name-parser :: Int -> Int -> [Int] -> ParseReply String
+  code offset input ->
+    (parser-relabel-reply
+      "variable"
+      (lambda-name-parser-unlabelled code offset input))
+
+
+define lambda-variable-parser :: Int -> Int -> [Int] -> ParseReply Term
+  code offset input ->
+    parser-map lambda-variable-value lambda-name-parser code offset input
+
+
+;;;; Parenthesized terms
+
+define lambda-opening-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset input ->
+    parser-relabel-reply "opening parenthesis" ((parser-symbol ⌜0x28⌝) code offset input)
+
+
+define lambda-closing-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset input ->
+    parser-relabel-reply "closing parenthesis" ((parser-symbol ⌜0x29⌝) code offset input)
+
+
+define lambda-parenthesized-parser :: Int -> Int -> [Int] -> ParseReply Term
+  code offset [opening|rest] ->
+    parser-bind lambda-term lambda-parenthesized-close code (offset + 1) rest
+
+
+define lambda-parenthesized-close :: Term -> Int -> Int -> [Int] -> ParseReply Term
+  term code offset [] ->
+    Rejected (ParserFailure offset code (expectation-named code "closing parenthesis")) False
+  term code offset [scalar|rest]
+    | scalar = 0x29 -> parser-lexeme-value term code (offset + 1) rest
+    | otherwise ->
+        Rejected (ParserFailure offset code (expectation-named code "closing parenthesis")) False
+
+
+;;;; Abstractions
+
+define make-abstraction :: String -> Term -> Term
+  binder body -> Abstraction binder body
+
+
+define lambda-after-dot :: String -> Int -> Int -> Int -> [Int] -> ParseReply Term
+  binder _ code offset input ->
+    parser-map (make-abstraction binder) lambda-term code offset input
+
+
+define lambda-dot-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset input ->
+    parser-relabel-reply "'.' after lambda binder" ((parser-symbol ⌜0x2e⌝) code offset input)
+
+
+define lambda-after-binder :: String -> Int -> Int -> [Int] -> ParseReply Term
+  binder code offset input ->
+    (parser-bind
+      lambda-dot-parser
+      (lambda-after-dot binder)
+      code offset input)
+
+
+define lambda-after-marker :: Int -> Int -> Int -> [Int] -> ParseReply Term
+  _ code offset input ->
+    parser-bind lambda-name-parser lambda-after-binder code offset input
+
+
+define lambda-marker-parser :: Int -> Int -> [Int] -> ParseReply Int
+  code offset input ->
+    (parser-relabel-reply
+      "lambda introducer (\\ or λ)"
+      ((parser-or (parser-symbol ⌜0x5c⌝) (parser-symbol ⌜0x03bb⌝)) code offset input))
+
+
+define lambda-abstraction-parser :: Int -> Int -> [Int] -> ParseReply Term
+  code offset input ->
+    parser-bind lambda-marker-parser lambda-after-marker code offset input
+
+
+;;;; Applications
+
+define lambda-atom-start? :: Int -> Bool
+  scalar | = 0x28    -> True
+         | otherwise -> lambda-variable-character? (chr scalar)
+
+
+define lambda-atom-parser :: Int -> Int -> [Int] -> ParseReply Term
+  code offset [] -> lambda-variable-parser code offset []
+  code offset input -> lambda-atom-parser-start code offset input input[0]
+
+
+define lambda-atom-parser-start :: Int -> Int -> [Int] -> Int -> ParseReply Term
+  code offset input scalar
+    | scalar = 0x28 -> lambda-parenthesized-parser code offset input
+    | otherwise     -> lambda-variable-parser code offset input
+
+
+define lambda-application-after-next :: Term -> Term -> Int -> Int -> [Int] -> ParseReply Term
+  function argument code offset input ->
+    lambda-application-tail (Application function argument) code offset input
+
+
+define lambda-application-tail :: Term -> Int -> Int -> [Int] -> ParseReply Term
+  term _ offset [] -> Parsed term offset False
+  term code offset [scalar|rest]
+    | lambda-atom-start? scalar ->
+        (parser-bind
+          lambda-atom-parser
+          (lambda-application-after-next term)
+          code offset (prepend scalar rest))
+    | otherwise -> Parsed term offset False
+
+
+define lambda-after-first-atom :: Term -> Int -> Int -> [Int] -> ParseReply Term
+  term code offset input -> lambda-application-tail term code offset input
+
+
+define lambda-application-parser :: Int -> Int -> [Int] -> ParseReply Term
+  code offset input ->
+    parser-bind lambda-atom-parser lambda-after-first-atom code offset input
+
+
+;;;; Complete terms
+
+define lambda-term :: Int -> Int -> [Int] -> ParseReply Term
+  code offset [] ->
+    Rejected (ParserFailure offset code (expectation-named code "a lambda term")) False
+  code offset input -> lambda-term-start code offset input input[0]
+
+
+define lambda-term-start :: Int -> Int -> [Int] -> Int -> ParseReply Term
+  code offset input scalar
+    | scalar = 0x5c -> lambda-abstraction-parser code offset input
+    | scalar = 0x3bb -> lambda-abstraction-parser code offset input
+    | otherwise -> lambda-application-parser code offset input
+
+
+define lambda-after-leading-space :: Int -> Int -> Int -> [Int] -> ParseReply Term
+  _ code offset input -> lambda-term code offset input
+
+
+define lambda-read :: [Int] -> ParseReply Term
+  scalars ->
+    (parser-complete
+      (parser-bind (parser-lexeme-value 0) lambda-after-leading-space)
+      1010 1000 0 scalars)
+
+
+;;; Source-level interface
+
+data ReadTerm
+  = ReadSuccess Term
+  | ReadFailure String
+
+
+define read-source-reply :: [Int] -> ParseReply Term -> ReadTerm
+  scalars reply
+    | reply-ok? reply ->
+        ReadSuccess (reply-value-or (Variable "<parse-error>") reply)
+    | otherwise ->
+    (ReadFailure
+      (render-parser-error
+        "<lambda>"
+        scalars
+        reply))
+
+
+define read-source :: String -> ReadTerm
+  source ->
+    def scalars (decode-utf8 source)
+    read-source-reply scalars (lambda-read scalars)
+
+
+define source-term-or :: Term -> ReadTerm -> Term
+  _ [ReadSuccess term] -> term
+  fallback [ReadFailure _] -> fallback
+
+
+define term-from-source :: String -> Term
+  source -> source-term-or (Variable "<parse-error>") (read-source source)
+
+
+define render-normalization :: Normalization -> String
+  [NormalForm term _] -> render-term term
+  [StepLimit term steps] ->
+    def count-text (int->text steps)
+    (render-term term) ++ "\nstep limit reached after " ++ count-text ++ " β-steps; reduction may continue"
+
+
+define interpret-read :: ReadTerm -> String
+  [ReadSuccess term] -> render-normalization (normalize-up-to 4096 term)
+  [ReadFailure message] -> message
+
+
+define interpret :: String -> String
+  source -> interpret-read (read-source source)
+
+
+;;; REPL text bridge
+
+define command-body :: [Int] -> [Int] -> [Int]
+  command line -> drop (length command) line
+
+
+define line-source :: [Int] -> String
+  bytes -> (bytes-prefix->text (length bytes) bytes)
+
+
+define print-line :: String -io-> Int
+  text -> write-text stdout (text ++ "\n")
+
+
+;;; REPL commands
+
+| Command spellings stay as bytes because IO.Readline returns terminal bytes.
+| Guest terms are turned back into text and decoded as UTF-8 by read-source.
+
+define command-help       :: [Int] ⌜0x3a 0x68 0x65 0x6c 0x70⌝
+define command-quit       :: [Int] ⌜0x3a 0x71 0x75 0x69 0x74⌝
+define command-q          :: [Int] ⌜0x3a 0x71⌝
+define command-step       :: [Int] ⌜0x3a 0x73 0x74 0x65 0x70 0x20⌝
+define command-trace      :: [Int] ⌜0x3a 0x74 0x72 0x61 0x63 0x65 0x20⌝
+define command-free       :: [Int] ⌜0x3a 0x66 0x72 0x65 0x65 0x20⌝
+define command-alpha      :: [Int] ⌜0x3a 0x61 0x6c 0x70 0x68 0x61 0x20⌝
+define command-step-bare  :: [Int] ⌜0x3a 0x73 0x74 0x65 0x70⌝
+define command-trace-bare :: [Int] ⌜0x3a 0x74 0x72 0x61 0x63 0x65⌝
+define command-free-bare  :: [Int] ⌜0x3a 0x66 0x72 0x65 0x65⌝
+define command-alpha-bare :: [Int] ⌜0x3a 0x61 0x6c 0x70 0x68 0x61⌝
+
+
+define repl-help :: Int -io-> Int
+  _ ->
+    def a (print-line "Untyped λ-calculus")
+    def b (print-line "  M,N ::= x | λx.M | M N")
+    def c (print-line "  application associates left; abstraction extends right")
+    def d (print-line "  both \\x.x and λx.x are accepted")
+    def e (print-line "")
+    def f (print-line "  :step  M       one leftmost-outermost β-step")
+    def g (print-line "  :trace M       trace up to 64 β-steps")
+    def h (print-line "  :free  M       show the free variables FV(M)")
+    def i (print-line "  :alpha M = N   decide α-equivalence")
+    def j (print-line "  :help          show this summary")
+    def k (print-line "  :quit          leave the REPL")
+    1
+
+
+;;;; :step
+
+define repl-step-result :: Term -> Reduction -io-> Int
+  _ [Contracted next] ->
+    def ignored (print-line ("→β  " ++ (render-term next)))
+    1
+  term [Irreducible _] ->
+    def ignored (print-line ("normal form  " ++ (render-term term)))
+    1
+
+
+define repl-step-read :: ReadTerm -io-> Int
+  [ReadFailure message] ->
+    def ignored (print-line message)
+    1
+  [ReadSuccess term] -> repl-step-result term (beta-step term)
+
+
+define repl-step :: [Int] -io-> Int
+  body -> repl-step-read (read-source (line-source body))
+
+
+;;;; :trace
+
+define trace-reduction :: Int -> Int -> Term -io-> Int
+  index remaining term -> trace-reduction-step index remaining term (beta-step term)
+
+
+define trace-reduction-step :: Int -> Int -> Term -> Reduction -io-> Int
+  _ _ term [Irreducible _] -> print-line ("normal form  " ++ (render-term term))
+  index remaining _ [Contracted next]
+    | remaining <= 0 -> print-line "trace limit reached; reduction may continue"
+    | otherwise ->
+        def ignored (print-line ((int->text index) ++ "  →β  " ++ (render-term next)))
+        trace-reduction (index + 1) (remaining - 1) next
+
+
+define repl-trace-read :: ReadTerm -io-> Int
+  [ReadFailure message] ->
+    def ignored (print-line message)
+    1
+  [ReadSuccess term] ->
+    def start (print-line ("0      " ++ (render-term term)))
+    def ignored (trace-reduction 1 64 term)
+    1
+
+
+define repl-trace :: [Int] -io-> Int
+  body -> repl-trace-read (read-source (line-source body))
+
+
+;;;; :free
+
+define render-free-variable-report :: Term -> String
+  term -> ("FV(" ++ (render-term term) ++ ") = " ++
+            (render-name-set (free-variables term)))
+
+
+define repl-free-read :: ReadTerm -io-> Int
+  [ReadFailure message] ->
+    def ignored (print-line message)
+    1
+  [ReadSuccess term] ->
+    def ignored (print-line (render-free-variable-report term))
+    1
+
+
+define repl-free :: [Int] -io-> Int
+  body -> repl-free-read (read-source (line-source body))
+
+
+;;;; :alpha
+
+data EquationSplit
+  = Equation [Int] [Int]
+  | NoEquation [Int]
+
+
+define split-equation-loop :: [Int] -> [Int] -> EquationSplit
+  left [] -> NoEquation left
+  left [byte|rest]
+    | byte = 0x3d -> Equation left rest
+    | otherwise   -> split-equation-loop (snoc left byte) rest
+
+
+define split-equation :: [Int] -> EquationSplit
+  bytes -> split-equation-loop [] bytes
+
+
+define alpha-answer :: Bool -> String
+  equivalent | equivalent -> "α-equivalent"
+             | otherwise  -> "not α-equivalent"
+
+
+define repl-alpha-right :: Term -> ReadTerm -io-> Int
+  _ [ReadFailure message] ->
+    def ignored (print-line message)
+    1
+  left [ReadSuccess right] ->
+    def ignored (print-line (alpha-answer (alpha-equivalent? left right)))
+    1
+
+
+define repl-alpha-left :: [Int] -> ReadTerm -io-> Int
+  _ [ReadFailure message] ->
+    def ignored (print-line message)
+    1
+  right-bytes [ReadSuccess left] ->
+    repl-alpha-right left (read-source (line-source right-bytes))
+
+
+define repl-alpha-split :: EquationSplit -io-> Int
+  [NoEquation _] ->
+    def ignored (print-line "usage: :alpha M = N")
+    1
+  [Equation left right] ->
+    repl-alpha-left right (read-source (line-source left))
+
+
+define repl-alpha :: [Int] -io-> Int
+  body -> repl-alpha-split (split-equation body)
+
+
+;;;; Plain evaluation and dispatch
+
+define repl-evaluate-read :: ReadTerm -io-> Int
+  [ReadFailure message] ->
+    def ignored (print-line message)
+    1
+  [ReadSuccess term] ->
+    def normalization (normalize-up-to 4096 term)
+    def ignored (print-line (render-normalization normalization))
+    1
+
+
+define repl-evaluate :: [Int] -io-> Int
+  line -> repl-evaluate-read (read-source (line-source line))
+
+
+define repl-usage :: String -io-> Int
+  usage ->
+    def ignored (print-line usage)
+    1
+
+
+define repl-dispatch :: [Int] -io-> Int
+  line
+    | line = command-q          -> 0
+    | line = command-quit       -> 0
+    | line = command-help       -> repl-help 0
+    | line = command-step-bare  -> repl-usage "usage: :step M"
+    | line = command-trace-bare -> repl-usage "usage: :trace M"
+    | line = command-free-bare  -> repl-usage "usage: :free M"
+    | line = command-alpha-bare -> repl-usage "usage: :alpha M = N"
+    | starts-with? line command-step   -> repl-step (command-body command-step line)
+    | starts-with? line command-trace  -> repl-trace (command-body command-trace line)
+    | starts-with? line command-free   -> repl-free (command-body command-free line)
+    | starts-with? line command-alpha  -> repl-alpha (command-body command-alpha line)
+    | otherwise                        -> repl-evaluate line
+
+
+define lambda-repl-line :: [Int] -io-> Int
+  [] | (= readline-status 1) -> 0
+     | otherwise             -> 1
+  line -> repl-dispatch line
+
+
+define lambda-repl :: Int -io-> Int
+  generation ->
+    def status (lambda-repl-line (read-line-with-prompt "λ> "))
+    if status = 0 then 0 else lambda-repl (generation + 1)
+
+
+;;; Mathematical checks
+
+| These tests are small executable lemmas.  They protect parsing conventions,
+| α-equivalence, capture avoidance, and the choice of normal-order reduction.
+
+define normalized-source :: String -> String
+  source ->
+    (render-term
+      (normalization-term
+        (normalize-up-to 4096 (term-from-source source))))
+
+
+tests
+  assert-eq
+    (render-term (term-from-source "\\x.x"))
+    "λx. x"
+    "ASCII backslash introduces abstraction"
+
+  assert-eq
+    (render-term (term-from-source "λx.x"))
+    "λx. x"
+    "Unicode lambda introduces abstraction"
+
+  assert-eq
+    (render-term (term-from-source "\\x.x 4"))
+    "λx. x 4"
+    "an abstraction extends right over an application"
+
+  assert-eq
+    (render-term (term-from-source "f x y"))
+    "f x y"
+    "application associates to the left"
+
+  assert-eq
+    (alpha-equivalent?
+      (term-from-source "\\x.x")
+      (term-from-source "\\y.y"))
+    True
+    "renaming a bound variable preserves α-equivalence"
+
+  assert-eq
+    (alpha-equivalent?
+      (term-from-source "\\x.y")
+      (term-from-source "\\y.y"))
+    False
+    "free and bound variables are distinguished by α-equivalence"
+
+  assert-eq
+    (normalized-source "(\\x.\\y.x) y")
+    "λy'. y"
+    "β-reduction α-converts to avoid capturing a free variable"
+
+  assert-eq
+    (normalized-source "(\\x.z) ((\\x.x x) (\\x.x x))")
+    "z"
+    "normal order reaches a normal form without evaluating Ω"
+
+  assert-eq
+    (normalized-source "((\\f.\\x.f (f x)) g) a")
+    "g (g a)"
+    "Church numeral two applies its function twice"
+
+  assert-eq
+    (render-name-set (free-variables (term-from-source "\\x.x y z")))
+    "{y, z}"
+    "FV follows the inductive definition"
+
+  assert-eq
+    (reply-ok? (lambda-read (decode-utf8 "(\\x.x")))
+    False
+    "a missing parenthesis is a structured parser failure"
+
+
+;;; Entry point
+
+define lambda-banner :: String
+  "Untyped λ-calculus — normal-order β-reduction\ntype :help for commands; :quit to leave\n"
+
+
+define start-repl :: () -io-> Int
+  _ ->
+    def ignored (write-text stdout lambda-banner)
+    lambda-repl 0
+
+
+start-repl ()

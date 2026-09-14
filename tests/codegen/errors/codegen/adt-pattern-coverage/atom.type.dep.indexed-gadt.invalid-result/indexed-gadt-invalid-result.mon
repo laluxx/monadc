@@ -1,0 +1,21 @@
+:TEST-ID tests.codegen.type.dep.indexed-gadt.invalid-result
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Every constructor of an indexed data declaration must return that declared family at its declared arity.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR constructor BadIndex must return BadVec
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.invalid-result
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.invalid-result
+:TEST-ATOM-LEAF atom.type.dep.indexed-gadt.invalid-result
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+data NatI :: Type
+  ZI : NatI
+data BadVec :: NatI -> Type
+  BadIndex : Int

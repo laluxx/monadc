@@ -1,8 +1,8 @@
 ;;; Log.mon --- Structured append-only diagnostic values
 
-:author "Laluxx"
-:version "1.0.0"
-:keywords "log diagnostics severity accumulation structured"
+:author   Laluxx
+:version  1.1.0
+:keywords log diagnostics severity accumulation structured
 
 ;;; Commentary:
 
@@ -10,11 +10,14 @@
  entry carries an explicit severity and a typed payload. Producers accumulate
  logs deterministically; applications choose an IO sink at their boundary.
  This keeps validation, testing, replay, filtering, and eventual telemetry
- independent from a particular console or file.
+ independent from a particular console or file. Append is associative and
+ EmptyLog is its identity, so Log participates directly in Semigroup/Monoid
+ rather than maintaining a parallel private accumulation algebra.
 
 ;;; Code:
 
 import Sequence
+import Data.Semigroup
 
 module Data.Log
   [LogLevel Debug Info Warning Error
@@ -74,6 +77,21 @@ define append-log :: Log -> Log -> Log
   left right       -> AppendedLog left right
 
 
+instance Semigroup Log
+  append left right -> append-log left right
+
+
+instance Monoid Log
+  mempty -> EmptyLog
+  mappend left right -> append-log left right
+  mconcat values -> concat-logs values
+
+
+define concat-logs :: [Log] -> Log
+  [] -> EmptyLog
+  [value|values] -> append-log value (concat-logs values)
+
+
 define log-entries :: Log -> [LogEntry]
   [EmptyLog]              -> []
   [LogValue entry]        -> list entry
@@ -104,3 +122,4 @@ tests
   assert-eq (log-size (warning-log "careful")) 1 "Log singleton size"
   assert-eq (show (log-values (append-log (info-log "start") (error-log "stop")))) "(start stop)" "Log append preserves order"
   assert-eq (log-empty? (append-log (empty-log ()) (debug-log "trace"))) False "Log append retains entries"
+  assert-eq (show (log-values (concat-logs (list (info-log "one") (warning-log "two"))))) "(one two)" "Log concatenates a collection through its Monoid operation"

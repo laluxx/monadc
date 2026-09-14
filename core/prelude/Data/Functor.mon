@@ -1,8 +1,8 @@
 ;;; Functor.mon --- Mapping abstractions
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "functor bifunctor contravariant typeclass mapping"
+:author   Laluxx
+:version  1.1.0
+:keywords functor bifunctor contravariant typeclass mapping
 
 ;;; Commentary:
 
@@ -32,8 +32,7 @@ class Functor f where
 
 
 method map-list :: (a -> b) -> [a] -> [b]
-  _ []     -> []
-  f [x|xs] -> __rt_prepend (f x) (map-list f xs)
+  f xs -> __rt_coll_map_closure f xs
 
 
 instance Functor Coll
@@ -62,11 +61,3 @@ class Bifunctor p where
   ;; minimal complete definition: bimap
   ;; law: first-map f = bimap f id
   ;; law: second-map g = bimap id g
-
-
-tests
-  :registration:
-  assert-eq 1 1 "Functor registers Functor"
-  assert-eq 1 1 "Functor registers Contravariant"
-  assert-eq 1 1 "Functor registers Bifunctor"
-  :registration:

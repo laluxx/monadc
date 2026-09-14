@@ -1,0 +1,15 @@
+;;; A nullary class method is selected from the explicitly constrained result.
+
+module Main
+
+class Top a where
+  top :: a
+
+define generic-top :: Top a => Unit -> a
+  _ -> (top)
+
+instance Top Bool
+  top -> True
+
+define [answer :: Bool] generic-top ()
+show answer

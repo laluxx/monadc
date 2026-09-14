@@ -1,0 +1,26 @@
+:TEST-ID tests.codegen.type.dep.indexed-gadt.impossible-elimination
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY semantic-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Coverage excludes constructors whose indexed result cannot unify with the scrutinee.
+:TEST-EXPECT compile
+:TEST-MENU branches/control-flow/pattern-match/atom.type.dep.indexed-gadt.impossible-elimination
+:TEST-MENU-PATH codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-gadt.impossible-elimination
+:TEST-ATOM-LEAF atom.type.dep.indexed-gadt.impossible-elimination
+:TEST-CLI-TARGET codegen branches control-flow pattern-match
+
+(module Main)
+data NatI :: Type
+  ZI : NatI
+  SI : NatI -> NatI
+data VectI :: NatI -> Type -> Type
+  NilI  : VectI ZI t
+  ConsI : t -> VectI n t -> VectI (SI n) t
+(define (firstI [value : (VectI (SI n) t)] -> t)
+  [ConsI x _] -> x)
+(define (tailI [value : (VectI (SI n) t)] -> (VectI n t))
+  [ConsI _ xs] -> xs)

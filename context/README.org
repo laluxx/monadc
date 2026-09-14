@@ -21,6 +21,10 @@
 
 * Development cycle handoff
 
+[DEC id:dec.context.install-local-bin-on-finish-2026-09-11 date:2026-09-11 by:human src:user-request conf:high]
+  When finishing an implementation task, install the resulting Monad compiler
+  to =~/.local/bin= before handing off, and verify the installed executable.
+
 [DEC id:dec.context.cycle-next-handoff-2026-08-11 date:2026-08-11 by:human src:user-request conf:high]
   Every completed implementation cycle must state the single ideal next cycle.
   The handoff names the concrete objective, explains why it is the highest

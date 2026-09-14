@@ -1,0 +1,19 @@
+module Main
+
+ordinary = λ[x]. x
+
+typed : Int = 1
+
+proof = 1 : Int
+
+define preserve :: Proof -> Proof
+  p -> p
+
+returned = preserve proof
+proofs = [proof returned]
+
+show proof
+show returned
+show proofs
+show typed
+show (ordinary 1)

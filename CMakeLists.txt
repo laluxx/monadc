@@ -87,6 +87,7 @@ set(MONADC_COMPILER_SOURCES
   lsp_repl.c
   tooling/diagnostic.c
   tooling/cst.c
+  tooling/format.c
   tooling/rewrite.c
   tooling/lint.c
   macro.c
@@ -321,5 +322,5 @@ install(TARGETS monad monad_runtime
 )
 install(FILES runtime.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/monad)
 install(DIRECTORY core/ DESTINATION ${CMAKE_INSTALL_LIBDIR}/monad/core
-  FILES_MATCHING PATTERN "*.mon" PATTERN "*.modules"
+  FILES_MATCHING PATTERN "*.mon"
 )

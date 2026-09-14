@@ -1,20 +1,32 @@
 ;;; Process.mon --- minimal Linux worker-process boundary
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "system posix process fork wait worker"
+:author   Laluxx
+:version  0.3.0
+:platform "linux-x86_64"
+:keywords system posix process fork wait worker
 
 ;;; Commentary:
 
- System.Posix.Process exposes only the lifecycle operations needed by isolated
- server workers. Policy—descriptor ownership, request handling, and whether to
- continue accepting—belongs to the server above this syscall seam.
+ System.Posix.Process exposes only the Linux x86-64 lifecycle operations
+ needed by isolated server workers. Policy—descriptor ownership, request
+ handling, and whether to continue accepting—belongs to the server above this
+ syscall seam.
+
+ wait-process owns the process-selecting operation. wait-any-child names the
+ historical wait-for-any-child behavior explicitly; wait-child remains only as
+ a compatibility wrapper so an argument is no longer silently presented as
+ semantically meaningful.
+
+ linked-to-parent? follows the parent-death-signal race-safe pattern: first set
+ PR_SET_PDEATHSIG, require that operation to succeed, then re-read the parent
+ process identifier. A failed prctl must never be mistaken for a successful
+ parent link.
 
 ;;; Code:
 
 module System.Posix.Process
   [sys-fork sys-exit sys-current-process sys-parent-process
-   linked-to-parent? wait-child]
+   linked-to-parent? wait-process wait-any-child wait-child]
 
 
 define sys-fork :: Int -foreign-> Int
@@ -67,9 +79,20 @@ define linked-to-parent? :: Int -> Int -io-> Bool
   :doc "Link this process to EXPECTED-PARENT with a Linux parent-death SIGNAL."
   expected-parent signal ->
     def linked (sys-parent-death-signal 1 signal)
-    (= (sys-parent-process 0) expected-parent)
+    if linked != 0 then False
+    else (= (sys-parent-process 0) expected-parent)
+
+
+define wait-process :: Int -io-> Int
+  :doc "Wait for PROCESS to change state and return its process identifier."
+  process -> sys-wait-child process
+
+
+define wait-any-child :: () -io-> Int
+  :doc "Wait for any child process to change state and return its process identifier."
+  _ -> sys-wait-child -1
 
 
 define wait-child :: Int -io-> Int
-  :doc "Wait for one worker to exit and return its process identifier."
-  ignored -> sys-wait-child -1
+  :doc "Compatibility wrapper for the historical any-child wait operation."
+  ignored -> wait-any-child ()

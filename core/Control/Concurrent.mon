@@ -1,8 +1,8 @@
 ;;; Concurrent.mon --- structured concurrency semantics
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "concurrency structured tasks cancellation failures outcomes"
+:author   Laluxx
+:version  0.2.0
+:keywords concurrency structured tasks cancellation failures outcomes
 :reference-qtt "https://bentnib.org/quantitative-type-theory.pdf"
 :reference-idris2-qtt "https://doi.org/10.4230/LIPIcs.ECOOP.2021.9"
 :reference-algebraic-effects "https://arxiv.org/abs/1312.1399"
@@ -167,3 +167,40 @@ define outcome-failed? :: TaskOutcome a -> Bool
 define outcome-value-or :: a -> TaskOutcome a -> a
   _        [TaskCompleted value] -> value
   fallback [TaskFailedWith _]    -> fallback
+
+
+define concurrent-test-root :: TaskIdentity
+  TaskIdentity 1
+
+
+define concurrent-test-child :: TaskIdentity
+  TaskIdentity 2
+
+
+define concurrent-test-causes :: [FailureEvidence]
+  list
+    (CleanupEvidence (TaskIdentity 1) "cleanup" [])
+    (PrimaryEvidence (TaskIdentity 2) Cancelled "cancelled" [])
+
+
+define concurrent-test-evidence :: FailureEvidence
+  PrimaryEvidence (TaskIdentity 1) Fault "root" concurrent-test-causes
+
+
+tests
+  :evidence-lowering:
+  def lowered-failure (failure-from-evidence concurrent-test-evidence)
+  assert-eq (failure-evidence-count concurrent-test-evidence) 3 "Concurrent evidence counts the complete causal tree"
+  assert-eq (failure-count lowered-failure) 3 "Concurrent lowering preserves causal node count"
+  assert-eq (failure-task-number lowered-failure) 1 "Concurrent lowering preserves root task identity"
+  assert-eq (failure-message lowered-failure) "root" "Concurrent lowering preserves diagnostic text"
+  assert-eq (failure-cleanup? lowered-failure) True "Concurrent detects cleanup failure recursively"
+  assert-eq (failure-cancelled? lowered-failure) True "Concurrent detects cancellation recursively"
+  :evidence-lowering:
+
+  :outcomes:
+  assert-eq (outcome-completed? (TaskCompleted 7)) True "Concurrent completed outcome predicate"
+  assert-eq (outcome-failed? (TaskFailedWith (failure-leaf concurrent-test-root Fault "boom"))) True "Concurrent failed outcome predicate"
+  assert-eq (outcome-value-or 0 (TaskCompleted 7)) 7 "Concurrent completed outcome returns its value"
+  assert-eq (outcome-value-or 0 (TaskFailedWith (failure-leaf concurrent-test-root Fault "boom"))) 0 "Concurrent failed outcome returns fallback"
+  :outcomes:

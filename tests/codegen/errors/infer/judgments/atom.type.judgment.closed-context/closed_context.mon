@@ -1,0 +1,21 @@
+:TEST-ID tests.type.judgment.closed-context
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY 90-diagnostics
+:TEST-SUBSET judgments
+:TEST-QUALITY semantic-regression
+:TEST-CODEGEN-ATOM atom.type.judgment.closed-context
+:TEST-CONTEXT monadc.context.type-theory.first-class-judgments
+:TEST-PURPOSE An explicit empty context rejects an undeclared hypothetical variable.
+:TEST-ATOM Empty Gamma rejects a free variable absent from both Gamma and the global signature.
+:TEST-EXPECT fail:compile
+:TEST-COVERAGE infer.c:explicit judgment environment restriction
+:TEST-USES-ATOM atom.type.judgment.closed-context
+:TEST-MENU errors/infer/judgments/atom.type.judgment.closed-context
+:TEST-MENU-PATH codegen/errors/infer/judgments/atom.type.judgment.closed-context
+:TEST-ATOM-LEAF atom.type.judgment.closed-context
+:TEST-CLI-TARGET codegen errors infer judgments
+
+(module Main)
+{} ⊢ hidden + 1 : Int

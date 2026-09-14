@@ -10,6 +10,47 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class EffectArrowSyntaxTests(unittest.TestCase):
+    def test_guarded_mutation_cannot_hide_state_write(self):
+        """Guard lowering must preserve the same effect as a plain clause."""
+        bodies = {
+            "plain": "index -> cells[index] <- 1",
+            "guarded": "index | otherwise -> cells[index] <- 1",
+        }
+        for label, body in bodies.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                work = Path(directory)
+                source = work / f"{label.title()}Mutation.mon"
+                source.write_text(
+                    "module Mutation []\n"
+                    "define cells :: [8 Int]\n"
+                    "  []\n\n"
+                    "define write-cell :: Int -> Int\n"
+                    f"  {body}\n"
+                )
+                env = os.environ.copy()
+                env["MONAD_CORE"] = str(ROOT / "core")
+                env["HOME"] = str(work / "home")
+                Path(env["HOME"]).mkdir()
+                compiled = subprocess.run(
+                    [str(ROOT / "monad"), str(source), "-o", str(work / "out")],
+                    cwd=work, env=env, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                self.assertNotEqual(compiled.returncode, 0)
+                self.assertIn("Missing effect annotation", compiled.stderr)
+                self.assertIn("state.write", compiled.stderr)
+
+                source.write_text(source.read_text().replace(
+                    "define write-cell :: Int -> Int",
+                    "define write-cell :: Int -state.writee-> Int",
+                ))
+                compiled = subprocess.run(
+                    [str(ROOT / "monad"), str(source), "-o", str(work / "out")],
+                    cwd=work, env=env, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                self.assertEqual(compiled.returncode, 0, compiled.stderr)
+
     def test_declared_trait_label_is_single_constraint_shorthand(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
@@ -364,6 +405,51 @@ define bad :: Int -io.read-> Int
             )
             self.assertNotEqual(compiled.returncode, 0)
             self.assertIn("effect contract", compiled.stderr.lower())
+
+    def test_definition_requires_inferred_effect_on_plain_arrow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "MissingEffectAnnotation.mon"
+            source.write_text("""
+module MissingEffectAnnotation [raise-value]
+
+define latent :: Int -io-> Int
+  value -> value
+
+define raise-value :: Int -> Int
+  value -> latent value
+""")
+            env = os.environ.copy()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            compiled = subprocess.run(
+                [str(ROOT / "monad"), str(source), "-o", str(work / "out")],
+                cwd=work, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            self.assertNotEqual(compiled.returncode, 0)
+            self.assertIn("missing effect annotation", compiled.stderr.lower())
+            self.assertIn(
+                "Int -e-> Int", compiled.stderr)
+            source.write_text(source.read_text().replace(
+                "raise-value :: Int -> Int",
+                "raise-value :: Int -e-> Int"))
+            corrected = subprocess.run(
+                [str(ROOT / "monad"), str(source), "-o", str(work / "out")],
+                cwd=work, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            self.assertEqual(corrected.returncode, 0, corrected.stderr)
+
+            source.write_text(source.read_text().replace(
+                "raise-value :: Int -e-> Int",
+                "raise-value :: Int -> Int"))
+            permissive = subprocess.run(
+                [str(ROOT / "monad"), str(source),
+                 "--allow-implicit-effects", "-o", str(work / "permissive")],
+                cwd=work, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            self.assertEqual(permissive.returncode, 0, permissive.stderr)
 
     def test_wisp_effect_qualification_reaches_portable_contract(self):
         with tempfile.TemporaryDirectory() as directory:

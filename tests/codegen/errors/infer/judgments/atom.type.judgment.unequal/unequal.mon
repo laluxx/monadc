@@ -1,0 +1,21 @@
+:TEST-ID tests.type.judgment.unequal
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY 90-diagnostics
+:TEST-SUBSET judgments
+:TEST-QUALITY semantic-regression
+:TEST-CODEGEN-ATOM atom.type.judgment.unequal
+:TEST-CONTEXT monadc.context.type-theory.first-class-judgments
+:TEST-PURPOSE A definitional-equality judgment rejects unequal normal forms.
+:TEST-ATOM Empty Gamma does not derive one definitionally equal to two at Int.
+:TEST-EXPECT fail:compile
+:TEST-COVERAGE infer.c:explicit definitional equality checking
+:TEST-USES-ATOM atom.type.judgment.unequal
+:TEST-MENU errors/infer/judgments/atom.type.judgment.unequal
+:TEST-MENU-PATH codegen/errors/infer/judgments/atom.type.judgment.unequal
+:TEST-ATOM-LEAF atom.type.judgment.unequal
+:TEST-CLI-TARGET codegen errors infer judgments
+
+(module Main)
+{} ⊢ 1 ≡ 2 : Int

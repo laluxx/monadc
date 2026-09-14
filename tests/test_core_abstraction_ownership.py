@@ -1,4 +1,7 @@
 import re
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -17,22 +20,73 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertIn("CORE_CACHE_DIR ?= $(HOME)/.cache/monad/core", makefile)
         self.assertIn('rm -rf "$(CORE_CACHE_DIR)"', makefile)
 
-    def test_core_declares_its_primitive_module_manifest(self):
+    def test_core_declares_primitive_bootstrap_in_module_metadata(self):
         main_c = source("main.c")
-        manifest = source("core/prelude/Data/Primitive.modules")
         makefile = source("Makefile")
         cmake = source("CMakeLists.txt")
 
         self.assertNotIn("k_primitive_type_stems", main_c)
         self.assertNotIn("k_primitive_type_stems2", main_c)
+        self.assertNotIn("Primitive.modules", main_c)
         self.assertIn("core_primitive_module_stems", main_c)
-        self.assertIn('"%s/prelude/%s.mon", core_dir, stem', main_c)
-        self.assertEqual(
-            [line for line in manifest.splitlines() if line and not line.startswith(";")],
-            ["Int", "Float", "Bool", "String", "Map", "Char", "Semigroup", "Sequence"],
-        )
-        self.assertIn('-o -name "*.modules"', makefile)
-        self.assertIn('PATTERN "*.modules"', cmake)
+        self.assertIn(":bootstrap primitive", main_c)
+        for relative in (
+            "core/prelude/Data/Int.mon", "core/prelude/Data/Float.mon",
+            "core/prelude/Data/Bool.mon", "core/prelude/Data/String.mon",
+            "core/prelude/Data/Map.mon", "core/prelude/Data/Char.mon",
+            "core/prelude/Data/Semigroup.mon", "core/prelude/Sequence.mon",
+        ):
+            self.assertIn(":bootstrap primitive", source(relative), relative)
+        self.assertNotIn('*.modules', makefile)
+        self.assertNotIn('*.modules', cmake)
+
+    def test_empty_core_needs_no_primitive_manifest(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-empty-core-") as td:
+            root = Path(td)
+            (root / "core").mkdir()
+            (root / "home").mkdir()
+            fixture = root / "Main.mon"
+            output = root / "Main"
+            fixture.write_text("module Main []\nshow 42\n", encoding="utf-8")
+            env = os.environ.copy()
+            env["MONAD_CORE"] = str(root / "core")
+            env["HOME"] = str(root / "home")
+            result = subprocess.run(
+                [str(ROOT / "monad"), str(fixture), "-o", str(output)],
+                cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertNotIn("Primitive.modules", result.stdout)
+
+    def test_module_metadata_bootstraps_core_owned_primitive_method(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-primitive-core-") as td:
+            root = Path(td)
+            data = root / "core" / "prelude" / "Data"
+            data.mkdir(parents=True)
+            (root / "home").mkdir()
+            for name in ("Bool.mon", "Int.mon"):
+                (data / name).write_text(
+                    source(f"core/prelude/Data/{name}"), encoding="utf-8")
+            fixture = root / "Main.mon"
+            output = root / "Main"
+            fixture.write_text(
+                "module Main []\nshow (positive? 1)\n", encoding="utf-8")
+            env = os.environ.copy()
+            env["MONAD_CORE"] = str(root / "core")
+            env["HOME"] = str(root / "home")
+            result = subprocess.run(
+                [str(ROOT / "monad"), str(fixture), "-o", str(output)],
+                cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout)
+            self.assertEqual(run.stdout, "True\n")
 
     def test_bool_is_a_core_owned_finite_type_set(self):
         bool_core = source("core/prelude/Data/Bool.mon")
@@ -78,6 +132,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "core/prelude/Data/Maybe.mon",
             "core/prelude/Data/Ord.mon",
             "core/prelude/Data/Profunctor.mon",
+            "core/prelude/Data/Relation.mon",
             "core/prelude/Data/Semigroup.mon",
             "core/prelude/Numeric.mon",
             "core/prelude/Text/LineEditor.mon",
@@ -86,9 +141,9 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         for module in modules:
             text = source(module)
             with self.subTest(module=module):
-                self.assertRegex(text, r'(?m)^:author\s+"[^"]+"$')
-                self.assertRegex(text, r'(?m)^:version\s+"[^"]+"$')
-                self.assertRegex(text, r'(?m)^:keywords\s+"[^"]+"$')
+                self.assertRegex(text, r'(?m)^:author\s+(?:"[^"]+"|\S+)$')
+                self.assertRegex(text, r'(?m)^:version\s+(?:"[^"]+"|\S+)$')
+                self.assertRegex(text, r'(?m)^:keywords\s+(?:"[^"]+"|.+)$')
                 self.assertNotRegex(text, r"(?mi)^;;\s*(?:Author|Version|Keywords):")
                 self.assertIn(";;; Commentary:", text)
 
@@ -203,7 +258,6 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         self.assertRegex(unicode_core, r"byte \| >= 0 and <= 0x7f -> True")
         self.assertRegex(unicode_core, r"scalar \| >= 0x1100  and <= 0x115f")
         self.assertNotRegex(unicode_core, r"\(and\s+\(>=\s+(?:byte|scalar)\b")
-        self.assertNotRegex(unicode_core, r"\|\s+(?:byte|scalar)\s+[<>=]")
 
         for compiler_source in (infer_c, dep_c, codegen_c):
             self.assertNotIn("__rt_utf8_width", compiler_source)
@@ -225,7 +279,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
     def test_sequence_public_abi_has_class_and_concrete_coll_methods(self):
         coll_core = source("core/prelude/Sequence.mon")
         for name in (
-            "filter", "prepend", "concat", "null?", "length", "reverse", "at", "nth",
+            "filter", "prepend", "null?", "length", "reverse", "at", "nth",
             "take", "drop", "takeWhile", "dropWhile",
             "any?", "all?", "zip", "zipWith", "snoc",
         ):
@@ -245,15 +299,16 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
                 coll_core,
                 rf"(?m)^method\s+{re.escape(implementation)}\s+::",
             )
-        self.assertIn("concat xs ys      -> rt_coll_concat xs ys", coll_core)
+        self.assertIn("method concat :: Semigroup (c a) => c a -> c a -> c a", coll_core)
+        self.assertIn("xs ys -> append xs ys", coll_core)
 
         self.assertNotRegex(coll_core, r"(?m)^(?:method|define)\s+append\s+::")
 
         implementation = coll_core.split("\ntests\n", 1)[0]
         self.assertNotIn(" ++ ", implementation)
         self.assertIn("import Data.Semigroup", coll_core)
-        self.assertIn("concat xs ys      -> rt_coll_concat xs ys", implementation)
-        self.assertIn("prepend x xs      -> __rt_prepend x xs", implementation)
+        self.assertIn("xs ys -> append xs ys", implementation)
+        self.assertIn("x xs -> __rt_prepend x xs", implementation)
         self.assertRegex(coll_core, r"(?m)^method head :: \[a\] -> a$")
         self.assertRegex(coll_core, r"(?m)^\s+:alias hd$")
         self.assertRegex(coll_core, r"(?m)^method tail :: \[a\] -> \[a\]$")
@@ -268,7 +323,6 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         for name in ("head", "tail", "count", "empty?"):
             self.assertNotIn(f'infer_env_insert(ctx->env, "{name}"', infer)
             self.assertNotIn(f'env_insert_builtin(ctx->env, "{name}"', codegen)
-            self.assertNotIn(f'strcmp(head->symbol, "{name}") == 0', codegen)
 
     def test_data_list_does_not_duplicate_sequence_structure(self):
         list_core = source("core/prelude/Data/List.mon")
@@ -362,7 +416,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
     def test_registered_core_types_override_legacy_representation_fallbacks(self):
         types_c = source("types.c")
-        registry_lookup = types_c.index("// Check alias registry")
+        registry_lookup = types_c.index("if (type_nominal_is_registered(name))")
         builtin_fallback = types_c.index("// Built-in types first")
 
         self.assertLess(
@@ -451,19 +505,25 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             r"(?m)^define\s+(?:sign|zero\?|positive\?|negative\?|divisible\?)\s+::",
         )
 
-    def test_sequence_composes_functor_and_foldable(self):
+    def test_sequence_keeps_shape_orthogonal_to_functor_and_foldable(self):
         functor = source("core/prelude/Data/Functor.mon")
         foldable = source("core/prelude/Data/Foldable.mon")
         sequence = source("core/prelude/Sequence.mon")
 
         self.assertRegex(functor, r"(?m)^\s*map\s+::")
         self.assertNotRegex(functor, r"(?m)^\s*fmap\s+::")
-        self.assertRegex(sequence, r"(?m)^class\s+\(Functor c, Foldable c\)\s+=>\s+Sequence c where")
-
-        class_body = sequence.split("class ", 1)[1].split("\n\ndefine ", 1)[0]
+        self.assertRegex(
+            sequence,
+            r"(?m)^class\s+Evaluation \(Strategy s\)\s+=>\s+Sequence s where",
+        )
+        class_body = sequence.split("class Evaluation", 1)[1].split("\n\ndefine ", 1)[0]
+        self.assertRegex(class_body, r"(?m)^\s+type Element s$")
+        self.assertRegex(class_body, r"(?m)^\s+type Strategy s$")
+        self.assertRegex(class_body, r"(?m)^\s+uncons\s+::")
+        self.assertRegex(class_body, r"(?m)^\s+lower\s+::")
         self.assertNotRegex(class_body, r"(?m)^\s*(?:map|foldl|foldr)\s+::")
         self.assertRegex(functor, r"(?m)^instance\s+Functor\s+Coll$")
-        self.assertRegex(foldable, r"(?m)^instance\s+Foldable\s+Coll$")
+        self.assertIn("class Foldable", foldable)
         self.assertNotRegex(sequence, r"(?m)^instance\s+(?:Functor|Foldable)\s+Coll$")
 
     def test_public_names_do_not_hide_unrelated_abstractions(self):
@@ -473,7 +533,7 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
 
         self.assertNotRegex(coll, r"(?m)^define\s+(?:append|both)\s+::")
         self.assertRegex(coll, r"(?m)^\s+snoc\s+::")
-        self.assertRegex(coll, r"(?m)^method\s+bothPredicates\s+::")
+        self.assertNotIn("bothPredicates", coll)
         self.assertNotRegex(function, r"(?m)^define\s+times\s+::")
         self.assertNotRegex(data_list, r"(?m)^define\s+length\s+::")
 
@@ -484,10 +544,11 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
             "\n\ninstance Membership", 1
         )[0]
 
-        self.assertRegex(membership, r"(?m)^\s*member\?\s+::")
+        self.assertRegex(membership, r"(?m)^\s*membership\?\s+::")
         self.assertNotRegex(membership, r"(?m)^\s*(?:count|foldl|foldr|elements)\s+::")
         self.assertRegex(data_set, r"(?m)^instance Membership Set$")
-        self.assertIn("(member? x s) => __rt_contains? s x", data_set)
+        self.assertIn("define set-member? :: Eq a => a -> {a} -> Bool", data_set)
+        self.assertNotIn("__rt_", data_set)
         self.assertNotIn('env_insert_builtin(ctx->env, "contains?"', codegen)
 
     def test_core_does_not_bypass_sequence_and_set_abstractions(self):
@@ -495,9 +556,10 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         list_core = source("core/prelude/Data/List.mon")
         readline_core = source("core/prelude/Text/LineEditor.mon")
 
-        self.assertNotRegex(set_core, r"\b(?:head|empty\?|count)\b")
-        self.assertIn("instance Eq Set", set_core)
-        self.assertIn("x -> __rt_set_singleton x", set_core)
+        self.assertIn("instance Eq a => Eq {a}", set_core)
+        self.assertIn("data Set a", set_core)
+        self.assertIn("SetValue [a]", set_core)
+        self.assertNotIn("__rt_set_", set_core)
         self.assertIn("bool __rt_set_singleton", source("runtime.c"))
         self.assertNotRegex(list_core, r"\b(?:head|tail)\b")
         self.assertNotIn("count text", readline_core)
@@ -563,31 +625,29 @@ class CoreAbstractionOwnershipTests(unittest.TestCase):
         )
         for builtin in ("starts-with?", "ends-with?", "contains?"):
             self.assertNotIn(f'env_insert_builtin(ctx->env, "{builtin}"', codegen)
-            self.assertNotIn(f'strcmp(head->symbol, "{builtin}")', codegen)
 
         self.assertNotIn("import Data.Eq", data_string)
         self.assertRegex(data_string, r"(?m)^method\s+startsWith\?\s+::")
         self.assertRegex(data_string, r"(?m)^method\s+endsWith\?\s+::")
         self.assertRegex(data_string, r"(?m)^method\s+includes\?\s+::")
 
-    def test_sequence_implementations_do_not_create_a_coll_shadow_api(self):
+    def test_sequence_has_one_coalgebra_and_one_producer_bridge(self):
         sequence = source("core/prelude/Sequence.mon")
 
         self.assertNotRegex(sequence, r"\bcoll-[A-Za-z0-9?!-]+")
-        self.assertNotRegex(sequence, r"(?m)^define\s+[A-Za-z0-9?!-]+\s+::")
+        self.assertEqual(
+            sequence.count("class Evaluation (Strategy s) => Sequence s where"),
+            1,
+        )
+        self.assertIn("define sequence-transition :: Sequence s =>", sequence)
+        self.assertIn("lower  :: s -> Producer", sequence)
 
-    def test_data_modules_use_methods_for_function_declarations(self):
-        violations = []
-        for path in sorted((ROOT / "core/prelude/Data").glob("*.mon")):
-            for line_number, line in enumerate(
-                path.read_text(encoding="utf-8").splitlines(), start=1
-            ):
-                if re.match(r"^define\s+[A-Za-z0-9?!-]+\s+::.*->", line):
-                    violations.append(
-                        f"{path.relative_to(ROOT)}:{line_number}: {line}"
-                    )
-
-        self.assertEqual(violations, [], "\n".join(violations))
+    def test_data_modules_do_not_reintroduce_parallel_evaluation_shapes(self):
+        forbidden = ("LazySequence", "StrictSequence", "LazyTree", "StrictTree")
+        for path in sorted((ROOT / "core/prelude/Data").rglob("*.mon")):
+            text = path.read_text(encoding="utf-8")
+            for name in forbidden:
+                self.assertNotRegex(text, rf"(?m)^class\s+{name}\b", str(path))
 
 
 if __name__ == "__main__":

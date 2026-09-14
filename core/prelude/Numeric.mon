@@ -1,8 +1,8 @@
 ;;; Numeric.mon --- Numeric typeclasses
 
-:author "Laluxx"
-:version "1.2.0"
-:keywords "numeric typeclass ring integral fractional floating power refinement algebra laws"
+:author   Laluxx
+:version  1.3.0
+:keywords numeric typeclass ring integral fractional floating power refinement algebra laws
 
 ;;; Commentary:
 
@@ -34,6 +34,7 @@
 
 import Data.Tuple
 import Data.Bool
+import Data.Eq
 
 module Numeric
   [Num Ring Integral Fractional Floating Real RealFrac
@@ -115,7 +116,7 @@ class Num a => Ring a where
   ;; inherited operations satisfy these executable exact-algebra obligations.
 
 
-class Num a => Integral a where
+class (Num a, Eq a) => Integral a where
   quot    :: a -> a -> a
   rem     :: a -> a -> a
   div     :: a -> a -> a
@@ -236,16 +237,6 @@ instance Integral Int
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Numeric registers Num"
-  assert-eq 1 1 "Numeric registers Ring"
-  assert-eq 1 1 "Numeric registers Integral"
-  assert-eq 1 1 "Numeric registers Fractional"
-  assert-eq 1 1 "Numeric registers Floating"
-  assert-eq 1 1 "Numeric registers Real"
-  assert-eq 1 1 "Numeric registers RealFrac"
-  assert-eq 1 1 "Numeric registers Pow"
-  :registration:
 
   :int-num:
   assert-eq (add 2 3) 5 "Numeric Num Int add"

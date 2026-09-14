@@ -1,0 +1,326 @@
+;;; Opcodes.mon --- fetch, decode, and execute classic CHIP-8 instructions
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "how-to chip8 cpu opcodes interpreter"
+
+;;; Commentary:
+
+ CHIP-8 instructions are two-byte words.  The decoder names the useful fields
+ once and the executor follows the reference table family by family.
+
+ `cpu-cycle` advances PC before execution.  Jumps replace it, skips add two
+ more bytes, calls therefore push the already-correct return address, and Fx0A
+ stalls simply by rewinding PC to its own instruction.
+
+ The implementation intentionally keeps hexadecimal instruction families
+ visible.  A CHIP-8 interpreter is clearer when the code still resembles the
+ machine specification.
+
+;;; Code:
+
+import Machine
+import Input
+import Data.Bool
+
+module Opcodes
+  [opcode-family opcode-x opcode-y opcode-n opcode-byte opcode-address
+   fetch-opcode execute-opcode cpu-cycle run-cycles]
+
+
+;;; Decoding
+
+define opcode-family :: Int -> Int
+  opcode -> (opcode / 4096) % 16
+
+
+define opcode-x :: Int -> Int
+  opcode -> (opcode / 256) % 16
+
+
+define opcode-y :: Int -> Int
+  opcode -> (opcode / 16) % 16
+
+
+define opcode-n :: Int -> Int
+  opcode -> opcode % 16
+
+
+define opcode-byte :: Int -> Int
+  opcode -> opcode % 256
+
+
+define opcode-address :: Int -> Int
+  opcode -> opcode % 4096
+
+
+define fetch-opcode -> Int
+  ((memory-byte cpu.pc) * 256) + (memory-byte (cpu.pc + 1))
+
+
+;;; Control flow
+
+define skip-next :: Int -e-> Int where e has state.write
+  _ ->
+    set! cpu.pc (cpu.pc + 2)
+    0
+
+
+define jump :: Int -e-> Int where e has state.write
+  address ->
+    set! cpu.pc address
+    0
+
+
+define call :: Int -e-> Int where e has state.write
+  address ->
+    push-stack cpu.pc
+    if cpu.running then jump address else cpu.fault
+
+
+define return-from-call :: Int -e-> Int where e has state.write
+  _ ->
+    def address (pop-stack 0)
+    if cpu.running then jump address else cpu.fault
+
+
+;;; 8xy* arithmetic and logic
+
+define execute-register-family :: Int -e-> Int where e has state.write
+  opcode ->
+    def x (opcode-x opcode)
+    def y (opcode-y opcode)
+    execute-register-op opcode (opcode-n opcode) x y
+
+
+define execute-register-op :: Int -> Int -> Int -> Int -e-> Int where e has state.write
+  _      0x0 x y -> write-register x (register y)
+  _      0x1 x y -> write-register x (bit-or (register x) (register y))
+  _      0x2 x y -> write-register x (& (register x) (register y))
+  _      0x3 x y -> write-register x (bit-xor (register x) (register y))
+  _      0x4 x y -> add-registers x y
+  _      0x5 x y -> subtract-registers x y
+  _      0x6 x _ -> shift-right x
+  _      0x7 x y -> subtract-reversed x y
+  _      0xe x _ -> shift-left x
+  opcode _   _ _ -> halt-machine opcode
+
+
+define add-registers :: Int -> Int -e-> Int where e has state.write
+  x y ->
+    def total ((register x) + (register y))
+    def carry (if (> total 255) 1 0)
+    write-register x total
+    write-register 0xf carry
+
+
+define subtract-registers :: Int -> Int -e-> Int where e has state.write
+  x y ->
+    def left (register x)
+    def right (register y)
+    def no-borrow (if (>= left right) 1 0)
+    write-register x (left - right)
+    write-register 0xf no-borrow
+
+
+define subtract-reversed :: Int -> Int -e-> Int where e has state.write
+  x y ->
+    def left (register y)
+    def right (register x)
+    def no-borrow (if (>= left right) 1 0)
+    write-register x (left - right)
+    write-register 0xf no-borrow
+
+
+define shift-right :: Int -e-> Int where e has state.write
+  x ->
+    def value (register x)
+    def least-significant-bit (value % 2)
+    write-register x (value / 2)
+    write-register 0xf least-significant-bit
+
+
+define shift-left :: Int -e-> Int where e has state.write
+  x ->
+    def value (register x)
+    def most-significant-bit (value / 128)
+    write-register x (value * 2)
+    write-register 0xf most-significant-bit
+
+
+;;; Dxyn drawing
+
+define sprite-mask :: Int -> Int
+  0 -> 0x80
+  1 -> 0x40
+  2 -> 0x20
+  3 -> 0x10
+  4 -> 0x08
+  5 -> 0x04
+  6 -> 0x02
+  _ -> 0x01
+
+
+define draw-sprite-byte :: Int -> Int -> Int -> Int -e-> Int where e has state.write
+  _ _ _ column | >= 8 -> 0
+  x y byte column ->
+    def lit? ((& byte (sprite-mask column)) != 0)
+    def collision (if lit? (toggle-pixel (x + column) y) 0)
+    def rest (draw-sprite-byte x y byte (column + 1))
+    if collision = 1 then 1 else rest
+
+
+define draw-sprite-rows :: Int -> Int -> Int -> Int -e-> Int where e has state.write
+  _ _ row height | row >= height -> 0
+  x y row height ->
+    def byte (memory-byte (cpu.index + row))
+    def collision (draw-sprite-byte x (y + row) byte 0)
+    def rest (draw-sprite-rows x y (row + 1) height)
+    if collision = 1 then 1 else rest
+
+
+define draw-sprite :: Int -> Int -> Int -e-> Int where e has state.write
+  x y height ->
+    def collision (draw-sprite-rows x y 0 height)
+    write-register 0xf collision
+    collision
+
+
+;;; Ex** keypad instructions
+
+define execute-key-family :: Int -e-> Int where e has state.write
+  opcode ->
+    def x (opcode-x opcode)
+    execute-key-op opcode (opcode-byte opcode) x
+
+
+define execute-key-op :: Int -> Int -> Int -e-> Int where e has state.write
+  _      0x9e x -> if key-down? (register x) then skip-next 0 else 0
+  _      0xa1 x -> if key-down? (register x) then 0 else skip-next 0
+  opcode _    _ -> halt-machine opcode
+
+
+;;; Fx** timers, index, font, BCD, and memory
+
+define store-registers :: Int -> Int -e-> Int where e has state.write
+  index x | index > x -> 0
+  index x ->
+    write-memory (cpu.index + index) (register index)
+    store-registers (index + 1) x
+
+
+define load-registers :: Int -> Int -e-> Int where e has state.write
+  index x | index > x -> 0
+  index x ->
+    write-register index (memory-byte (cpu.index + index))
+    load-registers (index + 1) x
+
+
+define store-bcd :: Int -e-> Int where e has state.write
+  value ->
+    write-memory cpu.index (value / 100)
+    write-memory (cpu.index + 1) ((value / 10) % 10)
+    write-memory (cpu.index + 2) (value % 10)
+
+
+define wait-for-key :: Int -e-> Int where e has state.write
+  x ->
+    def key (first-key-down)
+    (if (< key 0) (begin (set! cpu.pc (cpu.pc - 2)) 0) (write-register x key))
+
+
+define execute-system-family :: Int -e-> Int where e has state.write
+  opcode ->
+    def x (opcode-x opcode)
+    execute-system-op opcode (opcode-byte opcode) x
+
+
+define execute-system-op :: Int -> Int -> Int -e-> Int where e has state.write
+  _      0x07 x -> write-register x cpu.delay-timer
+  _      0x0a x -> wait-for-key x
+  _      0x15 x -> set! cpu.delay-timer (register x)
+  _      0x18 x -> set! cpu.sound-timer (register x)
+  _      0x1e x -> set! cpu.index (cpu.index + (register x))
+  _      0x29 x -> set! cpu.index (font-start + (((register x) % 16) * 5))
+  _      0x33 x -> store-bcd (register x)
+  _      0x55 x -> store-registers 0 x
+  _      0x65 x -> load-registers 0 x
+  opcode _    _ -> halt-machine opcode
+
+
+;;; Instruction table
+
+define execute-opcode :: Int -e-> Int where e has state.write
+  opcode | = 0x00e0 -> clear-display 0
+         | = 0x00ee -> return-from-call 0
+         | otherwise -> execute-family (opcode-family opcode) opcode
+
+
+define execute-family :: Int -> Int -e-> Int where e has state.write
+  0x0 opcode -> halt-machine opcode
+  0x1 opcode -> jump (opcode-address opcode)
+  0x2 opcode -> call (opcode-address opcode)
+  0x3 opcode -> if (register (opcode-x opcode)) = (opcode-byte opcode) then skip-next 0 else 0
+  0x4 opcode -> if (register (opcode-x opcode)) != (opcode-byte opcode) then skip-next 0 else 0
+  0x5 opcode -> execute-skip-registers-equal opcode
+  0x6 opcode -> write-register (opcode-x opcode) (opcode-byte opcode)
+  0x7 opcode -> write-register (opcode-x opcode) ((register (opcode-x opcode)) + (opcode-byte opcode))
+  0x8 opcode -> execute-register-family opcode
+  0x9 opcode -> execute-skip-registers-not-equal opcode
+  0xa opcode -> set! cpu.index (opcode-address opcode)
+  0xb opcode -> jump ((opcode-address opcode) + (register 0))
+  0xc opcode -> write-register (opcode-x opcode) (& (random-byte 0) (opcode-byte opcode))
+  0xd opcode -> draw-sprite (register (opcode-x opcode)) (register (opcode-y opcode)) (opcode-n opcode)
+  0xe opcode -> execute-key-family opcode
+  0xf opcode -> execute-system-family opcode
+  _   opcode -> halt-machine opcode
+
+
+define execute-skip-registers-equal :: Int -e-> Int where e has state.write
+  opcode | (opcode-n opcode) != 0 -> halt-machine opcode
+  opcode ->
+    (if (= (register (opcode-x opcode)) (register (opcode-y opcode))) (skip-next 0) 0)
+
+
+define execute-skip-registers-not-equal :: Int -e-> Int where e has state.write
+  opcode | (opcode-n opcode) != 0 -> halt-machine opcode
+  opcode ->
+    (if (!= (register (opcode-x opcode)) (register (opcode-y opcode))) (skip-next 0) 0)
+
+
+;;; Fetch / execute driver
+
+define valid-program-counter? -> Bool
+  and? (cpu.pc >= 0) (cpu.pc < (memory-size - 1))
+
+
+define execute-next-opcode :: Int -io-> Int
+  _ ->
+    def opcode (fetch-opcode)
+    set! cpu.pc (cpu.pc + 2)
+    execute-opcode opcode
+
+
+define cpu-cycle :: Int -io-> Int
+  _ -> (if (not cpu.running) 0 (if valid-program-counter? (execute-next-opcode 0) (halt-machine 0xfffc)))
+
+
+define run-cycles :: Int -io-> Int
+  count | <= 0            -> 0
+  count | not cpu.running -> 0
+  count ->
+    cpu-cycle 0
+    run-cycles (count - 1)
+
+
+;;; Tests
+
+tests
+  :decode:
+  assert-eq (opcode-family 0xd125)  0xd   "high nibble selects opcode family"
+  assert-eq (opcode-x 0xd125)       1     "x register nibble"
+  assert-eq (opcode-y 0xd125)       2     "y register nibble"
+  assert-eq (opcode-n 0xd125)       5     "low nibble"
+  assert-eq (opcode-byte 0x6abc)    0xbc  "low byte"
+  assert-eq (opcode-address 0x1abc) 0xabc "low twelve bits"
+  :decode:

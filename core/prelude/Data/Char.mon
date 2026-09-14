@@ -1,9 +1,9 @@
 ;;; Char.mon --- ASCII character predicates and conversions
+:bootstrap primitive
 
-:Author   Laluxx
-:Version  1.0.0
-:Keywords ascii char character text classification
-          case conversion radix
+:author   Laluxx
+:version  1.1.0
+:keywords ascii char character text classification case conversion radix
 
 ;;; Commentary:
 
@@ -74,39 +74,70 @@ module Data.Char where
 ;;; ASCII control constants
 
 define [nul :: Char] 0x00
-  Documentation.
+  :doc "ASCII NUL (null) control character."
 
-define [soh :: Char] 0x01   Documentation.
-define [stx :: Char] 0x02   Documentation.
-define [etx :: Char] 0x03   Documentation.
-define [eot :: Char] 0x04   Documentation.
-define [enq :: Char] 0x05   Documentation.
-define [ack :: Char] 0x06   Documentation.
-define [bel :: Char] 0x07   Documentation.
-define [bs  :: Char] 0x08   Documentation.
-define [tab :: Char] 0x09   Documentation.
-define [lf  :: Char] 0x0a   Documentation.
-define [vt  :: Char] 0x0b   Documentation.
-define [ff  :: Char] 0x0c   Documentation.
-define [cr  :: Char] 0x0d   Documentation.
-define [so  :: Char] 0x0e   Documentation.
-define [si  :: Char] 0x0f   Documentation.
-define [dle :: Char] 0x10   Documentation.
-define [dc1 :: Char] 0x11   Documentation.
-define [dc2 :: Char] 0x12   Documentation.
-define [dc3 :: Char] 0x13   Documentation.
-define [dc4 :: Char] 0x14   Documentation.
-define [nak :: Char] 0x15   Documentation.
-define [syn :: Char] 0x16   Documentation.
-define [etb :: Char] 0x17   Documentation.
-define [can :: Char] 0x18   Documentation.
-define [em  :: Char] 0x19   Documentation.
-define [sub :: Char] 0x1a   Documentation.
-define [esc :: Char] 0x1b   Documentation.
-define [fs  :: Char] 0x1c   Documentation.
-define [gs  :: Char] 0x1d   Documentation.
-define [rs  :: Char] 0x1e   Documentation.
-define [us  :: Char] 0x1f   Documentation.
+define [soh :: Char] 0x01
+  :doc "ASCII SOH (start of heading) control character."
+define [stx :: Char] 0x02
+  :doc "ASCII STX (start of text) control character."
+define [etx :: Char] 0x03
+  :doc "ASCII ETX (end of text) control character."
+define [eot :: Char] 0x04
+  :doc "ASCII EOT (end of transmission) control character."
+define [enq :: Char] 0x05
+  :doc "ASCII ENQ (enquiry) control character."
+define [ack :: Char] 0x06
+  :doc "ASCII ACK (acknowledge) control character."
+define [bel :: Char] 0x07
+  :doc "ASCII BEL (bell) control character."
+define [bs :: Char] 0x08
+  :doc "ASCII BS (backspace) control character."
+define [tab :: Char] 0x09
+  :doc "ASCII HT (horizontal tab) control character."
+define [lf :: Char] 0x0a
+  :doc "ASCII LF (line feed) control character."
+define [vt :: Char] 0x0b
+  :doc "ASCII VT (vertical tab) control character."
+define [ff :: Char] 0x0c
+  :doc "ASCII FF (form feed) control character."
+define [cr :: Char] 0x0d
+  :doc "ASCII CR (carriage return) control character."
+define [so :: Char] 0x0e
+  :doc "ASCII SO (shift out) control character."
+define [si :: Char] 0x0f
+  :doc "ASCII SI (shift in) control character."
+define [dle :: Char] 0x10
+  :doc "ASCII DLE (data link escape) control character."
+define [dc1 :: Char] 0x11
+  :doc "ASCII DC1 (device control 1) control character."
+define [dc2 :: Char] 0x12
+  :doc "ASCII DC2 (device control 2) control character."
+define [dc3 :: Char] 0x13
+  :doc "ASCII DC3 (device control 3) control character."
+define [dc4 :: Char] 0x14
+  :doc "ASCII DC4 (device control 4) control character."
+define [nak :: Char] 0x15
+  :doc "ASCII NAK (negative acknowledge) control character."
+define [syn :: Char] 0x16
+  :doc "ASCII SYN (synchronous idle) control character."
+define [etb :: Char] 0x17
+  :doc "ASCII ETB (end of transmission block) control character."
+define [can :: Char] 0x18
+  :doc "ASCII CAN (cancel) control character."
+define [em :: Char] 0x19
+  :doc "ASCII EM (end of medium) control character."
+define [sub :: Char] 0x1a
+  :doc "ASCII SUB (substitute) control character."
+define [esc :: Char] 0x1b
+  :doc "ASCII ESC (escape) control character."
+define [fs :: Char] 0x1c
+  :doc "ASCII FS (file separator) control character."
+define [gs :: Char] 0x1d
+  :doc "ASCII GS (group separator) control character."
+define [rs :: Char] 0x1e
+  :doc "ASCII RS (record separator) control character."
+define [us :: Char] 0x1f
+  :doc "ASCII US (unit separator) control character."
 
 define [space :: Char] 0x20
 define [del   :: Char] 0x7f

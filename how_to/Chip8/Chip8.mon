@@ -1,0 +1,123 @@
+;;; Chip8.mon --- a complete little CHIP-8 emulator in Monad
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "how-to chip8 emulator raylib interpreter"
+
+;;; Commentary:
+
+ This chapter is intentionally a program, not a language feature demonstration.
+ Monad already has enough pieces; the fun here is assembling them cleanly.
+
+ The emulator follows one narrow loop:
+
+   host keys -> CHIP-8 keys -> CPU cycles -> timers -> 64x32 framebuffer
+
+ Machine owns hardware state.  Opcodes owns instruction semantics.  Input and
+ Display isolate Raylib.  Rom owns the only file-loading boundary.  This file
+ merely decides what to run and keeps the pieces moving at a friendly pace.
+
+ The executable runs the bundled animated ROM without setup. To run a game,
+ replace `BuiltinDemo` below with `RomFile "game.ch8"`.
+
+ Then, from this directory:
+
+   monad Chip8.mon && ./Chip8
+
+;;; Code:
+
+import Machine
+import Opcodes
+import Input
+import Display
+import Rom
+import IO.Console
+
+module Main where
+
+
+;;; Program selection
+
+| Always give a first run something visible without requiring an external
+| download. RomFile remains the explicit source for real games.
+define selected-rom -> RomSource
+  BuiltinDemo
+
+
+;;; Emulation pace
+
+| 12 instructions per 60 Hz frame gives a 720 Hz interpreter.  CHIP-8 software
+| was never tied to one universal CPU frequency; this is a pleasant modern
+| default while timers remain exactly one tick per rendered frame.
+define cycles-per-frame :: Int
+  12
+
+
+;;; One frame
+
+define run-frame? :: String -io-> Bool
+  label ->
+    refresh-keys 0
+    run-cycles cycles-per-frame
+
+    def sound-before-tick cpu.sound-timer
+    tick-timers 0
+    render-frame label sound-before-tick
+
+    cpu.running
+
+
+define frame? :: String -io-> Bool
+  label ->
+    (if (window-should-close? 0) False (run-frame? label))
+
+
+;;; Window loop
+
+define run-window :: String -io-> Int
+  label ->
+    def running True
+    while running (set! running (frame? label))
+    0
+
+
+;;; Result reporting
+
+define report-fault :: Int -io-> Int
+  fault | = 0 -> 0
+  fault ->
+    write-error-line "CHIP-8 stopped on an unsupported or invalid instruction."
+    fault
+
+
+define run-loaded :: String -> RomResult -io-> Int
+  label [RomLoaded _] ->
+    open-display 0
+    run-window label
+    close-display 0
+    report-fault cpu.fault
+
+  _ [RomTooLarge _] ->
+    write-error-line "CHIP-8 ROM is larger than available program memory."
+    1
+
+  _ [RomReadFailed] ->
+    write-error-line "Could not read the CHIP-8 ROM file."
+    1
+
+
+;;; Entry point
+
+define run-chip8 :: RomSource -io-> Int
+  source ->
+    reset-machine 0
+    def label (rom-label source)
+    def result (load-rom source)
+    run-loaded label result
+
+
+define main :: Int -io-> Int
+  _ -> run-chip8 selected-rom
+
+
+main 0

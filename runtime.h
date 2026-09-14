@@ -33,6 +33,7 @@ typedef enum {
     RT_MAP,
     RT_OPAQUE,
     RT_CLOSURE,
+    RT_PROOF,
 } RuntimeValueType;
 
 
@@ -43,6 +44,7 @@ struct ConsCell;
 struct RuntimeList;
 struct RuntimeSet;
 struct RuntimeMap;
+struct RuntimeProof;
 
 typedef struct RuntimeValue *(*ThunkFn)(void *env);
 
@@ -80,6 +82,7 @@ typedef struct RuntimeValue {
         struct RuntimeMap   *map_val;
         RuntimeThunk        *thunk_val;
         RuntimeClosure      *closure_val;
+        struct RuntimeProof *proof_val;
         void                *opaque_val;
 
         struct {
@@ -153,6 +156,11 @@ typedef struct RuntimeSet {
     size_t         count;
     size_t         tombstones;
     RuntimeValue  *membership_predicate;
+    bool            is_integer_range;
+    bool            range_has_end;
+    int64_t         range_start;
+    int64_t         range_step;
+    int64_t         range_end;
 } RuntimeSet;
 
 
@@ -206,6 +214,7 @@ RuntimeList *rt_list_take(RuntimeList *list, int64_t n);
 RuntimeList *rt_list_drop(RuntimeList *list, int64_t n);
 
 RuntimeList  *rt_list_map(RuntimeList *list, void *env, RT_UnaryFn fn);
+RuntimeValue *__rt_coll_map_closure(RuntimeValue *closure, RuntimeValue *collection);
 RuntimeValue *rt_list_foldl(RuntimeList *list, RuntimeValue *init, void *env, RT_BinaryFn fn);
 RuntimeValue *rt_list_foldr(RuntimeList *list, RuntimeValue *init, void *env, RT_BinaryFn fn);
 RuntimeList  *rt_list_filter(RuntimeList *list, void *env, RT_UnaryFn pred);
@@ -222,6 +231,8 @@ RuntimeSet   *rt_set_of(RuntimeValue **vals, size_t n);
 RuntimeSet   *rt_set_from_list(RuntimeList *list);
 RuntimeSet   *rt_set_from_array(RuntimeValue *array_rv);
 RuntimeSet   *rt_set_from_predicate(RuntimeValue *predicate);
+RuntimeSet   *rt_set_range(int64_t start, int64_t step,
+                           int64_t end, int has_end);
 RuntimeSet   *rt_set_conj(RuntimeSet *s, RuntimeValue *val);
 RuntimeSet   *rt_set_disj(RuntimeSet *s, RuntimeValue *val);
 RuntimeSet   *rt_set_conj_mut(RuntimeSet *s, RuntimeValue *val);
@@ -283,6 +294,7 @@ RuntimeValue *rt_value_array(size_t length);
 RuntimeValue *rt_value_set(RuntimeSet *s);
 RuntimeValue *rt_value_map(RuntimeMap *m);
 RuntimeValue *rt_value_opaque(void *p);
+RuntimeValue *rt_value_proof(const char *conclusion);
 void *rt_unbox_opaque(RuntimeValue *v);
 
 
@@ -331,6 +343,8 @@ RuntimeValue *rt_bignum_div(RuntimeValue *a, RuntimeValue *b);
 /// Printing
 
 void rt_print_value(RuntimeValue *val);
+void rt_print_int_grouped(int64_t value, int newline);
+void rt_print_uint_grouped(uint64_t value, int newline);
 void rt_print_value_newline(RuntimeValue *val);
 void rt_print_list(RuntimeList *list);
 void rt_print_list_unbounded(RuntimeList *list);
@@ -363,6 +377,7 @@ char         *rt_string_drop(const char *s, int64_t n);
 int64_t       rt_string_byte(const char *s, int64_t index);
 char         *rt_char_string(int64_t codepoint);
 char         *rt_string_concat(const char *a, const char *b);
+RuntimeList  *rt_string_to_list(const char *s);
 void         *rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size);
 RuntimeValue *rt_coll_wrap(RuntimeValue *coll, RuntimeValue *item);
 RuntimeValue *rt_coll_empty(RuntimeValue *coll);
@@ -429,6 +444,7 @@ LLVMValueRef get_rt_list_from_step(CodegenContext *ctx);
 LLVMValueRef get_rt_list_take(CodegenContext *ctx);
 LLVMValueRef get_rt_list_drop(CodegenContext *ctx);
 LLVMValueRef get_rt_list_map(CodegenContext *ctx);
+LLVMValueRef get___rt_coll_map_closure(CodegenContext *ctx);
 LLVMValueRef get_rt_list_foldl(CodegenContext *ctx);
 LLVMValueRef get_rt_list_foldr(CodegenContext *ctx);
 LLVMValueRef get_rt_list_filter(CodegenContext *ctx);
@@ -450,6 +466,7 @@ LLVMValueRef get_rt_set_disj_mut(CodegenContext *ctx);
 LLVMValueRef get_rt_set_get(CodegenContext *ctx);
 LLVMValueRef get_rt_set_count(CodegenContext *ctx);
 LLVMValueRef get_rt_set_seq(CodegenContext *ctx);
+LLVMValueRef get_rt_set_range(CodegenContext *ctx);
 LLVMValueRef get_rt_value_set(CodegenContext *ctx);
 LLVMValueRef get_rt_unbox_set(CodegenContext *ctx);
 
@@ -500,6 +517,7 @@ LLVMValueRef get_rt_value_keyword(CodegenContext *ctx);
 LLVMValueRef get_rt_value_list(CodegenContext *ctx);
 LLVMValueRef get_rt_value_nil(CodegenContext *ctx);
 LLVMValueRef get_rt_value_thunk(CodegenContext *ctx);
+LLVMValueRef get_rt_value_proof(CodegenContext *ctx);
 LLVMValueRef get_rt_value_ratio(CodegenContext *ctx);
 LLVMValueRef get_rt_value_array(CodegenContext *ctx);
 LLVMValueRef get_rt_value_opaque(CodegenContext *ctx);
@@ -523,6 +541,8 @@ LLVMValueRef get_rt_ratio_to_float(CodegenContext *ctx);
 //// Print
 
 LLVMValueRef get_rt_print_value(CodegenContext *ctx);
+LLVMValueRef get_rt_print_int_grouped(CodegenContext *ctx);
+LLVMValueRef get_rt_print_uint_grouped(CodegenContext *ctx);
 LLVMValueRef get_rt_print_list(CodegenContext *ctx);
 
 //// String

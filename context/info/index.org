@@ -117,6 +117,7 @@ format. Key compiler source files referenced throughout:
   [[file:../context/runtime.org][Context: runtime library]]
 - [[file:list.org][Lists]] — linked cons cells, quoted list syntax, car/cdr, nil.
 - [[file:map.org][Maps]] — hash maps, assoc/dissoc/find/merge operations.
+- [[file:relation.org][Relations]] — finite binary facts, membership, directional queries, and the functional Map boundary.
 - [[file:set.org][Sets]] — hash sets, conj/disj, contains?, set operations.
 - [[file:arrays.org][Arrays]] — stack arrays, fat pointer arrays, heap-growable variants.
 - [[file:range.org][Ranges]] — eager [0..10], lazy (0..) numeric sequences.

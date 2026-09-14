@@ -1,0 +1,25 @@
+:TEST-ID tests.codegen.type.dep.indexed-gadt.missing-possible
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Coverage rejects a match that handles only an impossible indexed constructor.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR non-exhaustive patterns for VectI; missing: ConsI
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.missing-possible
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.missing-possible
+:TEST-ATOM-LEAF atom.type.dep.indexed-gadt.missing-possible
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+data NatI :: Type
+  ZI : NatI
+  SI : NatI -> NatI
+data VectI :: NatI -> Type -> Type
+  NilI  : VectI ZI t
+  ConsI : t -> VectI n t -> VectI (SI n) t
+(define (brokenI [value : (VectI (SI n) t)] -> Int)
+  NilI -> 0)

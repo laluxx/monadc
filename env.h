@@ -61,6 +61,7 @@ typedef struct EnvEntry {
     AST *source_ast;   // original define AST, NULL if not available
 
     char *source_text; // original define Source code, NULL if not available
+    char *repl_ir;     // latest REPL-generated IR for this binding
     char *header_path; // path to C header for FFI symbols, NULL if not FFI
     int   adt_tag;     // tag index for ADT constructors (-1 if not an ADT ctor)
 
@@ -122,7 +123,11 @@ bool env_is_local(Env *table, const char *name);
 
 void env_init_infer(Env *root);
 struct InferEnv *env_get_infer(Env *env);
+bool env_check_judgment(Env *env, struct AST *ast,
+                        char *error, size_t error_size);
+struct DepDerivation *env_take_judgment_derivation(Env *env);
 void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme);
+void env_hm_register_type(Env *env, const char *name, Type *type);
 bool env_install_hm_scheme(
     Env *env, const char *name, const char *portable_hm_scheme);
 bool env_set_portable_scheme(
@@ -133,6 +138,7 @@ bool env_install_callable_contract(
 
 struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
                                        AST *lambda_ast, const char *filename);
+void env_require_explicit_effect_arrows(bool required);
 
 bool env_hm_check_call(Env *env, const char *name, Type **arg_types, int n,
                        const char *filename, int line, int col);

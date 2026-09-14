@@ -22,6 +22,11 @@ DIAGNOSTIC_FIXTURE = ROOT / "tests/embedding/branches/diagnostics/atom.embedding
 
 
 class EmbeddingApiTests(unittest.TestCase):
+    def test_embedding_inference_shim_covers_dependent_family_query(self):
+        """The embedding compiler must not inherit unresolved CLI checker calls."""
+        support = (ROOT / "embed/infer_support.c").read_text()
+        self.assertIn("dep_is_indexed_family", support)
+
     def test_embedding_gate_covers_every_embedding_proof_layer(self):
         makefile = (ROOT / "Makefile").read_text()
         match = re.search(r"^test-embedding:.*?(?=^\S|\Z)", makefile,

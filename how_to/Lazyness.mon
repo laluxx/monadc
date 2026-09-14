@@ -1,0 +1,78 @@
+;;; Lazyness.mon --- A gentle tour of call-by-need evaluation
+
+:author   Laluxx
+:version  1.0.0
+:keywords lazy call-by-need delay force sharing evaluation
+
+;;; Commentary:
+
+ Laziness is a choice about =when= a pure computation runs. Monad is eager by
+ default: arguments are ordinarily evaluated before a function receives them.
+ The expression
+
+                 delay (expensive-answer 40 2)
+
+ is different. =delay= packages the expression as a value of type =Lazy Int=
+ without running it. Nothing asks for the integer until =force= demands it.
+
+ This is call-by-need, not merely call-by-name. The first successful =force=
+ evaluates the suspended expression and remembers its result. Every later
+ force of the same Lazy value observes that shared result. The computation is
+ delayed once and evaluated at most once.
+
+         expression ──delay──> Lazy value ──force──> result
+                                       ╰──force──> same result
+
+ The sharing guarantee is important even in pure code: it prevents repeated
+ work. Effects are intentionally excluded from =delay= because memoizing an IO
+ action would silently change how many times that effect occurs.
+
+ A Lazy wrapper is shallow. Forcing =Lazy (Lazy Int)= removes one layer only;
+ the inner computation remains suspended until it too is forced. This makes
+ laziness compositional: a data structure chooses exactly which recursive
+ positions are delayed instead of turning the whole language lazy.
+
+ =map= and =liftA2= preserve suspension. They describe work beneath a Lazy
+ wrapper; they do not perform it. =TotalDemand= is the companion proof surface:
+ it records that a particular demand is known to terminate, allowing
+ =demand-total= to expose the value without a latent divergence effect.
+
+;;; Code:
+
+import Control.Lazy
+import Control.Evaluation
+
+module LazynessExample where
+
+
+define expensive-answer :: Int -> Int -> Int
+  left right -> left + right
+
+
+define delayed-answer :: Lazy Int
+  delay (expensive-answer 40 2)
+
+
+define demand-twice :: Lazy Int -> Int
+  value -> (force value) + (force value)
+
+
+define delayed-double :: Lazy Int
+  delay ((force delayed-answer) * 2)
+
+
+define nested-delay :: Lazy (Lazy Int)
+  delay (delay 42)
+
+
+define safely-chosen :: Bool -> Lazy a -> Lazy a -> a
+  True wanted _ -> force wanted
+  False _ wanted -> force wanted
+
+
+tests
+  assert-eq (force delayed-answer)                          42 "force demands a delayed computation"
+  assert-eq (demand-twice delayed-answer)                   84 "repeated force observes one shared result"
+  assert-eq (force delayed-double)                          84 "derived work can remain beneath Lazy"
+  assert-eq (force (force nested-delay))                    42 "force removes one Lazy layer at a time"
+  assert-eq (safely-chosen True (delay 42) (delay (1 / 0))) 42 "an unchosen suspension is not evaluated"

@@ -1,8 +1,8 @@
 ;;; Ord.mon --- Ordering helpers
 
-:author "Laluxx"
-:version "1.2.0"
-:keywords "ord ordering comparison clamp interval relation"
+:author   Laluxx
+:version  1.4.0
+:keywords ord ordering comparison clamp interval relation
 
 ;;; Commentary:
 
@@ -14,13 +14,18 @@
  Primitive and user-defined instances therefore describe only their actual
  order, while all higher ordering algorithms share one implementation.
  Executable coherence laws pin the observable relationship between compare
- and the two primitive ascending relations. Extrema coherence remains stated
- below until specialized default methods preserve their concrete return ABI
- when nested inside a law.
+ and the two primitive ascending relations.
+
+ Ord is a total-order abstraction. Raw IEEE Float predicates are not a total
+ order because NaN is unordered, so the Float instance totalizes that case in
+ the same way as Data.Eq: NaNs form one equivalence class ordered after every
+ non-NaN value. This keeps compare/min/max and Eq coherent without pretending
+ raw IEEE predicates satisfy stronger laws than they do.
 
 ;;; Code:
 
 import Data.Bool
+import Data.Eq
 
 module Data.Ord
   [Ordering LT EQ GT
@@ -34,7 +39,7 @@ module Data.Ord
 type Ordering {LT EQ GT}
 
 
-class Ord a where
+class Eq a => Ord a where
   lt?       :: a -> a -> Bool
   lte?      :: a -> a -> Bool
   gt?       :: a -> a -> Bool
@@ -84,6 +89,21 @@ class Ord a where
   outside? lo hi x ->
     (or (lt? x lo) (gt? x hi))
 
+  law order-reflexive :: a -> Bool
+    x -> lte? x x
+
+  law order-antisymmetric :: a -> a -> Bool
+    x y -> implies? (and? (lte? x y) (lte? y x)) (eq? x y)
+
+  law order-transitive :: a -> a -> a -> Bool
+    x y z -> implies? (and? (lte? x y) (lte? y z)) (lte? x z)
+
+  law order-total :: a -> a -> Bool
+    x y -> or? (lte? x y) (lte? y x)
+
+  law strict-order-coherence :: a -> a -> Bool
+    x y -> iff? (lt? x y) (and? (lte? x y) (not? (eq? x y)))
+
   law compare-consistency :: a -> a -> Bool
     x y ->
       and?
@@ -91,6 +111,10 @@ class Ord a where
         (and?
           (implies? (gt? x y) ((compare x y) = GT))
           (implies? (and? (not? (lt? x y)) (not? (gt? x y))) ((compare x y) = EQ)))
+
+  law equality-consistency :: a -> a -> Bool
+    x y ->
+      iff? ((compare x y) = EQ) (eq? x y)
 
   law minimum-consistency :: a -> a -> Bool
     x y ->
@@ -105,6 +129,7 @@ class Ord a where
         (implies? (not? (gte? x y)) (and? (gte? (max x y) y) (gte? y (max x y))))
 
   ;; minimal complete definition: lt? and lte?
+  ;; Eq coherence is part of Ord itself, not an optional convention.
 
 
 method bool-rank :: Bool -> Int
@@ -130,9 +155,20 @@ instance Ord Char
   (lte? x y)      => (<= (char-rank x) (char-rank y))
 
 
+define float-nan-for-order? :: Float -> Bool
+  value -> not? (value = value)
+
+
 instance Ord Float
-  lt? x y  -> x < y
-  lte? x y -> x <= y
+  lt? x y
+    | float-nan-for-order? x -> False
+    | float-nan-for-order? y -> True
+    | otherwise              -> x < y
+
+  lte? x y
+    | float-nan-for-order? x -> float-nan-for-order? y
+    | float-nan-for-order? y -> True
+    | otherwise              -> x <= y
 
 
 method negate-for-comparing :: Int -> Int
@@ -176,15 +212,15 @@ method compareDown :: Int -> Int -> Ordering
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Ord registers Ord"
-  :registration:
 
   :compare:
   assert-eq (show (compare 1 2))     "LT" "Ord compare LT"
   assert-eq (show (compare 2 1))     "GT" "Ord compare GT"
   assert-eq (show (compare 2 2))     "EQ" "Ord compare EQ"
   assert-eq (show (compareDown 1 2)) "GT" "Ord compareDown"
+  assert-eq (lte? 4 4) True "Ord non-strict order is reflexive"
+  assert-eq (or? (lte? 7 3) (lte? 3 7)) True "Ord order is total"
+  assert-eq (implies? (and? (lte? 3 3) (lte? 3 3)) (eq? 3 3)) True "Ord antisymmetry agrees with Eq"
   :compare:
 
   :min-max:

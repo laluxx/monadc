@@ -1,8 +1,8 @@
 ;;; Vulkan.mon --- owned, checked Vulkan building blocks
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "graphics vulkan gpu ownership io"
+:author   Laluxx
+:version  0.2.0
+:keywords graphics vulkan gpu ownership io
 
 ;;; Commentary:
 
@@ -10,15 +10,53 @@
  scene data; they do not repeat foreign structure initialization, result
  checking, or destruction protocol.
 
+ The immediate facade is deliberately single-owner.  Every fallible creation
+ step records its successful prefix, and every failure converges on the same
+ reverse-order teardown used by close-window.  =graphics-ready= means the
+ render target and synchronization infrastructure exist; a frame additionally
+ requires =graphics-pipeline-ready=.
+
 ;;; Code:
 
 import Graphics
 
 (module Graphics.Vulkan
-  [VulkanShader VulkanShaderFailure VulkanShaderReady VulkanProgram
+  [VulkanShader VulkanShaderFailure VulkanShaderReady VulkanProgram GraphicsWindow
    shader-failed? shader-ready? shader-status-or shader-module-or
-   create-shader-module destroy-shader-module
-   vulkan-program run-vulkan-2d])
+   create-shader-module destroy-shader-module vulkan-program run-vulkan-2d
+   find-present-queue inspect-present-queue
+   init-window load-shader window-should-close?
+   begin-drawing draw-triangle end-drawing close-window
+   start-init-window finish-init-window mark-failed-window
+   init-vulkan-window init-vulkan-instance init-vulkan-surface init-vulkan-device
+   init-first-vulkan-device enumerate-first-vulkan-device create-immediate-device
+   finish-immediate-device init-immediate-swapchain init-immediate-images
+   create-immediate-image-views init-immediate-render-pass init-immediate-framebuffers
+   init-immediate-commands allocate-immediate-commands init-immediate-sync
+   finish-load-shader build-immediate-triangle poll-immediate-window? begin-immediate-drawing
+   begin-immediate-frame record-immediate-frame draw-immediate-triangle
+   end-immediate-drawing present-immediate-frame close-immediate-window close-ready-window
+   close-incomplete-window destroy-incomplete-window
+   create-triangle-pipeline continue-triangle-vertex create-triangle-fragment
+   continue-triangle-fragment fail-triangle-fragment build-ready-triangle-pipeline
+   build-triangle-pipeline finish-triangle-pipeline
+   graphics-window-state graphics-instance graphics-surface graphics-physical-device
+   graphics-device graphics-queue graphics-swapchain graphics-render-pass
+   graphics-command-pool graphics-image-available
+   graphics-in-flight graphics-extent graphics-image-count graphics-image-index
+   graphics-current-command graphics-ready vulkan-physical-devices
+   graphics-queue-index select-immediate-device select-immediate-queue
+   begin-selected-immediate-device enumerate-immediate-devices
+   query-immediate-surface-format choose-immediate-surface-format
+   create-immediate-swapchain prefer-immediate-surface-format
+   select-immediate-surface-format finish-immediate-swapchain
+   immediate-swapchain-image-count
+   vulkan-queue-properties vulkan-swap-images vulkan-swap-views vulkan-framebuffers
+   vulkan-surface-formats graphics-surface-format
+   vulkan-command-buffers vulkan-pipeline-stages vulkan-clear-color
+   vulkan-render-finished
+   vulkan-device-extensions vulkan-api-version-1-3
+   vulkan-pipeline-layout vulkan-pipeline])
 
 include <vulkan/vulkan.h>
 include <GLFW/glfw3.h> :unprefix GLFW_
@@ -36,18 +74,66 @@ layout VulkanProgram
 
 define vulkan-physical-devices :: [8 VkPhysicalDevice]
 define vulkan-queue-properties :: [32 VkQueueFamilyProperties]
-define vulkan-swap-images :: [8 VkImage]
-define vulkan-swap-views :: [8 VkImageView]
-define vulkan-framebuffers :: [8 VkFramebuffer]
-define vulkan-command-buffers :: [8 VkCommandBuffer]
-define vulkan-pipeline-stages :: [2 VkPipelineShaderStageCreateInfo]
-define vulkan-clear-color :: [4 F32]
-[0.018 0.006 0.009 1.0]
+define vulkan-swap-images      :: [8 VkImage]
+define vulkan-swap-views       :: [8 VkImageView]
+define vulkan-framebuffers     :: [8 VkFramebuffer]
+define vulkan-command-buffers  :: [8 VkCommandBuffer]
+define vulkan-render-finished  :: [8 VkSemaphore]
+define vulkan-pipeline-stages  :: [2 VkPipelineShaderStageCreateInfo]
+define vulkan-surface-formats  :: [64 VkSurfaceFormatKHR]
+
+define vulkan-clear-color      :: [4 F32]
+  [0.018 0.006 0.009 1.0]
+
 define vulkan-device-extensions :: [1 String]
-["VK_KHR_swapchain"]
+  ["VK_KHR_swapchain"]
+
+| VK_API_VERSION_1_3 (the function-like header macro is not imported by FFI).
+define vulkan-api-version-1-3 :: U32 4206592
 
 define vulkan-pipeline-layout (VkPipelineLayout)
 define vulkan-pipeline (VkPipeline)
+
+| The small immediate-mode facade deliberately owns one window, device and
+| frame at a time.  That is the same constraint raylib presents to a first
+| program, and keeps Vulkan handles out of application code.
+layout GraphicsWindow
+  [handle :: *GLFWwindow]
+
+define graphics-window-state (GraphicsWindow nil)
+define graphics-instance (VkInstance)
+define graphics-surface (VkSurfaceKHR)
+define graphics-physical-device (VkPhysicalDevice)
+define graphics-device (VkDevice)
+define graphics-queue (VkQueue)
+define graphics-swapchain (VkSwapchainKHR)
+define graphics-render-pass (VkRenderPass)
+define graphics-command-pool (VkCommandPool)
+define graphics-image-available (VkSemaphore)
+define graphics-in-flight (VkFence)
+define graphics-extent (VkExtent2D)
+define graphics-image-count (U32 0)
+define graphics-image-index (U32 0)
+define graphics-current-command (VkCommandBuffer)
+define graphics-queue-index (U32 0)
+define graphics-surface-format (VkSurfaceFormatKHR VK_FORMAT_UNDEFINED VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+
+| Lifecycle evidence for the immediate facade.  Counts describe the exact
+| successfully-created prefix of each fixed-capacity resource array.
+define graphics-glfw-ready False
+define graphics-instance-ready False
+define graphics-surface-ready False
+define graphics-device-ready False
+define graphics-swapchain-ready False
+define graphics-render-pass-ready False
+define graphics-command-pool-ready False
+define graphics-image-available-ready False
+define graphics-in-flight-ready False
+define graphics-pipeline-ready False
+define graphics-image-view-count (U32 0)
+define graphics-framebuffer-count (U32 0)
+define graphics-render-finished-count (U32 0)
+define graphics-ready False
 
 
 data VulkanShader
@@ -106,14 +192,21 @@ define vulkan-program :: String -> Int -> Int -> *U32 -> Int -> *U32 -> Int -> V
 
 ;;; Device selection
 
-define find-present-queue :: VkPhysicalDevice -> VkSurfaceKHR -> U32 -> U32 -> Int
-  device surface count index | index >= count -> -1
-  device surface count index -> Int index
+define find-present-queue :: U32 -> U32 -> U32
+  count index ->
+    if index >= count then (U32 4294967295) else inspect-present-queue count index
 
 
-define choose-physical-device :: VkInstance -> VkSurfaceKHR -> U32 -> U32 -> Int
-  instance surface count index | index >= count -> -1
-  instance surface count index -> Int index
+define queue-has-graphics? :: VkQueueFlags -> Bool
+  flags -> (= (flags % (U32 2)) VK_QUEUE_GRAPHICS_BIT)
+
+
+define inspect-present-queue :: U32 -> U32 -> U32
+  count index ->
+    def supported (U32 0)
+    def surface-status (vkGetPhysicalDeviceSurfaceSupportKHR graphics-physical-device index graphics-surface &supported)
+    def properties (vulkan-queue-properties index)
+    if (surface-status = VK_SUCCESS) and (supported != (U32 0)) and (queue-has-graphics? properties.queueFlags) then index else find-present-queue count (index + (U32 1))
 
 
 ;;; Pipeline
@@ -183,138 +276,671 @@ define finish-triangle-pipeline :: VkDevice -> VkRenderPass -> I32 -> *VkPipelin
   _ _ status _ _ _ _ _ _ | (!= status VK_SUCCESS) -> status
   device render-pass _ vertex-input assembly viewport raster multisampling color-blend ->
     def information (VkGraphicsPipelineCreateInfo VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO nil 0 2 &vulkan-pipeline-stages vertex-input assembly nil viewport raster multisampling nil color-blend nil vulkan-pipeline-layout render-pass 0 nil -1)
-    vkCreateGraphicsPipelines device nil 1 &information nil &vulkan-pipeline
+    def status (vkCreateGraphicsPipelines device nil 1 &information nil &vulkan-pipeline)
+    finish-triangle-pipeline-create device status
 
 
-;;; Frame recording
-
-define record-triangle :: VkCommandBuffer -> VkRenderPass -> VkFramebuffer -> VkExtent2D -> VkPipeline -io-> Int
-  command render-pass framebuffer extent pipeline ->
-    def begin-information (VkCommandBufferBeginInfo VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO nil VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT nil)
-    vkBeginCommandBuffer command &begin-information
-    def offset (VkOffset2D 0 0)
-    def area (VkRect2D offset extent)
-    def pass-information (VkRenderPassBeginInfo VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO nil render-pass framebuffer area 1 &vulkan-clear-color)
-    vkCmdBeginRenderPass command &pass-information VK_SUBPASS_CONTENTS_INLINE
-    vkCmdBindPipeline command VK_PIPELINE_BIND_POINT_GRAPHICS pipeline
-    vkCmdDraw command 3 1 0 0
-    vkCmdEndRenderPass command
-    vkEndCommandBuffer command
+define finish-triangle-pipeline-create :: VkDevice -> I32 -io-> I32
+  _ status | (= status VK_SUCCESS) -> VK_SUCCESS
+  device status ->
+    vkDestroyPipelineLayout device vulkan-pipeline-layout nil
+    status
 
 
 ;;; Application lifecycle
 
-define run-vulkan-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -> U32 -io-> Int
-  program window instance surface physical-device queue-index ->
-    def priority (F32 1.0)
-    def queue-information (VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO nil 0 queue-index 1 &priority)
-    def device-information (VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO nil 0 1 &queue-information 0 nil 1 &vulkan-device-extensions nil)
-    def device (VkDevice)
-    def status (vkCreateDevice physical-device &device-information nil &device)
-    if status != VK_SUCCESS then (Int status) else use-vulkan-device program window instance surface physical-device queue-index device
+| The convenience runner is intentionally implemented in terms of the same
+| checked facade exposed to applications.  There is one ownership protocol,
+| so fixes to initialization and teardown cannot diverge between two paths.
+define run-vulkan-2d :: VulkanProgram -io-> Int
+  :doc "Open PROGRAM, load its shader pair, draw one checked triangle frame, and release every owned resource."
+  program ->
+    def initialized (init-window program.width program.height program.title)
+    if initialized != 0 then initialized else run-vulkan-program-shaders program
 
 
-define use-vulkan-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -> U32 -> VkDevice -io-> Int
-  program window instance surface physical-device queue-index device ->
-    def queue (VkQueue)
-    vkGetDeviceQueue device queue-index 0 &queue
-    vkDeviceWaitIdle device
-    vkDestroyDevice device nil
+define run-vulkan-program-shaders :: VulkanProgram -io-> Int
+  program ->
+    def loaded (load-shader program.vertex-code program.vertex-word-count program.fragment-code program.fragment-word-count)
+    if loaded != 0 then close-run-result loaded else run-vulkan-program-frame
+
+
+define run-vulkan-program-frame -> Int
+  def begun begin-drawing
+  if begun != 0 then close-run-result begun else finish-vulkan-program-frame (draw-triangle)
+
+
+define finish-vulkan-program-frame :: Int -io-> Int
+  status | != 0 -> close-run-result status
+  _ -> close-run-result end-drawing
+
+
+define close-run-result :: Int -io-> Int
+  status ->
+    def close-status close-window
+    if status != 0 then status else close-status
+
+
+;;; Immediate-mode window API
+
+define init-window :: Int -> Int -> String -io-> Int
+  :doc "Create the single GLFW/Vulkan window used by the immediate-mode drawing API; reject invalid extents and nested ownership."
+  width height _ | <= width 0 -> -1
+  width height _ | <= height 0 -> -1
+  width height title ->
+    if (graphics-window-state.handle != nil) or graphics-glfw-ready then -1
+      else
+        def initialized glfwInit
+        finish-init-window (start-init-window (Int initialized) width height title)
+
+
+define start-init-window :: Int -> Int -> Int -> String -io-> Int
+  0 _ _ _ -> -1
+  _ width height title ->
+    set! graphics-glfw-ready True
+    init-vulkan-window width height title
+
+
+define finish-init-window :: Int -io-> Int
+  0 -> 0
+  status -> mark-failed-window status graphics-window-state.handle
+
+
+define mark-failed-window :: Int -> *GLFWwindow -io-> Int
+  status _ ->
+    cleanup-vulkan-resources
+    status
+
+
+define init-vulkan-window :: Int -> Int -> String -io-> Int
+  width height title ->
+    glfwWindowHint CLIENT_API NO_API
+    glfwWindowHint RESIZABLE False
+    set! graphics-window-state.handle (glfwCreateWindow width height title nil nil)
+    if graphics-window-state.handle = nil then -1 else init-vulkan-instance title
+
+
+define init-vulkan-instance :: String -io-> Int
+  title ->
+    def extension-count (U32 0)
+    def extensions (glfwGetRequiredInstanceExtensions &extension-count)
+    def application (VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO nil title 1 "Monad Graphics" 1 vulkan-api-version-1-3)
+    def information (VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO nil 0 &application 0 nil extension-count extensions)
+    def status (vkCreateInstance &information nil &graphics-instance)
+    if status != VK_SUCCESS then (Int status) else finish-immediate-instance
+
+
+define finish-immediate-instance -> Int
+  set! graphics-instance-ready True
+  init-vulkan-surface
+
+
+define init-vulkan-surface -> Int
+  def status (glfwCreateWindowSurface graphics-instance graphics-window-state.handle nil &graphics-surface)
+  if status != VK_SUCCESS then (Int status) else finish-immediate-surface
+
+
+define finish-immediate-surface -> Int
+  set! graphics-surface-ready True
+  init-vulkan-device
+
+
+define init-vulkan-device -> Int
+  def device-count (U32 0)
+  def status (vkEnumeratePhysicalDevices graphics-instance &device-count nil)
+  if status != VK_SUCCESS then (Int status) else if device-count = 0 then -1 else init-first-vulkan-device device-count
+
+
+define init-first-vulkan-device :: U32 -io-> Int
+  count ->
+    if count > (U32 8) then (Int -1) else enumerate-immediate-devices count
+
+
+define enumerate-immediate-devices :: U32 -io-> Int
+  count ->
+    def status (vkEnumeratePhysicalDevices graphics-instance &count &vulkan-physical-devices)
+    if status != VK_SUCCESS then (Int status) else select-immediate-device count (U32 0)
+
+
+define select-immediate-device :: U32 -> U32 -io-> Int
+  count index | index >= count -> -1
+  count index ->
+    set! graphics-physical-device (vulkan-physical-devices index)
+    def queue-count (U32 0)
+    vkGetPhysicalDeviceQueueFamilyProperties graphics-physical-device &queue-count nil
+    if queue-count > (U32 32) then select-immediate-device count (index + (U32 1))
+      else select-immediate-queue count index queue-count
+
+
+define select-immediate-queue :: U32 -> U32 -> U32 -io-> Int
+  device-count device-index queue-count ->
+    vkGetPhysicalDeviceQueueFamilyProperties graphics-physical-device &queue-count &vulkan-queue-properties
+    def queue-index (find-present-queue queue-count (U32 0))
+    if queue-index = (U32 4294967295) then select-immediate-device device-count (device-index + (U32 1))
+      else begin-selected-immediate-device queue-index
+
+
+define begin-selected-immediate-device :: U32 -io-> Int
+  queue-index ->
+    set! graphics-queue-index queue-index
+    create-immediate-device
+
+
+define enumerate-first-vulkan-device :: U32 -io-> Int
+  :doc "Enumerate COUNT devices and select the first device with a graphics/present queue."
+  count -> enumerate-immediate-devices count
+
+
+define create-immediate-device -> Int
+  def priority (F32 1.0)
+  def queue-information (VkDeviceQueueCreateInfo VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO nil 0 graphics-queue-index 1 &priority)
+  def device-information (VkDeviceCreateInfo VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO nil 0 1 &queue-information 0 nil 1 &vulkan-device-extensions nil)
+  def status (vkCreateDevice graphics-physical-device &device-information nil &graphics-device)
+  if status != VK_SUCCESS then (Int status) else finish-created-immediate-device
+
+
+define finish-created-immediate-device -> Int
+  set! graphics-device-ready True
+  finish-immediate-device
+
+
+define finish-immediate-device -> Int
+  vkGetDeviceQueue graphics-device graphics-queue-index 0 &graphics-queue
+  init-immediate-swapchain
+
+
+define clamp-surface-extent :: U32 -> U32 -> U32 -> U32
+  value minimum maximum ->
+    if value < minimum then minimum else if value > maximum then maximum else value
+
+
+define finish-surface-capabilities :: I32 -> VkSurfaceCapabilitiesKHR -io-> Int
+  status _ | (!= status VK_SUCCESS) -> Int status
+  _ capabilities -> configure-surface-extent capabilities
+
+
+define configure-surface-extent :: VkSurfaceCapabilitiesKHR -io-> Int
+  capabilities ->
+    def framebuffer-width (I32 0)
+    def framebuffer-height (I32 0)
+    glfwGetFramebufferSize graphics-window-state.handle &framebuffer-width &framebuffer-height
+    finish-framebuffer-extent capabilities framebuffer-width framebuffer-height
+
+
+define finish-framebuffer-extent :: VkSurfaceCapabilitiesKHR -> I32 -> I32 -io-> Int
+  capabilities framebuffer-width framebuffer-height | (= framebuffer-width (I32 0)) -> wait-for-surface-extent capabilities
+  capabilities framebuffer-width framebuffer-height | (= framebuffer-height (I32 0)) -> wait-for-surface-extent capabilities
+  capabilities framebuffer-width framebuffer-height -> use-surface-extent capabilities framebuffer-width framebuffer-height
+
+
+define wait-for-surface-extent :: VkSurfaceCapabilitiesKHR -io-> Int
+  capabilities ->
+    glfwWaitEvents
+    configure-surface-extent capabilities
+
+
+define use-surface-extent :: VkSurfaceCapabilitiesKHR -> I32 -> I32 -io-> Int
+  capabilities _ _ | (!= capabilities.currentExtent.width (U32 4294967295)) ->
+    set! graphics-extent capabilities.currentExtent
+    query-immediate-surface-format capabilities
+  capabilities framebuffer-width framebuffer-height ->
+    set! graphics-extent (VkExtent2D (clamp-surface-extent (U32 framebuffer-width) capabilities.minImageExtent.width capabilities.maxImageExtent.width) (clamp-surface-extent (U32 framebuffer-height) capabilities.minImageExtent.height capabilities.maxImageExtent.height))
+    query-immediate-surface-format capabilities
+
+
+define init-immediate-swapchain -> Int
+  def capabilities (VkSurfaceCapabilitiesKHR)
+  def capabilities-status (vkGetPhysicalDeviceSurfaceCapabilitiesKHR graphics-physical-device graphics-surface &capabilities)
+  finish-surface-capabilities capabilities-status capabilities
+
+
+define query-immediate-surface-format :: VkSurfaceCapabilitiesKHR -io-> Int
+  capabilities ->
+    def count (U32 0)
+    def format-status (vkGetPhysicalDeviceSurfaceFormatsKHR graphics-physical-device graphics-surface &count nil)
+    if (format-status != VK_SUCCESS) or (count = (U32 0)) or (count > (U32 64)) then -1 else choose-immediate-surface-format capabilities count
+
+
+define choose-immediate-surface-format :: VkSurfaceCapabilitiesKHR -> U32 -io-> Int
+  capabilities count ->
+    def populate-status (vkGetPhysicalDeviceSurfaceFormatsKHR graphics-physical-device graphics-surface &count &vulkan-surface-formats)
+    if populate-status != VK_SUCCESS then (Int populate-status) else use-immediate-surface-formats capabilities count
+
+
+define use-immediate-surface-formats :: VkSurfaceCapabilitiesKHR -> U32 -io-> Int
+  capabilities count ->
+    set! graphics-surface-format (vulkan-surface-formats 0)
+    create-immediate-swapchain capabilities (U32 0) count
+
+
+define create-immediate-swapchain :: VkSurfaceCapabilitiesKHR -> U32 -> U32 -io-> Int
+  capabilities index count ->
+    if index < count then prefer-immediate-surface-format capabilities index count else finish-immediate-swapchain capabilities
+
+
+define prefer-immediate-surface-format :: VkSurfaceCapabilitiesKHR -> U32 -> U32 -io-> Int
+  capabilities index count ->
+    def candidate (vulkan-surface-formats index)
+    if (candidate.format = VK_FORMAT_B8G8R8A8_SRGB) and (candidate.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) then select-immediate-surface-format capabilities candidate else create-immediate-swapchain capabilities (index + (U32 1)) count
+
+
+define select-immediate-surface-format :: VkSurfaceCapabilitiesKHR -> VkSurfaceFormatKHR -io-> Int
+  capabilities format ->
+    set! graphics-surface-format format
+    finish-immediate-swapchain capabilities
+
+
+define finish-immediate-swapchain :: VkSurfaceCapabilitiesKHR -io-> Int
+  capabilities ->
+    def image-count (immediate-swapchain-image-count capabilities)
+    def information (VkSwapchainCreateInfoKHR VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR nil 0 graphics-surface image-count graphics-surface-format.format graphics-surface-format.colorSpace graphics-extent 1 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT VK_SHARING_MODE_EXCLUSIVE 0 nil capabilities.currentTransform VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR VK_PRESENT_MODE_FIFO_KHR True nil)
+    def status (vkCreateSwapchainKHR graphics-device &information nil &graphics-swapchain)
+    if status != VK_SUCCESS then (Int status) else finish-created-immediate-swapchain
+
+
+define finish-created-immediate-swapchain -> Int
+  set! graphics-swapchain-ready True
+  init-immediate-images
+
+
+define immediate-swapchain-image-count :: VkSurfaceCapabilitiesKHR -> U32
+  capabilities ->
+    def requested (capabilities.minImageCount + (U32 1))
+    if (capabilities.maxImageCount != (U32 0)) and (requested > capabilities.maxImageCount) then capabilities.maxImageCount else requested
+
+
+define init-immediate-images -> Int
+  def query-status (vkGetSwapchainImagesKHR graphics-device graphics-swapchain &graphics-image-count nil)
+  if query-status != VK_SUCCESS then (Int query-status)
+    else if (graphics-image-count = (U32 0)) or (graphics-image-count > (U32 8)) then -1
+      else create-immediate-image-views
+
+
+define create-immediate-image-views -> Int
+  def populate-status (vkGetSwapchainImagesKHR graphics-device graphics-swapchain &graphics-image-count &vulkan-swap-images)
+  if populate-status != VK_SUCCESS then (Int populate-status) else create-immediate-image-view-at (U32 0)
+
+
+define create-immediate-image-view-at :: U32 -io-> Int
+  index | index >= graphics-image-count -> init-immediate-render-pass
+  index ->
+    def range (VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1)
+    def information (VkImageViewCreateInfo VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO nil 0 (vulkan-swap-images index) VK_IMAGE_VIEW_TYPE_2D graphics-surface-format.format (VkComponentMapping) range)
+    def status (vkCreateImageView graphics-device &information nil &(vulkan-swap-views index))
+    if status != VK_SUCCESS then (Int status) else finish-created-immediate-image-view index
+
+
+define finish-created-immediate-image-view :: U32 -io-> Int
+  index ->
+    set! graphics-image-view-count (index + (U32 1))
+    create-immediate-image-view-at (index + (U32 1))
+
+
+define init-immediate-render-pass -> Int
+  def attachment (VkAttachmentDescription 0 graphics-surface-format.format VK_SAMPLE_COUNT_1_BIT VK_ATTACHMENT_LOAD_OP_CLEAR VK_ATTACHMENT_STORE_OP_STORE VK_ATTACHMENT_LOAD_OP_DONT_CARE VK_ATTACHMENT_STORE_OP_DONT_CARE VK_IMAGE_LAYOUT_UNDEFINED VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+  def reference (VkAttachmentReference 0 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+  def subpass (VkSubpassDescription 0 VK_PIPELINE_BIND_POINT_GRAPHICS 0 nil 1 &reference nil nil 0 nil)
+  def information (VkRenderPassCreateInfo VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO nil 0 1 &attachment 1 &subpass 0 nil)
+  def status (vkCreateRenderPass graphics-device &information nil &graphics-render-pass)
+  if status != VK_SUCCESS then (Int status) else finish-created-immediate-render-pass
+
+
+define finish-created-immediate-render-pass -> Int
+  set! graphics-render-pass-ready True
+  init-immediate-framebuffers
+
+
+define init-immediate-framebuffers -> Int
+  create-immediate-framebuffer-at (U32 0)
+
+
+define create-immediate-framebuffer-at :: U32 -io-> Int
+  index | index >= graphics-image-count -> init-immediate-commands
+  index ->
+    def view (vulkan-swap-views index)
+    def information (VkFramebufferCreateInfo VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO nil 0 graphics-render-pass 1 &view graphics-extent.width graphics-extent.height 1)
+    def status (vkCreateFramebuffer graphics-device &information nil &(vulkan-framebuffers index))
+    if status != VK_SUCCESS then (Int status) else finish-created-immediate-framebuffer index
+
+
+define finish-created-immediate-framebuffer :: U32 -io-> Int
+  index ->
+    set! graphics-framebuffer-count (index + (U32 1))
+    create-immediate-framebuffer-at (index + (U32 1))
+
+
+define init-immediate-commands -> Int
+  def pool-information (VkCommandPoolCreateInfo VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO nil VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT graphics-queue-index)
+  def pool-status (vkCreateCommandPool graphics-device &pool-information nil &graphics-command-pool)
+  if pool-status != VK_SUCCESS then (Int pool-status) else finish-created-command-pool
+
+
+define finish-created-command-pool -> Int
+  set! graphics-command-pool-ready True
+  allocate-immediate-commands
+
+
+define allocate-immediate-commands -> Int
+  def allocation (VkCommandBufferAllocateInfo VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO nil graphics-command-pool VK_COMMAND_BUFFER_LEVEL_PRIMARY graphics-image-count)
+  def status (vkAllocateCommandBuffers graphics-device &allocation &vulkan-command-buffers)
+  if status != VK_SUCCESS then (Int status) else init-immediate-sync
+
+
+define init-immediate-sync -> Int
+  def semaphore-information (VkSemaphoreCreateInfo VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO nil 0)
+  def status (vkCreateSemaphore graphics-device &semaphore-information nil &graphics-image-available)
+  if status != VK_SUCCESS then (Int status) else finish-created-image-available
+
+
+define finish-created-image-available -> Int
+  set! graphics-image-available-ready True
+  create-render-finished-at (U32 0)
+
+
+define create-render-finished-at :: U32 -io-> Int
+  index | index >= graphics-image-count -> create-immediate-fence
+  index ->
+    def information (VkSemaphoreCreateInfo VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO nil 0)
+    def status (vkCreateSemaphore graphics-device &information nil &(vulkan-render-finished index))
+    if status != VK_SUCCESS then (Int status) else finish-created-render-finished index
+
+
+define finish-created-render-finished :: U32 -io-> Int
+  index ->
+    set! graphics-render-finished-count (index + (U32 1))
+    create-render-finished-at (index + (U32 1))
+
+
+define create-immediate-fence -> Int
+  def information (VkFenceCreateInfo VK_STRUCTURE_TYPE_FENCE_CREATE_INFO nil VK_FENCE_CREATE_SIGNALED_BIT)
+  def status (vkCreateFence graphics-device &information nil &graphics-in-flight)
+  if status != VK_SUCCESS then (Int status) else finish-created-immediate-fence
+
+
+define finish-created-immediate-fence -> Int
+  set! graphics-in-flight-ready True
+  set! graphics-ready True
+  0
+
+
+define load-shader :: *U32 -> Int -> *U32 -> Int -io-> Int
+  :doc "Load one non-empty embedded SPIR-V vertex/fragment shader pair for the current render target."
+  _ vertex-count _ _ | <= vertex-count 0 -> -1
+  _ _ _ fragment-count | <= fragment-count 0 -> -1
+  vertex-code vertex-count fragment-code fragment-count ->
+    if (not graphics-ready) or graphics-pipeline-ready then -1
+      else finish-load-shader (build-immediate-triangle vertex-code vertex-count fragment-code fragment-count)
+
+
+define finish-load-shader :: Int -io-> Int
+  0 ->
+    set! graphics-pipeline-ready True
+    0
+  status -> mark-failed-window status graphics-window-state.handle
+
+
+define build-immediate-triangle :: *U32 -> Int -> *U32 -> Int -io-> Int
+  vertex-code vertex-count fragment-code fragment-count ->
+    def program (vulkan-program "triangle" (Int graphics-extent.width) (Int graphics-extent.height) vertex-code vertex-count fragment-code fragment-count)
+    Int (create-triangle-pipeline graphics-device graphics-render-pass graphics-extent program)
+
+
+define window-should-close? -> Bool
+  :doc "Poll GLFW events and report whether the current window should close."
+  poll-immediate-window?
+
+
+define poll-immediate-window? -> Bool
+  if graphics-window-state.handle = nil then True
+    else
+      glfwWaitEventsTimeout 0.0
+      (!= (glfwWindowShouldClose graphics-window-state.handle) 0)
+
+
+define begin-drawing -> Int
+  :doc "Acquire one swapchain image and begin its clear/render pass; requires a loaded pipeline."
+  begin-immediate-drawing
+
+
+define begin-immediate-drawing -> Int
+  if (not graphics-ready) or (not graphics-pipeline-ready) then -1 else begin-immediate-frame
+
+
+define begin-immediate-frame -> Int
+  def wait-status (vkWaitForFences graphics-device 1 &graphics-in-flight True 18446744073709551615)
+  if wait-status != VK_SUCCESS then (Int wait-status) else acquire-immediate-frame
+
+
+define acquire-immediate-frame -> Int
+  def status (vkAcquireNextImageKHR graphics-device graphics-swapchain 18446744073709551615 graphics-image-available nil &graphics-image-index)
+  if status != VK_SUCCESS then (Int status) else record-immediate-frame
+
+
+define record-immediate-frame -> Int
+  set! graphics-current-command (vulkan-command-buffers graphics-image-index)
+  def reset-status (vkResetCommandBuffer graphics-current-command 0)
+  if reset-status != VK_SUCCESS then (Int reset-status) else begin-immediate-command
+
+
+define begin-immediate-command -> Int
+  def begin-information (VkCommandBufferBeginInfo VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO nil VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT nil)
+  def begin-status (vkBeginCommandBuffer graphics-current-command &begin-information)
+  if begin-status != VK_SUCCESS then (Int begin-status) else begin-immediate-render-pass
+
+
+define begin-immediate-render-pass -> Int
+  def area (VkRect2D (VkOffset2D 0 0) graphics-extent)
+  def pass-information (VkRenderPassBeginInfo VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO nil graphics-render-pass (vulkan-framebuffers graphics-image-index) area 1 &vulkan-clear-color)
+  vkCmdBeginRenderPass graphics-current-command &pass-information VK_SUBPASS_CONTENTS_INLINE
+  0
+
+
+define draw-triangle -> Int
+  :doc "Record one built-in three-vertex triangle draw in the current frame."
+  draw-immediate-triangle
+
+
+define draw-immediate-triangle -> Int
+  if not graphics-pipeline-ready then -1
+    else
+      vkCmdBindPipeline graphics-current-command VK_PIPELINE_BIND_POINT_GRAPHICS vulkan-pipeline
+      vkCmdDraw graphics-current-command 3 1 0 0
+      0
+
+
+define end-drawing -> Int
+  :doc "Submit and present the frame begun by begin-drawing."
+  end-immediate-drawing
+
+
+define end-immediate-drawing -> Int
+  vkCmdEndRenderPass graphics-current-command
+  def end-status (vkEndCommandBuffer graphics-current-command)
+  if end-status != VK_SUCCESS then (Int end-status) else reset-immediate-submit-fence
+
+
+define reset-immediate-submit-fence -> Int
+  def reset-status (vkResetFences graphics-device 1 &graphics-in-flight)
+  if reset-status != VK_SUCCESS then (Int reset-status) else submit-immediate-frame
+
+
+define submit-immediate-frame -> Int
+  def wait-stage (U32 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+  def render-finished (vulkan-render-finished graphics-image-index)
+  def submit (VkSubmitInfo VK_STRUCTURE_TYPE_SUBMIT_INFO nil 1 &graphics-image-available &wait-stage 1 &graphics-current-command 1 &render-finished)
+  def submit-status (vkQueueSubmit graphics-queue 1 &submit graphics-in-flight)
+  if submit-status != VK_SUCCESS then (Int submit-status) else present-immediate-frame
+
+
+define present-immediate-frame -> Int
+  def render-finished (vulkan-render-finished graphics-image-index)
+  def present (VkPresentInfoKHR VK_STRUCTURE_TYPE_PRESENT_INFO_KHR nil 1 &render-finished 1 &graphics-swapchain &graphics-image-index nil)
+  Int (vkQueuePresentKHR graphics-queue &present)
+
+
+define close-window -> Int
+  :doc "Wait for the GPU when available and destroy exactly the resource prefix owned by init-window."
+  close-immediate-window
+
+
+define close-immediate-window -> Int
+  cleanup-vulkan-resources
+
+
+define close-ready-window -> Int
+  cleanup-vulkan-resources
+
+
+define close-incomplete-window -> Int
+  cleanup-vulkan-resources
+
+
+| Cleanup is intentionally status-insensitive: once teardown begins, a failed
+| idle wait must not prevent destruction of resources already owned by Core.
+define cleanup-vulkan-resources -> Int
+  wait-idle-if-device graphics-device-ready
+  destroy-pipeline-if-ready graphics-pipeline-ready
+  destroy-fence-if-ready graphics-in-flight-ready
+  destroy-render-finished-prefix graphics-render-finished-count
+  destroy-image-available-if-ready graphics-image-available-ready
+  destroy-command-pool-if-ready graphics-command-pool-ready
+  destroy-framebuffer-prefix graphics-framebuffer-count
+  destroy-image-view-prefix graphics-image-view-count
+  destroy-render-pass-if-ready graphics-render-pass-ready
+  destroy-swapchain-if-ready graphics-swapchain-ready
+  destroy-device-if-ready graphics-device-ready
+  destroy-surface-if-ready graphics-surface-ready
+  destroy-instance-if-ready graphics-instance-ready
+  destroy-incomplete-window (graphics-window-state.handle != nil)
+  terminate-glfw-if-ready graphics-glfw-ready
+  reset-vulkan-lifecycle-state
+
+
+define wait-idle-if-device :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDeviceWaitIdle graphics-device
     0
 
 
-define run-vulkan-physical-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -io-> Int
-  program window instance surface physical-device ->
-    def queue-count (U32 0)
-    vkGetPhysicalDeviceQueueFamilyProperties physical-device &queue-count nil
-    if queue-count > 32 then -1 else find-vulkan-device-queue program window instance surface physical-device queue-count
+define destroy-pipeline-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroyPipeline graphics-device vulkan-pipeline nil
+    vkDestroyPipelineLayout graphics-device vulkan-pipeline-layout nil
+    0
 
 
-define find-vulkan-device-queue :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> VkPhysicalDevice -> U32 -io-> Int
-  program window instance surface physical-device queue-count ->
-    vkGetPhysicalDeviceQueueFamilyProperties physical-device &queue-count &vulkan-queue-properties
-    def queue-index (find-present-queue physical-device surface queue-count (U32 0))
-    if queue-index < 0 then -1 else run-vulkan-device program window instance surface physical-device (U32 queue-index)
+define destroy-fence-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroyFence graphics-device graphics-in-flight nil
+    0
 
 
-define run-enumerated-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> U32 -io-> Int
-  _ _ _ _ count | = 0 -> -1
-  _ _ _ _ count | > 8 -> -1
-  program window instance surface count ->
-    vkEnumeratePhysicalDevices instance &count &vulkan-physical-devices
-    def device-index (choose-physical-device instance surface count (U32 0))
-    run-selected-device program window instance surface device-index
+define destroy-render-finished-prefix :: U32 -io-> Int
+  0 -> 0
+  count ->
+    def index (count - (U32 1))
+    vkDestroySemaphore graphics-device (vulkan-render-finished index) nil
+    destroy-render-finished-prefix index
 
 
-define run-selected-device :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> Int -io-> Int
-  _ _ _ _ index | < 0 -> -1
-  program window instance surface index ->
-    run-vulkan-physical-device program window instance surface (vulkan-physical-devices index)
+define destroy-image-available-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroySemaphore graphics-device graphics-image-available nil
+    0
 
 
-define run-vulkan-surface :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -io-> Int
-  program window instance surface ->
-    def device-count (U32 0)
-    vkEnumeratePhysicalDevices instance &device-count nil
-    run-enumerated-device program window instance surface device-count
+define destroy-command-pool-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroyCommandPool graphics-device graphics-command-pool nil
+    0
 
 
-define finish-vulkan-surface :: VulkanProgram -> *GLFWwindow -> VkInstance -> VkSurfaceKHR -> Int -io-> Int
-  _ _ _ _ status | != VK_SUCCESS -> status
-  program window instance surface _ ->
-    def result (run-vulkan-surface program window instance surface)
-    vkDestroySurfaceKHR instance surface nil
-    result
+define destroy-framebuffer-prefix :: U32 -io-> Int
+  0 -> 0
+  count ->
+    def index (count - (U32 1))
+    vkDestroyFramebuffer graphics-device (vulkan-framebuffers index) nil
+    destroy-framebuffer-prefix index
 
 
-define run-vulkan-instance :: VulkanProgram -> *GLFWwindow -> VkInstance -io-> Int
-  program window instance ->
-    def surface (VkSurfaceKHR)
-    def status (glfwCreateWindowSurface instance window nil &surface)
-    finish-vulkan-surface program window instance surface (Int status)
+define destroy-image-view-prefix :: U32 -io-> Int
+  0 -> 0
+  count ->
+    def index (count - (U32 1))
+    vkDestroyImageView graphics-device (vulkan-swap-views index) nil
+    destroy-image-view-prefix index
 
 
-define finish-vulkan-instance :: VulkanProgram -> *GLFWwindow -> VkInstance -> Int -io-> Int
-  _ _ _ status | != VK_SUCCESS -> status
-  program window instance _ ->
-    def result (run-vulkan-instance program window instance)
-    vkDestroyInstance instance nil
-    result
+define destroy-render-pass-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroyRenderPass graphics-device graphics-render-pass nil
+    0
 
 
-define run-vulkan-window :: VulkanProgram -> *GLFWwindow -io-> Int
-  program window ->
-    def extension-count (U32 0)
-    def extensions (glfwGetRequiredInstanceExtensions &extension-count)
-    def application (VkApplicationInfo VK_STRUCTURE_TYPE_APPLICATION_INFO nil program.title 1 "Monad Graphics" 1 4194304)
-    def information (VkInstanceCreateInfo VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO nil 0 &application 0 nil extension-count extensions)
-    def instance (VkInstance)
-    def status (vkCreateInstance &information nil &instance)
-    finish-vulkan-instance program window instance (Int status)
+define destroy-swapchain-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroySwapchainKHR graphics-device graphics-swapchain nil
+    0
 
 
-define finish-vulkan-window :: VulkanProgram -> *GLFWwindow -io-> Int
-  _ nil ->
+define destroy-device-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroyDevice graphics-device nil
+    0
+
+
+define destroy-surface-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroySurfaceKHR graphics-instance graphics-surface nil
+    0
+
+
+define destroy-instance-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
+    vkDestroyInstance graphics-instance nil
+    0
+
+
+define destroy-incomplete-window :: Bool -io-> Int
+  False -> 0
+  True ->
+    glfwDestroyWindow graphics-window-state.handle
+    0
+
+
+define terminate-glfw-if-ready :: Bool -io-> Int
+  False -> 0
+  True ->
     glfwTerminate
-    -1
-  program window ->
-    def result (run-vulkan-window program window)
-    glfwDestroyWindow window
-    glfwTerminate
-    result
+    0
 
 
-define start-vulkan-2d :: VulkanProgram -> Int -io-> Int
-  _ 0 -> -1
-  program _ ->
-    glfwWindowHint CLIENT_API NO_API
-    glfwWindowHint RESIZABLE False
-    def window (glfwCreateWindow program.width program.height program.title nil nil)
-    finish-vulkan-window program window
-
-
-define run-vulkan-2d :: VulkanProgram -io-> Int
-  :doc "Open PROGRAM, draw its three-vertex pipeline, and own the complete Vulkan lifecycle."
-  program ->
-    def initialized glfwInit
-    start-vulkan-2d program (Int initialized)
+define reset-vulkan-lifecycle-state -> Int
+  set! graphics-window-state.handle nil
+  set! graphics-glfw-ready False
+  set! graphics-instance-ready False
+  set! graphics-surface-ready False
+  set! graphics-device-ready False
+  set! graphics-swapchain-ready False
+  set! graphics-render-pass-ready False
+  set! graphics-command-pool-ready False
+  set! graphics-image-available-ready False
+  set! graphics-in-flight-ready False
+  set! graphics-pipeline-ready False
+  set! graphics-image-view-count (U32 0)
+  set! graphics-framebuffer-count (U32 0)
+  set! graphics-render-finished-count (U32 0)
+  set! graphics-image-count (U32 0)
+  set! graphics-image-index (U32 0)
+  set! graphics-ready False
+  0

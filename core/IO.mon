@@ -1,8 +1,8 @@
 ;;; IO.mon --- explicit Core world boundary
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "io effects bytes text handles posix"
+:author   Laluxx
+:version  0.3.0
+:keywords io effects bytes text handles posix
 
 ;;; Commentary:
 
@@ -11,10 +11,13 @@
  descriptors are explicit at the primitive boundary so tests can use pipes,
  applications can redirect streams, and no ambient global handle is hidden.
 
- This first portable layer exposes byte and text operations. Resource-safe
- owned handles, structured IO errors, buffering, cancellation, and platform
- backends will grow above this boundary rather than being encoded as magic
- compiler behavior.
+ This lowest structured layer exposes byte and text operations. Single-attempt
+ writes remain available when callers need raw progress, while exact text output
+ retries prefixes and detects zero progress explicitly. =IOCombinedFailure=
+ preserves causal information when an owned workflow encounters both a primary
+ failure and a cleanup/secondary failure. Resource-safe owned handles and
+ platform-specific policies live above this boundary rather than becoming
+ compiler magic.
 
 ;;; Code:
 
@@ -23,17 +26,21 @@ import Sequence
 import Data.Either
 
 module IO
-  [IOError IOEndOfInput IOStatus
+  [IOError IOEndOfInput IOWriteNoProgress IOStatus IOCombinedFailure
    stdin stdout stderr
    read-byte write-byte write-text write-buffer
-   read-byte-result write-byte-result write-text-result]
+   read-byte-result write-byte-result write-text-result write-text-all-result]
 
                     • The portable primitive currently distinguishes a byte from a negative
                     • status. `IOStatus` deliberately retains that status rather than claiming an
 data IOError        • errno classification the backend has not supplied. Structured reads use
-  = IOEndOfInput    • the raw read count directly: zero is EOF, a negative status is failure, and
-  | IOStatus Int    • one yields the byte. The legacy `read-byte` primitive remains available for
-                    • callers intentionally using its compact -1 sentinel protocol.
+  = IOEndOfInput      • the raw read count directly: zero is EOF, a negative status is failure, and
+  | IOWriteNoProgress • a zero-length write before exhaustion is explicit failure: exact-write loops
+  | IOStatus Int      • must never spin forever or silently lose a suffix. IOCombinedFailure preserves
+  | IOCombinedFailure IOError IOError
+                      • two independent failures when cleanup/secondary work also fails instead of
+                      • silently discarding one cause. The legacy `read-byte` primitive remains
+                      • available for callers using its compact -1 sentinel protocol.
 
 define stdin  STDIN
 define stdout STDOUT
@@ -80,3 +87,24 @@ define write-byte-result :: Int -> Int -io-> Either IOError Int
 define write-text-result :: Int -> String -io-> Either IOError Int
   fd text -> def status (write-text fd text)
              if status < 0 then Left (IOStatus status) else Right status
+
+
+;;; Exact text output
+
+;; POSIX-style byte sinks may complete only a prefix. `write-text-result`
+;; deliberately reports one primitive attempt; this helper owns the stronger
+;; all-or-error contract used by structured Console and File operations.
+define write-text-all-loop :: Int -> String -> Int -io-> Either IOError Int
+  _ text written | empty? text -> Right written
+  fd text written ->
+    def result (write-text-result fd text)
+    (match result with
+     | (Left error) -> (Left error)
+     | (Right count) ->
+         (if (= count 0)
+             (Left IOWriteNoProgress)
+             (write-text-all-loop fd (drop count text) (written + count))))
+
+
+define write-text-all-result :: Int -> String -io-> Either IOError Int
+  fd text -> write-text-all-loop fd text 0

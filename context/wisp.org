@@ -211,7 +211,22 @@
 
 [OBS id:obs.wisp.pipe-sugar src:wisp.c conf:high]
   Pipe sugar: =x |> f= transforms to =(f x)=. Pipe chains are handled by the
-  wisp transformer using the arity table to determine correct grouping.
+  wisp transformer using the arity table to determine correct grouping. A
+  deeper =|>= line continues the preceding expression, including an assignment
+  RHS, and an infix target is a left section: =x |> * scale= becomes
+  =(* x scale)=. The public semantic owner is Function.applyTo, exported under
+  the =|>= alias; this lowering is its compiler optimization.
+
+[FIX id:fix.wisp-donut-pipeline-2026-09-10 date:2026-09-10 by:codex src:wisp.c,core/prelude/Function.mon,how_to/Donut.mon,tests/test_how_to_examples.py,tests/codegen/branches/wisp-codegen/operator-sugar/atom.codegen.80.wisp.codegen.operator.sugar.rt.wisp.pipe/rt_wisp_pipe.mon conf:high]
+  Receiver-relative guards preserve negation, so =sample | not visible?= calls
+  =visible?= with =sample= before applying =not=. Multiline pipeline assignment
+  right-hand sides remain one expression, guarded inline mutation uses the
+  ordinary assignment lowering, and named postfix indices retain the reader's
+  native fixed-buffer path. Rewriting such indices through generic =nth= is
+  forbidden: it boxes and copies the whole fixed buffer per access. Donut is
+  the end-to-end and bounded-memory regression for these combined forms.
+  Guard lowering does not form an effect boundary: the annotation validator
+  includes the generated lambda body's effects when the lambda is applied.
 
 [DEC id:dec.wisp.phase-oriented-file-split-2026-07-29 src:wisp.c,wisp_syntax_policy.c conf:high]
   Split the Wisp implementation by phase and ownership, not by helper size.
@@ -293,6 +308,18 @@
   body, so =x= is bound as the function parameter rather than treated as an
   unbound pattern variable. Non-simple clauses containing =_=, literals,
   collection patterns such as =[x|xs]=, or guards keep the pattern-clause path.
+
+[OBS id:obs.wisp.function-header-alias-sugar-2026-09-09 src:wisp.c,reader.c,codegen.c,tests/test_wisp_function_alias_sugar.py conf:high]
+  A typed Wisp function header may place one or more aliases between its
+  primary name and the =::= signature separator. For example,
+  =define union un uni ∪ :: {a} -> {a} -> {a}= lowers to a definition named
+  =union= with alias metadata for =un=, =uni=, and =∪=. Every listed alias is
+  registered as a callable name for the same implementation. The primary name
+  remains the first name, and ordinary single-name headers are unchanged.
+  Class contexts do not alter the rule: =define same? equal? eq :: Eq a =>
+  a -> a -> Bool= assigns the complete context and signature to =same?= and
+  lowers =equal?= and =eq= to ordinary alias metadata. The regression executes
+  every alias so this is a runtime contract, not merely an expansion snapshot.
 
 * Deferred Column Layout Idea
 :PROPERTIES:

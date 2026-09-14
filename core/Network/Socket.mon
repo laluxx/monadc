@@ -1,14 +1,20 @@
 ;;; Socket.mon --- small owned TCP socket interface
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "network sockets tcp ownership io"
+:author   Laluxx
+:version  0.2.0
+:keywords network sockets tcp ownership io
 
 ;;; Commentary:
 
  Network.Socket turns the POSIX status protocol into explicit values and keeps
  address layout out of applications. Blocking operations retry interruption,
  writes are completed, and stream consumers distinguish EOF from failure.
+
+ Public bounds are checked before crossing the syscall boundary: TCP ports are
+ 0..65535, receive timeouts are non-negative, and buffer reads/sends may not
+ exceed the owned allocation. Invalid syscall-style arguments return -EINVAL
+ where the existing result type is an OS status; impossible pure buffer
+ observations fail before an out-of-bounds read.
 
 ;;; Code:
 
@@ -78,8 +84,14 @@ define read-count-or :: Int -> SocketRead -> Int
   fallback _ -> fallback
 
 
+define valid-network-port? :: Int -> Bool
+  port | (< port 0) -> False
+  port | (> port 65535) -> False
+  _ -> True
+
+
 define network-port :: Int -> Int
-  :doc "Encode a host-order TCP port in network byte order."
+  :doc "Encode a validated host-order TCP port in network byte order."
   port -> ((port & 0xff) * 256) + ((div port 256) & 0xff)
 
 
@@ -94,7 +106,8 @@ define shutdown-write :: Socket -io-> Int
 
 
 define make-socket-buffer :: Int -io-> SocketBuffer
-  :doc "Allocate a connection-owned byte buffer with CAPACITY bytes."
+  :doc "Allocate a connection-owned byte buffer with strictly positive CAPACITY."
+  capacity | (<= capacity 0) -> error "Network.Socket.make-socket-buffer: capacity must be positive"
   capacity -> SocketBuffer (sys-network-buffer-allocate capacity) capacity
 
 
@@ -103,11 +116,14 @@ define release-socket-buffer :: SocketBuffer -io-> Int
   buffer -> sys-network-buffer-release buffer.bytes buffer.capacity
 
 
+define apply-receive-timeout :: Socket -> Timeval -io-> Int
+  socket timeout -> sys-receive-timeout socket.descriptor &timeout
+
+
 define set-receive-timeout :: Socket -> Int -io-> Int
-  :doc "Limit one blocking receive on SOCKET to SECONDS of inactivity."
-  socket seconds ->
-    def timeout (Timeval seconds 0)
-    sys-receive-timeout socket.descriptor &timeout
+  :doc "Limit one blocking receive on SOCKET to non-negative SECONDS of inactivity."
+  _ seconds | (< seconds 0) -> -22
+  socket seconds -> apply-receive-timeout socket (Timeval seconds 0)
 
 
 define pointer-byte :: *U8 -> Int -> U8
@@ -127,6 +143,8 @@ define buffer-bytes-from :: SocketBuffer -> Int -> Int -> [Byte]
 define buffer-bytes :: SocketBuffer -> Int -> [Byte]
   :doc "Copy the first COUNT received octets from BUFFER into an immutable byte sequence."
   _ count | (<= count 0) -> []
+  buffer count | (> count buffer.capacity) ->
+    error "Network.Socket.buffer-bytes: count exceeds buffer capacity"
   buffer count -> buffer-bytes-from buffer 0 count
 
 
@@ -185,11 +203,16 @@ define listen-atomic-result :: Int -> Int -io-> SocketResult
               | otherwise      -> listen-descriptor port status
 
 
-define listen-loopback :: Int -io-> SocketResult
-  :doc "Listen for TCP connections on 127.0.0.1 at PORT."
-  port ->
+define listen-loopback-validity :: Int -> Bool -io-> SocketResult
+  _ False -> SocketFailure (0 - 22)
+  port True ->
     def descriptor (sys-socket AF_INET (bit-or SOCK_STREAM SOCK_CLOEXEC) 0)
     listen-atomic-result port descriptor
+
+
+define listen-loopback :: Int -io-> SocketResult
+  :doc "Listen for TCP connections on 127.0.0.1 at a validated PORT."
+  port -> listen-loopback-validity port (valid-network-port? port)
 
 
 define accept-configured :: Int -> Int -io-> SocketResult
@@ -239,7 +262,9 @@ define send-all-from :: Socket -> SocketBuffer -> Int -> Int -io-> Int
 
 define send-buffer :: Socket -> SocketBuffer -> Int -io-> Int
   :doc "Send COUNT bytes from BUFFER, retrying partial writes."
-  _ _ count | (<= count 0) -> count
+  _ _ count | (< count 0) -> -22
+  _ _ 0 -> 0
+  _ buffer count | (> count buffer.capacity) -> -22
   client buffer count -> send-all-from client buffer 0 count
 
 
@@ -266,15 +291,24 @@ define send-text :: Socket -> String -io-> Int
 
 
 define receive-result :: Socket -> SocketBuffer -> Int -io-> SocketRead
-  _ _ count | (= count -4)  -> SocketReadRetry count
-            | (= count -11) -> SocketReadTimeout count
-            | (< count 0)   -> SocketReadFailure count
-            | (= count 0)   -> SocketReadEOF 0
-            | otherwise     -> SocketReadReady count
+  _ _ count | (= count (0 - 4)) -> SocketReadRetry count
+  _ _ count | (= count (0 - 11)) -> SocketReadTimeout count
+  _ _ count | (< count 0) -> SocketReadFailure count
+  _ _ count | (= count 0) -> SocketReadEOF 0
+  _ _ count -> SocketReadReady count
 
 
 define receive :: Socket -> SocketBuffer -io-> SocketRead
   :doc "Read one stream fragment into BUFFER and distinguish data, retry, EOF, and failure."
-  client buffer ->
-    def count (sys-recv client.descriptor buffer.bytes buffer.capacity)
-    receive-result client buffer count
+  _ buffer | (<= buffer.capacity 0) -> SocketReadFailure (0 - 22)
+  client buffer -> receive-result client buffer (sys-recv client.descriptor buffer.bytes buffer.capacity)
+
+
+tests
+  :port:
+  assert-eq (valid-network-port? 0) True "Network.Socket accepts port zero"
+  assert-eq (valid-network-port? 65535) True "Network.Socket accepts the largest TCP port"
+  assert-eq (valid-network-port? -1) False "Network.Socket rejects a negative port"
+  assert-eq (valid-network-port? 65536) False "Network.Socket rejects an oversized port"
+  assert-eq (network-port 80) 20480 "Network.Socket encodes a TCP port in network byte order"
+  :port:

@@ -2,7 +2,7 @@
 #+AUTHOR: codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-08-26
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -339,3 +339,20 @@
   Failures matching the symptoms above should start triage in this category, then
   follow the listed neighbors only when the local contract does not explain the
   issue.
+
+* ADT Coverage Proof
+
+[DEC id:dec.pmatch.adt-coverage date:2026-08-26 by:human+codex]
+  Every pattern-matching function whose annotated parameters have finite-set
+  or algebraic-data types must prove total coverage during dependent checking.
+  Ordinary ADTs are registered before the shadow pass, making the proof
+  independent of declaration order. The checker enumerates the finite
+  constructor product across all matched parameters, treats guarded clauses as
+  non-total, accepts wildcard and variable catch-alls, rejects redundant rows,
+  and diagnoses the first missing constructor (or a missing product case).
+
+[FIX id:fix.pmatch.adt-coverage-2026-08-26 date:2026-08-26 by:codex src:dep.c,dep.h,main.c,tests/codegen/errors/codegen/adt-pattern-coverage,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.adt-pattern-coverage.exhaustive/adt-pattern-coverage-exhaustive.mon conf:high]
+  ADT coverage moved from an optional optimizer warning into the dependent
+  checker as a compilation obligation. Regression fixtures prove rejection of
+  a missing constructor, rejection of an incomplete two-ADT constructor
+  product, and acceptance of an exhaustive payload-constructor match.

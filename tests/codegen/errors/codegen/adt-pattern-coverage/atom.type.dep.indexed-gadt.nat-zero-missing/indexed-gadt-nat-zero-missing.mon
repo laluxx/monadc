@@ -1,0 +1,25 @@
+:TEST-ID tests.codegen.type.dep.indexed-gadt.nat-zero-missing
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Natural index literal 0 is definitionally the zero constructor for indexed coverage.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR non-exhaustive patterns for VecZ; missing: NilZ
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.nat-zero-missing
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.nat-zero-missing
+:TEST-ATOM-LEAF atom.type.dep.indexed-gadt.nat-zero-missing
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+data NatZ :: Type
+  Z : NatZ
+  S : NatZ -> NatZ
+data VecZ :: NatZ -> Type -> Type
+  NilZ  : VecZ Z t
+  ConsZ : t -> VecZ n t -> VecZ (S n) t
+(define (badZero [value : (VecZ 0 t)] -> Int)
+  [ConsZ _ _] -> 1)

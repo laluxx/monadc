@@ -1,0 +1,25 @@
+:TEST-ID tests.codegen.type.dep.indexed-fin.impossible-zero
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY semantic-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Fin has no constructors at zero and both constructors remain possible at a successor index.
+:TEST-EXPECT compile
+:TEST-MENU branches/control-flow/pattern-match/atom.type.dep.indexed-fin.impossible-zero
+:TEST-MENU-PATH codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-fin.impossible-zero
+:TEST-ATOM-LEAF atom.type.dep.indexed-fin.impossible-zero
+:TEST-CLI-TARGET codegen branches control-flow pattern-match
+
+(module Main)
+data NatF :: Type
+  Z : NatF
+  S : NatF -> NatF
+data FinF :: NatF -> Type
+  FZF : FinF (S n)
+  FSF : FinF n -> FinF (S n)
+(define (finTag [value : (FinF (S n))] -> Int)
+  FZF -> 0
+  [FSF _] -> 1)

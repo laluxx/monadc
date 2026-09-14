@@ -1,0 +1,3 @@
+module Main
+
+bad-proof = λ[value]. value : [value]

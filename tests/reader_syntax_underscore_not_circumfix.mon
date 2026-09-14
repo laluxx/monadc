@@ -1,0 +1,9 @@
+;;; '_' describes operator spacing; it is not an expression placeholder.
+
+reader-syntax Int
+  |_| identity
+
+module Main
+
+define identity :: Int -> Int
+  value -> value

@@ -1,14 +1,19 @@
 ;;; Stream.mon --- incremental delimiter framing for byte streams
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "text parser stream bytes framing"
+:author   Laluxx
+:version  0.2.0
+:keywords text parser stream bytes framing
 
 ;;; Commentary:
 
  Text.Parser.Stream separates transport fragmentation from grammar parsing.
- Feed arbitrary byte fragments until a delimiter completes one bounded frame;
- bytes after that delimiter are returned untouched.
+ Feed arbitrary byte fragments until a non-empty delimiter completes one
+ bounded frame; bytes after that delimiter are returned untouched.
+
+ The delimiter is part of the returned frame. Empty delimiters are rejected
+ explicitly because they have no meaningful incremental completion boundary
+ and would otherwise require dequeuing an empty rolling window. Limits are
+ measured in bytes already accepted into the frame.
 
 ;;; Code:
 
@@ -37,7 +42,8 @@ data ParserStreamReply
 
 
 define parser-stream :: Int -> ParserStream
-  :doc "Create an empty incremental frame with a maximum of LIMIT bytes."
+  :doc "Create an empty incremental frame with a non-negative maximum of LIMIT bytes."
+  limit | (< limit 0) -> ParserStream 0 0 EmptyQueue EmptyQueue 0
   limit -> ParserStream limit 0 EmptyQueue EmptyQueue 0
 
 
@@ -101,7 +107,8 @@ define stream-bytes :: ParserStream -> [Byte]
 
 
 define feed-until :: [Byte] -> ParserStream -> [Byte] -> ParserStreamReply
-  :doc "Feed BYTES until ENDING completes a frame or STREAM reaches its limit."
+  :doc "Feed BYTES until non-empty ENDING completes a frame or STREAM reaches its limit."
+  [] stream _ -> ParserStreamRejected stream.size
   _ stream [] -> ParserStreamPartial stream
   ending stream [byte|rest]
     | (>= stream.size stream.limit) -> ParserStreamRejected stream.size
@@ -109,3 +116,40 @@ define feed-until :: [Byte] -> ParserStream -> [Byte] -> ParserStreamReply
         ParserStreamComplete (stream-bytes (push-byte ending stream byte)) rest
     | otherwise ->
         feed-until ending (push-byte ending stream byte) rest
+
+
+define parser-stream-test-ending :: [Byte]
+  ⌜0x0d 0x0a⌝
+
+
+tests
+  :invalid-contract:
+  assert-eq
+    (stream-rejected? (feed-until [] (parser-stream 8) ⌜0x41⌝))
+    True
+    "Parser.Stream rejects an empty delimiter"
+  assert-eq
+    (stream-error-offset-or -1 (feed-until parser-stream-test-ending (parser-stream -1) ⌜0x41⌝))
+    0
+    "Parser.Stream normalizes a negative byte limit to zero"
+  :invalid-contract:
+
+  :fragmentation:
+  def first-fragment
+    (feed-until parser-stream-test-ending (parser-stream 8) ⌜0x41 0x0d⌝)
+  assert-eq (stream-partial? first-fragment) True "Parser.Stream keeps a split delimiter partial"
+  def first-state
+    (stream-state-or (parser-stream 0) first-fragment)
+  def completed-fragment
+    (feed-until parser-stream-test-ending first-state ⌜0x0a 0x42⌝)
+  assert-eq (stream-complete? completed-fragment) True "Parser.Stream completes a fragmented delimiter"
+  assert-eq (count (stream-frame-or [] completed-fragment)) 3 "Parser.Stream frame includes its delimiter"
+  assert-eq (count (stream-rest-or [] completed-fragment)) 1 "Parser.Stream preserves bytes after the delimiter"
+  :fragmentation:
+
+  :limit:
+  def over-limit
+    (feed-until parser-stream-test-ending (parser-stream 2) ⌜0x41 0x42 0x43⌝)
+  assert-eq (stream-rejected? over-limit) True "Parser.Stream enforces the frame limit"
+  assert-eq (stream-error-offset-or -1 over-limit) 2 "Parser.Stream reports the accepted-byte offset"
+  :limit:

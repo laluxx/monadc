@@ -1,0 +1,43 @@
+;;; Fin.mon --- Finite naturals indexed by an exclusive upper bound
+
+:author   Laluxx
+:version  1.0.0
+:keywords finite natural dependent index bound proof
+
+;;; Commentary:
+
+ Fin n contains exactly the structural naturals strictly smaller than n.
+ Its constructors make out-of-range indices unrepresentable: FZ proves that
+ S n is non-empty, and FS lifts an existing Fin n through one larger bound.
+
+ No unchecked Int-to-Fin conversion is provided here. Constructing Fin from a
+ machine integer requires a bound witness and therefore belongs with the proof
+ surface that can return failure explicitly.
+
+;;; Code:
+
+import Data.Nat
+
+module Data.Fin
+  [Fin FZ FS fin-to-int fin-weaken]
+
+
+data Fin :: Nat -> Type
+  FZ : Fin (S n)
+  FS : Fin n -> Fin (S n)
+
+
+define fin-to-int :: Fin n -> Int
+  FZ     -> 0
+  [FS n] -> 1 + (fin-to-int n)
+
+
+define fin-weaken :: Fin n -> Fin (S n)
+  FZ     -> FZ
+  [FS n] -> FS (fin-weaken n)
+
+
+tests
+  assert-eq (fin-to-int FZ) 0 "Fin FZ denotes zero"
+  assert-eq (fin-to-int (FS FZ)) 1 "Fin successor conversion"
+  assert-eq (fin-to-int (fin-weaken (FS FZ))) 1 "Fin weakening preserves value"

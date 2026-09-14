@@ -1,0 +1,12 @@
+module Main
+
+identity = λ[value]. value
+higher-identity = λ[function]. function
+
+returned-identity = (higher-identity identity)
+
+show (identity [1 2 3])
+show (identity {1 2 3})
+show (identity ⌜1 2 3⌝)
+show ((higher-identity identity) [4 5 6])
+show (returned-identity {4 5 6})

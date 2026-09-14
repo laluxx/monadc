@@ -1,13 +1,17 @@
 ;;; Network.mon --- Linux network syscall seam
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "system posix sockets tcp foreign effects"
+:author   Laluxx
+:version  0.2.0
+:platform "linux-x86_64"
+:keywords system posix sockets tcp foreign effects
 
 ;;; Commentary:
 
- This module is the Linux ABI boundary beneath Network.Socket. It preserves
- raw syscall results and owns no application error policy.
+ This module is the Linux x86-64 ABI boundary beneath Network.Socket. It
+ preserves raw syscall results and owns no application error policy. Syscall
+ numbers, sockaddr/timeval layout assumptions, MSG_NOSIGNAL, and socket flags
+ in this file are therefore platform implementation details, not portable
+ POSIX constants.
 
 ;;; Code:
 

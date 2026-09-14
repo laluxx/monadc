@@ -231,6 +231,7 @@ Type *type_oct(void);
 Type *type_keyword(void);
 Type *type_ratio(void);
 Type *type_set(void);
+Type *type_set_of(Type *element_type);
 Type *type_map(void);
 Type *type_map_of(Type *key_type, Type *value_type);
 Type *type_coll(void);

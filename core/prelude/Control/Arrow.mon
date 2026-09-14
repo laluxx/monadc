@@ -1,8 +1,19 @@
 ;;; Arrow.mon --- Arrow abstraction
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: arrow fanout split typeclass
+:author   Laluxx
+:version  1.1.0
+:keywords arrow category first second split fanout typeclass
+
+;;; Commentary:
+
+ Arrow extends Category with the ability to lift pure functions and act on the
+ first component of a product. The remaining product combinators are derived
+ from that minimal basis, so an instance cannot accidentally give second,
+ split, and fanout mutually inconsistent semantics.
+
+ The defaults follow the standard Arrow equations: second is first conjugated
+ by swapping, split runs two arrows on independent product components, and
+ fanout duplicates one input before split.
 
 ;;; Code:
 
@@ -12,6 +23,14 @@ module Control.Arrow
   [Arrow arr first second split fanout]
 
 
+define arrow-swap :: (a, b) -> (b, a)
+  (left, right) -> (right, left)
+
+
+define arrow-duplicate :: a -> (a, a)
+  value -> (value, value)
+
+
 class Category arr => Arrow arr where
   arr    :: (a -> b) -> arr a b
   first  :: arr a b -> arr (a, c) (b, c)
@@ -19,10 +38,20 @@ class Category arr => Arrow arr where
   split  :: arr a b -> arr c d -> arr (a, c) (b, d)
   fanout :: arr a b -> arr a c -> arr a (b, c)
 
+  second value ->
+    composeCategory
+      (arr arrow-swap)
+      (composeCategory (first value) (arr arrow-swap))
+
+  split left right ->
+    composeCategory (second right) (first left)
+
+  fanout left right ->
+    composeCategory (split left right) (arr arrow-duplicate)
+
   ;; higher-kinded: arr :: Type -> Type -> Type
-
-
-tests
-  :registration:
-  assert-eq 1 1 "Arrow registers Arrow"
-  :registration:
+  ;; minimal complete definition: arr and first
+  ;;
+  ;; law: second f = arr swap >>> first f >>> arr swap
+  ;; law: split f g = first f >>> second g
+  ;; law: fanout f g = arr duplicate >>> split f g

@@ -1,8 +1,8 @@
 ;;; Readline.mon --- effectful terminal line acquisition
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "io readline terminal effects emacs"
+:author   Laluxx
+:version  0.2.0
+:keywords io readline terminal effects emacs
 
 ;;; Commentary:
 
@@ -11,9 +11,10 @@
  without IO, while terminal programs expose their world interaction in their
  arrow types.
 
- The `Fd` operations perform byte input without changing terminal mode. The
- top-level operations bracket acquisition with cbreak setup/restoration. The
- qualified `io` row intentionally abstracts over both byte input and terminal
+ The =Fd= operations perform byte input without changing terminal mode. The
+ top-level operations bracket acquisition with checked cbreak setup/restoration;
+ a failed attribute read never mutates an uninitialized termios snapshot. The
+ qualified =io= row intentionally abstracts over both byte input and terminal
  control effects until Core has a first-class resource-safe Terminal handle.
 
 ;;; Code:
@@ -50,7 +51,7 @@ define readline-prepend :: Int -> [Int] -> [Int]
   scalar scalars -> prepend scalar scalars
 
 
-define history-write :: Int -> Int -> [Int] -> Int
+define history-write :: Int -> Int -> [Int] -io-> Int
   _ index [] -> index
   slot index _ | (>= index 256) -> index
   slot index [byte|rest] ->
@@ -66,14 +67,14 @@ define history-read :: Int -> Int -> Int -> [Int]
 
 define history-line :: Int -> [Int]
   position ->
-    def slot (rem position 64)
+    def slot (position % 64)
     history-read slot 0 (readline-history-lengths slot)
 
 
-define history-add :: [Int] -> Int
+define history-add :: [Int] -io-> Int
   [] -> readline-history-total
   text ->
-    def slot (rem readline-history-total 64)
+    def slot (readline-history-total % 64)
     def count (history-write slot 0 text)
     def saved-length (set! (readline-history-lengths slot) count)
     def next-total (readline-history-total + 1)
@@ -90,31 +91,36 @@ define previous-history-position :: Int -> Int -> Int
   total current -> (- current 1)
 
 
-define history-move-previous :: Int -> Int
+define history-move-previous :: Int -io-> Int
   total -> (set! readline-history-position
              (previous-history-position total readline-history-position))
 
 
-define history-previous :: Int -> [Int]
+define history-previous :: Int -io-> [Int]
   total -> history-line (history-move-previous total)
 
 
-define history-move-next :: Int -> Int
+define history-move-next :: Int -io-> Int
   total ->
     def next (readline-history-position + 1)
     set! readline-history-position next
 
 
-define history-next :: Int -> [Int]
+define history-next-at :: Int -> Int -io-> [Int]
+  total next | (>= next total) -> []
+  _ next -> history-line next
+
+
+define history-next :: Int -io-> [Int]
   total | (>= readline-history-position total) -> []
-  total -> history-line (history-move-next total)
+  total -> history-next-at total (history-move-next total)
 
 
-define history-reset-position :: Int -> Int
+define history-reset-position :: Int -io-> Int
   total -> set! readline-history-position total
 
 
-define kill-write :: Int -> Int -> Int -> [Int] -> Int
+define kill-write :: Int -> Int -> Int -> [Int] -io-> Int
   _ _ index [] -> index
   _ _ index _ | >= 256 -> index
   slot base index [byte|rest] ->
@@ -122,10 +128,10 @@ define kill-write :: Int -> Int -> Int -> [Int] -> Int
     kill-write slot base (index + 1) rest
 
 
-define kill-save :: [Int] -> Int
+define kill-save :: [Int] -io-> Int
   [] -> readline-kill-total
   text ->
-    def slot (rem readline-kill-total 16)
+    def slot (readline-kill-total % 16)
     def base (slot * 256)
     def count (kill-write slot base 0 text)
     def saved-length (set! (readline-kill-lengths slot) count)
@@ -133,7 +139,7 @@ define kill-save :: [Int] -> Int
 
 
 define kill-read :: Int -> Int -> Int -> [Int]
-  _ index count | >= -> []
+  _ index count | (>= index count) -> []
   base index count ->
     readline-prepend (readline-kill-bytes (base + index)) (kill-read base (index + 1) count)
 
@@ -141,7 +147,7 @@ define kill-read :: Int -> Int -> Int -> [Int]
 define kill-latest :: Int -> [Int]
   total | <= 0 -> []
   total ->
-    def slot (rem (total - 1) 16)
+    def slot ((total - 1) % 16)
     def base (slot * 256)
     kill-read base 0 (readline-kill-lengths slot)
 
@@ -155,19 +161,19 @@ define kill-key? :: Int -> Bool
 
 
 define killed-text :: Int -> Int -> [Int] -> [Int]
-  key cursor text | (= key LineEditor.key-ctrl-k) -> drop text cursor
-  key cursor text | (= key LineEditor.key-ctrl-u) -> take text cursor
+  key cursor text | (= key LineEditor.key-ctrl-k) -> drop cursor text
+  key cursor text | (= key LineEditor.key-ctrl-u) -> take cursor text
   key cursor text | (= key LineEditor.key-ctrl-backspace) ->
-    drop (take text cursor) (LineEditor.apply-key-cursor key cursor text)
+    drop (LineEditor.apply-key-cursor key cursor text) (take cursor text)
   key cursor text | (= key LineEditor.key-meta-d) ->
     def remaining (- (length text) (length (LineEditor.apply-key-text key cursor text)))
-    take (drop text cursor) remaining
+    take remaining (drop cursor text)
   _ _ _ -> []
 
 
 define yank-text :: Int -> [Int] -> [Int] -> [Int]
   cursor text yank ->
-    concat (take text cursor) (concat yank (drop text cursor))
+    concat (take cursor text) (concat yank (drop cursor text))
 
 
 define begins-with-text? :: [Int] -> [Int] -> Bool
@@ -175,7 +181,6 @@ define begins-with-text? :: [Int] -> [Int] -> Bool
   _ [] -> False
   [query|queries] [character|characters] | (= query character) ->
     begins-with-text? queries characters
-  _ _ -> False
   _ _ -> False
 
 
@@ -207,7 +212,7 @@ define editor-key-kind :: Int -> Int
       | otherwise                         -> 4
 
 
-define editor-next-text :: Int -> Int -> Int -> [Int] -> [Int]
+define editor-next-text :: Int -> Int -> Int -> [Int] -io-> [Int]
   1 _ _ _ -> history-previous readline-history-total
   2 _ _ _ -> history-next readline-history-total
   3 _ cursor text ->
@@ -230,22 +235,26 @@ define record-kill-kind :: Int -> Int
       | otherwise -> 0
 
 
-define record-kill-from :: Int -> Int -> Int -> [Int] -> Int
+define record-kill-from :: Int -> Int -> Int -> [Int] -io-> Int
   1 key cursor text -> kill-save (killed-text key cursor text)
   0 _ _ _ -> readline-kill-total
 
 
-define record-kill :: Int -> Int -> [Int] -> Int
+define record-kill :: Int -> Int -> [Int] -io-> Int
   key cursor text -> record-kill-from (record-kill-kind key) key cursor text
 
 
 define begin-line-editing :: Int -io-> Int
   fd ->
     def saved (sys-ioctl fd TCGETS &readline-saved-termios)
-    def copied (sys-ioctl fd TCGETS &readline-active-termios)
-    def local-flags (readline-active-termios 12)
-    def changed (set! (readline-active-termios 12) (local-flags & 0xf5))
-    sys-ioctl fd TCSETS &readline-active-termios
+    if saved < 0 then saved
+    else
+      def copied (sys-ioctl fd TCGETS &readline-active-termios)
+      if copied < 0 then copied
+      else
+        def local-flags (readline-active-termios 12)
+        def changed (set! (readline-active-termios 12) (local-flags & 0xf5))
+        sys-ioctl fd TCSETS &readline-active-termios
 
 
 define finish-line-editing :: Int -io-> Int
@@ -309,19 +318,34 @@ define write-line-bytes :: Int -> [Int] -io-> Int
       (write-line-bytes fd rest))
 
 
+define cursor-left-step :: Int -> Int -> Int -io-> Int
+  fd count _ -> cursor-left fd (count - 1)
+
+
 define cursor-left :: Int -> Int -io-> Int
   fd count | count <= 0 -> 0
-  fd count -> def escape (write-text fd "\x1b[D")
-              cursor-left fd (count - 1)
+  fd count -> cursor-left-step fd count (write-text fd "\x1b[D")
+
+
+define refresh-cursor-distance :: Int -> [Int] -> Int
+  cursor text -> (length text) - cursor
+
+
+define refresh-after-clear :: Int -> [Int] -> Int -io-> Int
+  cursor text _ -> cursor-left stdout (refresh-cursor-distance cursor text)
+
+define refresh-after-text :: Int -> [Int] -> Int -io-> Int
+  cursor text _ -> refresh-after-clear cursor text (write-text stdout "\x1b[K")
+
+define refresh-after-prompt :: Int -> [Int] -> Int -io-> Int
+  cursor text _ -> refresh-after-text cursor text (write-line-bytes stdout text)
+
+define refresh-after-carriage :: String -> Int -> [Int] -> Int -io-> Int
+  prompt cursor text _ -> refresh-after-prompt cursor text (write-text stdout prompt)
 
 
 define refresh-line :: String -> Int -> [Int] -io-> Int
-  prompt cursor text ->
-    (with [carriage (write-byte stdout 0x0d)]
-      (with [shown-prompt (write-text stdout prompt)]
-        (with [shown-text (write-line-bytes stdout text)]
-          (with [cleared (write-text stdout "\x1b[K")]
-            (cursor-left stdout (- (length text) cursor))))))
+  prompt cursor text -> refresh-after-carriage prompt cursor text (write-byte stdout 0x0d)
 
 
 define search-prompt :: [Int] -> String
@@ -358,7 +382,7 @@ define read-line-prompt-loop :: String -> Int -> [Int] -io-> [Int]
                                     (read-line-prompt-loop prompt next-cursor next-text))))))))
 
 
-define record-line-status :: Int -> [Int] -> Int
+define record-line-status :: Int -> [Int] -io-> Int
   key _ | (< key 0) -> set! readline-status 1
   key [] | (= key LineEditor.key-ctrl-d) -> set! readline-status 1
   _ _ -> set! readline-status 0
@@ -384,11 +408,22 @@ define read-line-with-prompt :: String -io-> [Int]
   prompt -> read-line-result-with-prompt prompt
 
 
-define read-line-with-saved :: a -io-> [Int]
-  saved -> def text    (read-line-bytes-fd stdin)
-           def ignored (tty-set-attr stdin saved)
-           text
-
-
 define read-line :: () -io-> [Int]
-  _ -> read-line-with-saved (tty-cbreak-mode stdin)
+  _ -> read-line-result-with-prompt ""
+
+
+tests
+  :history-bounds:
+  assert-eq (history-oldest 0) 0 "Readline empty history starts at zero"
+  assert-eq (history-oldest 64) 0 "Readline first ringful retains its origin"
+  assert-eq (history-oldest 70) 6 "Readline ring keeps only the newest 64 entries"
+  assert-eq (previous-history-position 70 6) 6 "Readline previous clamps at oldest retained entry"
+  assert-eq (previous-history-position 70 9) 8 "Readline previous moves one retained entry"
+  :history-bounds:
+
+  :search-pure:
+  assert-eq (begins-with-text? (list 1 2) (list 1 2 3)) True "Readline prefix match"
+  assert-eq (begins-with-text? (list 1 3) (list 1 2 3)) False "Readline prefix mismatch"
+  assert-eq (contains-text? (list 2 3) (list 1 2 3 4)) True "Readline substring match"
+  assert-eq (contains-text? (list 4 5) (list 1 2 3 4)) False "Readline substring requires the whole query"
+  :search-pure:

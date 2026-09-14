@@ -1,0 +1,137 @@
+;;; Lazy.mon --- Pure call-by-need evaluation strategy
+
+:author   Laluxx
+:version  0.2.0
+:keywords lazy call-by-need thunk sharing suspension memoization evaluation
+
+;;; Commentary:
+
+ Lazy is Monad's pure call-by-need evaluation strategy. It is a general Core
+ abstraction, not a sequence feature. A Lazy value may be used at any recursive
+ position: sequence tails, tree branches, graph neighborhoods, parser states,
+ memoized proof objects, or user-defined structures that do not yet exist.
+
+ The compiler owns only the suspension substrate. Core owns the algebra built
+ on that substrate. =delay expression= captures EXPRESSION without evaluating
+ it. =force value= demands the captured computation. The first successful force
+ evaluates the body and memoizes the result; later forces observe the shared
+ result rather than re-running the body.
+
+;;; Call-by-Need Semantics
+
+ Lazy differs from call-by-name precisely by sharing. Operationally, a thunk
+ has states analogous to
+
+                    Unevaluated closure
+                    Evaluating
+                    Evaluated value
+
+ Force atomically moves an unrestricted thunk from Unevaluated through
+ Evaluating to Evaluated. Re-entering a thunk while it is Evaluating is a
+ black hole and therefore denotes divergence rather than a fabricated value.
+ Concurrent forcing of an unrestricted thunk must not evaluate its body more
+ than once.
+
+ The observable pure-value law is
+
+                    force (delay e)  ≃  e
+
+ but this equation must not be used to justify transformations that duplicate
+ E, evaluate E earlier than demanded, or destroy sharing.
+
+;;; Relation to Guarded Recursion
+
+ Lazy is operational suspension. It is intentionally *not* identified with
+ Nakano's proof-theoretic later modality ▷ because ordinary =force= eliminates
+ Lazy whenever the program demands it. A future guarded-recursion checker may
+ interpret selected Lazy occurrences as guarded recursive positions and prove
+ productivity, but those proofs live above this operational substrate.
+
+ This separation matters for research-grade soundness: useful operational
+ laziness and a logical productivity modality are related, but they are not the
+ same type former unless the language also controls elimination by clocks or an
+ equivalent discipline.
+
+;;; Effects and Quantitative Ownership
+
+ The body of delay may be total or may carry only pure divergence. It may not
+ perform externally observable effects such as IO, mutation, exceptions, or
+ foreign execution: memoization would otherwise change effect multiplicity.
+ Force therefore carries a latent =diverge= effect unless the compiler proves
+ the particular thunk total. Effect-polymorphic suspensions, if Monad later
+ needs them, should be a separate type with explicit sharing semantics.
+
+ Lazy preserves quantitative ownership. A thunk that closes over a quantity-1
+ value is itself usable only at a quantity compatible with that capture. The
+ compiler may memoize unrestricted thunks, but it may not turn memoization into
+ implicit duplication of linear resources.
+
+;;; Compiler Contract
+
+ The compiler provides exactly:
+
+   Lazy  :: Type -> Type
+   delay :: <special-form> a -> Lazy a
+   force :: Lazy a -> a
+
+ Required properties:
+
+   1. delay does not evaluate its body when the suspension is constructed.
+   2. force evaluates an unrestricted suspension at most once.
+   3. force (delay e) returns the same pure value as e when e terminates.
+   4. recursive self-force is detected as black-hole divergence.
+   5. shared forcing is thread-safe for unrestricted thunks.
+   6. QTT usage of captured values is preserved.
+   7. the representation is unobservable and may be erased by specialization.
+   8. no data structure receives a privileged lazy runtime representation.
+
+ Everything else below is ordinary Core semantics.
+
+;;; Research Basis
+
+ John Launchbury, "A Natural Semantics for Lazy Evaluation", POPL 1993.
+   https://doi.org/10.1145/158511.158618
+
+ Zena Ariola and Matthias Felleisen, "The Call-by-Need Lambda Calculus",
+ Journal of Functional Programming, 1997.
+   https://doi.org/10.1017/S0956796898003037
+
+ Robert Atkey and Conor McBride, "Productive Coprogramming with Guarded
+ Recursion", ICFP 2013.
+   https://doi.org/10.1145/2500365.2500597
+
+ The first two references motivate sharing-sensitive call-by-need semantics.
+ The third motivates a future type-based productivity layer without collapsing
+ operational Lazy into a logical later modality.
+
+;;; Code:
+
+import Control.Evaluation
+import Control.Applicative
+
+module Control.Lazy where
+  :compiler-substrate
+    Lazy delay force
+
+
+instance Functor Lazy
+  map f value -> delay (f (force value))
+
+
+instance Applicative Lazy
+  pure value -> delay value
+  applyA f value -> delay ((force f) (force value))
+
+
+instance Evaluation Lazy
+  defer thunk -> delay (thunk ())
+  demand value -> force value
+
+
+tests
+  :call-by-need-surface:
+  assert-eq (force (delay (1 + 2))) 3 "Lazy delay/force preserves the pure value"
+  assert-eq (force (map (lambda (x) (x * 2)) (delay 4))) 8 "Lazy Functor maps under suspension"
+  assert-eq (force (liftA2 (lambda (x y) (x + y)) (delay 3) (delay 5))) 8 "Lazy Applicative combines suspended values"
+  assert-eq (demand-total (total-defer (lambda (_) 11))) 11 "TotalDemand discharges a total Lazy demand"
+  :call-by-need-surface:

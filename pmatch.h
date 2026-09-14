@@ -56,4 +56,7 @@ AST *pmatch_desugar(AST *pmatch_node, ASTParam *params, int param_count);
 // Thin wrapper around ast_pattern_free for stack-allocated patterns.
 void pattern_free(ASTPattern *p);
 
+void pmatch_field_accessor_name(char *buffer, size_t capacity,
+                                const char *constructor, int field_index);
+
 #endif

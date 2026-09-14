@@ -100,6 +100,7 @@ typedef enum {
     AST_INSTANCE,   // (instance Eq TrafficLight where ...)
     TOK_LAMBDA_LIT, // λx. — pure lambda calculus literal
     AST_TYPE_SET,   // (type Bool {True False}) finite union of singleton types
+    AST_JUDGMENT,   // first-class evidence for Gamma |- e (:|=) e? : T
 } ASTType;
 
 // A single parsed function parameter: name + optional type annotation
@@ -186,6 +187,8 @@ typedef struct ASTDataConstructor {
     char  *name;         // "Circle"
     char **field_types;  // ["Float"] or ["Float", "Float"]
     int    field_count;
+    char  *type_signature; // full GADT constructor type
+    char  *result_type;    // constructor codomain
 } ASTDataConstructor;
 
 // A single field in a layout definition
@@ -276,6 +279,13 @@ typedef struct AST {
         } type_set;
 
         struct {
+            struct AST *context;      // explicit Gamma, or empty set
+            struct AST *expression;   // subject being checked
+            struct AST *equal_to;     // optional RHS for definitional equality
+            struct AST *claimed_type; // proposition's type component
+        } judgment;
+
+        struct {
             struct AST **assertions;
             int count;
         } tests;
@@ -321,6 +331,7 @@ typedef struct AST {
         // AST_DATA
         struct {
             char  *name;              // "Maybe", "Color"
+            char  *kind_signature;    // e.g. "Nat -> Type -> Type"
             char **type_params;       // e.g. ["a"] for Maybe a
             int    type_param_count;
             ASTDataConstructor *constructors;
@@ -358,6 +369,9 @@ typedef struct AST {
         struct {
             char  *class_name;     // "Eq"
             char  *type_name;      // "TrafficLight"
+            char **constraint_names;     // ["Eq"] in Eq a => Eq (Set a)
+            char **constraint_type_vars; // ["a"]
+            int    constraint_count;
             char **assoc_names;    // ["Result"]
             char **assoc_values;   // ["Float"]
             int    assoc_count;
@@ -419,6 +433,8 @@ AST *ast_new_refinement(const char *name, const char *var,
                         const char *base_type, AST *predicate,
                         const char *docstring, const char *alias_name);
 AST *ast_new_type_set(const char *name, AST **members, size_t member_count);
+AST *ast_new_judgment(AST *context, AST *expression, AST *equal_to,
+                      AST *claimed_type);
 AST *ast_new_address_of(AST *operand);
 AST *ast_new_range(AST *start, AST *step, AST *end, bool is_array);
 AST *ast_new_layout(const char *name,
@@ -428,6 +444,7 @@ AST *ast_new_set(void);
 AST *ast_new_map(void);
 AST *ast_new_pmatch(ASTPMatchClause *clauses, int clause_count);
 AST *ast_new_data(const char *name,
+                  const char *kind_signature,
                   char **type_params, int type_param_count,
                   ASTDataConstructor *constructors, int constructor_count,
                   char **deriving, int deriving_count);

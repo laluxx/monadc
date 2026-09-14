@@ -1,8 +1,9 @@
 ;;; FileDescriptor.mon --- POSIX file-descriptor backend
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "posix files descriptors foreign effects"
+:author   Laluxx
+:version  0.2.0
+:platform "linux-x86_64"
+:keywords posix files descriptors foreign effects
 
 ;;; Commentary:
 
@@ -10,6 +11,12 @@
  values exactly as the kernel returns them and owns no portable error policy.
  Higher Core layers turn zero, positive counts, and negative statuses into
  typed results.
+
+ The inline syscall numbers, argument registers, flag constants, and
+ PosixStatBuffer layout are specifically the Linux x86-64 userspace ABI. They
+ are intentionally labelled as such rather than presented as generic POSIX.
+ A future portable backend must select another implementation at this module
+ boundary instead of reusing these constants accidentally.
 
 ;;; Code:
 

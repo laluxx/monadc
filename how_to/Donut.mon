@@ -67,42 +67,50 @@ define shades :: [Char]
 
 ;;; Screen and torus geometry
 
-define screen-width    :: Int    80
-define screen-height   :: Int    22
-define frame-row-width :: Int    81
-define frame-size      :: Int    (frame-row-width * screen-height)
-define theta-steps     :: Int    90
-define phi-steps       :: Int    314
-define tube-radius     :: Float  1.0
-define donut-radius    :: Float  2.0
-define viewer-distance :: Float  5.0
-
-define projection-scale :: Float
-  30.0
+define [screen-width     :: Int]    80
+define [screen-height    :: Int]    22
+define [frame-row-width  :: Int]    81
+define [frame-size       :: Int]    (frame-row-width * screen-height)
+define [theta-steps      :: Int]    90
+define [phi-steps        :: Int]    314
+define [tube-radius      :: Float]  1.0
+define [donut-radius     :: Float]  2.0
+define [viewer-distance  :: Float]  5.0
+define [projection-scale :: Float]  30.0
 
 
 ;;; Types
 
-;; The four sines/cosines that only change once per frame.
+| The four sines/cosines that only change once per frame.
 layout Angles
-  [cos-a :: Float]
-  [sin-a :: Float]
-  [cos-b :: Float]
-  [sin-b :: Float]
+  cos-a :: Float
+  sin-a :: Float
+  cos-b :: Float
+  sin-b :: Float
 
 
-;; One surface sample: its screen cell, its inverse depth, and its raw
-;; luminance (before clamping into a shade index).
+| One surface sample: its screen cell, its inverse depth, and its raw
+| luminance (before clamping into a shade index).
 layout Sample
-  [xp        :: Int]
-  [yp        :: Int]
-  [depth     :: Float]
-  [luminance :: Float]
+  xp        :: Int
+  yp        :: Int
+  depth     :: Float
+  luminance :: Float
+
+
+| The raster scan consumes each sample before computing the next one, so a
+| single mutable record avoids retaining millions of short-lived layouts.
+define sample-scratch :: Sample
+  Sample 0 0 0.0 0.0
+
+
+define current-sample :: Float -> Sample
+  _ -> sample-scratch
 
 
 ;;; Per-point math
 
-define compute-sample :: Angles -> Float -> Float -> Sample
+define compute-sample :: Angles -> Float -> Float -state.writee-> Sample
   angles theta phi ->
     def costheta (cos-radians theta)
     def sintheta (sin-radians theta)
@@ -127,7 +135,11 @@ define compute-sample :: Angles -> Float -> Float -> Sample
     def light-c angles.sin-a * sintheta
     def light-d angles.cos-b * ((angles.cos-a * sintheta) - (costheta * angles.sin-a * sinphi))
     def luminance light-a - light-b - light-c + light-d
-    Sample xp yp ooz luminance
+    sample-scratch.xp    <- xp
+    sample-scratch.yp    <- yp
+    sample-scratch.depth <- ooz
+    def luminance-status (set! sample-scratch.luminance luminance)
+    current-sample luminance-status
 
 
 define visible? :: Sample -> Bool
@@ -136,7 +148,7 @@ define visible? :: Sample -> Bool
          | .yp <  0             -> False
          | .yp >= screen-height -> False
          | .luminance <= 0.0    -> False
-         | otherwise            -> True
+         | otherwise           -> True
 
 
 define pixel-index :: Sample -> Int
@@ -146,7 +158,7 @@ define pixel-index :: Sample -> Int
 define shade-for :: Float -> Char
   luminance ->
     def raw (Int (luminance * 8.0))
-    nth shades (clamp-shade-index raw)
+    shades[clamp-shade-index(raw)]
 
 
 define clamp-shade-index :: Int -> Int
@@ -158,12 +170,12 @@ define clamp-shade-index :: Int -> Int
 ;;; The z-buffer and frame-buffer
 
 define repeat-char :: Char -> Int -> [Char]
-  c 0 -> []
+  _ 0 -> []
   c n -> prepend c (repeat-char c (n - 1))
 
 
 define repeat-float :: Float -> Int -> [Float]
-  x 0 -> []
+  _ 0 -> []
   x n -> prepend x (repeat-float x (n - 1))
 
 
@@ -176,37 +188,47 @@ define far-depths :: [Float]
 
 
 define depth-buffer :: [14kb Float]
-define char-buffer :: [2kb]
+define char-buffer  :: [2kb]
 
 
-define clear-buffers :: Int -> Int
+define clear-buffers :: Int -state.writee-> Int
   index | >= (screen-width * screen-height) -> 0
         | otherwise ->
     def output-index (index + (index / screen-width))
-    def depth-status (set! (depth-buffer index) (0.0 - 1000000.0))
-    def char-status (set! (char-buffer output-index) 32)
+    depth-buffer[index] <- (0.0 - 1000000.0)
+    char-buffer[output-index] <- 32
     def newline-status (clear-row-end index output-index)
-    clear-buffers ((index + 1) + (newline-status - newline-status))
+    clear-buffers (index + 1)
 
 
-define clear-row-end :: Int -> Int -> Int
-  index output-index | (index % screen-width) = (screen-width - 1) -> set! (char-buffer (output-index + 1)) 10
+define write-row-end :: Int -state.writee-> Int
+  output-index ->
+    char-buffer[output-index] <- 10
+
+
+define clear-row-end :: Int -> Int -state.writee-> Int
+  index output-index | (index % screen-width) = (screen-width - 1) -> write-row-end (output-index + 1)
                      | otherwise -> 0
 
 
-define update-buffers :: Sample -> Int
-  sample | not (visible? sample) -> 0
-         | not (nearer? sample)  -> 0
+define update-buffers :: Sample -state.writee-> ()
+  sample | not visible? -> ()
+         | not nearer?  -> ()
          | otherwise ->
     def index (pixel-index sample)
     def output-index ((sample.yp * frame-row-width) + sample.xp)
-    def depth-status (set! (depth-buffer index) sample.depth)
-    def char-status (set! (char-buffer output-index) (shade-byte (clamp-shade-index (Int (sample.luminance * 8.0)))))
-    char-status
+    depth-buffer[index]       <- sample.depth
+    char-buffer[output-index] <- sample.luminance
+                                   |> * 8.0
+                                   |> Int
+                                   |> clamp-shade-index
+                                   |> shade-byte
 
 
 define nearer? :: Sample -> Bool
-  sample -> sample.depth > (depth-buffer (pixel-index sample))
+  sample ->
+    def index (pixel-index sample)
+    sample.depth > depth-buffer[index]
 
 
 define shade-byte :: Int -> Int
@@ -226,70 +248,58 @@ define shade-byte :: Int -> Int
 
 ;;; Scanning the torus
 
-define scan-phi :: Angles -> Float -> Int -> Int
+define scan-phi :: Angles -> Float -> Int -state.writee-> Int
   _ _ j | >= phi-steps -> 0
   angles theta j ->
     def phi ((Float j) * (τ / (Float phi-steps)))
     def sample (compute-sample angles theta phi)
     def status (update-buffers sample)
-    def next (scan-phi angles theta (j + 1))
-    next + (status - status)
+    scan-phi angles theta (j + 1)
 
 
-define scan-theta :: Angles -> Int -> Int
+define scan-theta :: Angles -> Int -state.writee-> Int
   _ i | >= theta-steps -> 0
   angles i ->
     def theta ((Float i) * (τ / (Float theta-steps)))
     def status (scan-phi angles theta 0)
-    def next (scan-theta angles (i + 1))
-    next + (status - status)
+    scan-theta angles (i + 1)
 
 
-define prepare-frame :: Float -> Float -> Int
+define prepare-frame :: Float -> Float -state.writee-> Int
   a b ->
     def angles (Angles (cos-radians a) (sin-radians a) (cos-radians b) (sin-radians b))
     def cleared (clear-buffers 0)
-    def scanned (scan-theta angles 0)
-    scanned + (cleared - cleared)
+    scan-theta angles 0
 
 
 ;;; The animation driver
 
 define draw-frame :: Float -> Float -io-> Int
-  a b -> write-prepared-frame (prepare-frame a b)
+  a b ->
+    def prepared (prepare-frame a b)
+    def homed (home-terminal stdout)
+    write-buffer stdout char-buffer frame-size
 
 
-define write-prepared-frame :: Int -io-> Int
-  prepared -> write-homed-frame (home-terminal stdout)
-
-
-define write-homed-frame :: Int -io-> Int
-  homed -> write-buffer stdout char-buffer frame-size
-
-
-;; There is not yet a Core clock sleep operation, so frames are emitted as fast
-;; as the terminal accepts them. That missing pacing primitive is the next
-;; reusable concept this example asks Core to grow.
+| There is not yet a Core clock sleep operation=, so frames are emitted as fast
+| as the terminal accepts them. That missing pacing primitive is the next
+| reusable concept this example asks Core to grow.
 define spin-frames :: Float -> Float -> Int -io-> Int
-  a b 0     -> 0
-  a b count -> spin-after-frame (draw-frame a b) (a + 0.04) (b + 0.02) (count - 1)
-
-
-define spin-after-frame :: Int -> Float -> Float -> Int -io-> Int
-  status a b count -> spin-frames a b (count + (status - status))
+  _ _ 0     -> 0
+  a b count ->
+    def status (draw-frame a b)
+    spin-frames (a + 0.04) (b + 0.02) (count - 1)
 
 
 ;;; Executable entry point
 
-define start-animation :: Int -io-> Int
-  hidden -> finish-animation (spin-frames 0.0 0.0 (120 + (hidden - hidden)))
+define start-animation :: -io-> ()
+  def started (begin-terminal-animation stdout)
+  def status (spin-frames 0.0 0.0 120)
+  def ended (end-terminal-animation stdout)
 
 
-define finish-animation :: Int -io-> Int
-  status -> end-terminal-animation stdout
-
-
-start-animation (begin-terminal-animation stdout)
+start-animation
 
 
 tests
@@ -303,7 +313,7 @@ tests
   :buffers:
 
   :visibility:
-  assert-eq (visible? (Sample (0 - 1) 0 1.0 1.0)) False "off-screen left is not visible"
+  assert-eq (visible? (Sample (0 - 1) 0 1.0 1.0))  False "off-screen left is not visible"
   assert-eq (visible? (Sample 0 0 1.0 0.0))        False "zero luminance is not visible"
   assert-eq (visible? (Sample 0 0 1.0 0.5))        True  "an on-screen lit point is visible"
   :visibility:

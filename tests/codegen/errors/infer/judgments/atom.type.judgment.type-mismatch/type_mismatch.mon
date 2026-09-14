@@ -1,0 +1,22 @@
+:TEST-ID tests.type.judgment.type-mismatch
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY 90-diagnostics
+:TEST-SUBSET judgments
+:TEST-QUALITY semantic-regression
+:TEST-CODEGEN-ATOM atom.type.judgment.type-mismatch
+:TEST-CONTEXT monadc.context.type-theory.first-class-judgments
+:TEST-PURPOSE A typing judgment rejects a false claimed type.
+:TEST-ATOM Empty Gamma does not derive integer one at type String.
+:TEST-EXPECT fail:compile
+:TEST-COVERAGE infer.c:explicit judgment type checking
+:TEST-USES-ATOM atom.type.judgment.type-mismatch
+:TEST-MENU errors/infer/judgments/atom.type.judgment.type-mismatch
+:TEST-MENU-PATH codegen/errors/infer/judgments/atom.type.judgment.type-mismatch
+:TEST-ATOM-LEAF atom.type.judgment.type-mismatch
+:TEST-CLI-TARGET codegen errors infer judgments
+
+(module Main)
+{} ⊢ 1 : String
+

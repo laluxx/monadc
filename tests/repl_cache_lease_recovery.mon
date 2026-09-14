@@ -1,0 +1,13 @@
+; Native REPL regression: the implicitly imported Function prelude must load,
+; a session must reach evaluation after an abandoned cache lease, and the Set
+; prelude's exported infix aliases must be known before prompt input is parsed.
+(show (id 3))
+s = {1 2 3 4}
+s2 = {5 6 7 8}
+s U s2
+{1 2 3} ∪ {3 4 5}
+{1 2 3} ∩ {3 4 5}
+{1 2 3} ∖ {3 4 5}
+{1 2} △ {2 3}
+{1 2} ⊆ {1 2 3}
+{1 4} ⊈ {1 2 3}

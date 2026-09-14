@@ -1,11 +1,13 @@
-:TEST-ID tests.reader.collections.arrow-map-literal
+:TEST-ID tests.reader.collections.arrow-relation-literal
 :TEST-CONTEXT monadc.context.wisp.sugar.arrow-value-binding
-:TEST-PURPOSE Arrow-valued map literals retain compact and hanging layout forms.
+:TEST-PURPOSE Arrow-valued relation literals retain compact and hanging layout forms.
 :TEST-EXPECT parse-json
 :TEST-TIER regression
 :TEST-STATUS active
 :TEST-SECTION reader
 :TEST-CATEGORY collections
+
+import Data.Relation
 
 define compact
 { :a -> 1
@@ -21,7 +23,7 @@ define expanded
     :b -> 2
   }
 
-show Map? compact
-show Map? hanging
-show Map? expanded
-show (count compact) + (count hanging) + (count expanded)
+show (relates? compact :a 1)
+show (relates? hanging :b 2)
+show (relates? expanded :a 1)
+show (relation-size compact) + (relation-size hanging) + (relation-size expanded)

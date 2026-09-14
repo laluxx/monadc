@@ -1,0 +1,16 @@
+module Main
+
+;;; nominal_shadows_builtin_type_constructor.mon --- Core may reclaim legacy names
+
+type-syntax {_} Set
+
+data Set a
+  = Presented a
+
+define wrap :: a -> {a}
+  value -> Presented value
+
+define unwrap :: {a} -> a
+  [Presented value] -> value
+
+show (unwrap (wrap 42))

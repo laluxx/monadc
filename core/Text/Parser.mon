@@ -1,8 +1,8 @@
 ;;; Parser.mon --- Bootstrap parser core
 
-:author "Laluxx"
-:version "0.4.0"
-:keywords "parser combinator incremental consumption diagnostics text"
+:author   Laluxx
+:version  0.4.0
+:keywords parser combinator incremental consumption diagnostics text
 :reference-parsec "https://dspace.library.uu.nl/handle/1874/2535"
 :reference-attoparsec "https://hackage.haskell.org/package/attoparsec/docs/Data-Attoparsec-Text.html"
 :reference-megaparsec "https://hackage.haskell.org/package/megaparsec/docs/Text-Megaparsec.html"
@@ -431,11 +431,11 @@ define parser-sep-first :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -
 
 
 define parser-sep-by-up-to :: Int -> Int -> (Int -> Int -> [Int] -> ParseReply s) -> (Int -> Int -> [Int] -> ParseReply a) -> Int -> Int -> [Int] -> ParseReply [a]
-  limit progress-code separator parser code offset bytes
-    | limit <= 0 -> parser-many-up-to 0 progress-code parser code offset bytes
-    | otherwise  ->
-        (parser-sep-first limit progress-code separator parser code offset bytes
-          (parser code offset bytes))
+  limit progress-code separator parser code offset bytes ->
+       if limit <= 0
+         then parser-many-up-to 0 progress-code parser code offset bytes
+         else parser-sep-first limit progress-code separator parser code offset bytes
+                (parser code offset bytes)
 
 
 define parser-sep-by1-reply :: Int -> Int -> ParseReply [a] -> ParseReply [a]
@@ -705,7 +705,7 @@ define render-parser-failure :: String -> [Int] -> ParserFailure -> String
     def column (source-column-number offset source)
     def start (source-line-start offset source)
     def tail (parser-drop start source)
-    def excerpt (source-bytes->string (take tail (source-line-length tail)))
+    def excerpt (source-bytes->string (take (source-line-length tail) tail))
     ((render-parser-location source-name line column) ++ (render-parser-message failure) ++ (render-parser-excerpt line excerpt) ++ (render-parser-caret column))
 
 
@@ -771,7 +771,7 @@ define parser-empty? :: [Int] -> Bool
 
 
 define parser-drop :: Int -> [Int] -> [Int]
-  n xs -> drop xs n
+  n xs -> drop n xs
 
 
 define byte :: Int -> Int -> [Int] -> ParseResult

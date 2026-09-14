@@ -1,0 +1,55 @@
+module Main
+
+; Types are values.  This finite type is the set {1, ..., 23}.
+type small = {1..23}
+show small
+
+; Lambda binders may carry explicit types.
+integer-identity = λvalue : Int. value
+show (integer-identity 23)
+
+; Ordinary definitions bind values.
+identity = λ[value]. value
+ascii-identity = \value. value
+
+; Typed definitions remain declarations followed by checked values.
+[increment : (Int -> Int)] = λvalue : Int. value + 1
+
+; A colon in expression position constructs evidence, not an annotation that
+; gets erased.  The result is a sealed, first-class Proof value.
+proof-of-three = 3 : Int
+proof-of-identity = λ[value]. value : (Int -> Int)
+
+define preserve-proof :: Proof -> Proof
+  evidence -> evidence
+
+returned-proof = preserve-proof proof-of-identity
+proof-vault = [proof-of-three proof-of-identity returned-proof]
+
+show proof-of-three
+show returned-proof
+show proof-vault
+
+; Explicit contexts let a program state the exact assumptions of a derivation.
+contextual-proof = {x : Int} ⊢ x + 3 : Int
+equality-proof = {x : Int} ⊢ (λy. y + 3) 5 ≡ 8 : Int
+show contextual-proof
+show equality-proof
+
+; Representation-polymorphic functions remain first-class at runtime.
+higher-identity = λ[function]. function
+returned-identity = (higher-identity identity)
+show (identity [1 2 3])
+show (identity {1 2 3})
+show (identity ⌜1 2 3⌝)
+show (returned-identity {4 5 6})
+
+; The lexical environment itself is reflected as a context value.
+show *context*
+
+; Notice that [A] is a collection type, not function-type notation:
+;   λ[value]. value : [value]          ; rejected, soundly
+; The corresponding function judgment is:
+valid-function-proof = λ[value]. value : (Int -> Int)
+show valid-function-proof
+show *context*

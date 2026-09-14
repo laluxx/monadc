@@ -6,6 +6,13 @@
 #+TODO: NEXT(n) TODO(t) DOING(i) BLOCKED(b) RESEARCH(r) | DONE(d) SUPERSEDED(s)
 #+TAGS: compiler(c) core(k) types(y) qtt(q) effects(e) modal(m) runtime(r) tooling(o) research(h)
 
+#+begin_src mon
+"." ++ take 3 "monad"
+<input>:1:1: error: REPL expected one complete form, got 5
+  - Hint: terminate multiline Wisp forms with a blank line, or send one top-level form at a time.
+#+end_src
+
+
 * Navigation
 
 This file is the human-facing work queue and idea inbox. Detailed subsystem
@@ -16,6 +23,7 @@ Do not copy an authoritative roadmap back into several sections here.
 | Area                | Canonical document      | Current direction                          |
 |---------------------+-------------------------+--------------------------------------------|
 | Unified type theory | [[file:context/type-theory.org][context/type-theory.org]] | unified types, effects, and grades         |
+| Contextual proofs   | [[file:context/first-class-contextual-judgments.org][context/first-class-contextual-judgments.org]] | first-class judgments and derivation diagnostics |
 | Semanfftic IR       | [[file:context/ir.org][context/ir.org]]          | one checked compiler authority             |
 | QTT and reclamation | [[file:qtt/README.org][qtt/README.org]]          | graded arrows, effects, ownership lowering |
 | Memory safety       | [[file:context/memory.org][context/memory.org]]      | verified deterministic reclamation         |
@@ -1365,10 +1373,6 @@ Inference rules come in this form:
     ───────        ⌜──⌝ is the inference line.
        C           ⌜C⌝  is the Conclusion.
 
-The idea is to make them first class in the language.
-
- Example:
-
  #+begin_src monad
 
      x : Int   3 : Int
@@ -1380,7 +1384,6 @@ then printLn "It type checked!"
  #+end_src
 
 ** Derivations
-
  #+begin_src monad
 
             x : Int

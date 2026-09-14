@@ -1,9 +1,27 @@
 ;;; Math.mon --- Integer mathematics and common constants
 
+:author   Laluxx
+:version  1.0.0
+:keywords math integer factorial fibonacci prime power constants
+
+;;; Commentary:
+
+ Math contains total-on-domain integer algorithms and common mathematical
+ constants. Operations whose mathematical result is not an Int reject inputs
+ outside their documented domain instead of silently manufacturing a value.
+
+ The recursive algorithms are written with bounded stack/operation growth:
+ Fibonacci is linear rather than the naive exponential recurrence, integer
+ power uses exponentiation by squaring, and primality avoids divisor*divisor
+ overflow in its termination check.
+
+;;; Code:
+
 module Math
   [pi tau half-pi e phi
    factorial fib prime?
    sum-range product-range pow]
+
 
 define [pi      :: Float] 3.141592653589793  :alias π
 define [tau     :: Float] 6.283185307179586  :alias τ
@@ -14,41 +32,94 @@ define [phi     :: Float] 1.6180339887498949 :alias φ
 
 define factorial :: Int -> Int
   n | <= 1      -> 1
-    | otherwise -> n * (factorial (n - 1))
+    | otherwise -> n * factorial (n - 1)
+
 
 define fib :: Int -> Int
   n | <= 0      -> 0
     | <= 1      -> 1
-    | otherwise -> (fib (n - 1)) + (fib (n - 2))
+    | otherwise -> fib (n - 1) + fib (n - 2)
+
 
 define prime-check? :: Int -> Int -> Bool
-  n divisor | divisor * divisor > n -> True
-            | (n % divisor) = 0     -> False
-            | otherwise             -> prime-check? n (divisor + 1)
+  n divisor
+    | divisor > (n / divisor) -> True
+    | (n % divisor) = 0       -> False
+    | otherwise               -> prime-check? n (divisor + 2)
+
 
 define prime? :: Int -> Bool
   n | < 2       -> False
-    | otherwise -> prime-check? n 2
+    | = 2       -> True
+    | (n % 2) = 0 -> False
+    | otherwise -> prime-check? n 3
+
+
+define sum-range-from :: Int -> Int -> Int -> Int
+  lo hi acc | lo > hi   -> acc
+  lo hi acc             -> sum-range-from (lo + 1) hi (acc + lo)
+
 
 define sum-range :: Int -> Int -> Int
-  lo hi | lo > hi    -> 0
-        | otherwise  -> lo + (sum-range (lo + 1) hi)
+  lo hi -> sum-range-from lo hi 0
+
+
+define product-range-from :: Int -> Int -> Int -> Int
+  lo hi acc | lo > hi -> acc
+  lo hi acc           -> product-range-from (lo + 1) hi (acc * lo)
+
 
 define product-range :: Int -> Int -> Int
-  lo hi | lo > hi    -> 1
-        | otherwise  -> lo * (product-range (lo + 1) hi)
+  lo hi -> product-range-from lo hi 1
+
+
+define pow-positive :: Int -> Int -> Int -> Int
+  _ 0 acc -> acc
+  base exponent acc
+    | (exponent % 2) = 1 ->
+        pow-positive (base * base) (exponent / 2) (acc * base)
+    | otherwise ->
+        pow-positive (base * base) (exponent / 2) acc
+
 
 define pow :: Int -> Int -> Int
-  base exponent | exponent <= 0 -> 1
-                | otherwise     -> base * (pow base (exponent - 1))
+  :doc "Raise BASE to a non-negative integer EXPONENT using exponentiation by squaring."
+  _ exponent | exponent < 0 -> error "Math.pow: negative exponent has no general Int result"
+  base exponent -> pow-positive base exponent 1
 
 
-tests [/]
-  assert-eq (factorial 6)       720   "Math factorial"
-  assert-eq (fib 10)            55    "Math fib"
-  assert-eq (prime? 29)         True  "Math prime"
-  assert-eq (prime? 21)         False "Math composite"
-  assert-eq (sum-range 1 100)   5050  "Math sum range"
-  assert-eq (product-range 2 5) 120   "Math product range"
-  assert-eq (pow 3 4)           81    "Math pow"
+tests
+  :factorial:
+  assert-eq (factorial 0) 1 "Math factorial zero"
+  assert-eq (factorial 1) 1 "Math factorial one"
+  assert-eq (factorial 6) 720 "Math factorial"
+  :factorial:
 
+  :fibonacci:
+  assert-eq (fib 0) 0 "Math fib zero"
+  assert-eq (fib 1) 1 "Math fib one"
+  assert-eq (fib 10) 55 "Math fib"
+  assert-eq (fib 30) 832040 "Math fib linear recurrence"
+  :fibonacci:
+
+  :prime:
+  assert-eq (prime? -7) False "Math negative is not prime"
+  assert-eq (prime? 0) False "Math zero is not prime"
+  assert-eq (prime? 2) True "Math two is prime"
+  assert-eq (prime? 29) True "Math prime"
+  assert-eq (prime? 21) False "Math composite"
+  assert-eq (prime? 100) False "Math even composite"
+  :prime:
+
+  :ranges:
+  assert-eq (sum-range 1 100) 5050 "Math sum range"
+  assert-eq (sum-range 5 4) 0 "Math empty sum range"
+  assert-eq (product-range 2 5) 120 "Math product range"
+  assert-eq (product-range 5 4) 1 "Math empty product range"
+  :ranges:
+
+  :power:
+  assert-eq (pow 3 0) 1 "Math power zero"
+  assert-eq (pow 3 4) 81 "Math power even exponent"
+  assert-eq (pow 2 15) 32768 "Math power odd exponent"
+  :power:

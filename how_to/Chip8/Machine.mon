@@ -1,0 +1,327 @@
+;;; Machine.mon --- CHIP-8 machine state and memory
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "how-to chip8 emulator machine memory display keypad"
+
+;;; Commentary:
+
+ A CHIP-8 machine is deliberately tiny: 4 KiB of RAM, sixteen V registers,
+ a sixteen-entry call stack, two timers, a 64x32 monochrome display, and a
+ sixteen-key keypad.  Keeping that state explicit makes the rest of the
+ emulator read like the specification instead of like storage plumbing.
+
+ The mutable arrays below model hardware.  Small helper functions own their
+ invariants: bytes remain bytes, screen coordinates wrap at the CHIP-8 edge,
+ and stack operations stop the machine rather than wandering out of bounds.
+
+;;; Code:
+
+import Data.Bool
+
+module Machine
+  [memory-size program-start font-start
+   screen-width screen-height screen-size
+   register-count stack-depth key-count
+   CpuState cpu
+   reset-machine cpu-running? halt-machine
+   memory-byte write-memory
+   register write-register
+   push-stack pop-stack
+   clear-display pixel toggle-pixel
+   key-down? set-key clear-keys
+   random-byte tick-timers
+   load-font]
+
+
+;;; Machine constants
+
+define memory-size    :: Int 4096
+define program-start  :: Int 0x200
+define font-start     :: Int 0x050
+
+define screen-width   :: Int 64
+define screen-height  :: Int 32
+define screen-size    :: Int (screen-width * screen-height)
+
+define register-count :: Int 16
+define stack-depth    :: Int 16
+define key-count      :: Int 16
+
+
+;;; Processor state
+
+layout CpuState
+  [pc          :: Int]
+  [index       :: Int]
+  [sp          :: Int]
+  [delay-timer :: Int]
+  [sound-timer :: Int]
+  [random-seed :: Int]
+  [running     :: Bool]
+  [fault       :: Int]
+
+
+define cpu :: CpuState
+  CpuState program-start 0 0 0 0 0x1234567 True 0
+
+
+;;; Hardware storage
+
+| The machine APIs perform arithmetic on every stored value, so use explicit
+| Int elements and enforce byte ranges at the write boundaries.
+define ram       :: [4096 Int]
+define registers :: [16   Int]
+define stack     :: [16   Int]
+define display   :: [2048 Int]
+define keypad    :: [16   Int]
+
+
+;;; Small numeric helpers
+
+define byte :: Int -> Int
+  value ->
+    def remainder (value % 256)
+    if remainder < 0 then remainder + 256 else remainder
+
+
+define wrap-x :: Int -> Int
+  x -> x % screen-width
+
+
+define wrap-y :: Int -> Int
+  y -> y % screen-height
+
+
+define pixel-index :: Int -> Int -> Int
+  x y -> ((wrap-y y) * screen-width) + (wrap-x x)
+
+
+;;; RAM and registers
+
+| Fixed arrays are applied explicitly.  Besides being clearer at the hardware
+| boundary, this keeps the dependent checker from mistaking the array value
+| itself for an index.
+define memory-byte :: Int -> Int
+  address | < 0            -> 0
+          | >= memory-size -> 0
+          | otherwise      -> ram[address]
+
+
+define write-memory :: Int -> Int -e-> Int where e has state.write
+  address _ | < 0            -> halt-machine 0xfffd
+  address _ | >= memory-size -> halt-machine 0xfffd
+  address value ->
+    ram[address] <- (byte value)
+    0
+
+
+define register :: Int -> Int
+  index -> (registers index)
+
+
+define write-register :: Int -> Int -e-> Int where e has state.write
+  index value ->
+    registers[index] <- (byte value)
+    0
+
+
+;;; Stack
+
+define push-stack :: Int -e-> Int where e has state.write
+  value | cpu.sp >= stack-depth -> halt-machine 0xffff
+  value ->
+    stack[cpu.sp] <- value
+    set! cpu.sp (cpu.sp + 1)
+    0
+
+
+define pop-stack-value :: Int -e-> Int where e has state.write
+  _ ->
+    set! cpu.sp (cpu.sp - 1)
+    stack[cpu.sp]
+
+
+define pop-stack :: Int -e-> Int where e has state.write
+  _ -> if cpu.sp <= 0 then halt-machine 0xfffe else pop-stack-value 0
+
+
+;;; Display
+
+define clear-display-from :: Int -e-> Int where e has state.write
+  index | >= screen-size -> 0
+  index ->
+    set! (display index) 0
+    clear-display-from (index + 1)
+
+
+define clear-display :: Int -e-> Int where e has state.write
+  _ -> clear-display-from 0
+
+
+define pixel :: Int -> Int -> Int
+  x y -> (display (pixel-index x y))
+
+
+;; CHIP-8 drawing is XOR drawing.  Returning 1 when a lit pixel is erased lets
+;; the Dxyn instruction accumulate VF without knowing how pixels are stored.
+define toggle-pixel :: Int -> Int -e-> Int where e has state.write
+  x y ->
+    def index (pixel-index x y)
+    def before (display index)
+    def after (if (= before 0) 1 0)
+    set! (display index) after
+    if before = 1 then 1 else 0
+
+
+;;; Keypad
+
+define key-down? :: Int -> Bool
+  key | < 0          -> False
+      | >= key-count -> False
+      | otherwise    -> (keypad key) != 0
+
+
+define set-key :: Int -> Bool -e-> Int where e has state.write
+  key down ->
+    set! (keypad key) (if down 1 0)
+    0
+
+
+define clear-keys-from :: Int -e-> Int where e has state.write
+  key | >= key-count -> 0
+  key ->
+    set! (keypad key) 0
+    clear-keys-from (key + 1)
+
+
+define clear-keys :: Int -e-> Int where e has state.write
+  _ -> clear-keys-from 0
+
+
+;;; Timers and deterministic randomness
+
+;; The emulator owns a tiny deterministic generator instead of depending on a
+;; host random API.  Replaying the same ROM therefore starts from the same
+;; machine state every time.
+define random-byte :: Int -e-> Int where e has state.write
+  _ ->
+    def next ((cpu.random-seed * 1103515245 + 12345) % 2147483648)
+    set! cpu.random-seed next
+    (next / 65536) % 256
+
+
+define decrement-if-positive :: Int -> Int
+  value | > 0       -> value - 1
+        | otherwise -> 0
+
+
+define tick-timers :: Int -io-> Int
+  _ ->
+    set! cpu.delay-timer (decrement-if-positive cpu.delay-timer)
+    set! cpu.sound-timer (decrement-if-positive cpu.sound-timer)
+    0
+
+
+;;; CHIP-8 font
+
+;; 0-F, five bytes per glyph.  Fx29 points I at one of these sprites.
+define font-data :: [80]
+[
+  0xf0 0x90 0x90 0x90 0xf0
+  0x20 0x60 0x20 0x20 0x70
+  0xf0 0x10 0xf0 0x80 0xf0
+  0xf0 0x10 0xf0 0x10 0xf0
+  0x90 0x90 0xf0 0x10 0x10
+  0xf0 0x80 0xf0 0x10 0xf0
+  0xf0 0x80 0xf0 0x90 0xf0
+  0xf0 0x10 0x20 0x40 0x40
+  0xf0 0x90 0xf0 0x90 0xf0
+  0xf0 0x90 0xf0 0x10 0xf0
+  0xf0 0x90 0xf0 0x90 0x90
+  0xe0 0x90 0xe0 0x90 0xe0
+  0xf0 0x80 0x80 0x80 0xf0
+  0xe0 0x90 0x90 0x90 0xe0
+  0xf0 0x80 0xf0 0x80 0xf0
+  0xf0 0x80 0xf0 0x80 0x80
+]
+
+
+define load-font-from :: Int -e-> Int where e has state.write
+  offset | >= 80 -> 0
+  offset ->
+    write-memory (font-start + offset) (font-data offset)
+    load-font-from (offset + 1)
+
+
+define load-font :: Int -e-> Int where e has state.write
+  _ -> load-font-from 0
+
+
+;;; Reset
+
+define clear-memory-from :: Int -e-> Int where e has state.write
+  address | >= memory-size -> 0
+  address ->
+    set! (ram address) 0
+    clear-memory-from (address + 1)
+
+
+define clear-registers-from :: Int -e-> Int where e has state.write
+  index | >= register-count -> 0
+  index ->
+    set! (registers index) 0
+    clear-registers-from (index + 1)
+
+
+define clear-stack-from :: Int -e-> Int where e has state.write
+  index | >= stack-depth -> 0
+  index ->
+    set! (stack index) 0
+    clear-stack-from (index + 1)
+
+
+define reset-machine :: Int -io-> Int
+  _ ->
+    set! cpu.pc program-start
+    set! cpu.index 0
+    set! cpu.sp 0
+    set! cpu.delay-timer 0
+    set! cpu.sound-timer 0
+    set! cpu.random-seed 0x1234567
+    set! cpu.running True
+    set! cpu.fault 0
+
+    clear-memory-from 0
+    clear-registers-from 0
+    clear-stack-from 0
+    clear-display 0
+    clear-keys 0
+    load-font 0
+
+
+define cpu-running? -> Bool
+  cpu.running
+
+
+define halt-machine :: Int -e-> Int where e has state.write
+  fault ->
+    set! cpu.fault fault
+    set! cpu.running False
+    fault
+
+
+;;; Tests
+
+tests
+  :geometry:
+  assert-eq (wrap-x 64)                 0   "screen x wraps"
+  assert-eq (wrap-y 32)                 0   "screen y wraps"
+  assert-eq (pixel-index 1 1)           65  "pixel indexing is row major"
+  :geometry:
+
+  :bytes:
+  assert-eq (byte 256)                  0   "byte arithmetic wraps"
+  assert-eq (byte 511)                  255 "byte keeps the low eight bits"
+  assert-eq (byte (0 - 1))              255 "negative arithmetic wraps through 8 bits"
+  :bytes:

@@ -1,8 +1,8 @@
 ;;; QuickCheck.mon --- Property generation and shrinking evidence
 
-:author "Laluxx"
-:version "0.4.0"
-:keywords "testing property quickcheck arbitrary shrink deterministic replay"
+:author   Laluxx
+:version  0.5.0
+:keywords testing property quickcheck arbitrary shrink deterministic replay
 
 ;;; Commentary:
 
@@ -15,13 +15,15 @@
  Finite type sets do not need Arbitrary instances: check-laws enumerates them
  completely in source order and reports EXHAUSTIVE. Infinite and opaque types
  opt into sampled checking by implementing arbitrary. Shrinking has a lawful,
- allocation-free empty default, so the minimal definition is arbitrary;
- useful instances should override shrink with strictly simpler candidates.
+ allocation-free empty default for first-order Arbitrary, so its minimal
+ definition is arbitrary. Higher-kinded Arbitrary1 cannot manufacture a
+ generic =c (c Int)= empty value without an additional Empty/Alternative
+ premise, so =shrink1= is intentionally part of that class's minimal basis.
 
  Seed splitting and output mixing use SplitMix64's Weyl increment and
  Stafford variant-13 finalizer with deliberate two's-complement wrapping.
  Logical right shifts make the bit-level specification independent of signed
- comparison. Bounded generation uses rejection sampling rather than `%`
+ comparison. Bounded generation uses rejection sampling rather than =%=
  alone, avoiding modulo bias.
 
  The compiler owns seed scheduling, exact 64-bit replay coordinates, and the
@@ -87,11 +89,13 @@ method quickcheck-bounded-from :: Int -> Int -> Int -> Int
 
 
 method quickcheck-bounded :: Int -> Int -> Int
-  seed bound ->
-    (quickcheck-bounded-from
-      seed
-      bound
-      (>>> (quickcheck-mix64 (quickcheck-next-seed seed)) 1))
+  seed bound
+    | bound <= 0 -> error "Test.QuickCheck.quickcheck-bounded: bound must be positive"
+    | otherwise ->
+        (quickcheck-bounded-from
+          seed
+          bound
+          (>>> (quickcheck-mix64 (quickcheck-next-seed seed)) 1))
 
 
 define quickcheck-shrink-integral :: Int -> Int -> [Int]
@@ -113,10 +117,14 @@ class Arbitrary a where
   ;; Generator determinism: equal seed and size inputs produce equal values.
   ;; Shrink progress: candidates should be structurally simpler than the input.
 
+define quickcheck-size-bound :: Int -> Int
+  size | size < 0 -> 0
+  size -> size
+
 
 instance Arbitrary Int
   arbitrary seed size ->
-    (quickcheck-bounded seed ((size * 2) + 1)) - size
+    (quickcheck-bounded seed (((quickcheck-size-bound size) * 2) + 1)) - (quickcheck-size-bound size)
 
   shrink x ->
     quickcheck-shrink-integral x x
@@ -126,12 +134,11 @@ class Arbitrary1 c where
   arbitrary1 :: Int -> Int -> c Int
   shrink1    :: c Int -> c (c Int)
 
-  shrink1 xs ->
-    list
-
   ;; Higher-kinded generation evidence for laws over c a. The concrete Int
   ;; element domain keeps a constructor law monomorphic and reproducible while
   ;; exercising its shape independently of element generation.
+  ;; Minimal complete definition: arbitrary1 and shrink1. There is no generic
+  ;; empty `c (c Int)` available from this class alone.
 
 
 instance Arbitrary1 Coll
@@ -169,6 +176,7 @@ tests
   :determinism:
   assert-eq (arbitrary 0 10) (arbitrary 0 10) "Arbitrary Int replays a seed"
   assert-eq (arbitrary 17 0) 0 "Arbitrary Int respects size zero"
+  assert-eq (arbitrary 17 -10) 0 "Arbitrary Int normalizes an invalid negative size to zero"
   :determinism:
 
   :shrinking:

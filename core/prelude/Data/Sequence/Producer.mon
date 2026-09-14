@@ -1,0 +1,840 @@
+;;; Producer.mon --- Existential producer calculus for sequence fusion
+
+:author   Laluxx
+:version  0.4.0
+:keywords sequence producer existential fusion flat-map stateful rate normalization
+
+;;; Commentary:
+
+ Producer is the intensional machine calculus used to implement and fuse
+ representation-changing sequence operations. It is not a second definition of
+ sequence shape.
+
+ A Producer existentially hides its private state:
+
+                  Producer E A = exists S.
+                    (S -> Step E S A) x S
+
+ where
+
+                  Step E S A = 1 + E S + A x E S.
+
+ The hidden state is essential. Clients should depend on the yielded element and
+ evaluation strategy, not on an implementation-specific chain of map/filter/take
+ state wrappers. Existential packaging is the representation used by classical
+ stream fusion and is precisely what lets arbitrarily many transforms remain one
+ producer value while their internal state changes freely.
+
+ ;;; Extensional Sequence versus Intensional Machine
+
+ Sequence owns the visible coalgebra
+
+                       1 + A x E X.
+
+ Producer adds the silent Skip summand solely to describe internal progress:
+
+                       1 + E X + A x E X.
+
+ A finite prefix of Skip transitions is invisible when Producer is observed as a
+ Sequence. An infinite Skip path is visible as divergence. The compiler may erase
+ or rearrange hidden producer states only when visible observations, demanded
+ divergence, evaluation order obligations, and quantitative usage are preserved.
+
+ The Producer constructor is intentionally hidden from the public module
+ surface. User code may construct producers through =producer=, but cannot unpack
+ the existential state and make its representation part of ordinary semantics.
+ This gives the optimizer freedom to normalize pipelines without turning private
+ fusion state into a language-level observational commitment.
+
+ ;;; Demand Discipline
+
+ Every combinator below advances at most one raw input transition for each raw
+ transition it constructs, except weak observation itself, which may remove a
+ finite Skip prefix.
+
+ Dormant continuations stay under E until their turn. Append never observes the
+ right producer before the left producer stops. Zip observes left before right
+ for each pair and keeps the unused continuation suspended. These ordering facts
+ are semantic in the presence of divergence and therefore constrain fusion.
+
+ For Lazy, optimization additionally satisfies demand refinement: a fused
+ pipeline may demand less than the reference producer but never demand a
+ continuation or retained callback earlier without a separate strictness proof.
+
+ ;;; Fusion as Normalization
+
+ Classical stream fusion relies on an existential state machine plus local
+ Stop/Skip/Yield transformations. More recent complete-fusion work strengthens
+ this perspective: pipeline compilation can be understood as normalization of a
+ stream calculus to a state-machine normal form.
+
+ Monad adopts the same architectural boundary without making Producer the
+ extensional meaning of Sequence. Core supplies the machine and its equations;
+ the compiler is responsible for specialization, state-product elimination,
+ constructor elimination, loopification, and eventual normalization.
+
+ For a statically closed producer P, the intended compiler normalization N has
+ the following proof obligations:
+
+                    observe (N P)  ~=d  observe P
+                    N (N P)        =nf  N P
+
+ where ~=d is visible demand equivalence and =nf means equality of the chosen
+ first-order machine normal form up to alpha-renaming and state isomorphism.
+ Normalization is required to terminate. Its output must contain no Core-level
+ Producer, Step, View, higher-order transform closure, or intermediate tuple whose
+ sole purpose was pipeline composition.
+
+ These equations specify a target contract, not an executable =normalize=
+ function in Core. The normalizer belongs to the compiler because its result is
+ lower-level control flow, while the equations being normalized remain ordinary
+ Core semantics.
+
+ ;;; Expressiveness versus Complete Fusion
+
+ The Step machine is extensionally universal for the regular one-output-at-a-time
+ sequence interface. Zero-rate behavior is Skip; one-rate behavior is Yield; and
+ many-rate behavior such as flat-map is represented by a product state that
+ alternates between an outer Producer and the currently active inner Producer.
+
+ This is enough to give every combinator below precise ordinary Core semantics.
+ It is not, by itself, a theorem that compiling those Core values naively leaves
+ no existential packages or closures. Flat-map is the critical example: its
+ semantic state contains an existential inner Producer selected by a callback.
+
+ Monad therefore distinguishes two claims:
+
+   semantic fusion
+     No intermediate Sequence is materialized; transforms compose as one
+     Producer state machine.
+
+   complete representation fusion
+     After specialization of a statically known pipeline, Producer packages,
+     Step constructors, closures, tuples, and transform wrappers are absent from
+     generated code.
+
+ The first claim follows from this module. The second is a compiler normalization
+ obligation. The compiler must perform closure conversion/defunctionalization and
+ normalize producer composition to a first-order state machine whenever the
+ pipeline and its higher-order callbacks are statically available after
+ specialization. A dynamically escaping Producer remains an ordinary first-class
+ value and carries no zero-allocation promise.
+
+ This boundary follows the lesson of complete-fusion work: nesting, differing
+ rates, and zip require semantic normalization rather than optimism about a
+ black-box inliner. Core supplies the reference calculus and equations; the
+ compiler owns normalization to representation-free machine code.
+
+ ;;; Research Basis
+
+ Duncan Coutts, Roman Leshchinskiy, and Don Stewart, "Stream Fusion: From Lists
+ to Streams to Nothing at All", ICFP 2007.
+   https://doi.org/10.1145/1291151.1291199
+
+ Ralf Hinze, Thomas Harper, and Daniel W. H. James, "Theory and Practice of
+ Fusion", IFL 2010.
+   https://doi.org/10.1007/978-3-642-24276-2_2
+
+ Oleg Kiselyov, Aggelos Biboudis, Nick Palladinos, and Yannis Smaragdakis,
+ "Stream Fusion, to Completeness", POPL 2017.
+   https://doi.org/10.1145/3009837.3009880
+
+ Oleg Kiselyov, Tomoaki Kobayashi, and Nick Palladinos, "Complete Fusion for
+ Stateful Streams: Equational Theory of Stateful Streams and Fusion as
+ Normalization-by-Evaluation", arXiv:2412.15768, revised 2026.
+   https://arxiv.org/abs/2412.15768
+
+ Tomoaki Kobayashi and Oleg Kiselyov, "Complete Stream Fusion for
+ Software-Defined Radio", PEPM 2024.
+   https://doi.org/10.1145/3635800.3636962
+
+ The first two references motivate existential pull machines and coalgebraic
+ fusion. The complete-fusion work demonstrates why nesting and rate differences
+ must be normalized deliberately, and the SDR case study shows that stateful
+ mapping and sliding windows need not become primitive sequence shapes.
+
+;;; Code:
+
+import Control.Evaluation
+import Control.Applicative
+import Data.Bool
+import Data.Functor
+import Data.Tuple
+
+module Data.Sequence.Producer
+  [Step Stop Skip Yield
+   Producer producer observe-producer MapFilterResult Filtered Emitted
+   filter-producer take-producer drop-producer
+   take-while-producer drop-while-producer
+   append-producer zip-producer zip-with-producer
+   flat-map-producer map-accumulate-producer map-filter-accumulate-producer
+   scan-producer enumerate-producer intersperse-producer]
+
+
+;;; Existential Machine
+
+
+data Step e s a
+  = Stop
+  | Skip (e s)
+  | Yield a (e s)
+
+
+instance Functor e => Bifunctor (Step e)
+  bimap _ _ Stop -> Stop
+
+  bimap map-state _ [Skip next] ->
+    Skip (map map-state next)
+
+  bimap map-state map-element [Yield value next] ->
+    Yield (map-element value) (map map-state next)
+
+
+;; S is existential: it occurs in the constructor arguments but not in the
+;; Producer result. The compiler must preserve this abstraction boundary.
+data Producer :: (Type -> Type) -> Type -> Type
+  ProducerState : (s -> Step e s a) -> s -> Producer e a
+
+
+define producer :: (s -> Step e s a) -> s -> Producer e a
+  transition initial -> ProducerState transition initial
+
+
+define map-step-element :: Functor e => (a -> b) -> Step e s a -> Step e s b
+  _ Stop -> Stop
+  _ [Skip next] -> Skip next
+  f [Yield value next] -> Yield (f value) next
+
+
+define map-step-state :: Functor e => (s -> t) -> Step e s a -> Step e t a
+  _ Stop -> Stop
+  f [Skip next] -> Skip (map f next)
+  f [Yield value next] -> Yield value (map f next)
+
+
+define map-producer-transition :: Functor e =>
+  (a -> b) -> (s -> Step e s a) -> s -> Step e s b
+  f transition state -> map-step-element f (transition state)
+
+
+instance Functor e => Functor (Producer e)
+  map f [ProducerState transition state] ->
+    ProducerState (map-producer-transition f transition) state
+
+
+;;; Weak Observation
+
+
+;; Perform one transition while immediately repackaging the private state. The
+;; existential S never escapes this eliminator: subsequent code works with the
+;; uniform state type Producer e a.
+define advance-producer :: Functor e =>
+  Producer e a -> Step e (Producer e a) a
+  [ProducerState transition state] ->
+    map-step-state (lambda (next) (ProducerState transition next)) (transition state)
+
+
+data Observation e a
+  = NoObservation Bool
+  | Observed a (e (Producer e a))
+
+
+define observation-result :: Observation e a -> (a, e (Producer e a))?
+  [NoObservation _] -> nil
+  [Observed value next] -> (value, next)
+
+
+define demand-producer :: Evaluation e => e (Producer e a) -> Producer e a
+  next -> demand next
+
+
+define observe-machine-step :: Evaluation e => Step e (Producer e a) a -> Observation e a
+  [Skip next] -> observe-machine (demand-producer next)
+  [Yield value next] -> Observed value next
+  _ -> NoObservation False
+
+
+define observe-machine :: Evaluation e => Producer e a -> Observation e a
+  source -> observe-machine-step (advance-producer source)
+
+
+define observe-producer :: Evaluation e =>
+  Producer e a -> (a, e (Producer e a))?
+  source -> observation-result (observe-machine source)
+
+
+;;; Local Transformations
+
+
+define filter-step :: (a -> Bool) -> Step e s a -> Step e s a
+  _ Stop -> Stop
+  _ [Skip next] -> Skip next
+  predicate [Yield value next]
+    | predicate value -> Yield value next
+    | otherwise       -> Skip next
+
+
+define filter-transition :: (a -> Bool) -> (s -> Step e s a) -> s -> Step e s a
+  predicate transition state -> filter-step predicate (transition state)
+
+
+define filter-producer :: (a -> Bool) -> Producer e a -> Producer e a
+  predicate [ProducerState transition state] ->
+    ProducerState (filter-transition predicate transition) state
+
+
+;; Take counts Yield transitions. Skip never consumes the visible budget.
+data TakeState e s a
+  = TakeState Int (s -> Step e s a) s
+
+
+define take-next :: Functor e =>
+  Int -> (s -> Step e s a) -> Step e s a -> Step e (TakeState e s a) a
+  _ _ Stop -> Stop
+
+  amount transition [Skip next] ->
+    Skip (map (lambda (state) (TakeState amount transition state)) next)
+
+  amount transition [Yield value next] ->
+    Yield value
+      (map (lambda (state) (TakeState (amount - 1) transition state)) next)
+
+
+define take-transition :: Functor e =>
+  TakeState e s a -> Step e (TakeState e s a) a
+  [TakeState amount _ _]
+    | amount <= 0 -> Stop
+
+  [TakeState amount transition state] ->
+    take-next amount transition (transition state)
+
+
+define take-producer :: Functor e =>
+  Int -> Producer e a -> Producer e a
+  amount [ProducerState transition state] ->
+    ProducerState take-transition (TakeState amount transition state)
+
+
+;; Drop turns the first N Yield transitions into silent progress.
+data DropState e s a
+  = DropState Int (s -> Step e s a) s
+
+
+define pass-drop-step :: Functor e =>
+  (s -> Step e s a) -> Step e s a -> Step e (DropState e s a) a
+  transition value ->
+    map-step-state (lambda (state) (DropState 0 transition state)) value
+
+
+define drop-next :: Functor e =>
+  Int -> (s -> Step e s a) -> Step e s a -> Step e (DropState e s a) a
+  _ _ Stop -> Stop
+
+  amount transition [Skip next] ->
+    Skip (map (lambda (state) (DropState amount transition state)) next)
+
+  amount transition [Yield _ next] ->
+    Skip (map (lambda (state) (DropState (amount - 1) transition state)) next)
+
+
+define drop-transition :: Functor e =>
+  DropState e s a -> Step e (DropState e s a) a
+  [DropState amount transition state]
+    | amount <= 0 -> pass-drop-step transition (transition state)
+
+  [DropState amount transition state] ->
+    drop-next amount transition (transition state)
+
+
+define drop-producer :: Functor e =>
+  Int -> Producer e a -> Producer e a
+  amount [ProducerState transition state] ->
+    ProducerState drop-transition (DropState amount transition state)
+
+
+;; TakeWhile terminates on the first rejected Yield without demanding its tail.
+data TakeWhileState e s a
+  = TakeWhileState (a -> Bool) (s -> Step e s a) s
+
+
+define take-while-next :: Functor e =>
+  (a -> Bool) -> (s -> Step e s a) -> Step e s a
+  -> Step e (TakeWhileState e s a) a
+  _ _ Stop -> Stop
+
+  predicate transition [Skip next] ->
+    Skip
+      (map (lambda (state) (TakeWhileState predicate transition state)) next)
+
+  predicate transition [Yield value next]
+    | predicate value ->
+        Yield value
+          (map (lambda (state) (TakeWhileState predicate transition state)) next)
+    | otherwise -> Stop
+
+
+define take-while-transition :: Functor e =>
+  TakeWhileState e s a -> Step e (TakeWhileState e s a) a
+  [TakeWhileState predicate transition state] ->
+    take-while-next predicate transition (transition state)
+
+
+define take-while-producer :: Functor e =>
+  (a -> Bool) -> Producer e a -> Producer e a
+  predicate [ProducerState transition state] ->
+    ProducerState take-while-transition
+      (TakeWhileState predicate transition state)
+
+
+;; DropWhile has a dropping phase and a transition-transparent passing phase.
+data DropWhileState e s a
+  = Dropping (a -> Bool) (s -> Step e s a) s
+  | Passing (s -> Step e s a) s
+
+
+define passing-next :: Functor e =>
+  (s -> Step e s a) -> Step e s a -> Step e (DropWhileState e s a) a
+  transition value ->
+    map-step-state (lambda (state) (Passing transition state)) value
+
+
+define dropping-next :: Functor e =>
+  (a -> Bool) -> (s -> Step e s a) -> Step e s a
+  -> Step e (DropWhileState e s a) a
+  _ _ Stop -> Stop
+
+  predicate transition [Skip next] ->
+    Skip (map (lambda (state) (Dropping predicate transition state)) next)
+
+  predicate transition [Yield value next]
+    | predicate value ->
+        Skip (map (lambda (state) (Dropping predicate transition state)) next)
+    | otherwise ->
+        Yield value (map (lambda (state) (Passing transition state)) next)
+
+
+define drop-while-transition :: Functor e =>
+  DropWhileState e s a -> Step e (DropWhileState e s a) a
+  [Passing transition state] ->
+    passing-next transition (transition state)
+
+  [Dropping predicate transition state] ->
+    dropping-next predicate transition (transition state)
+
+
+define drop-while-producer :: Functor e =>
+  (a -> Bool) -> Producer e a -> Producer e a
+  predicate [ProducerState transition state] ->
+    ProducerState drop-while-transition
+      (Dropping predicate transition state)
+
+
+;;; Ordered Composition
+
+
+;; Append never observes RIGHT before LEFT terminates.
+data AppendState e l r a
+  = AppendLeft (l -> Step e l a) l (r -> Step e r a) r
+  | AppendRight (r -> Step e r a) r
+
+
+define append-right-next :: Functor e =>
+  (r -> Step e r a) -> Step e r a -> Step e (AppendState e l r a) a
+  transition value ->
+    map-step-state (lambda (state) (AppendRight transition state)) value
+
+
+define append-left-next :: Evaluation e =>
+  (l -> Step e l a) -> (r -> Step e r a) -> r -> Step e l a
+  -> Step e (AppendState e l r a) a
+  _ right-transition right-state Stop ->
+    Skip (defer (lambda (_) (AppendRight right-transition right-state)))
+
+  left-transition right-transition right-state [Skip next] ->
+    Skip
+      (map
+        (lambda (state)
+          (AppendLeft left-transition state right-transition right-state))
+        next)
+
+  left-transition right-transition right-state [Yield value next] ->
+    Yield value
+      (map
+        (lambda (state)
+          (AppendLeft left-transition state right-transition right-state))
+        next)
+
+
+define append-transition :: Evaluation e =>
+  AppendState e l r a -> Step e (AppendState e l r a) a
+  [AppendRight transition state] ->
+    append-right-next transition (transition state)
+
+  [AppendLeft left-transition left-state right-transition right-state] ->
+    append-left-next left-transition right-transition right-state
+      (left-transition left-state)
+
+
+define append-producer :: Evaluation e =>
+  Producer e a -> Producer e a -> Producer e a
+  [ProducerState left-transition left-state]
+  [ProducerState right-transition right-state] ->
+    ProducerState append-transition
+      (AppendLeft left-transition left-state right-transition right-state)
+
+
+;; Zip is left-to-right within each output pair. RIGHT is untouched until LEFT
+;; has yielded the value for that pair.
+data ZipState e l r a b
+  = NeedLeft (l -> Step e l a) l (r -> Step e r b) r
+  | NeedRight a (e l) (l -> Step e l a) (r -> Step e r b) r
+
+
+define zip-left-next :: Evaluation e =>
+  (l -> Step e l a) -> (r -> Step e r b) -> r -> Step e l a
+  -> Step e (ZipState e l r a b) (a, b)
+  _ _ _ Stop -> Stop
+
+  left-transition right-transition right-state [Skip next] ->
+    Skip
+      (map
+        (lambda (state)
+          (NeedLeft left-transition state right-transition right-state))
+        next)
+
+  left-transition right-transition right-state [Yield value next] ->
+    Skip
+      (defer
+        (lambda (_)
+          (NeedRight value next left-transition right-transition right-state)))
+
+
+define zip-right-next :: Evaluation e =>
+  a -> e l -> (l -> Step e l a) -> (r -> Step e r b) -> Step e r b
+  -> Step e (ZipState e l r a b) (a, b)
+  _ _ _ _ Stop -> Stop
+
+  left-value left-next left-transition right-transition [Skip next] ->
+    Skip
+      (map
+        (lambda (state)
+          (NeedRight left-value left-next left-transition right-transition state))
+        next)
+
+  left-value left-next left-transition right-transition [Yield right-value next] ->
+    Yield (left-value, right-value)
+      (defer
+        (lambda (_)
+          (NeedLeft left-transition (demand left-next)
+            right-transition (demand next))))
+
+
+define zip-transition :: Evaluation e =>
+  ZipState e l r a b -> Step e (ZipState e l r a b) (a, b)
+  [NeedLeft left-transition left-state right-transition right-state] ->
+    zip-left-next left-transition right-transition right-state
+      (left-transition left-state)
+
+  [NeedRight left-value left-next left-transition right-transition right-state] ->
+    zip-right-next left-value left-next left-transition right-transition
+      (right-transition right-state)
+
+
+define zip-producer :: Evaluation e =>
+  Producer e a -> Producer e b -> Producer e (a, b)
+  [ProducerState left-transition left-state]
+  [ProducerState right-transition right-state] ->
+    ProducerState zip-transition
+      (NeedLeft left-transition left-state right-transition right-state)
+
+
+define zip-with-producer :: Evaluation e =>
+  (a -> b -> c) -> Producer e a -> Producer e b -> Producer e c
+  combine left right ->
+    map (uncurry combine) (zip-producer left right)
+
+
+;;; Nested and Stateful Composition
+
+
+;; FlatMap changes production rate: one outer element may produce zero, one, or
+;; arbitrarily many inner elements. OUTER-REST stays suspended while INNER is
+;; live, so an infinite inner producer never demands an unreachable outer tail.
+data FlatMapState e a b
+  = NeedOuter (a -> Producer e b) (Producer e a)
+  | NeedInner (a -> Producer e b) (e (Producer e a)) (Producer e b)
+
+
+define flat-map-outer-next :: Evaluation e =>
+  (a -> Producer e b) -> Step e (Producer e a) a
+  -> Step e (FlatMapState e a b) b
+  _ Stop -> Stop
+
+  expand [Skip outer-next] ->
+    Skip (map (lambda (next) (NeedOuter expand next)) outer-next)
+
+  expand [Yield value outer-next] ->
+    Skip
+      (defer
+        (lambda (_)
+          (NeedInner expand outer-next (expand value))))
+
+
+define flat-map-inner-next :: Evaluation e =>
+  (a -> Producer e b) -> e (Producer e a) -> Step e (Producer e b) b
+  -> Step e (FlatMapState e a b) b
+  expand outer-next Stop ->
+    Skip (map (lambda (next) (NeedOuter expand next)) outer-next)
+
+  expand outer-next [Skip inner-next] ->
+    Skip
+      (map
+        (lambda (next) (NeedInner expand outer-next next))
+        inner-next)
+
+  expand outer-next [Yield value inner-next] ->
+    Yield value
+      (map
+        (lambda (next) (NeedInner expand outer-next next))
+        inner-next)
+
+
+define flat-map-transition :: Evaluation e =>
+  FlatMapState e a b -> Step e (FlatMapState e a b) b
+  [NeedOuter expand outer] ->
+    flat-map-outer-next expand (advance-producer outer)
+
+  [NeedInner expand outer-next inner] ->
+    flat-map-inner-next expand outer-next (advance-producer inner)
+
+
+define flat-map-producer :: Evaluation e =>
+  (a -> Producer e b) -> Producer e a -> Producer e b
+  expand outer ->
+    ProducerState flat-map-transition (NeedOuter expand outer)
+
+
+;; map-accumulate is the general one-output-per-Yield stateful map. Source Skip
+;; transitions never update the accumulator.
+data MapAccumulateState e state a b
+  = MapAccumulateState (state -> a -> (state, b)) state (Producer e a)
+
+
+define map-accumulate-next :: Functor e =>
+  (state -> a -> (state, b)) -> state -> Step e (Producer e a) a
+  -> Step e (MapAccumulateState e state a b) b
+  _ _ Stop -> Stop
+
+  combine accumulator [Skip next] ->
+    Skip
+      (map
+        (lambda (source)
+          (MapAccumulateState combine accumulator source))
+        next)
+
+  combine accumulator [Yield value next] ->
+    (map-accumulate-yield combine next (combine accumulator value))
+
+
+define map-accumulate-yield :: Functor e =>
+  (state -> a -> (state, b)) -> e (Producer e a) -> (state, b)
+  -> Step e (MapAccumulateState e state a b) b
+  combine next result ->
+    Yield (snd result) (map (lambda (source) (MapAccumulateState combine (fst result) source)) next)
+
+
+define map-accumulate-transition :: Functor e =>
+  MapAccumulateState e state a b
+  -> Step e (MapAccumulateState e state a b) b
+  [MapAccumulateState combine accumulator source] ->
+    map-accumulate-next combine accumulator (advance-producer source)
+
+
+define map-accumulate-producer :: Functor e =>
+  (state -> a -> (state, b)) -> state -> Producer e a -> Producer e b
+  combine initial source ->
+    ProducerState map-accumulate-transition (MapAccumulateState combine initial source)
+
+
+;; map-filter-accumulate is the general stateful zero-or-one-rate transform.
+;; Returning nil advances state without producing a visible element.
+data MapFilterResult state b
+  = Filtered state
+  | Emitted state b
+
+
+data MapFilterAccumulateState e state a b
+  = MapFilterAccumulateState (state -> a -> MapFilterResult state b) state (Producer e a)
+
+
+define map-filter-result :: Functor e =>
+  (state -> a -> MapFilterResult state b) -> e (Producer e a) -> MapFilterResult state b
+  -> Step e (MapFilterAccumulateState e state a b) b
+  combine next [Filtered following] ->
+    Skip
+      (map
+        (lambda (source)
+          (MapFilterAccumulateState combine following source))
+        next)
+
+  combine next [Emitted following output] ->
+    Yield output
+      (map
+        (lambda (source)
+          (MapFilterAccumulateState combine following source))
+        next)
+
+
+define map-filter-accumulate-next :: Functor e =>
+  (state -> a -> MapFilterResult state b) -> state -> Step e (Producer e a) a
+  -> Step e (MapFilterAccumulateState e state a b) b
+  _ _ Stop -> Stop
+
+  combine accumulator [Skip next] ->
+    Skip
+      (map
+        (lambda (source)
+          (MapFilterAccumulateState combine accumulator source))
+        next)
+
+  combine accumulator [Yield value next] ->
+    map-filter-result combine next (combine accumulator value)
+
+
+define map-filter-accumulate-transition :: Functor e =>
+  MapFilterAccumulateState e state a b
+  -> Step e (MapFilterAccumulateState e state a b) b
+  [MapFilterAccumulateState combine accumulator source] ->
+    map-filter-accumulate-next combine accumulator (advance-producer source)
+
+
+define map-filter-accumulate-producer :: Functor e =>
+  (state -> a -> MapFilterResult state b) -> state -> Producer e a -> Producer e b
+  combine initial source ->
+    ProducerState map-filter-accumulate-transition (MapFilterAccumulateState combine initial source)
+
+
+;; Scan emits the seed once, then every successive accumulator.
+data ScanState e state a
+  = ScanSeed (state -> a -> state) state (Producer e a)
+  | ScanMore (state -> a -> state) state (Producer e a)
+
+
+define scan-more-next :: Functor e =>
+  (state -> a -> state) -> state -> Step e (Producer e a) a
+  -> Step e (ScanState e state a) state
+  _ _ Stop -> Stop
+
+  combine accumulator [Skip next] ->
+    Skip
+      (map
+        (lambda (source)
+          (ScanMore combine accumulator source))
+        next)
+
+  combine accumulator [Yield value next] ->
+    (scan-yield combine next (combine accumulator value))
+
+
+define scan-yield :: Functor e =>
+  (state -> a -> state) -> e (Producer e a) -> state
+  -> Step e (ScanState e state a) state
+  combine next following ->
+    Yield following (map (lambda (source) (ScanMore combine following source)) next)
+
+
+define scan-transition :: Evaluation e =>
+  ScanState e state a -> Step e (ScanState e state a) state
+  [ScanSeed combine initial source] ->
+    Yield initial
+      (defer
+        (lambda (_)
+          (ScanMore combine initial source)))
+
+  [ScanMore combine accumulator source] ->
+    scan-more-next combine accumulator (advance-producer source)
+
+
+define scan-producer :: Evaluation e =>
+  (state -> a -> state) -> state -> Producer e a -> Producer e state
+  combine initial source ->
+    ProducerState scan-transition (ScanSeed combine initial source)
+
+
+data EnumerateState e a
+  = EnumerateState Int (Producer e a)
+
+
+define enumerate-next :: Functor e =>
+  Int -> Step e (Producer e a) a -> Step e (EnumerateState e a) (Int, a)
+  _ Stop -> Stop
+  index [Skip next] ->
+    Skip (map (lambda (source) (EnumerateState index source)) next)
+  index [Yield value next] ->
+    Yield (index, value)
+      (map (lambda (source) (EnumerateState (+ index 1) source)) next)
+
+
+define enumerate-transition :: Functor e =>
+  EnumerateState e a -> Step e (EnumerateState e a) (Int, a)
+  [EnumerateState index source] ->
+    enumerate-next index (advance-producer source)
+
+
+define enumerate-producer :: Functor e =>
+  Producer e a -> Producer e (Int, a)
+  source -> ProducerState enumerate-transition (EnumerateState 0 source)
+
+
+;; Intersperse has a buffered phase because a separator is emitted only after a
+;; following source value is known to exist. No source continuation is demanded
+;; merely to emit the buffered value.
+data IntersperseState e a
+  = FirstValue a (Producer e a)
+  | NeedValue a (Producer e a)
+  | BufferedValue a a (e (Producer e a))
+
+
+define first-value-next :: Functor e =>
+  a -> Step e (Producer e a) a -> Step e (IntersperseState e a) a
+  _ Stop -> Stop
+
+  separator [Skip next] ->
+    Skip (map (lambda (source) (FirstValue separator source)) next)
+
+  separator [Yield value next] ->
+    Yield value
+      (map (lambda (source) (NeedValue separator source)) next)
+
+
+define need-value-next :: Evaluation e =>
+  a -> Step e (Producer e a) a -> Step e (IntersperseState e a) a
+  _ Stop -> Stop
+
+  separator [Skip next] ->
+    Skip (map (lambda (source) (NeedValue separator source)) next)
+
+  separator [Yield value next] ->
+    Yield separator
+      (defer
+        (lambda (_)
+          (BufferedValue separator value next)))
+
+
+define intersperse-transition :: Evaluation e =>
+  IntersperseState e a -> Step e (IntersperseState e a) a
+  [FirstValue separator source] ->
+    first-value-next separator (advance-producer source)
+
+  [NeedValue separator source] ->
+    need-value-next separator (advance-producer source)
+
+  [BufferedValue separator value next] ->
+    Yield value
+      (map (lambda (source) (NeedValue separator source)) next)
+
+
+define intersperse-producer :: Evaluation e =>
+  a -> Producer e a -> Producer e a
+  separator source ->
+    ProducerState intersperse-transition (FirstValue separator source)

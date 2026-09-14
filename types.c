@@ -1,4 +1,5 @@
 #include "types.h"
+#include "reader_syntax.h"
 #include "compat.h"
 #include "reader.h"
 #include <stdlib.h>
@@ -161,6 +162,7 @@ static bool type_name_is_builtin_constructor(const char *name) {
            strcmp(name, "String") == 0 ||
            strcmp(name, "Hex") == 0 || strcmp(name, "Bin") == 0 ||
            strcmp(name, "Oct") == 0 || strcmp(name, "Keyword") == 0 ||
+           strcmp(name, "Symbol") == 0 ||
            strcmp(name, "Ratio") == 0 || strcmp(name, "List") == 0 ||
            strcmp(name, "Arr") == 0 || strcmp(name, "Set") == 0 ||
            strcmp(name, "Map") == 0 || strcmp(name, "Coll") == 0 ||
@@ -221,6 +223,26 @@ static Type *type_parse_type_application(const char *name) {
     }
 
     const char *constructor = parts[0];
+    size_t constructor_len = strlen(constructor);
+    if (constructor_len > 2 && constructor[0] == '(' &&
+        constructor[constructor_len - 1] == ')') {
+        size_t total = constructor_len;
+        for (int i = 1; i < count; i++) total += strlen(parts[i]) + 1;
+        char *flattened = malloc(total + 1);
+        memcpy(flattened, constructor + 1, constructor_len - 2);
+        size_t at = constructor_len - 2;
+        for (int i = 1; i < count; i++) {
+            flattened[at++] = ' ';
+            size_t part_len = strlen(parts[i]);
+            memcpy(flattened + at, parts[i], part_len);
+            at += part_len;
+        }
+        flattened[at] = '\0';
+        Type *applied = type_from_name(flattened);
+        free(flattened);
+        type_free_split_parts(parts, count);
+        return applied;
+    }
     if (strcmp(constructor, "Map") == 0 && count == 3) {
         Type *key = type_from_name(parts[1]);
         Type *value = type_from_name(parts[2]);
@@ -231,8 +253,17 @@ static Type *type_parse_type_application(const char *name) {
         type_free_split_parts(parts, count);
         return map;
     }
-    if (!(constructor[0] >= 'A' && constructor[0] <= 'Z') ||
-        type_name_is_builtin_constructor(constructor)) {
+    bool constructor_variable = constructor[0] >= 'a' &&
+                                constructor[0] <= 'z' &&
+                                constructor[1] == '\0';
+    if (!(constructor[0] >= 'A' && constructor[0] <= 'Z') &&
+        !constructor_variable) {
+        type_free_split_parts(parts, count);
+        return NULL;
+    }
+    if (!constructor_variable &&
+        type_name_is_builtin_constructor(constructor) &&
+        !type_nominal_is_registered(constructor)) {
         type_free_split_parts(parts, count);
         return NULL;
     }
@@ -884,6 +915,13 @@ int refinement_check_literal(const char *type_name, double val,
 Type *type_from_name(const char *name) {
     if (!name) return NULL;
 
+    char *notation_expansion = reader_type_syntax_expand(name);
+    if (notation_expansion) {
+        Type *expanded = type_from_name(notation_expansion);
+        free(notation_expansion);
+        return expanded;
+    }
+
     char *trimmed_name = type_trim_copy(name);
     if (!trimmed_name) return NULL;
     if (trimmed_name[0] == '\0') {
@@ -905,8 +943,23 @@ Type *type_from_name(const char *name) {
 
     size_t len = strlen(name);
 
-    if (strcmp(name, "()") == 0 || strcmp(name, "Unit") == 0)
+    bool spaced_unit = len >= 2 && name[0] == '(' && name[len - 1] == ')';
+    for (size_t i = 1; spaced_unit && i + 1 < len; i++)
+        spaced_unit = name[i] == ' ' || name[i] == '\t';
+    if (strcmp(name, "()") == 0 || strcmp(name, "Unit") == 0 || spaced_unit)
         return type_unit();
+
+    /* Postfix optionality binds to the complete preceding type expression.
+     * Recognize it before application parsing so `(a, e s) ?` does not become
+     * a strict tuple whose final application argument happens to be `?`. */
+    if (len > 1 && name[len - 1] == '?') {
+        char *inner_name = strndup(name, len - 1);
+        char *trimmed_inner = type_trim_copy(inner_name);
+        Type *inner = type_from_name(trimmed_inner);
+        free(trimmed_inner);
+        free(inner_name);
+        if (inner) return type_optional(inner);
+    }
 
     Type *arrow_type = type_parse_arrow_chain(name);
     if (arrow_type) return arrow_type;
@@ -914,8 +967,8 @@ Type *type_from_name(const char *name) {
     Type *comma_tuple = type_parse_comma_tuple(name);
     if (comma_tuple) return comma_tuple;
 
-    Type *type_app = type_parse_type_application(name);
-    if (type_app) return type_app;
+    Type *parsed_app = type_parse_type_application(name);
+    if (parsed_app) return parsed_app;
 
     if (len > 1 && name[0] == '*') {
         const char *inner_name = name + 1;
@@ -1049,13 +1102,6 @@ Type *type_from_name(const char *name) {
         return t;
     }
 
-    if (len > 1 && name[len - 1] == '?') {
-        char *inner_name = strndup(name, len - 1);
-        Type *inner = type_from_name(inner_name);
-        free(inner_name);
-        if (inner) return type_optional(inner);
-    }
-
     // Compound types (parsed dynamically from string annotations)
     if (strncmp(name, "Fn :: ", 6) == 0) {
         /* Fn :: (Int -> Int) — parse and return the full arrow type chain.
@@ -1125,6 +1171,13 @@ Type *type_from_name(const char *name) {
         }
     }
 
+    /* A source declaration owns its nominal name, even when that name was
+     * historically reserved by a primitive representation.  This permits a
+     * core module to replace a legacy builtin with an ordinary algebraic type
+     * while code that has not imported/declared that nominal keeps the legacy
+     * spelling during migration. */
+    if (type_nominal_is_registered(name)) return type_layout_ref(name);
+
     // Built-in types first
     if (strcmp(name, "Int")     == 0) return type_int();
     if (strcmp(name, "Float")   == 0) return type_float();
@@ -1135,6 +1188,7 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Bin")     == 0) return type_bin();
     if (strcmp(name, "Oct")     == 0) return type_oct();
     if (strcmp(name, "Keyword") == 0) return type_keyword();
+    if (strcmp(name, "Symbol")  == 0) return type_symbol();
     if (strcmp(name, "Ratio")   == 0) return type_ratio();
     if (strcmp(name, "List")    == 0) return type_list(NULL, 0);
     if (strcmp(name, "Arr")     == 0) return type_arr_fat(NULL);
@@ -1159,12 +1213,14 @@ Type *type_from_name(const char *name) {
     if (strcmp(name, "Escape")  == 0) return type_escape();
     if (strcmp(name, "Unit")    == 0) return type_unit();
     if (strcmp(name, "Heap")    == 0) return type_arr_heap(NULL);
+    /* Proof is the public existential view of an indexed kernel derivation.
+     * A judgment expression refines its hidden index to the exact checked
+     * conclusion, while an annotation `Proof` accepts any such index. */
+    if (strcmp(name, "Proof")   == 0) return type_app("Proof", type_unknown());
 
     /* ADT declarations are parsed before their function signatures but their
      * concrete LLVM layouts are emitted later. Preserve the nominal identity
      * during HM/QTT elaboration instead of degrading it to TYPE_UNKNOWN. */
-    if (type_nominal_is_registered(name)) return type_layout_ref(name);
-
     /* Arbitrary-width integers: I<n> and U<n> */
     {
         int width = 0; bool is_signed = false;
@@ -1216,7 +1272,12 @@ Type *type_bin    (void) { return make_type(TYPE_BIN);     }
 Type *type_oct    (void) { return make_type(TYPE_OCT);     }
 Type *type_keyword(void) { return make_type(TYPE_KEYWORD); }
 Type *type_ratio  (void) { return make_type(TYPE_RATIO);   }
-Type *type_set    (void) { return make_type(TYPE_SET);     }
+Type *type_set_of(Type *element_type) {
+    Type *t = make_type(TYPE_SET);
+    t->element_type = element_type;
+    return t;
+}
+Type *type_set    (void) { return type_set_of(NULL);       }
 Type *type_map_of(Type *key_type, Type *value_type) {
     Type *t = make_type(TYPE_MAP);
     t->map_key_type = key_type ? type_clone(key_type) : NULL;
@@ -1397,6 +1458,7 @@ bool types_equal(Type *a, Type *b) {
     case TYPE_OPTIONAL:
     case TYPE_PTR:
     case TYPE_COLL:
+    case TYPE_SET:
         return types_equal(a->element_type, b->element_type);
     case TYPE_ARR:
         return a->arr_size == b->arr_size
@@ -1508,6 +1570,8 @@ Type *type_clone(Type *t) {
             c->element_type = type_clone(t->element_type);
             return c;
         }
+        case TYPE_SET:
+            return type_set_of(type_clone(t->element_type));
         case TYPE_MAP:
             return type_map_of(t->map_key_type, t->map_value_type);
         case TYPE_F32:     return type_f32();
@@ -1586,7 +1650,8 @@ void type_free(Type *t) {
         free(t->list_types);
         type_free(t->list_elem);
     }
-    if (t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL || t->kind == TYPE_COLL) {
+    if (t->kind == TYPE_PTR || t->kind == TYPE_OPTIONAL ||
+        t->kind == TYPE_COLL || t->kind == TYPE_SET) {
         type_free(t->element_type);
     }
     if (t->kind == TYPE_ARR) {
@@ -1638,7 +1703,12 @@ const char *type_to_string(Type *t) {
     case TYPE_OCT:     return "Oct";
     case TYPE_KEYWORD: return "Keyword";
     case TYPE_RATIO:   return "Ratio";
-    case TYPE_SET:     return "Set";
+    case TYPE_SET:
+        if (t->element_type)
+            snprintf(buf, 512, "{%s}", type_to_string(t->element_type));
+        else
+            snprintf(buf, 512, "Set");
+        return buf;
     case TYPE_MAP:
         if (t->map_key_type && t->map_value_type) {
             snprintf(buf, 512, "Map %s %s",

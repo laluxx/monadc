@@ -14,12 +14,6 @@ void print_subcommand_menu(const char *subcmd)
     printf("Monad %s\n", subcmd ? subcmd : "commands");
 }
 
-int completion_menu_main(const char *prog)
-{
-    print_usage(prog);
-    return 0;
-}
-
 #else
 
 #include <ctype.h>
@@ -96,7 +90,7 @@ static const Entry ENTRIES[] = {
     {ENTRY_COMMAND, "commands", 'c', "r", "run", "", "monad run",
      "Build and run the package", "Runs the binary immediately after a successful build."},
     {ENTRY_COMMAND, "commands", 'c', "x", "clean", "", "monad clean",
-     "Remove build artifacts", "Deletes build/ and generated object/IR/assembly files."},
+     "Remove build artifacts", "In packages, deletes build/ and generated source artifacts. In a standalone source directory, removes interfaces, objects, IR, assembly, bitcode, and executables whose names match local .mon files."},
     {ENTRY_COMMAND, "commands", 'c', "i", "install", "", "monad install",
      "Install into ~/.local/bin", "Builds if needed, then installs the executable."},
     {ENTRY_COMMAND, "commands", 'c', "t", "test", "[suite|file.mon]", "monad test [list|runner|core|laws|windows|how-to|file.mon]",
@@ -105,6 +99,8 @@ static const Entry ENTRIES[] = {
      "Type-check only", "Useful for editors because the exit status is the diagnostic result."},
     {ENTRY_COMMAND, "commands", 'c', "L", "lint", "[--json|--fix] <path>", "monad lint core",
      "Lint Monad source", "Checks one file or recursively checks every .mon file in a directory."},
+    {ENTRY_COMMAND, "commands", 'c', "F", "format", "--control-flow=<glyph|ascii> [--write|--check] <path>", "monad format --control-flow=glyph core",
+     "Format Monad source", "Deterministically switches receiver-relative control flow between ASCII and canonical glyph notation."},
     {ENTRY_COMMAND, "commands", 'c', "e", "eval", "<code>", "monad eval \"3 + 3\"",
      "Evaluate one expression", "Runs the REPL evaluator once and exits."},
     {ENTRY_COMMAND, "commands", 'c', "R", "repl", "", "monad repl",
@@ -115,14 +111,10 @@ static const Entry ENTRIES[] = {
      "Open compiler debugger", "Starts the compiler debugger TUI for one source file."},
     {ENTRY_COMMAND, "commands", 'c', "l", "lsp", "", "monad lsp",
      "Start language server", "Starts the LSP server, or the LSP REPL when attached to a terminal."},
-    {ENTRY_COMMAND, "commands", 'c', "s", "spirv", "<shader> -o <module.mon>", "monad spirv triangle.vert -o Triangle.mon",
-     "Embed a shader in Monad", "Compiles and validates GLSL for Vulkan 1.3, then writes its byte size and typed U32 words as an ordinary Monad module. --name overrides the shader-derived binding name."},
+    {ENTRY_COMMAND, "commands", 'c', "s", "spirv", "<shader> [-o <module.mon>] [--name <binding>]", "monad spirv triangle.vert",
+     "Embed a shader in Monad", "Compiles and validates GLSL for Vulkan 1.3, then writes its byte size and typed U32 words as an ordinary Monad module. Without -o the output is named after the shader stage (Triangle.vert becomes TriangleVert.mon); --name overrides the shader-derived binding name."},
     {ENTRY_COMMAND, "commands", 'c', "h", "help", "[topic]", "monad help build",
      "Show help", "Prints static help for a command or the top-level menu."},
-    {ENTRY_COMMAND, "commands", 'c', "m", "menu", "", "monad menu",
-     "Open this flag browser", "Interactive orderless-style browser for commands and flags."},
-    {ENTRY_COMMAND, "commands", 'c', "f", "flags", "", "monad flags",
-     "Alias for menu", "Same as monad menu."},
 
     {ENTRY_FLAG, "general", 'g', "h", "-h, --help", "", "monad --help",
      "Show top-level help", "Prints all commands and common options."},
@@ -148,6 +140,9 @@ static const Entry ENTRIES[] = {
      "Enable all warnings", "Currently accepted as a common compiler flag."},
     {ENTRY_FLAG, "general", 'g', "W", "-Wextra", "", "monad file.mon -Wextra",
      "Enable extra warnings", "Currently accepted as a common compiler flag."},
+    {ENTRY_FLAG, "general", 'g', "f", "--allow-implicit-effects, allow-implicit-effects", "",
+     "monad file.mon --allow-implicit-effects", "Allow inferred effects on plain arrows",
+     "Disables mandatory effect labels in explicit function signatures."},
 
     {ENTRY_FLAG, "emit", 'e', "i", "--emit-ir, emit-ir", "", "monad file.mon --emit-ir",
      "Emit LLVM IR", "Writes a .ll file for inspection or debugger workflows."},
@@ -275,14 +270,8 @@ void print_usage(const char *prog)
     section("common options");
     print_entries_for_section("general");
 
-    section("fast browser");
-    row(CYAN, "menu, flags", "Open the orderless-style interactive flag browser");
-
     gap();
-    fprintf(stderr,
-            "  " DIM "Run " RESET CYAN "monad menu" RESET DIM
-            " for the interactive browser, or " RESET CYAN "monad help <subcommand>" RESET DIM
-            " for detailed help." RESET "\n\n");
+    fprintf(stderr, "  " DIM "Use `monad <command> help` for command-specific documentation." RESET "\n\n");
 }
 
 static void print_command_header(const Entry *cmd)
@@ -302,24 +291,6 @@ void print_subcommand_menu(const char *subcmd)
         return;
     }
 
-    if (streq(subcmd, "flags") || streq(subcmd, "menu")) {
-        fprintf(stderr,
-                "\n" BOLD "  monad menu" RESET "\n"
-                "  " DIM "Interactive orderless-style command and flag browser." RESET "\n");
-        section("keys");
-        row(CYAN, "C-n/C-p, arrows", "move through candidates");
-        row(CYAN, "C-a/C-e", "beginning/end of prompt");
-        row(CYAN, "C-b/C-f", "move backward/forward one character");
-        row(CYAN, "M-b/M-f", "move backward/forward one word");
-        row(CYAN, "M-d, C-w, C-k", "kill word forward, word backward, or line");
-        row(CYAN, "C-y", "yank last killed text");
-        row(CYAN, "TAB, 1-8", "switch sections");
-        row(CYAN, "RET", "accept selected usage and print it");
-        row(CYAN, "q, C-g", "quit");
-        gap();
-        return;
-    }
-
     const Entry *cmd = find_command(subcmd);
     if (!cmd) {
         fprintf(stderr, "\n  " DIM "No detailed help for '" RESET "%s" DIM "'." RESET "\n", subcmd);
@@ -329,7 +300,17 @@ void print_subcommand_menu(const char *subcmd)
 
     print_command_header(cmd);
 
-    if (streq(subcmd, "build") || streq(subcmd, "run")) {
+    if (streq(subcmd, "format")) {
+        section("control-flow styles");
+        row(YELLOW, "--control-flow=glyph", "render guards as canonical ├─ / ╰─╮ / ▶ trees");
+        row(YELLOW, "--control-flow=ascii", "render glyph trees as receiver-relative | guards");
+        section("operation");
+        row(YELLOW, "--write", "rewrite files atomically in place");
+        row(YELLOW, "--check", "report drift without changing files; exit 1 when changes exist");
+        section("laws");
+        row(GREEN, "idempotent", "formatting twice produces identical bytes");
+        row(GREEN, "round-trip", "ASCII → glyph → ASCII returns canonical ASCII");
+    } else if (streq(subcmd, "build") || streq(subcmd, "run")) {
         section("emit flags");
         print_entries_for_section("emit");
         section("trace flags");
@@ -357,6 +338,9 @@ void print_subcommand_menu(const char *subcmd)
     gap();
 }
 
+/* The former interactive command browser is deliberately not part of the
+ * compiler.  Command-local help above is the sole help interface. */
+#if 0
 typedef enum {
     KEY_NONE = 0,
     KEY_ESC = 27,
@@ -1101,5 +1085,7 @@ int completion_menu_main(const char *prog)
 
     return 0;
 }
+
+#endif /* removed interactive menu */
 
 #endif

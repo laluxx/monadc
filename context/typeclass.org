@@ -366,8 +366,10 @@
   resolving instances at codegen time within a single compilation unit,
   where all imports are resolved and all instances are known.
 
-[THINK id:think.typeclass.feature-gap conf:high]
-  The current typeclass system is minimal compared to Haskell's: no
+[THINK id:think.typeclass.feature-gap conf:high status:superseded]
+  Historical assessment, superseded by the implemented class/default and
+  superclass machinery and the associated-strategy cycle below.
+  The then-current typeclass system was minimal compared to Haskell's: no
   associated types, no superclass constraints (class Eq a => Ord a),
   no default method implementations, no instance deriving. Each of
   these features adds significant complexity:
@@ -515,3 +517,291 @@
   must reject a bare class whenever more than one type variable is a plausible
   argument. This is a design record only; bare constraints are not currently
   accepted syntax.
+
+* Core compiler cycle 1: associated strategy superclass
+:PROPERTIES:
+:ID: monadc.context.typeclass.associated-strategy-cycle-one
+:CUSTOM_ID: associated-strategy-cycle-one
+:CONTEXT_KIND: implementation
+:CONTEXT_CREATED: 2026-09-06
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,typeclass.c,tests/test_associated_strategy.py
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.typeclass.research-contract-2026-09-06 date:2026-09-06 by:human+codex]
+  Continue compiler implementation against
+  [[file:../MONAD-CORE-RESEARCH-HANDOFF.org][the Core research handoff]].
+  Core owns semantics; the compiler supplies general language mechanisms.
+  Implement in bounded, tested cycles in the roadmap's dependency order.
+
+[OBS id:obs.typeclass.core-baseline-2026-09-06 src:command-output conf:high]
+  The supplied archive has SHA-256
+  =6975aa2f9894d50fe175b745cda8fd301f0bb708b9d66b26d27e5929f41bc805=.
+  All 78 archived Core files match their working-tree counterparts byte-for-byte.
+  No archive overlay was necessary. The initial working tree already contained
+  extensive compiler and Core edits; this cycle preserves them.
+
+[FIX id:fix.typeclass.associated-strategy-2026-09-06 src:reader.c,typeclass.c conf:high]
+  Class superclass arguments now retain grouped type applications in both
+  single and comma-separated constraint lists. For an owned associated family
+  =Strategy s=, checking =instance Cursor Int= reduces the superclass argument
+  using that instance's equation before looking up the required dictionary.
+  Thus =Strategy Int = Float= requires =Evaluation Float=, not =Evaluation Int=.
+  A missing equation or dictionary names the associated family and instance.
+  Unowned applications remain rejected explicitly.
+
+  This is a first Phase-1 slice, not a complete associated-type solver. It
+  supports a direct owned family applied to the class head variable. Nested
+  reduction, compound instance equations, strategy equality constraints,
+  generic inference and dictionary specialization remain to be implemented.
+
+[OBS id:obs.typeclass.associated-strategy-tests-2026-09-06 src:tests/test_associated_strategy.py conf:high]
+  [[file:../tests/test_associated_strategy.py][Seven regression tests]] cover
+  native compile/run, Wisp, multiple superclasses, scalar Element specialization,
+  missing equations/evidence and unowned-family diagnostics. Renaming the owner
+  to Cursor, Sequence, BinaryTree or Producer preserves behavior. A source guard
+  rejects exact protected Core-name literals in compiler C files; its sole
+  exception is the diagnostic name of QTT sequential demand composition. This
+  is a narrow architecture guard, not a proof that every semantic special case
+  is absent.
+
+  The first three tests failed before implementation at the grouped superclass
+  argument. All seven pass after implementation. Tests use the existing isolated
+  superclass harness and do not establish that the entire research Core compiles.
+
+#+CAPTION: Cycle 1 validation
+| Command | Result |
+|---------+--------|
+| =make -j2 monad= | Passed, existing warnings |
+| =make -j2 all= | Passed, including compiler embedding libraries |
+| =python3 -m unittest discover -s tests -p test_associated_strategy.py= | 7 passed |
+| =python3 -m unittest discover -s tests -p test_typeclass_superclasses.py= | 11 passed, 4 failed; same four observed before implementation |
+| =python3 -m unittest discover -s tests -p test_class_laws.py= | Blocked by Producer.mon parsing during Core bootstrap |
+| =git diff --check= | Existing trailing blank line in core/prelude/Sequence.mon |
+
+[TODO id:todo.typeclass.research-cycle-two-2026-09-06 owner:codex status:partial]
+  Continue Phase 1 with structural associated-type equations and reduction in
+  inference/specialization, including strategy equality obligations. The archive
+  uses applied and list instance heads, which the current single-symbol equation
+  reader does not handle. Preserve this cycle's instance-directed checking.
+
+[TODO id:todo.typeclass.research-integration-gates-2026-09-06 owner:codex status:open]
+  Restore real-Core bootstrap execution gates: Producer.mon:203 currently fails
+  with =Expected ')' to close define= at a multiline constrained signature.
+  The superclass suite's empty-Core harness also lacks Bool bootstrap support
+  (four failures were observed before and after this cycle). Add failing tests
+  for those boundaries before implementing their fixes. No freeze archive or
+  full-Core conformance claim is warranted by this cycle.
+
+[TODO id:todo.typeclass.existential-producer-elimination-2026-09-06 owner:codex status:active]
+  The Core integration gate now reaches the real existential boundary in
+  =Data.Sequence.Producer=: =ProducerState : (s -> Step e s a) -> s ->
+  Producer e a= parses as an indexed-style constructor and preserves its two
+  runtime arguments, but eliminating =ProducerState= later leaks the hidden
+  state as an unsolved =?= input during specialization of =observe-transition=.
+  Ordinary parameterized higher-kinded constructor results must be
+  instantiated by HM, while the dependent layer contributes only genuine
+  index refinements. Focused gate: =MONAD_CORE_TEST_FILTER=Data/Sequence/Producer.mon
+  python3 tests/run_core.py=.
+
+* Core compiler cycle 2: compound associated equations
+:PROPERTIES:
+:ID: monadc.context.typeclass.associated-strategy-cycle-two
+:CUSTOM_ID: associated-strategy-cycle-two
+:CONTEXT_KIND: implementation
+:CONTEXT_CREATED: 2026-09-06
+:CONTEXT_STATUS: active
+:SOURCE: reader.c,typeclass.c,tests/test_associated_strategy.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.typeclass.compound-equations-cycle-two src:reader.c conf:high]
+  Instance heads and associated equations now share the balanced class type-atom
+  reader. It preserves list types and parenthesized applications/tuples, including
+  nested brackets, and rejects mismatched delimiters or oversized expressions.
+  Examples accepted by the native compile/run tests include =[a]=, =(Box [Int])=
+  and =(Machine e a)= heads and =(Box Float)= strategy values. These tests prove
+  declaration support, not polymorphic instance matching at arbitrary call sites.
+
+  Equation owners must match the normalized spelling of the surrounding instance
+  head; this is not yet definitional type equality. An omitted owner remains legal
+  (=type Element = Int=), but the equals sign is required. Previously the reader
+  silently accepted an equation without it. Compound applications on the right
+  must be grouped; arbitrary unparenthesized type expressions remain future work.
+
+[FIX id:fix.typeclass.equation-ownership-cycle-two src:typeclass.c conf:high]
+  Validate associated family ownership and uniqueness before superclass checking
+  or method specialization. Previously unknown and duplicate equations were
+  accepted. Diagnostics identify the family and instance. This prevents separate
+  consumers from choosing different definitions of the same associated family.
+
+[OBS id:obs.typeclass.compound-equation-tests-cycle-two src:tests/test_associated_strategy.py conf:high]
+  The expanded [[file:../tests/test_associated_strategy.py][regression suite]] has
+  14 tests, all passing. New failures were reproduced before each implementation:
+  compound heads/values failed parsing, missing equals was accepted, and unknown
+  or duplicate equations were accepted. Native execution also verifies that a
+  method with =Element Int = (Int, Int)= returns and prints =(21 21)= correctly.
+  Both Wisp and canonical syntax are exercised, including omitted owners.
+
+#+CAPTION: Cycle 2 verification
+| Command | Result |
+|---------+--------|
+| =make -j2 monad= | Passed |
+| =make -j2 all= | Passed, including embedding libraries; existing warnings |
+| =python3 -m unittest discover -s tests -p test_associated_strategy.py= | 14 passed |
+| =python3 -m unittest discover -s tests -p test_typeclass_superclasses.py= | 11 passed, same 4 Bool-bootstrap failures as cycle 1 |
+| =git diff --check -- reader.c typeclass.c tests/test_associated_strategy.py context/typeclass.org= | Passed |
+
+[TODO id:todo.typeclass.research-cycle-three owner:codex status:partial]
+  Continue Phase 1 with general associated-type reduction in inference and
+  specialization, including polymorphic instance matching and strategy equality
+  obligations. Current method signatures still use textual substitution. Cycle 2
+  completes the compound equation reader slice; it does not complete the broader
+  Phase-1 solver work. The real-Core Producer bootstrap blocker recorded in cycle 1
+  remains outside this cycle's isolated tests and has not been retested here.
+
+* Core compiler cycle 3: deterministic specialization reduction
+:PROPERTIES:
+:ID: monadc.context.typeclass.associated-strategy-cycle-three
+:CUSTOM_ID: associated-strategy-cycle-three
+:CONTEXT_KIND: implementation
+:CONTEXT_CREATED: 2026-09-06
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.c,tests/test_associated_strategy.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.typeclass.boundary-reduction-cycle-three src:typeclass.c conf:high]
+  Instance method specialization now reduces associated applications only at
+  type-identifier boundaries. The previous unrestricted substring replacement
+  reduced =Element s= inside =TailElement s= and produced the nonexistent type
+  =TailInt=. The reducer now distinguishes overlapping family names and rejects
+  specialized signatures that exceed its bounded representation with a diagnostic
+  naming the family and instance.
+
+[FIX id:fix.typeclass.fixed-point-reduction-cycle-three src:typeclass.c conf:high]
+  Associated equations in method signatures are normalized over bounded repeated
+  passes. Consequently a chain such as =First Int = Second s= and =Second Int =
+  Float= reduces to =Float= regardless of equation order. The bound is derived
+  from the number of instance equations, so specialization terminates even for
+  recursive equations. Residual recursive families still reach the existing type
+  diagnostic; a dedicated cycle-detection diagnostic remains future work.
+
+[OBS id:obs.typeclass.specialization-tests-cycle-three src:tests/test_associated_strategy.py conf:high]
+  The focused suite now contains 17 tests. The new overlapping-family and reversed
+  equation-chain tests both failed before their fixes and execute successfully
+  afterward. A declared nominal =Elemental= also verifies that unrelated nominal
+  spellings remain intact. These tests cover instance method specialization; the
+  HM inference environment still lacks a general associated-family representation.
+
+#+CAPTION: Cycle 3 verification
+| Command | Result |
+|---------+--------|
+| =make -j2 monad= | Passed |
+| =make -j2 all= | Passed, including embedding libraries; existing warnings |
+| =python3 -m unittest discover -s tests -p test_associated_strategy.py= | 17 passed |
+| =python3 -m unittest discover -s tests -p test_typeclass_superclasses.py= | 11 passed, same 4 isolated Bool-bootstrap failures |
+| =python3 -m unittest discover -s tests -p test_class_laws.py= | Still blocked at Producer.mon:203 during Core bootstrap |
+| =git diff --check -- reader.c typeclass.c tests/test_associated_strategy.py context/typeclass.org= | Passed |
+
+[TODO id:todo.typeclass.research-cycle-four owner:codex status:partial]
+  Introduce an explicit associated-family representation/reduction API for HM
+  inference and concrete call result types, replacing specialization-local string
+  normalization. Then express compatible-strategy equality obligations using that
+  representation. Keep the mechanism class-generic and preserve Cycle 1's semantic
+  boundary guard.
+
+* Core compiler cycle 4: shared associated-family reduction API
+:PROPERTIES:
+:ID: monadc.context.typeclass.associated-strategy-cycle-four
+:CUSTOM_ID: associated-strategy-cycle-four
+:CONTEXT_KIND: implementation
+:CONTEXT_CREATED: 2026-09-06
+:CONTEXT_STATUS: active
+:SOURCE: typeclass.h,typeclass.c,tests/test_associated_strategy.py
+:CONFIDENCE: high
+:END:
+
+[FIX id:fix.typeclass.shared-reducer-cycle-four src:typeclass.h,typeclass.c conf:high]
+  Associated-family normalization is now exposed through the class-generic
+  =tc_specialize_type_expression= API. It accepts a class, concrete instance and
+  class-owned type expression; it performs Cycle 3's bounded fixed-point family
+  reduction followed by boundary-aware head-parameter substitution. The caller
+  owns the resulting string. Invalid classes, instances or oversized reductions
+  return no result.
+
+  Instance method compilation now calls this API instead of carrying a private
+  copy of the replacement algorithm. This establishes one reducer for later HM
+  and equality-constraint integration. The internal representation remains a
+  parsed source type expression encoded as text; a dedicated Type node for an
+  associated-family application is still future work.
+
+[FIX id:fix.typeclass.concrete-result-cycle-four src:typeclass.h,typeclass.c conf:high]
+  The new =tc_instance_method_result_type= API specializes a method signature for
+  a concrete instance before returning its result Type. Concrete method entries
+  now use this result instead of the unreduced class declaration result. Thus
+  downstream callers see =Float= for =Value Int = Float= rather than an unknown
+  =Value s= family application.
+
+[OBS id:obs.typeclass.shared-reducer-tests-cycle-four src:tests/test_associated_strategy.py conf:high]
+  The focused suite now contains 19 passing tests. A structural regression first
+  failed because neither shared API existed; it now requires both public contracts
+  in the header and implementation. A native compile/run test exercises a unique
+  nullary method with an associated Float result and prints =42.5=. Earlier tests
+  continue to exercise compound, overlapping and chained family reductions.
+
+#+CAPTION: Cycle 4 verification
+| Command | Result |
+|---------+--------|
+| =make -j2 monad= | Passed; header change rebuilt compiler objects |
+| =make -j2 all= | Passed, including embedding libraries; existing warnings |
+| =python3 -m unittest discover -s tests -p test_associated_strategy.py= | 19 passed |
+| =python3 -m unittest discover -s tests -p test_typeclass_superclasses.py= | 11 passed, same 4 isolated Bool-bootstrap failures |
+| =git diff --check -- reader.c typeclass.c typeclass.h tests/test_associated_strategy.py context/typeclass.org= | Passed |
+
+[TODO id:todo.typeclass.research-cycle-five owner:codex status:open]
+  Integrate the shared reducer with concrete call-result selection and the HM
+  constraint layer wherever an instance is known, then add compatible-associated-
+  strategy equality obligations. Replace textual family applications with a
+  structural Type representation when that integration requires it. The
+  Producer.mon bootstrap parser failure remains an independent integration gate.
+
+* Core replacement readiness audit
+:PROPERTIES:
+:ID: monadc.context.typeclass.core-replacement-readiness-2026-09-06
+:CUSTOM_ID: core-replacement-readiness-2026-09-06
+:CONTEXT_KIND: observation
+:CONTEXT_CREATED: 2026-09-06
+:CONTEXT_STATUS: active
+:SOURCE: command-output,MONAD-CORE-RESEARCH-HANDOFF.org
+:CONFIDENCE: high
+:END:
+
+[OBS id:obs.typeclass.core-archives-readiness-2026-09-06 src:command-output conf:high]
+  Isolated per-module compilation against the exact archives found:
+
+  - old =core.tar.gz=: 67 of 69 modules compile; =IO/Directory.mon= fails an
+    Either constructor arity check and =Data/LazySequence.mon= fails parsing;
+  - new verified Cycle-6 archive: 27 of 77 modules compile; 50 fail;
+  - 49 of those 50 new failures share the same transitive root at
+    =Control/Evaluation.mon:166=: ambiguous constrained call to =defer=;
+  - the remaining new failure is Graphics/Vulkan and includes FFI output; it
+    needs a focused rerun after the Evaluation fan-out is removed.
+
+  This audit compiles every module independently with its matching extracted Core
+  as =MONAD_CORE=. It does not run module test blocks or the final packaged-tree
+  verification gate.
+
+[OBS id:obs.typeclass.core-tree-identity-2026-09-06 src:command-output conf:high]
+  The working =core/= contains all 77 files from the new archive plus legacy
+  leftovers, notably =core/prelude/Data/LazySequence.mon=. The new archive does
+  not contain that module. Replacing the default by overlay alone would therefore
+  retain a semantic abstraction the handoff explicitly removes.
+
+[DEC id:dec.typeclass.core-deletion-gate-2026-09-06 date:2026-09-06 by:codex]
+  Do not delete the old archive or declare the new Core default yet. First remove
+  the Evaluation dispatch fan-out, enumerate the newly exposed failures, pass all
+  new Core module compilation/tests, remove legacy-only files from a reviewable
+  tree, and execute the handoff's extracted-package verification gate. The old
+  archive is currently the only nearly bootstrappable recovery baseline.

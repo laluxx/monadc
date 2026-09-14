@@ -1,15 +1,35 @@
 ;;; Term.mon --- POSIX terminal and termios bindings
 
-:Author   Laluxx
-:Version  0.7.0
-:Keywords system posix terminal termios ioctl
+:author   Laluxx
+:version  0.9.0
+:platform "linux-x86_64"
+:keywords system posix terminal termios ioctl
 
 ;;; Commentary:
+
+ This is the Linux x86-64 terminal ABI backend; ioctl numbers and termios
+ layout constants are platform implementation details, not portable policy.
 
  Canonical home: System.Posix.Term. This module is platform-specific and is
  intentionally not part of the pure prelude.
 
+ TCGETS/TCSETS use the Linux UAPI =struct termios=, not libc's potentially
+ different structure: four 32-bit flag words followed by one line-discipline
+ byte and nineteen control bytes. WinSize is four 16-bit unsigned fields. These
+ widths are part of the ABI contract; widening either structure to ordinary Int
+ fields corrupts field interpretation even if the backing allocation happens to
+ be large enough.
+
+ Query operations expose checked =*-result= forms. Historical value-returning
+ wrappers remain for compatibility but fail loudly when ioctl fails rather than
+ returning a zero-filled structure that is indistinguishable from valid kernel
+ state. ioctl operations whose third argument is an integer value use a distinct
+ syscall wrapper from pointer-valued requests; Linux does not reinterpret a
+ pointer to an integer as the integer argument itself.
+
 ;;; Code:
+
+import Data.Either
 
 module System.Posix.Term where
 
@@ -57,49 +77,66 @@ module System.Posix.Term where
     STDIN STDOUT STDERR
 
   :masks
-    term-or3 term-or4 term-or5
+    term-or3 term-or4 term-or5 term-or8
     raw-iflag-mask raw-lflag-mask cbreak-lflag-mask
 
   :primitives
-    sys-read sys-write sys-ioctl
+    sys-read sys-write sys-ioctl sys-ioctl-value
 
   :attributes
-    tty-get-attr tty-set-attr tty-set-attr-drain tty-set-attr-flush
-    tty-raw-termios tty-cbreak-termios tty-raw-mode tty-cbreak-mode
+    tty-get-attr-result tty-get-attr tty-set-attr tty-set-attr-drain tty-set-attr-flush
+    tty-raw-termios tty-cbreak-termios
+    tty-raw-mode-result tty-raw-mode tty-cbreak-mode-result tty-cbreak-mode
 
   :window-and-flow
-    get-winsize set-winsize tty-flush tty-flow tty-send-break
+    get-winsize-result get-winsize set-winsize tty-flush tty-flow tty-send-break
 
   :modem
-    tty-get-modem tty-set-modem tty-set-modem-bits tty-clear-modem-bits
+    tty-get-modem-result tty-get-modem tty-set-modem tty-set-modem-bits tty-clear-modem-bits
 
   :process-control
-    tty-get-pgrp tty-set-pgrp tty-get-sid
+    tty-get-pgrp-result tty-get-pgrp tty-set-pgrp tty-get-sid-result tty-get-sid
     tty-make-controlling tty-release-controlling
 
   :io
     read-char write-char write-str read-buf
 
 
-define termios-abi-version :: Int 1
+define termios-abi-version :: Int 2
 
 
 layout Termios
-  c_iflag  :: Int
-  c_oflag  :: Int
-  c_cflag  :: Int
-  c_lflag  :: Int
-  c_line   :: Int
-  c_cc     :: Int
-  c_ispeed :: Int
-  c_ospeed :: Int
+  c_iflag :: U32
+  c_oflag :: U32
+  c_cflag :: U32
+  c_lflag :: U32
+  c_line  :: U8
+  c_cc0   :: U8
+  c_cc1   :: U8
+  c_cc2   :: U8
+  c_cc3   :: U8
+  c_cc4   :: U8
+  c_cc5   :: U8
+  c_cc6   :: U8
+  c_cc7   :: U8
+  c_cc8   :: U8
+  c_cc9   :: U8
+  c_cc10  :: U8
+  c_cc11  :: U8
+  c_cc12  :: U8
+  c_cc13  :: U8
+  c_cc14  :: U8
+  c_cc15  :: U8
+  c_cc16  :: U8
+  c_cc17  :: U8
+  c_cc18  :: U8
 
 
 layout WinSize
-  ws_row    :: Int
-  ws_col    :: Int
-  ws_xpixel :: Int
-  ws_ypixel :: Int
+  ws_row    :: U16
+  ws_col    :: U16
+  ws_xpixel :: U16
+  ws_ypixel :: U16
 
 
 define TCGETS      0x5401
@@ -267,10 +304,14 @@ define term-or5 :: Int -> Int -> Int -> Int -> Int -> Int
   a b c d e -> bit-or (bit-or (bit-or (bit-or a b) c) d) e
 
 
-define raw-iflag-mask (term-or5 BRKINT ICRNL INPCK ISTRIP IXON)
+define term-or8 :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+  a b c d e f g h -> bit-or (term-or4 a b c d) (term-or4 e f g h)
 
 
-define raw-lflag-mask (term-or4 ECHO ICANON IEXTEN ISIG)
+define raw-iflag-mask (term-or8 IGNBRK BRKINT PARMRK ISTRIP INLCR IGNCR ICRNL IXON)
+
+
+define raw-lflag-mask (term-or5 ECHO ECHONL ICANON IEXTEN ISIG)
 
 
 define cbreak-lflag-mask (bit-or ECHO ICANON)
@@ -303,138 +344,223 @@ define sys-ioctl :: Int -> Int -> *a -foreign-> Int
         syscall ret
 
 
-define tty-get-attr :: Int -> Termios
-  :doc "Reads current terminal attributes via TCGETS."
-  fd -> def t (Termios 0 0 0 0 0 0 0 0)
-        def ignored (sys-ioctl fd TCGETS &t)
-        t
+define sys-ioctl-value :: Int -> Int -> Int -foreign-> Int
+  fd req value ->
+    asm mov 16    %rax
+        mov fd    %rdi
+        mov req   %rsi
+        mov value %rdx
+        syscall ret
 
 
-define tty-set-attr :: Int -> Termios -> Int
-  :doc "Applies terminal attributes immediately via TCSETS."
-  fd t -> (sys-ioctl fd TCSETS &t)
+define empty-termios :: Termios
+  Termios (U32 0) (U32 0) (U32 0) (U32 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0)
 
 
-define tty-set-attr-drain :: Int -> Termios -> Int
-  :doc "Applies terminal attributes after output drains via TCSETSW."
-  fd t -> (sys-ioctl fd TCSETSW &t)
+define empty-winsize :: WinSize
+  WinSize (U16 0) (U16 0) (U16 0) (U16 0)
 
 
-define tty-set-attr-flush :: Int -> Termios -> Int
-  :doc "Applies terminal attributes after drain and input flush via TCSETSF."
-  fd t -> (sys-ioctl fd TCSETSF &t)
+define tty-get-attr-result :: Int -foreign-> Either Int Termios
+  :doc "Read terminal attributes, preserving the raw ioctl status on failure."
+  fd ->
+    def value empty-termios
+    def status (sys-ioctl fd TCGETS &value)
+    if status < 0 then Left status else Right value
+
+
+define tty-get-attr :: Int -foreign-> Termios
+  :doc "Compatibility value observation; fails instead of fabricating attributes."
+  fd ->
+    (match (tty-get-attr-result fd) with
+     | (Right value) -> value
+     | (Left _) -> error "System.Posix.Term.tty-get-attr: TCGETS failed")
+
+
+define tty-set-attr :: Int -> Termios -foreign-> Int
+  :doc "Apply terminal attributes immediately via TCSETS."
+  fd value -> sys-ioctl fd TCSETS &value
+
+
+define tty-set-attr-drain :: Int -> Termios -foreign-> Int
+  :doc "Apply terminal attributes after output drains via TCSETSW."
+  fd value -> sys-ioctl fd TCSETSW &value
+
+
+define tty-set-attr-flush :: Int -> Termios -foreign-> Int
+  :doc "Apply terminal attributes after drain and input flush via TCSETSF."
+  fd value -> sys-ioctl fd TCSETSF &value
 
 
 define tty-raw-termios :: Termios -> Termios
-  :doc "Return a raw-mode Termios value derived from ORIGINAL."
-  original -> (Termios
-                 (original.c_iflag & (~ raw-iflag-mask))
-                 (original.c_oflag & (~ OPOST))
-                 (bit-or original.c_cflag CS8)
-                 (original.c_lflag & (~ raw-lflag-mask))
-                 original.c_line
-                 original.c_cc
-                 original.c_ispeed
-                 original.c_ospeed)
+  :doc "Return the Linux cfmakeraw-equivalent Termios value derived from ORIGINAL."
+  original -> Termios
+    (U32 ((Int original.c_iflag) & (~ raw-iflag-mask)))
+    (U32 ((Int original.c_oflag) & (~ OPOST)))
+    (U32 (bit-or ((Int original.c_cflag) & (~ (bit-or CSIZE PARENB))) CS8))
+    (U32 ((Int original.c_lflag) & (~ raw-lflag-mask)))
+    original.c_line
+    original.c_cc0 original.c_cc1 original.c_cc2 original.c_cc3 original.c_cc4
+    (U8 0) (U8 1) original.c_cc7 original.c_cc8 original.c_cc9
+    original.c_cc10 original.c_cc11 original.c_cc12 original.c_cc13 original.c_cc14
+    original.c_cc15 original.c_cc16 original.c_cc17 original.c_cc18
 
 
 define tty-cbreak-termios :: Termios -> Termios
-  :doc "Return a cbreak-mode Termios value derived from ORIGINAL."
-  original -> (Termios
-                 original.c_iflag
-                 original.c_oflag
-                 original.c_cflag
-                 (original.c_lflag & (~ cbreak-lflag-mask))
-                 original.c_line
-                 original.c_cc
-                 original.c_ispeed
-                 original.c_ospeed)
+  :doc "Return a noncanonical no-echo Termios value derived from ORIGINAL."
+  original -> Termios
+    original.c_iflag original.c_oflag original.c_cflag
+    (U32 ((Int original.c_lflag) & (~ cbreak-lflag-mask)))
+    original.c_line
+    original.c_cc0 original.c_cc1 original.c_cc2 original.c_cc3 original.c_cc4
+    (U8 0) (U8 1) original.c_cc7 original.c_cc8 original.c_cc9
+    original.c_cc10 original.c_cc11 original.c_cc12 original.c_cc13 original.c_cc14
+    original.c_cc15 original.c_cc16 original.c_cc17 original.c_cc18
 
 
-define tty-raw-mode :: Int -> Termios
-  :doc "Enable raw mode and return the original Termios for restoration."
-  fd -> def original (tty-get-attr fd)
-        def ignored (tty-set-attr fd (tty-raw-termios original))
-        original
+define terminal-mode-apply :: Int -> (Termios -> Termios) -> Termios -foreign-> Either Int Termios
+  fd transform original ->
+    def status (tty-set-attr fd (transform original))
+    if status < 0 then Left status else Right original
 
 
-define tty-cbreak-mode :: Int -> Termios
-  :doc "Enable cbreak mode and return the original Termios for restoration."
-  fd -> def original (tty-get-attr fd)
-        def ignored (tty-set-attr fd (tty-cbreak-termios original))
-        original
+define terminal-mode-from-result :: Int -> (Termios -> Termios) -> Either Int Termios -foreign-> Either Int Termios
+  _ _ [Left status] -> Left status
+  fd transform [Right original] -> terminal-mode-apply fd transform original
 
 
-define get-winsize :: Int -> WinSize
-  :doc "Return terminal window dimensions via TIOCGWINSZ."
-  fd -> def ws (WinSize 0 0 0 0)
-        def ignored (sys-ioctl fd TIOCGWINSZ &ws)
-        ws
+define terminal-mode-result :: Int -> (Termios -> Termios) -foreign-> Either Int Termios
+  fd transform -> terminal-mode-from-result fd transform (tty-get-attr-result fd)
 
 
-define set-winsize :: Int -> WinSize -> Int
+define tty-raw-mode-result :: Int -foreign-> Either Int Termios
+  :doc "Enable raw mode and return the original attributes on success."
+  fd -> terminal-mode-result fd tty-raw-termios
+
+
+define tty-raw-mode :: Int -foreign-> Termios
+  :doc "Compatibility raw-mode entry; fails if either TCGETS or TCSETS fails."
+  fd ->
+    (match (tty-raw-mode-result fd) with
+     | (Right original) -> original
+     | (Left _) -> error "System.Posix.Term.tty-raw-mode: terminal setup failed")
+
+
+define tty-cbreak-mode-result :: Int -foreign-> Either Int Termios
+  :doc "Enable cbreak mode and return the original attributes on success."
+  fd -> terminal-mode-result fd tty-cbreak-termios
+
+
+define tty-cbreak-mode :: Int -foreign-> Termios
+  :doc "Compatibility cbreak entry; fails if either TCGETS or TCSETS fails."
+  fd ->
+    (match (tty-cbreak-mode-result fd) with
+     | (Right original) -> original
+     | (Left _) -> error "System.Posix.Term.tty-cbreak-mode: terminal setup failed")
+
+
+define get-winsize-result :: Int -foreign-> Either Int WinSize
+  :doc "Read terminal window dimensions without conflating failure with zero size."
+  fd ->
+    def value empty-winsize
+    def status (sys-ioctl fd TIOCGWINSZ &value)
+    if status < 0 then Left status else Right value
+
+
+define get-winsize :: Int -foreign-> WinSize
+  :doc "Compatibility window-size observation; fails if TIOCGWINSZ fails."
+  fd ->
+    (match (get-winsize-result fd) with
+     | (Right value) -> value
+     | (Left _) -> error "System.Posix.Term.get-winsize: TIOCGWINSZ failed")
+
+
+define set-winsize :: Int -> WinSize -foreign-> Int
   :doc "Set terminal window dimensions via TIOCSWINSZ."
   fd ws -> (sys-ioctl fd TIOCSWINSZ &ws)
 
 
-define tty-flush :: Int -> Int -> Int
+define tty-flush :: Int -> Int -foreign-> Int
   :doc "Flush terminal queue: 0 input, 1 output, 2 both."
-  fd queue -> (sys-ioctl fd TCFLSH &queue)
+  fd queue -> (sys-ioctl-value fd TCFLSH queue)
 
 
-define tty-flow :: Int -> Int -> Int
+define tty-flow :: Int -> Int -foreign-> Int
   :doc "Suspend or resume terminal I/O flow."
-  fd action -> (sys-ioctl fd TCXONC &action)
+  fd action -> (sys-ioctl-value fd TCXONC action)
 
 
-define tty-send-break :: Int -> Int -> Int
+define tty-send-break :: Int -> Int -foreign-> Int
   :doc "Send a terminal break."
-  fd duration -> (sys-ioctl fd TCSBRK &duration)
+  fd duration -> (sys-ioctl-value fd TCSBRK duration)
 
 
-define tty-get-modem :: Int -> Int
-  :doc "Return current modem line bits."
-  fd -> def bits 0
-        def ignored (sys-ioctl fd TIOCMGET &bits)
-        bits
+define tty-get-modem-result :: Int -foreign-> Either Int Int
+  :doc "Read modem line bits while preserving ioctl failure."
+  fd ->
+    def bits 0
+    def status (sys-ioctl fd TIOCMGET &bits)
+    if status < 0 then Left status else Right bits
 
 
-define tty-set-modem :: Int -> Int -> Int
+define tty-get-modem :: Int -foreign-> Int
+  :doc "Compatibility modem observation; fails if TIOCMGET fails."
+  fd ->
+    (match (tty-get-modem-result fd) with
+     | (Right bits) -> bits
+     | (Left _) -> error "System.Posix.Term.tty-get-modem: TIOCMGET failed")
+
+
+define tty-set-modem :: Int -> Int -foreign-> Int
   fd bits -> (sys-ioctl fd TIOCMSET &bits)
 
 
-define tty-set-modem-bits :: Int -> Int -> Int
+define tty-set-modem-bits :: Int -> Int -foreign-> Int
   fd bits -> (sys-ioctl fd TIOCMBIS &bits)
 
 
-define tty-clear-modem-bits :: Int -> Int -> Int
+define tty-clear-modem-bits :: Int -> Int -foreign-> Int
   fd bits -> (sys-ioctl fd TIOCMBIC &bits)
 
 
-define tty-get-pgrp :: Int -> Int
-  fd -> def pgrp 0
-        def ignored (sys-ioctl fd TIOCGPGRP &pgrp)
-        pgrp
+define tty-get-pgrp-result :: Int -foreign-> Either Int Int
+  fd ->
+    def pgrp 0
+    def status (sys-ioctl fd TIOCGPGRP &pgrp)
+    if status < 0 then Left status else Right pgrp
 
 
-define tty-set-pgrp :: Int -> Int -> Int
+define tty-get-pgrp :: Int -foreign-> Int
+  fd ->
+    (match (tty-get-pgrp-result fd) with
+     | (Right pgrp) -> pgrp
+     | (Left _) -> error "System.Posix.Term.tty-get-pgrp: TIOCGPGRP failed")
+
+
+define tty-set-pgrp :: Int -> Int -foreign-> Int
   fd pgrp -> (sys-ioctl fd TIOCSPGRP &pgrp)
 
 
-define tty-get-sid :: Int -> Int
-  fd -> def sid 0
-        def ignored (sys-ioctl fd TIOCGSID &sid)
-        sid
+define tty-get-sid-result :: Int -foreign-> Either Int Int
+  fd ->
+    def sid 0
+    def status (sys-ioctl fd TIOCGSID &sid)
+    if status < 0 then Left status else Right sid
 
 
-define tty-make-controlling :: Int -> Int
-  fd -> def arg 0
-        (sys-ioctl fd TIOCSCTTY &arg)
+define tty-get-sid :: Int -foreign-> Int
+  fd ->
+    (match (tty-get-sid-result fd) with
+     | (Right sid) -> sid
+     | (Left _) -> error "System.Posix.Term.tty-get-sid: TIOCGSID failed")
 
 
-define tty-release-controlling :: Int -> Int
-  fd -> def arg 0
-        (sys-ioctl fd TIOCNOTTY &arg)
+define tty-make-controlling :: Int -foreign-> Int
+  fd -> sys-ioctl-value fd TIOCSCTTY 0
+
+
+define tty-release-controlling :: Int -foreign-> Int
+  fd -> sys-ioctl-value fd TIOCNOTTY 0
 
 
 define read-char :: Int -e-> Int
@@ -459,16 +585,30 @@ define read-buf :: Int -> *U8 -> Int -e-> Int
   fd buf len -> (sys-read fd buf len)
 
 
+define termios-test-value :: Int -> Int -> Int -> Int -> Termios
+  iflag oflag cflag lflag -> Termios
+    (U32 iflag) (U32 oflag) (U32 cflag) (U32 lflag) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0) (U8 0)
+
+
 define term-test-raw-iflag :: _ -> Int
-  _ -> (tty-raw-termios (Termios raw-iflag-mask OPOST 0 raw-lflag-mask 0 0 0 0)).c_iflag
+  _ -> Int (tty-raw-termios (termios-test-value raw-iflag-mask OPOST (bit-or CS7 PARENB) raw-lflag-mask)).c_iflag
+
+
+define term-test-raw-cflag :: _ -> Int
+  _ -> Int (tty-raw-termios (termios-test-value 0 0 (bit-or CS7 PARENB) 0)).c_cflag
+
+
+define term-test-raw-vmin :: _ -> Int
+  _ -> Int (tty-raw-termios (termios-test-value 0 0 0 0)).c_cc6
 
 
 define term-test-cbreak-lflag :: _ -> Int
-  _ -> (tty-cbreak-termios (Termios 0 0 0 cbreak-lflag-mask 0 0 0 0)).c_lflag
+  _ -> Int (tty-cbreak-termios (termios-test-value 0 0 0 cbreak-lflag-mask)).c_lflag
 
 
 tests
   :constants:
+  assert-eq termios-abi-version 2 "Term ABI version tracks the corrected Linux UAPI layout"
   assert-eq TCGETS     0x5401 "Term TCGETS"
   assert-eq TIOCGWINSZ 0x5413 "Term TIOCGWINSZ"
   assert-eq STDIN      0      "Term STDIN"
@@ -477,12 +617,15 @@ tests
   :constants:
 
   :masks:
-  assert-eq raw-iflag-mask    (term-or5 BRKINT ICRNL INPCK ISTRIP IXON) "Term raw iflag mask"
-  assert-eq raw-lflag-mask    (term-or4 ECHO ICANON IEXTEN ISIG)        "Term raw lflag mask"
+  assert-eq raw-iflag-mask    (term-or8 IGNBRK BRKINT PARMRK ISTRIP INLCR IGNCR ICRNL IXON) "Term raw iflag mask"
+  assert-eq raw-lflag-mask    (term-or5 ECHO ECHONL ICANON IEXTEN ISIG)                        "Term raw lflag mask"
   assert-eq cbreak-lflag-mask (bit-or ECHO ICANON)                      "Term cbreak lflag mask"
   :masks:
 
   :layouts:
-  assert-eq (term-test-raw-iflag 0)    0 "Term raw clears input flags"
-  assert-eq (term-test-cbreak-lflag 0) 0 "Term cbreak clears local flags"
+  assert-eq (term-test-raw-iflag 0)    0   "Term raw clears input flags"
+  assert-eq (term-test-raw-cflag 0)    CS8 "Term raw clears size/parity and selects eight-bit characters"
+  assert-eq (term-test-raw-vmin 0)     1   "Term raw mode makes one byte the minimum read"
+  assert-eq (term-test-cbreak-lflag 0) 0   "Term cbreak clears canonical/echo flags"
+  assert-eq (Int (empty-winsize.ws_row)) 0 "Term WinSize stores row as a 16-bit field"
   :layouts:

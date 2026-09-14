@@ -86,6 +86,7 @@ void tc_registry_free(TypeClassRegistry *reg) {
         free(inst->method_names);
         free(inst->method_funcs);
         free(inst->method_symbols);
+        ast_free(inst->source_ast);
     }
     free(reg->instances);
     free(reg);
@@ -166,6 +167,8 @@ static void tc_copy_instance_into(TypeClassRegistry *dst,
     inst->class_name = src->class_name ? strdup(src->class_name) : NULL;
     inst->type_name = src->type_name ? strdup(src->type_name) : NULL;
     inst->dict_global = src->dict_global;
+    inst->is_template = src->is_template;
+    inst->source_ast = ast_clone(src->source_ast);
 
     inst->assoc_count = src->assoc_count;
     inst->assoc_names = malloc(sizeof(char*) * (src->assoc_count ? src->assoc_count : 1));
@@ -208,15 +211,39 @@ void tc_registry_merge(TypeClassRegistry *dst, TypeClassRegistry *src) {
 
 /// Name helpers
 
+static void tc_append_symbol_component(char *out, size_t out_size,
+                                       const char *component) {
+    size_t used = strlen(out);
+    for (const unsigned char *p = (const unsigned char *)component;
+         *p && used + 1 < out_size; p++) {
+        if (isalnum(*p) || *p == '_') {
+            out[used++] = (char)*p;
+            out[used] = '\0';
+        } else {
+            int written = snprintf(out + used, out_size - used, "_x%02x", *p);
+            if (written < 0) return;
+            size_t room = out_size - used;
+            used += (size_t)written < room ? (size_t)written : room - 1;
+        }
+    }
+}
+
 void tc_dict_name(const char *class_name, const char *type_name,
                   char *out, size_t out_size) {
-    snprintf(out, out_size, "__dict_%s_%s", class_name, type_name);
+    snprintf(out, out_size, "__dict_");
+    tc_append_symbol_component(out, out_size, class_name);
+    strncat(out, "_", out_size - strlen(out) - 1);
+    tc_append_symbol_component(out, out_size, type_name);
 }
 
 void tc_method_name(const char *class_name, const char *type_name,
                     const char *method_name, char *out, size_t out_size) {
-    snprintf(out, out_size, "__impl_%s_%s_%s",
-             class_name, type_name, method_name);
+    snprintf(out, out_size, "__impl_");
+    tc_append_symbol_component(out, out_size, class_name);
+    strncat(out, "_", out_size - strlen(out) - 1);
+    tc_append_symbol_component(out, out_size, type_name);
+    strncat(out, "_", out_size - strlen(out) - 1);
+    tc_append_symbol_component(out, out_size, method_name);
 }
 
 /// Lookup
@@ -246,6 +273,27 @@ TCInstance *tc_find_instance(TypeClassRegistry *reg, const char *class_name,
             subtype_match = inst;
     }
     return subtype_match;
+}
+
+static bool tc_has_matching_template(TypeClassRegistry *reg,
+                                     const char *class_name,
+                                     const char *type_name) {
+    if (!reg || !class_name || !type_name) return false;
+    const char *actual = type_name;
+    while (*actual == '(' || isspace((unsigned char)*actual)) actual++;
+    size_t actual_head = strcspn(actual, " )\t");
+    for (int i = 0; i < reg->instance_count; i++) {
+        TCInstance *inst = &reg->instances[i];
+        if (!inst->is_template || strcmp(inst->class_name, class_name) != 0)
+            continue;
+        const char *pattern = inst->type_name;
+        while (*pattern == '(' || isspace((unsigned char)*pattern)) pattern++;
+        size_t pattern_head = strcspn(pattern, " )\t");
+        if (actual_head == pattern_head &&
+            strncmp(actual, pattern, actual_head) == 0)
+            return true;
+    }
+    return false;
 }
 
 bool tc_is_method(TypeClassRegistry *reg, const char *method_name) {
@@ -299,6 +347,120 @@ LLVMTypeRef tc_dict_type(TypeClassRegistry *reg, const char *class_name,
 // in the HM type environment so inference knows about them.
 //
 //
+static bool tc_is_associated_application(const char *expression,
+                                          const char *name,
+                                          const char *parameter) {
+    char application[512];
+    int length = snprintf(application, sizeof(application), "(%s %s)",
+                          name, parameter);
+    return length >= 0 && (size_t)length < sizeof(application) &&
+           strcmp(expression, application) == 0;
+}
+
+static bool tc_type_identifier_char(char c) {
+    return isalnum((unsigned char)c) || c == '_' || c == '.' || c == '-';
+}
+
+/* Replace one type application only at identifier boundaries. A substring
+ * rewrite turns `TailElement s` into `TailInt` when reducing `Element s`. */
+static bool tc_replace_type_application(char *signature, size_t capacity,
+                                        const char *family,
+                                        const char *parameter,
+                                        const char *replacement,
+                                        bool *changed) {
+    char target[256];
+    int target_length = snprintf(target, sizeof(target), "%s %s",
+                                 family, parameter);
+    if (target_length < 0 || (size_t)target_length >= sizeof(target))
+        return false;
+
+    char *search = signature;
+    while ((search = strstr(search, target)) != NULL) {
+        char before = search == signature ? '\0' : search[-1];
+        char after = search[target_length];
+        if ((before && tc_type_identifier_char(before)) ||
+            (after && tc_type_identifier_char(after))) {
+            search++;
+            continue;
+        }
+        size_t prefix = (size_t)(search - signature);
+        size_t replacement_length = strlen(replacement);
+        size_t suffix_length = strlen(search + target_length);
+        if (prefix + replacement_length + suffix_length + 1 > capacity)
+            return false;
+        memmove(search + replacement_length, search + target_length,
+                suffix_length + 1);
+        memcpy(search, replacement, replacement_length);
+        search += replacement_length;
+        if (changed) *changed = true;
+    }
+    return true;
+}
+
+static bool tc_replace_type_identifier(char *expression, size_t capacity,
+                                       const char *identifier,
+                                       const char *replacement) {
+    size_t identifier_length = strlen(identifier);
+    char *search = expression;
+    while ((search = strstr(search, identifier)) != NULL) {
+        char before = search == expression ? '\0' : search[-1];
+        char after = search[identifier_length];
+        if ((before && tc_type_identifier_char(before)) ||
+            (after && tc_type_identifier_char(after))) {
+            search++;
+            continue;
+        }
+        size_t prefix = (size_t)(search - expression);
+        size_t replacement_length = strlen(replacement);
+        size_t suffix_length = strlen(search + identifier_length);
+        if (prefix + replacement_length + suffix_length + 1 > capacity)
+            return false;
+        memmove(search + replacement_length, search + identifier_length,
+                suffix_length + 1);
+        memcpy(search, replacement, replacement_length);
+        search += replacement_length;
+    }
+    return true;
+}
+
+char *tc_specialize_type_expression(TypeClassRegistry *reg,
+                                    const char *class_name,
+                                    const char *instance_type,
+                                    const char *expression) {
+    if (!reg || !class_name || !instance_type || !expression) return NULL;
+    TCClass *class_decl = tc_find_class(reg, class_name);
+    TCInstance *instance = tc_find_instance(reg, class_name, instance_type);
+    if (!class_decl || !instance || strlen(expression) >= 512) return NULL;
+
+    char specialized[512];
+    strcpy(specialized, expression);
+    for (int pass = 0; pass <= instance->assoc_count; pass++) {
+        bool changed = false;
+        for (int i = 0; i < instance->assoc_count; i++)
+            if (!tc_replace_type_application(specialized, sizeof(specialized),
+                    instance->assoc_names[i], class_decl->type_var,
+                    instance->assoc_values[i], &changed))
+                return NULL;
+        if (!changed) break;
+    }
+
+    const char *replacement = instance_type;
+    size_t instance_length = strlen(instance_type);
+    char *ungrouped_instance = NULL;
+    if (instance_length >= 2 && instance_type[0] == '(' &&
+        instance_type[instance_length - 1] == ')') {
+        ungrouped_instance = strndup(instance_type + 1, instance_length - 2);
+        replacement = ungrouped_instance;
+    }
+    if (!tc_replace_type_identifier(specialized, sizeof(specialized),
+                                    class_decl->type_var, replacement)) {
+        free(ungrouped_instance);
+        return NULL;
+    }
+    free(ungrouped_instance);
+    return strdup(specialized);
+}
+
 void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
     if (!ast || ast->type != AST_CLASS) return;
 
@@ -311,10 +473,13 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
                 parser_get_filename(), ast->line, ast->column,
                 super_name, ast->class_decl.name);
         }
-        if (super_var && ast->class_decl.type_var &&
-            strcmp(super_var, ast->class_decl.type_var) != 0) {
+        bool supported = strcmp(super_var, ast->class_decl.type_var) == 0;
+        for (int ai = 0; ai < ast->class_decl.assoc_count; ai++)
+            supported |= tc_is_associated_application(super_var,
+                ast->class_decl.assoc_types[ai], ast->class_decl.type_var);
+        if (!supported) {
             tc_codegen_error(ctx,
-                "%s:%d:%d: error: unsupported superclass constraint '%s %s' for class '%s %s'; only constraints over the head type variable are currently supported",
+                "%s:%d:%d: error: unsupported superclass constraint '%s %s' for class '%s %s'; expected the head type variable or an owned associated type applied to it",
                 parser_get_filename(), ast->line, ast->column,
                 super_name, super_var, ast->class_decl.name,
                 ast->class_decl.type_var);
@@ -434,6 +599,18 @@ static Type *my_type_parse_fn_arrow(const char *sig) {
     while (*start == ' ') start++;
     for (int i = strlen(start)-1; i >= 0 && start[i] == ' '; i--) start[i] = '\0';
 
+    /* Class signatures are token-joined with spaces, so postfix optional
+     * syntax may arrive as `(a, E s) ?`.  Parse the postfix here before
+     * delegating the base expression; otherwise `?` can be mistaken for an
+     * additional type-application argument. */
+    size_t start_len = strlen(start);
+    if (start_len > 0 && start[start_len - 1] == '?') {
+        start[--start_len] = '\0';
+        while (start_len > 0 && start[start_len - 1] == ' ')
+            start[--start_len] = '\0';
+        return type_optional(my_type_parse_fn_arrow(start));
+    }
+
     if (start[0] == '(' && start[strlen(start)-1] == ')') {
         start[strlen(start)-1] = '\0';
         start++;
@@ -477,6 +654,54 @@ Type *tc_method_result_type(TypeClassRegistry *reg, const char *class_name,
     return NULL;
 }
 
+Type *tc_instance_method_result_type(TypeClassRegistry *reg,
+                                     const char *class_name,
+                                     const char *instance_type,
+                                     const char *method_name) {
+    TCClass *class_decl = tc_find_class(reg, class_name);
+    if (!class_decl || !tc_find_instance(reg, class_name, instance_type))
+        return NULL;
+    for (int i = 0; i < class_decl->method_count; i++) {
+        TCMethod *method = &class_decl->methods[i];
+        if (!method->name || !method->type_str ||
+            strcmp(method->name, method_name) != 0)
+            continue;
+        char *specialized = tc_specialize_type_expression(
+            reg, class_name, instance_type, method->type_str);
+        if (!specialized) return NULL;
+        Type *signature = my_type_parse_fn_arrow(specialized);
+        free(specialized);
+        Type *result = signature;
+        while (result && result->kind == TYPE_ARROW)
+            result = result->arrow_ret;
+        Type *owned_result = result ? type_clone(result) : NULL;
+        type_free(signature);
+        return owned_result;
+    }
+    return NULL;
+}
+
+int tc_method_arity(TypeClassRegistry *reg, const char *class_name,
+                    const char *method_name) {
+    TCClass *class_decl = tc_find_class(reg, class_name);
+    if (!class_decl) return -1;
+    for (int i = 0; i < class_decl->method_count; i++) {
+        TCMethod *method = &class_decl->methods[i];
+        if (!method->name || !method->type_str ||
+            strcmp(method->name, method_name) != 0)
+            continue;
+        Type *signature = my_type_parse_fn_arrow(method->type_str);
+        int arity = 0;
+        for (Type *cursor = signature;
+             cursor && cursor->kind == TYPE_ARROW;
+             cursor = cursor->arrow_ret)
+            arity++;
+        type_free(signature);
+        return arity;
+    }
+    return -1;
+}
+
 /// Instance registration
 //
 // For each method in the instance:
@@ -499,13 +724,69 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         return;
     }
 
+    /* Equations belong to this class, and each family has one definition.
+     * Validate before superclass lookup or signature specialization so those
+     * consumers cannot disagree about which duplicate equation to use. */
+    for (int ai = 0; ai < ast->instance_decl.assoc_count; ai++) {
+        const char *name = ast->instance_decl.assoc_names[ai];
+        bool owned = false;
+        for (int ci = 0; ci < c->assoc_count; ci++)
+            owned |= strcmp(name, c->assoc_types[ci]) == 0;
+        if (!owned)
+            tc_codegen_error(ctx,
+                "%s:%d:%d: error: unknown associated type '%s' in instance '%s %s'",
+                parser_get_filename(), ast->line, ast->column,
+                name, class_name, type_name);
+        for (int previous = 0; previous < ai; previous++)
+            if (strcmp(name, ast->instance_decl.assoc_names[previous]) == 0)
+                tc_codegen_error(ctx,
+                    "%s:%d:%d: error: duplicate associated type '%s' in instance '%s %s'",
+                    parser_get_filename(), ast->line, ast->column,
+                    name, class_name, type_name);
+    }
+
     for (int si = 0; si < c->superclass_count; si++) {
         const char *super_name = c->superclass_names[si];
-        if (!tc_find_instance(reg, super_name, type_name)) {
+        const char *argument = c->superclass_type_vars[si];
+        const char *super_type = argument;
+        const char *associated = NULL;
+        if (strcmp(argument, c->type_var) == 0) {
+            super_type = type_name;
+        } else {
+            for (int ai = 0; ai < c->assoc_count; ai++) {
+                if (!tc_is_associated_application(argument, c->assoc_types[ai],
+                                                   c->type_var)) continue;
+                associated = c->assoc_types[ai];
+                super_type = NULL;
+                for (int bi = 0; bi < ast->instance_decl.assoc_count; bi++) {
+                    if (strcmp(ast->instance_decl.assoc_names[bi], associated) == 0)
+                        super_type = ast->instance_decl.assoc_values[bi];
+                }
+                if (!super_type)
+                    tc_codegen_error(ctx,
+                        "%s:%d:%d: error: associated type '%s' requires an equation in instance '%s %s'",
+                        parser_get_filename(), ast->line, ast->column,
+                        associated, class_name, type_name);
+                break;
+            }
+        }
+        bool supplied_by_context = false;
+        for (int ci = 0; ci < ast->instance_decl.constraint_count; ci++) {
+            if (strcmp(ast->instance_decl.constraint_names[ci], super_name) == 0 &&
+                strcmp(ast->instance_decl.constraint_type_vars[ci], super_type) == 0) {
+                supplied_by_context = true;
+                break;
+            }
+        }
+        if (!supplied_by_context &&
+            !tc_find_instance(reg, super_name, super_type) &&
+            !tc_has_matching_template(reg, super_name, super_type)) {
             tc_codegen_error(ctx,
-                "%s:%d:%d: error: superclass constraint requires instance '%s %s' before '%s %s'",
+                "%s:%d:%d: error: superclass constraint requires instance '%s %s' before '%s %s'%s%s",
                 parser_get_filename(), ast->line, ast->column,
-                super_name, type_name, class_name, type_name);
+                super_name, super_type, class_name, type_name,
+                associated ? "; associated type " : "",
+                associated ? associated : "");
         }
     }
 
@@ -542,6 +823,25 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         inst->method_funcs[mi] = NULL;
         inst->method_symbols[mi] = NULL;
     }
+
+    /* A constrained instance is a dictionary template, not a concrete
+     * dictionary.  Its methods mention evidence-bound type variables (for
+     * example `Evaluation e => Applicative (TotalDemand e)`), so emitting the
+     * body now would turn calls through that evidence into unresolved bare
+     * symbols such as `applyA`.  Retain the complete declaration for the
+     * concrete-instantiation path instead.  In particular, do not manufacture
+     * a null dictionary or a semantically fake method body merely to satisfy
+     * the native linker. */
+    inst->is_template = ast->instance_decl.constraint_count > 0;
+    inst->source_ast = inst->is_template ? ast_clone(ast) : NULL;
+    if (inst->is_template) {
+        if (getenv("MONAD_DEBUG_TYPECLASS"))
+            fprintf(stderr, "Instance template: %s %s (%d constraints)\n",
+                    class_name, type_name,
+                    ast->instance_decl.constraint_count);
+        return;
+    }
+
     /* ── Step 1: compile each explicitly provided method ───────────────── */
     for (int mi = 0; mi < c->method_count; mi++) {
         const char *mname = c->methods[mi].name;
@@ -590,44 +890,18 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         snprintf(sig_buf, sizeof(sig_buf), "Fn :: %s", c->methods[mi].type_str);
 
         /* Apply the exact same rewriting to the implementation signature */
-        for (int k = 0; k < inst->assoc_count; k++) {
-            char target[128];
-            snprintf(target, sizeof(target), "%s %s", inst->assoc_names[k], c->type_var);
-            char *pos;
-            while ((pos = strstr(sig_buf, target)) != NULL) {
-                char temp[512];
-                int len_before = pos - sig_buf;
-                snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, sig_buf, inst->assoc_values[k], pos + strlen(target));
-                strcpy(sig_buf, temp);
-            }
-        }
-        {
-            char bare_target[64];
-            snprintf(bare_target, sizeof(bare_target), "%s", c->type_var);
-            char bare_replace[128];
-            snprintf(bare_replace, sizeof(bare_replace), "%s", inst->type_name);
-
-            char temp_sig[512];
-            strcpy(temp_sig, sig_buf);
-            char *pos = temp_sig;
-            size_t t_len = strlen(bare_target);
-
-            while ((pos = strstr(pos, bare_target)) != NULL) {
-                bool left_bound = (pos == temp_sig) || !((*(pos - 1) >= 'a' && *(pos - 1) <= 'z') || (*(pos - 1) >= 'A' && *(pos - 1) <= 'Z') || (*(pos - 1) >= '0' && *(pos - 1) <= '9') || *(pos - 1) == '_');
-                bool right_bound = !((*(pos + t_len) >= 'a' && *(pos + t_len) <= 'z') || (*(pos + t_len) >= 'A' && *(pos + t_len) <= 'Z') || (*(pos + t_len) >= '0' && *(pos + t_len) <= '9') || *(pos + t_len) == '_');
-
-                if (left_bound && right_bound) {
-                    char temp[512];
-                    int len_before = pos - temp_sig;
-                    snprintf(temp, sizeof(temp), "%.*s%s%s", len_before, temp_sig, bare_replace, pos + t_len);
-                    strcpy(temp_sig, temp);
-                    pos = temp_sig + len_before + strlen(bare_replace);
-                } else {
-                    pos += t_len;
-                }
-            }
-            strcpy(sig_buf, temp_sig);
-        }
+        char *specialized = tc_specialize_type_expression(
+            reg, class_name, type_name, sig_buf);
+        if (!specialized)
+            tc_codegen_error(ctx,
+                "%s:%d:%d: error: cannot specialize method signature in instance '%s %s'",
+                parser_get_filename(), ast->line, ast->column,
+                class_name, type_name);
+        strcpy(sig_buf, specialized);
+        free(specialized);
+        if (getenv("MONAD_DEBUG_TYPECLASS"))
+            fprintf(stderr, "specialized %s %s.%s :: %s\n",
+                    class_name, type_name, mname, sig_buf);
 
         Type *method_sig = my_type_parse_fn_arrow(sig_buf);
         Type *t_iter = method_sig;
@@ -769,7 +1043,8 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
                 params[pi].name = strdup("__arg");
                 params[pi].type = type_unknown();
             }
-            Type *return_type = tc_method_result_type(reg, c->name, mname);
+            Type *return_type = tc_instance_method_result_type(
+                reg, c->name, type_name, mname);
             if (!return_type) return_type = type_unknown();
             env_insert_func(ctx->env, mname, params, param_count,
                             return_type, inst->method_funcs[mi], NULL, NULL);

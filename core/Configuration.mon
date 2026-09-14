@@ -1,8 +1,8 @@
 ;;; Configuration.mon --- Typed, language-owned project configuration
 
-:author "Laluxx"
-:version "0.2.0"
-:keywords "configuration validation diagnostics provenance DSL"
+:author   Laluxx
+:version  0.3.0
+:keywords configuration validation diagnostics provenance DSL
 
 ;;; Commentary:
 
@@ -13,7 +13,9 @@
  it does not replace static types with a universal string-keyed value tree.
 
  A ConfigValidation either retains the fully typed application value or
- contains structured diagnostics. ConfigPath identifies an option
+ contains structured diagnostics. Its Applicative instance accumulates
+ diagnostics from independent fields while deliberately providing no Monad
+ instance that would imply fail-fast dependency. ConfigPath identifies an option
  independently of presentation, while ConfigDiagnostic records severity and
  an explanatory message. ConfigurationSource lets a tool record whether a
  setting came from defaults, a project module, an environment variable, or a
@@ -30,8 +32,8 @@
      line-width  = 100
      indentation = 2
 
- `expand-configuration` is an ordinary exported Syntax transformer. It turns
- each `name = expression` line into a keyword constructor argument and emits
+ =expand-configuration= is an ordinary exported Syntax transformer. It turns
+ each =name = expression= line into a keyword constructor argument and emits
  a typed definition. Consequently layout checking owns unknown, duplicate,
  missing, and incorrectly typed fields; the compiler has no FormatOptions or
  configuration-key special case.
@@ -41,6 +43,8 @@
 reader-block configuration_ expand-configuration
 
 import Sequence
+import Data.Functor
+import Control.Applicative
 
 module Configuration
   [ConfigPath config-path child-path render-path
@@ -70,6 +74,27 @@ layout ConfigDiagnostic
 data ConfigValidation a
   = ConfigurationInvalid [ConfigDiagnostic]
   | ConfigurationValid   a
+
+
+define map-config-validation :: (a -> b) -> ConfigValidation a -> ConfigValidation b
+  _ [ConfigurationInvalid diagnostics] -> ConfigurationInvalid diagnostics
+  f [ConfigurationValid value] -> ConfigurationValid (f value)
+
+
+define apply-config-validation :: ConfigValidation (a -> b) -> ConfigValidation a -> ConfigValidation b
+  [ConfigurationInvalid left] [ConfigurationInvalid right] -> ConfigurationInvalid (append left right)
+  [ConfigurationInvalid diagnostics] [ConfigurationValid _] -> ConfigurationInvalid diagnostics
+  [ConfigurationValid _] [ConfigurationInvalid diagnostics] -> ConfigurationInvalid diagnostics
+  [ConfigurationValid f] [ConfigurationValid value] -> ConfigurationValid (f value)
+
+
+instance Functor ConfigValidation
+  map f value -> map-config-validation f value
+
+
+instance Applicative ConfigValidation
+  pure value -> ConfigurationValid value
+  applyA fvalue value -> apply-config-validation fvalue value
 
 
 data ConfigurationSource
@@ -166,6 +191,8 @@ tests
   assert-eq (show (ConfigurationValid 42)) "(ConfigurationValid 42)" "successful validation retains its typed value"
   assert-eq (show (require formatter-path "must be positive" False)) "((ConfigDiagnostic (ConfigPath (format line-width)) Error must be positive))" "requirements produce structured diagnostics"
   assert-eq (show (require formatter-path "must be positive" True)) "()" "satisfied requirements produce no diagnostics"
+  assert-eq (show (liftA2 (lambda (x y) (x + y)) (ConfigurationValid 2) (ConfigurationValid 3))) "(ConfigurationValid 5)" "configuration validation inherits Applicative lifting"
+  assert-eq (show (applyA (ConfigurationInvalid (require formatter-path "left" False)) (ConfigurationInvalid (require formatter-path "right" False)))) "(ConfigurationInvalid ((ConfigDiagnostic (ConfigPath (format line-width)) Error left) (ConfigDiagnostic (ConfigPath (format line-width)) Error right)))" "configuration validation accumulates independent diagnostics"
   :validation:
 
   :provenance:

@@ -1,8 +1,8 @@
 ;;; LineEditor.mon --- Pure line-editing state transitions
 
-:author "Laluxx"
-:version "0.2.0"
-:keywords "readline emacs editing text sequence pure"
+:author   Laluxx
+:version  0.3.0
+:keywords readline emacs editing text sequence pure
 
 ;;; Commentary:
 
@@ -12,9 +12,14 @@
  module remains deterministic, freely testable, and memoizable.
 
  Ordered prefix, suffix, length, construction, and concatenation behavior is
- inherited from Sequence. This module owns only cursor/editing policy and the
- editing policy; it must not maintain local list algorithms parallel to the
- sequence abstraction.
+ inherited from Sequence. This module owns only cursor/editing policy; it must
+ not maintain local list algorithms parallel to the sequence abstraction.
+
+ Every public state transition treats the cursor as an index *between* elements
+ and normalizes it into the closed interval [0, length text] before editing.
+ Terminal drivers may temporarily observe stale cursor values while history or
+ completion replaces the buffer, but those values cannot turn into out-of-range
+ indexing or a cursor beyond the resulting line.
 
 ;;; Code:
 
@@ -28,7 +33,7 @@ module Text.LineEditor
    key-meta-b key-meta-d key-meta-f
    key-escape key-arrow-left key-arrow-right key-home key-end key-delete
    key-arrow-up key-arrow-down key-function
-   move-begin move-end move-forward move-backward
+   normalize-cursor move-begin move-end move-forward move-backward
    insert-char delete-forward delete-backward
    kill-line-backward kill-line-forward
    kill-word-backward kill-word-forward transpose-characters
@@ -61,6 +66,12 @@ define key-delete 1007
 define key-arrow-up 1008
 define key-arrow-down 1009
 define key-function 1010
+
+
+define normalize-cursor :: Int -> [Int] -> Int
+  cursor _ | (< cursor 0) -> 0
+  cursor text | (> cursor (length text)) -> length text
+  cursor _ -> cursor
 
 
 define insert-at :: Int -> Int -> [Int] -> [Int]
@@ -104,7 +115,7 @@ define word-start-loop :: Int -> Int -> Int -> [Int] -> Int
 
 
 define word-start :: Int -> [Int] -> Int
-  cursor text -> word-start-loop cursor 0 0 text
+  cursor text -> word-start-loop (normalize-cursor cursor text) 0 0 text
 
 
 define word-end-skip :: Int -> [Int] -> Int
@@ -123,8 +134,9 @@ define word-end-take :: Int -> [Int] -> Int
 
 define word-end :: Int -> [Int] -> Int
   cursor text ->
-    def start (word-end-skip cursor (drop text cursor))
-    word-end-take start (drop text start)
+    def position (normalize-cursor cursor text)
+    def start (word-end-skip position (drop position text))
+    word-end-take start (drop start text)
 
 
 define move-begin :: Int -> [Int] -> Int
@@ -136,45 +148,52 @@ define move-end :: Int -> [Int] -> Int
 
 
 define move-forward :: Int -> [Int] -> Int
-  cursor text
-    | (< cursor (length text)) -> (+ cursor 1)
-    | otherwise                -> cursor
+  cursor text ->
+    def position (normalize-cursor cursor text)
+    if (< position (length text)) then (+ position 1)
+    else position
 
 
 define move-backward :: Int -> [Int] -> Int
-  cursor _
-    | (> cursor 0) -> (- cursor 1)
-    | otherwise    -> cursor
+  cursor text ->
+    def position (normalize-cursor cursor text)
+    if (> position 0) then (- position 1)
+    else position
 
 
 define insert-char :: Int -> Int -> [Int] -> [Int]
-  cursor c text -> insert-at cursor c text
+  cursor c text -> insert-at (normalize-cursor cursor text) c text
 
 
 define delete-forward :: Int -> [Int] -> [Int]
-  cursor text -> delete-at cursor text
+  cursor text -> delete-at (normalize-cursor cursor text) text
 
 
 define delete-backward :: Int -> [Int] -> [Int]
-  cursor text
-    | (<= cursor 0) -> text
-    | otherwise     -> delete-at (- cursor 1) text
+  cursor text ->
+    def position (normalize-cursor cursor text)
+    if (<= position 0) then text
+    else delete-at (- position 1) text
 
 
 define kill-word-forward :: Int -> [Int] -> [Int]
-  cursor text -> concat (take text cursor) (drop-forward-word (drop text cursor))
+  cursor text ->
+    def position (normalize-cursor cursor text)
+    concat (take position text) (drop-forward-word (drop position text))
 
 
 define kill-word-backward :: Int -> [Int] -> [Int]
-  cursor text -> concat (take text (word-start cursor text)) (drop text cursor)
+  cursor text ->
+    def position (normalize-cursor cursor text)
+    concat (take (word-start position text) text) (drop position text)
 
 
 define kill-line-backward :: Int -> [Int] -> [Int]
-  cursor text -> drop text cursor
+  cursor text -> drop (normalize-cursor cursor text) text
 
 
 define kill-line-forward :: Int -> [Int] -> [Int]
-  cursor text -> take text cursor
+  cursor text -> take (normalize-cursor cursor text) text
 
 
 define transpose-position :: Int -> [Int] -> Int
@@ -187,14 +206,14 @@ define transpose-position :: Int -> [Int] -> Int
 define transpose-characters :: Int -> [Int] -> [Int]
   _ text | (< (length text) 2) -> text
   cursor text ->
-    def position (transpose-position cursor text)
-    def before (take text position)
-    def after (drop text (+ position 2))
+    def position (transpose-position (normalize-cursor cursor text) text)
+    def before (take position text)
+    def after (drop (+ position 2) text)
     def swapped (prepend (nth text (+ position 1)) (prepend (nth text position) after))
     concat before swapped
 
 
-define apply-key-text :: Int -> Int -> [Int] -> [Int]
+define apply-key-text-at :: Int -> Int -> [Int] -> [Int]
   key cursor text
     | (= key key-ctrl-d)         -> delete-forward cursor text
     | (= key key-backspace)      -> delete-backward cursor text
@@ -223,7 +242,7 @@ define apply-key-text :: Int -> Int -> [Int] -> [Int]
     | otherwise                  -> insert-char cursor key text
 
 
-define apply-key-cursor :: Int -> Int -> [Int] -> Int
+define apply-key-cursor-at :: Int -> Int -> [Int] -> Int
   key cursor text
     | (= key key-ctrl-a)         -> move-begin cursor text
     | (= key key-ctrl-e)         -> move-end cursor text
@@ -252,6 +271,14 @@ define apply-key-cursor :: Int -> Int -> [Int] -> Int
     | otherwise                  -> (+ cursor 1)
 
 
+define apply-key-text :: Int -> Int -> [Int] -> [Int]
+  key cursor text -> apply-key-text-at key (normalize-cursor cursor text) text
+
+
+define apply-key-cursor :: Int -> Int -> [Int] -> Int
+  key cursor text -> apply-key-cursor-at key (normalize-cursor cursor text) text
+
+
 define decode-escape2 :: Int -> Int -> Int
   second third
     | (and (= second 0x5b) (= third 0x44)) -> key-arrow-left
@@ -274,14 +301,13 @@ define line-complete? :: Int -> Bool
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Readline registers insert-char"
-  assert-eq 1 1 "Readline registers delete-forward"
-  assert-eq 1 1 "Readline registers kill-word-forward"
-  :registration:
 
   :cursor:
   assert-eq (apply-key-cursor 0x63 2 (list 0x61 0x62)) 3 "Readline printable advances cursor"
+  assert-eq (normalize-cursor -3 (list 0x61 0x62)) 0 "negative cursors normalize to the start"
+  assert-eq (normalize-cursor 9 (list 0x61 0x62)) 2 "oversized cursors normalize to the end"
+  assert-eq (apply-key-cursor key-ctrl-b 9 (list 0x61 0x62)) 1 "editing commands normalize stale oversized cursors before movement"
+  assert-eq (show (apply-key-text 0x63 -4 (list 0x61 0x62))) "(99 97 98)" "insertion normalizes stale negative cursors"
   :cursor:
 
   :movement:

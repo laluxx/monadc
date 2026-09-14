@@ -74,7 +74,7 @@ define possibly-Fx :: Formula (◇ Fx)
 
 ;; The formula studied in this chapter is
 ;;
-;;   `∀x. □Fx -> □∀x. Fx`
+;;   ∀x. □Fx -> □∀x. Fx
 ;;
 ;; This direction is commonly called the Barcan formula.  Its reverse,
 ;; □∀x. Fx -> ∀x. □Fx, is commonly called the converse Barcan formula.
@@ -87,10 +87,10 @@ define barcan-sexp :: Formula
   (implies (∀ "x" (□ Fx)) (□ (∀ "x" Fx)))
 
 
-;; The second is mathematical surface syntax.  Because the expected type is
-;; Formula, the scoped reader exported by Logic.FirstOrder.Modal applies only
-;; to this body.  It lowers to the same ordinary function applications as the
-;; definition above; there is no modal-logic AST hidden in the compiler.
+| The second is mathematical surface syntax.  Because the expected type is
+| Formula, the scoped reader exported by Logic.FirstOrder.Modal applies only
+| to this body.  It lowers to the same ordinary function applications as the
+| definition above; there is no modal-logic AST hidden in the compiler.
 
 define barcan-math :: Formula
   ∀x. □Fx -> □∀x. Fx

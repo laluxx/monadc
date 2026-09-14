@@ -1,0 +1,27 @@
+:TEST-ID tests.type.judgment.context-assumption
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY 90-diagnostics
+:TEST-SUBSET judgments
+:TEST-QUALITY semantic-regression
+:TEST-CODEGEN-ATOM atom.type.judgment.context-assumption
+:TEST-CONTEXT monadc.context.type-theory.first-class-judgments
+:TEST-PURPOSE An explicit Gamma assumption is authoritative, not re-inferred.
+:TEST-ATOM Bool assumption cannot satisfy integer addition.
+:TEST-EXPECT fail:compile
+:TEST-COVERAGE dep.c:rigid Gamma assumption checking
+:TEST-ERROR-MESSAGE Couldn't match expected type
+:TEST-DIAGNOSTIC-CONTAINS while checking:
+:TEST-DIAGNOSTIC-CONTAINS derivation:
+:TEST-DIAGNOSTIC-CONTAINS infer (+) ⇒ Int → Int → Int
+:TEST-DIAGNOSTIC-CONTAINS lookup x in Γ ⇒ Bool
+:TEST-DIAGNOSTIC-CONTAINS argument 3 skipped after failure
+:TEST-USES-ATOM atom.type.judgment.context-assumption
+:TEST-MENU errors/infer/judgments/atom.type.judgment.context-assumption
+:TEST-MENU-PATH codegen/errors/infer/judgments/atom.type.judgment.context-assumption
+:TEST-ATOM-LEAF atom.type.judgment.context-assumption
+:TEST-CLI-TARGET codegen errors infer judgments
+
+(module Main)
+{x: Bool} ⊢ x + 3 : Int

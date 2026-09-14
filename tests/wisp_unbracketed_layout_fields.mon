@@ -50,8 +50,8 @@ define make-tableau :: [TableauEntry] -> BranchStatus -> Tableau
 
 
 tests
-  assert-eq parsed.ok True "an unbracketed Boolean field is readable"
-  assert-eq parsed.value 42 "an unbracketed value field is readable"
-  assert-eq parsed.offset 7 "unbracketed layouts retain constructor order"
-  assert-eq parsed.error 0 "the last unbracketed field is retained"
-  assert-eq pair.right 22 "bracketed fields remain supported"
+  assert-eq parsed.ok     True "an unbracketed Boolean field is readable"
+  assert-eq parsed.value  42   "an unbracketed value field is readable"
+  assert-eq parsed.offset 7    "unbracketed layouts retain constructor order"
+  assert-eq parsed.error  0    "the last unbracketed field is retained"
+  assert-eq pair.right    22   "bracketed fields remain supported"

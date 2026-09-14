@@ -1,19 +1,23 @@
 ;;; Validation.mon --- Independent checks with accumulated failures
 
-:author "Laluxx"
-:version "1.0.0"
-:keywords "validation errors accumulation applicative"
+:author   Laluxx
+:version  1.2.0
+:keywords validation errors accumulation applicative
 
 ;;; Commentary:
 
  Validation represents independent checks. Unlike Either's fail-fast bind,
  Invalid retains a structured Log so independent branches can accumulate
- diagnostics with their severity and order intact. Sequential dependency still
- belongs to Either or Monad.
+ diagnostics with their severity and order intact. Its Functor and Applicative
+ instances make that distinction executable: independent Applicative branches
+ accumulate both Logs, while sequential dependency still belongs to Either or
+ a Monad with an explicit failure type.
 
 ;;; Code:
 
 import Data.Log
+import Data.Functor
+import Control.Applicative
 
 module Data.Validation
   [Validation Invalid Valid
@@ -25,6 +29,32 @@ module Data.Validation
 data Validation a
   = Invalid Log
   | Valid a
+
+
+;;; Structure and applicative accumulation
+
+define map-validation :: (a -> b) -> Validation a -> Validation b
+  _ [Invalid errors] -> Invalid errors
+  f [Valid value]    -> Valid (f value)
+
+
+define apply-validation :: Validation (a -> b) -> Validation a -> Validation b
+  [Invalid left] [Invalid right] -> Invalid (append-log left right)
+  [Invalid errors] [Valid _]     -> Invalid errors
+  [Valid _] [Invalid errors]     -> Invalid errors
+  [Valid f] [Valid value]        -> Valid (f value)
+
+
+instance Functor Validation
+  map f value -> map-validation f value
+
+
+instance Applicative Validation
+  pure value -> Valid value
+  applyA fvalue value -> apply-validation fvalue value
+  liftA f value -> apply-validation (Valid f) value
+  liftA2 f left right -> apply-validation (apply-validation (Valid f) left) right
+  liftA3 f first second third -> apply-validation (apply-validation (apply-validation (Valid f) first) second) third
 
 
 ;;; Construction and observation
@@ -59,11 +89,22 @@ define validation-value-or :: Validation a -> a -> a
 
 ;;; Independent accumulation
 
+define validation-pair :: a -> b -> (a, b)
+  left right -> (left, right)
+
+define validation-add :: Int -> Int -> Int
+  left right -> left + right
+
+
 define combine-validation :: Validation a -> Validation b -> Validation (a, b)
+  left right -> liftA2 validation-pair left right
+
+
+define combine-validation-add :: Validation Int -> Validation Int -> Validation Int
   [Invalid left] [Invalid right] -> Invalid (append-log left right)
-  [Invalid errors] [Valid _]     -> Invalid errors
-  [Valid _] [Invalid errors]     -> Invalid errors
-  [Valid left] [Valid right]     -> Valid (left, right)
+  [Invalid errors] [Valid _] -> Invalid errors
+  [Valid _] [Invalid errors] -> Invalid errors
+  [Valid left] [Valid right] -> Valid (left + right)
 
 
 tests
@@ -72,3 +113,6 @@ tests
   assert-eq (validation-value-or (Valid 7) 0) 7 "Validation extracts success"
   assert-eq (validation-value-or (invalid "bad") 0) 0 "Validation uses fallback on failure"
   assert-eq (show (validation-errors (combine-validation (invalid "left") (invalid "right")))) "(left right)" "Validation accumulates failures left to right"
+  assert-eq (show (validation-errors (applyA (invalid "function") (invalid "argument")))) "(function argument)" "Validation Applicative accumulates independent failures"
+  assert-eq (validation-value-or (combine-validation-add (valid 2) (valid 3)) 0) 5 "Validation lifts a binary success"
+  assert-eq (show (validation-errors (combine-validation-add (invalid "left") (invalid "right")))) "(left right)" "Validation binary lifting accumulates both branches"

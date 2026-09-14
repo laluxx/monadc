@@ -1,0 +1,185 @@
+;;; Unfold.mon --- Constructive coalgebraic sequence generation
+
+:author   Laluxx
+:version  0.3.0
+:keywords sequence unfold anamorphism productivity total demand coalgebra coiterate
+
+;;; Commentary:
+
+ Unfold is the canonical constructive source for regular sequences. It does not
+ introduce a new notion of sequence; it packages an ordinary coalgebra state and
+ lets Sequence observe it through the evaluation strategy chosen by E. UnfoldStep
+ and its constructors are part of the public API: without them an external caller
+ could name =unfold= but could not construct the coalgebra result its callback is
+ required to return. The terminal summand carries no payload; termination is the
+ proposition itself, so =UnfoldStop= is nullary rather than storing a meaningless
+ Boolean witness.
+
+ The important design choice is that recursive continuation evidence is explicit:
+
+              step : S -> 1 + A × TotalDemand E S.
+
+ Therefore every accepted transition is total, and every continuation it returns
+ is proven demand-total. This is enough to justify ProductiveSequence for the
+ entire representation without claiming that every value of =Lazy S= is total.
+
+ =Coiterate= strengthens the same coalgebra by removing the terminal summand:
+
+              step : S -> A × TotalDemand E S.
+
+ The representation is consequently productive and infinite. There is no
+ =LazyUnfold= or =StrictUnfold=; choosing E supplies the evaluation policy once.
+
+;;; Coalgebraic Reading
+
+ Ordinary Sequence has behavior functor
+
+                     F_E,A(X) = 1 + A × E X.
+
+ Unfold restricts its coalgebra to the productive subobject obtained by replacing
+ E X with TotalDemand E X. Forgetting the evidence recovers an ordinary
+ F_E,A-coalgebra. Coiterate similarly inhabits the nonterminating functor
+
+                     G_E,A(X) = A × E X.
+
+ This is intentionally operational evidence, not an identification with the
+ logical later modality. A future guarded-recursion checker may synthesize
+ equivalent TotalDemand evidence from guarded definitions and erase it during
+ lowering.
+
+;;; Research Basis
+
+ J.J.M.M. Rutten, "Universal Coalgebra: a Theory of Systems", Theoretical
+ Computer Science 249(1), 2000.
+   https://doi.org/10.1016/S0304-3975(00)00056-6
+
+ Robert Atkey and Conor McBride, "Productive Coprogramming with Guarded
+ Recursion", ICFP 2013.
+   https://doi.org/10.1145/2500365.2500597
+
+ Andreas Abel, "MiniAgda: Integrating Sized and Dependent Types", 2010.
+   https://doi.org/10.4204/EPTCS.43.2
+
+ Aleš Bizjak, Hans Bugge Grathwohl, Ranald Clouston, Rasmus E. Møgelberg, and
+ Lars Birkedal, "Guarded Dependent Type Theory with Coinductive Types", 2016.
+   https://doi.org/10.1007/978-3-662-49630-5_2
+
+ The common theme is compositional productivity: recursive generation is accepted
+ because the type of the continuation carries enough structure to prove the next
+ finite observation becomes available, not because the runtime happens to use a
+ lazy representation.
+
+;;; Code:
+
+import Control.Evaluation
+import Control.Strict
+import Data.Functor
+import Sequence
+
+module Data.Sequence.Unfold
+  [UnfoldStep UnfoldStop UnfoldYield
+   Unfold unfold
+   Coiterate coiterate]
+
+
+data UnfoldStep e seed a
+  = UnfoldStop
+  | UnfoldYield a (TotalDemand e seed)
+
+
+data Unfold e seed a
+  = Unfold (seed -> UnfoldStep e seed a) seed
+
+
+define unfold ::
+  (seed -> UnfoldStep e seed a) -> seed -> Unfold e seed a
+  step initial -> Unfold step initial
+
+
+define unfold-observation :: Evaluation e =>
+  (seed -> UnfoldStep e seed a)
+  -> UnfoldStep e seed a
+  -> (a, e (Unfold e seed a))?
+  _ UnfoldStop -> nil
+  step [UnfoldYield value rest] ->
+    (value, forget-total (map (lambda (next) (Unfold step next)) rest))
+
+
+instance Evaluation e => Sequence (Unfold e seed a)
+  type Element (Unfold e seed a) = a
+  type Strategy (Unfold e seed a) = e
+
+  uncons [Unfold step seed] -> unfold-observation step (step seed)
+
+
+instance Evaluation e => ProductiveSequence (Unfold e seed a)
+
+
+data Coiterate e seed a
+  = Coiterate (seed -> (a, TotalDemand e seed)) seed
+
+
+define coiterate ::
+  (seed -> (a, TotalDemand e seed)) -> seed -> Coiterate e seed a
+  step initial -> Coiterate step initial
+
+
+define coiterate-observation :: Evaluation e =>
+  (seed -> (a, TotalDemand e seed))
+  -> (a, TotalDemand e seed)
+  -> (a, e (Coiterate e seed a))
+  step (value, rest) ->
+    (value, forget-total (map (lambda (next) (Coiterate step next)) rest))
+
+
+instance Evaluation e => Sequence (Coiterate e seed a)
+  type Element (Coiterate e seed a) = a
+  type Strategy (Coiterate e seed a) = e
+
+  uncons [Coiterate step seed] -> coiterate-observation step (step seed)
+
+
+instance Evaluation e => ProductiveSequence (Coiterate e seed a)
+
+
+instance Evaluation e => InfiniteSequence (Coiterate e seed a)
+
+
+define unfold-test-step :: Int -> UnfoldStep Strict Int Int
+  seed | (>= seed 3) -> UnfoldStop
+  seed -> UnfoldYield seed (total-defer (lambda (_) (seed + 1)))
+
+
+define coiterate-test-step :: Int -> (Int, TotalDemand Strict Int)
+  seed -> (seed, total-defer (lambda (_) (seed + 1)))
+
+
+define unfold-test-first-or :: Int -> (Int, Strict (Unfold Strict Int Int))? -> Int
+  fallback nil -> fallback
+  _ (value, _) -> value
+
+
+define unfold-test-second-or :: Int -> (Int, Strict (Unfold Strict Int Int))? -> Int
+  fallback nil -> fallback
+  fallback (_, rest) -> unfold-test-first-or fallback (uncons (demand rest))
+
+
+define coiterate-test-first-or :: Int -> (Int, Strict (Coiterate Strict Int Int))? -> Int
+  fallback nil -> fallback
+  _ (value, _) -> value
+
+
+define coiterate-test-second-or :: Int -> (Int, Strict (Coiterate Strict Int Int))? -> Int
+  fallback nil -> fallback
+  fallback (_, rest) -> coiterate-test-first-or fallback (uncons (demand rest))
+
+
+tests
+  :constructive-generation:
+  define finite-source (unfold unfold-test-step 0)
+  define infinite-source (coiterate coiterate-test-step 10)
+  assert-eq (unfold-test-first-or -1 (uncons finite-source)) 0 "Unfold exposes the initial coalgebra output"
+  assert-eq (unfold-test-second-or -1 (uncons finite-source)) 1 "Unfold continuation carries total next-state evidence"
+  assert-eq (coiterate-test-first-or -1 (uncons infinite-source)) 10 "Coiterate exposes its initial value"
+  assert-eq (coiterate-test-second-or -1 (uncons infinite-source)) 11 "Coiterate advances through a total continuation"
+  :constructive-generation:

@@ -5,7 +5,7 @@ SDL_Init SDL_INIT_VIDEO
 define window SDL_CreateWindow "Hello" 640 480 0
 define renderer SDL_CreateRenderer window nil
 
-loop
+while True
   SDL_SetRenderDrawColor renderer 33 33 33 255
   SDL_RenderClear renderer
   SDL_RenderPresent renderer

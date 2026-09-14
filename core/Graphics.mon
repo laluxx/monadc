@@ -1,3 +1,14 @@
 ;;; Graphics.mon --- graphics namespace
 
-(module Graphics [])
+:author   Laluxx
+:version  1.0.0
+:keywords graphics namespace
+
+;;; Commentary:
+
+ Graphics is the dependency-light namespace root for concrete graphics
+ backends. It deliberately exports no rendering policy of its own.
+
+;;; Code:
+
+module Graphics []

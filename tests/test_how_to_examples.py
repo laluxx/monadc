@@ -29,9 +29,108 @@ class HowToExampleTests(unittest.TestCase):
         "how_to/Macros.mon",
         "how_to/Iter.mon",
         "how_to/QuickCheck.mon",
+        "how_to/Relations.mon",
         "how_to/ReaderSyntax.mon",
         "how_to/FirstOrderModalLogic.mon",
+        "how_to/Lazyness.mon",
+        "how_to/Strictness.mon",
     )
+
+    def test_chip8_example_compiles(self):
+        """The complete multi-module CHIP-8 chapter must remain buildable."""
+        with tempfile.TemporaryDirectory(prefix="monadc-chip8-") as td:
+            temp = Path(td)
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), "Chip8.mon", "-o", str(temp / "Chip8")],
+                cwd=ROOT / "how_to/Chip8", env=env, text=True,
+                encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=30,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-5000:])
+
+    def test_chip8_loads_external_rom_bytes(self):
+        """RomFile must copy actual file bytes into CHIP-8 program memory."""
+        with tempfile.TemporaryDirectory(prefix="monadc-chip8-rom-") as td:
+            temp = Path(td)
+            rom = temp / "probe.ch8"
+            rom.write_bytes(bytes((0x60, 0x0A, 0x61, 0x0B)))
+            source = temp / "Probe.mon"
+            output = temp / "Probe"
+            source.write_text(
+                "import Machine\n"
+                "import Rom\n\n"
+                "module Main where\n\n"
+                "define verify :: RomResult -> Int\n"
+                "  [RomLoaded _] ->\n"
+                "    show (memory-byte program-start)\n"
+                "    show (memory-byte (program-start + 2))\n"
+                "    0\n"
+                "  [RomTooLarge _] -> 2\n"
+                "  [RomReadFailed] -> 3\n\n"
+                f'verify (load-rom (RomFile "{rom}"))\n',
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT / "how_to/Chip8", env=env, text=True,
+                encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=30,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-5000:])
+            ran = subprocess.run(
+                [str(output)], cwd=ROOT / "how_to/Chip8", env=env,
+                text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=10,
+            )
+            self.assertEqual(ran.returncode, 0, ran.stdout[-2000:])
+            self.assertEqual(ran.stdout, "96\n97\n")
+
+    def test_chip8_builtin_rom_reaches_display_framebuffer(self):
+        """The bundled ROM must execute a draw opcode visible to Display."""
+        with tempfile.TemporaryDirectory(prefix="monadc-chip8-framebuffer-") as td:
+            temp = Path(td)
+            source = temp / "FramebufferProbe.mon"
+            output = temp / "FramebufferProbe"
+            source.write_text(
+                "import Machine\nimport Rom\nimport Opcodes\nimport Display\n\n"
+                "module Main where\n\n"
+                "define framebuffer-pixel-at :: Int -> Int\n"
+                "  index -> display-pixel-value (index % screen-width) "
+                "(index / screen-width)\n\n"
+                "reset-machine 0\nload-rom BuiltinDemo\nrun-cycles 5\n"
+                "show cpu.fault\nshow (display-pixel-value 0 12)\n"
+                "show (framebuffer-pixel-at (12 * screen-width))\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            compiled = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT / "how_to/Chip8", env=env, text=True,
+                encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=30,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stdout[-5000:])
+            ran = subprocess.run(
+                [str(output)], cwd=ROOT / "how_to/Chip8", env=env,
+                text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False, timeout=10,
+            )
+            self.assertEqual(ran.returncode, 0, ran.stdout[-2000:])
+            self.assertEqual(ran.stdout, "0\n1\n1\n")
 
     def test_header_only_graphics_examples_compile_without_bindings(self):
         """Raylib and GLFW headers must supply both arity and C types directly."""
@@ -156,12 +255,33 @@ class HowToExampleTests(unittest.TestCase):
         self.assertNotIn("define float->int", source_text)
         self.assertIn("import System.Terminal.ANSI", source_text)
         self.assertIn("define depth-buffer :: [14kb Float]", source_text)
-        self.assertIn("define char-buffer :: [2kb]", source_text)
+        self.assertRegex(source_text, r"define char-buffer\s+:: \[2kb\]")
+        self.assertIn("sample | not visible? -> ()", source_text)
+        self.assertIn("define sample-scratch :: Sample", source_text)
+        self.assertIn("define start-animation :: -io-> Int", source_text)
+        self.assertNotIn("define start-animation :: Int -io-> Int", source_text)
+        self.assertRegex(source_text, r"\nstart-animation\s*\n")
+        self.assertIn("define update-buffers :: Sample -state.writee-> ()",
+                      source_text)
+        self.assertNotIn("status - status", source_text)
+        self.assertNotIn("cleared - cleared", source_text)
+        self.assertNotIn("scan-after-update", source_text)
+        for sequencing_wrapper in (
+            "clear-after-row-end", "scan-after-phi", "scan-after-clear",
+            "write-prepared-frame", "write-homed-frame", "spin-after-frame",
+            "finish-animation",
+        ):
+            self.assertNotIn(sequencing_wrapper, source_text)
+        self.assertNotIn("where e has state.write", source_text)
+        self.assertIn("depth-buffer[index]       <- sample.depth", source_text)
+        self.assertIn("|> clamp-shade-index", source_text)
+        self.assertNotRegex(source_text, r"\((?:depth|char)-buffer\s")
         with tempfile.TemporaryDirectory(prefix="monadc-donut-") as td:
             temp = Path(td)
             output = temp / "Donut"
             core = temp / "core"
-            shutil.copytree(ROOT / "core", core)
+            shutil.copytree(ROOT / "core", core,
+                            ignore=shutil.ignore_patterns(".#*"))
             self.assertTrue(
                 (core / "Math" / "Angle.mon").exists(),
                 "Donut's Math.Angle dependency must ship in the checkout Core",
@@ -504,6 +624,7 @@ class HowToExampleTests(unittest.TestCase):
             )
 
     def test_scheme_example_parses_and_evaluates_a_small_program(self):
+        """Annotated top-level ADT values retain their nominal type at uses."""
         source = ROOT / "how_to/Scheme.mon"
         source_text = source.read_text()
         self.assertIn("import Text.Parser", source_text)
@@ -568,13 +689,18 @@ class HowToExampleTests(unittest.TestCase):
             self.assertEqual(compiled.stdout, "")
             run = subprocess.run(
                 [str(output)], cwd=ROOT, env=env, text=True,
-                input="(+ 1 2)\n'\u03bb\n",
+                input="d\n'hellopp\n(+ 3 3)\n(+ 3 (+ 3 3))\n"
+                      "(+ (+ 2 2) (+ 2 2))\n'\u03bb\n",
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 check=False, timeout=30,
             )
             self.assertEqual(run.returncode, 0, run.stdout[-4000:])
             self.assertIn("scm> ", run.stdout)
-            self.assertIn("scm> 3\n", run.stdout)
+            self.assertIn("scm> error: unbound symbol: d\n", run.stdout)
+            self.assertIn("scm> hellopp\n", run.stdout)
+            self.assertIn("scm> 6\n", run.stdout)
+            self.assertIn("scm> 9\n", run.stdout)
+            self.assertIn("scm> 8\n", run.stdout)
             self.assertIn("scm> λ\n", run.stdout)
 
             pid, descriptor = pty.fork()
@@ -976,6 +1102,136 @@ class HowToExampleTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, result.stdout[-4000:])
             self.assertIn("invalid reader-syntax rule", result.stdout)
             self.assertIn("reader_syntax_invalid_rule.mon:4:", result.stdout)
+
+    def test_reader_syntax_supports_user_defined_circumfix_notation(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-reader-circumfix-") as td:
+            temp = Path(td)
+            output = temp / "reader-circumfix"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD), str(ROOT / "tests/reader_syntax_circumfix.mon"),
+                 "-o", str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(run.stdout, "42\n")
+
+    def test_reader_syntax_underscore_is_not_a_circumfix_value_hole(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-reader-hole-role-") as td:
+            temp = Path(td)
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD),
+                 str(ROOT / "tests/reader_syntax_underscore_not_circumfix.mon"),
+                 "-o", str(temp / "invalid-circumfix")],
+                cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout[-4000:])
+            self.assertIn("OPEN$CLOSE TARGET", result.stdout)
+
+    def test_nullary_typeclass_method_specializes_from_result_type(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-nullary-class-") as td:
+            temp = Path(td)
+            output = temp / "nullary-class"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD),
+                 str(ROOT / "tests/typeclass_nullary_result_specialization.mon"),
+                 "-o", str(output)],
+                cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(run.stdout, "True\n")
+
+    def test_user_nominal_type_can_reclaim_legacy_builtin_constructor_name(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-nominal-shadow-") as td:
+            temp = Path(td)
+            output = temp / "nominal-shadow"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD),
+                 str(ROOT / "tests/nominal_shadows_builtin_type_constructor.mon"),
+                 "-o", str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(run.stdout, "42\n")
+
+    def test_pattern_clause_accepts_layout_if_with_polymorphic_recursion(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-layout-if-clause-") as td:
+            temp = Path(td)
+            output = temp / "polymorphic-recursive-filter"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD),
+                 str(ROOT / "tests/polymorphic_recursive_filter.mon"),
+                 "-o", str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+
+    def test_data_set_literals_and_comprehensions_lower_to_core(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-core-set-") as td:
+            temp = Path(td)
+            output = temp / "set-core-integration"
+            env = os.environ.copy()
+            env["HOME"] = str(temp / "home")
+            Path(env["HOME"]).mkdir()
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_RUNTIME_LIB"] = str(RUNTIME)
+            result = subprocess.run(
+                [str(MONAD), str(ROOT / "tests/set_core_integration.mon"),
+                 "-o", str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout[-4000:])
+            run = subprocess.run(
+                [str(output)], cwd=ROOT, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                check=False, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout[-4000:])
+            self.assertEqual(run.stdout, "1\nTrue\nTrue\nTrue\n")
 
     def test_reader_declarations_accept_crlf_source_files(self):
         with tempfile.TemporaryDirectory(prefix="monadc-reader-crlf-") as td:

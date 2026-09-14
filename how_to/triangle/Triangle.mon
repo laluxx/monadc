@@ -2,21 +2,20 @@
 
 import Graphics
 import Graphics.Vulkan
-import shaders.TriangleFrag
-import shaders.TriangleVert
+import Shaders.TriangleFrag
+import Shaders.TriangleVert
 
 module Main
 
 
-define triangle :: VulkanProgram
-  vulkan-program
-    "Monad — Vulkan Triangle"
-    960
-    540
-    &triangle-vertex-shader
-    (count triangle-vertex-shader)
-    &triangle-fragment-shader
-    (count triangle-fragment-shader)
+init-window 960 540 "Monad — Vulkan Triangle"
+load-shader
+  &triangle-vertex-shader   (count triangle-vertex-shader)
+  &triangle-fragment-shader (count triangle-fragment-shader)
 
+until window-should-close?
+  begin-drawing
+  draw-triangle
+  end-drawing
 
-run-vulkan-2d triangle
+close-window

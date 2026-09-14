@@ -1,0 +1,27 @@
+:TEST-ID tests.codegen.type.dep.indexed-gadt.impossible-application
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Applying a successor-indexed function to the zero-indexed constructor is rejected statically.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR indexed constructor [] has type
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.impossible-application
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.impossible-application
+:TEST-ATOM-LEAF atom.type.dep.indexed-gadt.impossible-application
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+data NatV :: Type
+  Z : NatV
+  S : NatV -> NatV
+data VecV :: NatV -> Type -> Type
+  [] : VecV 0 t
+  .  : t -> VecV n t -> VecV (S n) t
+(define (headV [value : (VecV (S n) t)] -> t)
+  [. x _] -> x)
+(define (badHead [_ : Int] -> t)
+  _ -> (headV []))

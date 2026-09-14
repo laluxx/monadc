@@ -1,25 +1,37 @@
-;;; String.mon --- Core-owned character sequences
+;;; String.mon --- Core-owned byte-addressed strings
+:bootstrap primitive
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: string sequence character refinement typeclass
+:author   Laluxx
+:version  1.2.0
+:keywords string sequence byte utf8 refinement bootstrap
 
 ;;; Commentary:
 
- String is the set of all finite character sequences. The compiler retains
- its compact representation and primitive lowering, while Sequence owns generic
- sequence behavior and this module owns String-specific conversions and
- queries.
+ String is the compiler's compact finite byte-addressed string representation.
+ Core does not identify one String observation with a Unicode scalar or
+ grapheme cluster. At this bootstrap boundary Element String is Char because
+ the runtime's byte code unit is representation-compatible with Char; Data.Char
+ deliberately gives that type only ASCII classification semantics.
+
+ Consequently length/nth/take/drop on String are code-unit operations. =byte-length=
+ names that representation-level observation explicitly for APIs that should not
+ rely on the generic collection spelling. Unicode
+ interpretation is centralized in Text.Unicode, which validates UTF-8 before
+ decoding scalar values and separately exposes scalar/grapheme/display counts.
+ This is the authoritative representation contract: generic Sequence code must
+ not silently reinterpret String indexing as Unicode-character indexing.
 
 ;;; Code:
 
 import Sequence
+import Control.Strict
 import Data.Bool
+import Data.Sequence.Producer
 
 module Data.String
   [String IsString fromString
    IsList Item fromList fromListN
-   startsWith? endsWith? includes? copy]
+   byte-length startsWith? endsWith? includes? copy]
 
 
 (type String { chars ∈ [Char] | True })
@@ -39,19 +51,44 @@ class IsList l where
   ;; Conversion pattern for sequence literals and collection builders.
 
 
+instance Sequence String
+  type Element String = Char
+  type Strategy String = Strict
+
+  uncons value
+    | value = "" -> nil
+    | otherwise  -> (nth value 0, strict (drop 1 value))
+  lower values -> ProducerState sequence-transition values
+
+
+instance ProductiveSequence String
+
+
+instance FiniteSequence String
+
+
+define byte-length :: String -> Int
+  :doc "Return the number of UTF-8 representation bytes/code units in TEXT."
+  text -> length text
+
+
 method startsWith? :: String -> String -> Bool
-  s prefix -> (take s (length prefix)) = prefix
+  s prefix
+    | byte-length prefix > byte-length s -> False
+    | otherwise -> (take (byte-length prefix) s) = prefix
 
 
 method endsWith? :: String -> String -> Bool
-  s suffix -> (drop s (- (length s) (length suffix))) = suffix
+  s suffix
+    | byte-length suffix > byte-length s -> False
+    | otherwise -> (drop ((byte-length s) - (byte-length suffix)) s) = suffix
 
 
 method string-includes? :: String -> String -> Bool
   s fragment | fragment = ""                         -> True
              | s = ""                                -> False
-             | (take s (length fragment)) = fragment -> True
-             | otherwise                             -> string-includes? (drop s 1) fragment
+             | (take (length fragment) s) = fragment -> True
+             | otherwise                             -> string-includes? (drop 1 s) fragment
 
 
 method includes? :: String -> String -> Bool
@@ -63,10 +100,6 @@ method copy :: String -> String
 
 
 tests
-  :registration:
-  assert-eq 1 1 "String registers IsString"
-  assert-eq 1 1 "String registers IsList"
-  :registration:
 
   :queries:
   assert-eq ("hello".startsWith? "he") True "Data.String prefix"
@@ -89,8 +122,10 @@ tests
   :sequence:
   assert-eq (null? "")                                      True   "String Sequence null?"
   assert-eq (length "hello")                                5      "String Sequence length"
+  assert-eq (length "λ")                                    2      "String Sequence length counts UTF-8 code units"
+  assert-eq (byte-length "Aλ🙂")                            7      "Data.String byte-length names the representation unit"
   assert-eq (show (reverse "abc"))                          "cba"  "String Sequence reverse"
-  assert-eq (show (take "abcd" 2))                          "ab"   "String Sequence take"
-  assert-eq (show (drop "abcd" 2))                          "cd"   "String Sequence drop"
+  assert-eq (show (take 2 "abcd"))                          "ab"   "String Sequence take"
+  assert-eq (show (drop 2 "abcd"))                          "cd"   "String Sequence drop"
   assert-eq (show (filter (lambda (c) (!= c 'b')) "abc"))   "ac"   "String Sequence filter"
   :sequence:

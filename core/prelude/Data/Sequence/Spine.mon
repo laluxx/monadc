@@ -1,0 +1,185 @@
+;;; Spine.mon --- Canonical recursive sequence shape over Evaluation
+
+:author   Laluxx
+:version  0.3.0
+:keywords sequence spine strict lazy recursive shape evaluation initial final coalgebra
+
+;;; Commentary:
+
+ Spine is the smallest concrete witness of Monad's shape/evaluation
+ factorization. It defines the recursive sequence polynomial once:
+
+                     1 + A × E X
+
+ and leaves E abstract.
+
+                     Spine Strict A
+                     Spine Lazy   A
+
+ are therefore two evaluations of the same structural definition, not two
+ libraries with copied constructors and algorithms.
+
+;;; Inductive and Coinductive Regions
+
+ For E = Strict, recursive positions are immediate and finite values recover the
+ familiar list functor
+
+                     L_A(X) = 1 + A × X.
+
+ In a total set-theoretic reading the finite region is the initial algebra
+
+                     μX. 1 + A × X.
+
+ With Lazy, recursive positions may remain suspended. Productive guarded values
+ can describe behavior in the corresponding final-coalgebra region
+
+                     νX. 1 + A × X.
+
+ but =Spine Lazy= as an unrestricted operational type is larger than that
+ productive domain: a delayed tail may diverge before exposing its next
+ constructor. Lazy supplies suspension; a productivity proof identifies the
+ well-behaved coinductive subset.
+
+;;; Construction and Infinite Recursive Values
+
+ Finite recursive construction is evaluation-polymorphic: =spine-from-list=
+ uses =defer= at each tail and terminates under both Strict and Lazy.
+
+ Explicitly infinite *recursive data*, however, cannot honestly be polymorphic in
+ E. At =Spine Strict A=, constructing =SCons a (Strict rest)= requires REST now,
+ which requires its rest now, and so on; the constructor call never returns.
+ =repeat-spine= and =iterate-spine= are therefore specialized to Lazy, where the
+ recursive tail is guarded by call-by-need.
+
+ Strict infinite sequential behavior is still representable without pretending an
+ eager recursive value is finite to construct: Data.Sequence.Unfold/Coiterate
+ stores a finite state machine and produces one strict continuation state per
+ observation. Recursive shape and coalgebraic state are deliberately distinct.
+
+;;; Functoriality
+
+ Spine is functorial whenever E is functorial. Mapping changes every visible
+ element and maps the recursive transformation under E; it never needs to know
+ whether the continuation is immediate or suspended.
+
+ This is the model expected of future shapes such as Tree E A. The shape owns
+ recursive positions, Evaluation owns timing, and ordinary functorial structure
+ composes the two.
+
+;;; Research Basis
+
+ Michael Abbott, Thorsten Altenkirch, and Neil Ghani, "Containers: Constructing
+ Strictly Positive Types", Theoretical Computer Science 342(1), 2005.
+   https://doi.org/10.1016/j.tcs.2005.06.002
+
+ Robert Atkey and Conor McBride, "Productive Coprogramming with Guarded
+ Recursion", ICFP 2013.
+   https://doi.org/10.1145/2500365.2500597
+
+ Aleš Bizjak, Hans Bugge Grathwohl, Ranald Clouston, Rasmus E. Møgelberg, and
+ Lars Birkedal, "Guarded Dependent Type Theory with Coinductive Types", 2016.
+   https://arxiv.org/abs/1601.01586
+
+ Containers motivate separating structural positions from their inhabitants.
+ Guarded-recursion work explains why potentially infinite recursive behavior
+ needs a productivity discipline stronger than ordinary operational laziness.
+
+;;; Code:
+
+import Control.Evaluation
+import Control.Strict
+import Control.Lazy
+import Data.Functor
+import Sequence
+
+module Data.Sequence.Spine
+  [Spine SNil SCons
+   empty-spine singleton-spine cons-spine map-spine
+   spine-from-list repeat-spine iterate-spine]
+
+
+;;; Structure
+
+
+data Spine e a
+  = SNil
+  | SCons a (e (Spine e a))
+
+
+define empty-spine :: Spine e a
+  SNil
+
+
+define singleton-spine :: Evaluation e => a -> Spine e a
+  value -> SCons value (defer (lambda (_) SNil))
+
+
+define cons-spine :: a -> e (Spine e a) -> Spine e a
+  value rest -> SCons value rest
+
+
+define map-spine :: Functor e => (a -> b) -> Spine e a -> Spine e b
+  _ SNil -> SNil
+  f [SCons value rest] ->
+    SCons (f value)
+      (map (lambda (next) (map-spine f next)) rest)
+
+
+instance Functor e => Functor (Spine e)
+  map f values -> map-spine f values
+
+
+instance Evaluation e => Sequence (Spine e a)
+  type Element (Spine e a) = a
+  type Strategy (Spine e a) = e
+
+  uncons SNil -> nil
+  uncons [SCons value rest] -> (value, rest)
+
+
+instance ProductiveSequence (Spine Strict a)
+
+
+instance FiniteSequence (Spine Strict a)
+
+
+;;; Constructors
+
+
+define spine-from-list :: Evaluation e => [a] -> Spine e a
+  [] -> SNil
+  [value|rest] ->
+    SCons value (defer (lambda (_) (spine-from-list rest)))
+
+
+define repeat-spine :: a -> Spine Lazy a
+  value ->
+    SCons value (defer (lambda (_) (repeat-spine value)))
+
+
+define iterate-spine :: (a -> a) -> a -> Spine Lazy a
+  next value ->
+    SCons value
+      (defer (lambda (_) (iterate-spine next (next value))))
+
+
+;; The two constructors above are guarded values, but they do not justify a
+;; blanket ProductiveSequence instance for every `Spine Lazy a`: callers can
+;; still construct a Spine containing an arbitrary nonproductive Lazy tail.
+
+
+define spine-lazy-head? :: Spine Lazy Int -> Int?
+  SNil -> nil
+  [SCons value _] -> value
+
+
+define spine-lazy-second? :: Spine Lazy Int -> Int?
+  SNil -> nil
+  [SCons _ rest] -> spine-lazy-head? (force rest)
+
+
+tests
+  :infinite-construction:
+  assert-eq (show (spine-lazy-second? (repeat-spine 7))) "7" "repeat-spine guards its recursive tail with Lazy"
+  assert-eq (show (spine-lazy-second? (iterate-spine (lambda (x) (x + 1)) 4))) "5" "iterate-spine exposes successive lazy values"
+  :infinite-construction:

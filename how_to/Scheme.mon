@@ -9,7 +9,7 @@
  A language can be small without being a toy-shaped pile of special cases.
  This example follows the whole path from source text to a useful result:
 
-   source  →  Text.Parser  →  ScmValue  →  evaluate  →  render
+   source  =->=  Text.Parser  =->=  ScmValue  =->=  evaluate  =->=  render
 
  The reader recognizes integers, booleans, symbols, lists, and quote sugar.
  The evaluator adds lexical names, quotation, conditionals, and

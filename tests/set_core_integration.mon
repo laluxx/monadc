@@ -1,0 +1,8 @@
+import Data.Set
+
+module Main
+
+show (cardinality (image (lambda (x) 0) {1 2 3}))
+show (Set.member? 3 (union {1 2} {2 3}))
+show (Set.member? 4 {x ∈ {1 2 3 4} | x > 2})
+show (in-set? 3 (union {1 2} {2 3}))

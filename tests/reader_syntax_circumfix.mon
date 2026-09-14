@@ -1,0 +1,14 @@
+;;; reader_syntax_circumfix.mon --- User-defined one-hole circumfix notation
+
+reader-syntax Int
+  |$| identity
+
+module Main
+
+define identity :: Int -> Int
+  value -> value
+
+define answer :: Int
+  |42|
+
+show answer

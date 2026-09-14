@@ -32,6 +32,7 @@
 #include "optimizations.h"
 #include "bytecode.h"
 #include "tooling/lint.h"
+#include "tooling/format.h"
 #include "qtt/usage.h"
 #include "qtt/bindings.h"
 #include "qtt/compiler.h"
@@ -997,13 +998,28 @@ static bool declare_externals(CodegenContext *ctx,
                 env_insert_layout(ctx->env, e->return_type->layout_name,
                                   type_clone(e->return_type), NULL);
             }
+            /* ADT constructor objects are compiled against their principal
+             * polymorphic scheme.  Export parameter metadata may have been
+             * specialized by a provider-side use (for example Right Bool),
+             * but rebuilding an imported declaration from that specialization
+             * conflicts with the stable erased constructor ABI. */
+            TypeScheme *ctor_scheme = (e->kind == ENV_ADT_CTOR && e->hm_scheme)
+                ? infer_type_scheme_deserialize(e->hm_scheme) : NULL;
+            Type *scheme_cursor = ctor_scheme ? ctor_scheme->type : NULL;
             LLVMTypeRef *pt = e->param_count > 0
                 ? malloc(sizeof(LLVMTypeRef) * e->param_count) : NULL;
-            for (int j = 0; j < e->param_count; j++)
-                pt[j] = type_to_llvm(ctx, e->params[j].type);
+            for (int j = 0; j < e->param_count; j++) {
+                Type *abi_param = e->params[j].type;
+                if (scheme_cursor && scheme_cursor->kind == TYPE_ARROW) {
+                    abi_param = scheme_cursor->arrow_param;
+                    scheme_cursor = scheme_cursor->arrow_ret;
+                }
+                pt[j] = type_to_llvm(ctx, abi_param);
+            }
             LLVMTypeRef fnt = LLVMFunctionType(
                 type_to_llvm(ctx, e->return_type), pt, e->param_count, 0);
             if (pt) free(pt);
+            scheme_free(ctor_scheme);
             LLVMValueRef fn = LLVMGetNamedFunction(ctx->module, e->mangled_name);
             if (!fn) {
                 fn = LLVMAddFunction(ctx->module, e->mangled_name, fnt);
@@ -1393,37 +1409,70 @@ static CoreModuleList core_primitive_module_stems(void)
 {
     CoreModuleList modules = {0};
     char *core_dir = monad_core_dir();
-    char path[1024];
-    snprintf(path, sizeof(path), "%s/prelude/Data/Primitive.modules", core_dir);
+    const char *relative_dirs[] = {"prelude/Data", "prelude"};
+
+    /* Bootstrap ownership is ordinary module metadata.  Discover marked
+     * modules from the Core tree itself so a missing side manifest cannot
+     * alter or disable the language's public primitive methods. */
+    for (size_t di = 0; di < sizeof(relative_dirs) / sizeof(relative_dirs[0]); di++) {
+        char dir_path[1024];
+        snprintf(dir_path, sizeof(dir_path), "%s/%s", core_dir,
+                 relative_dirs[di]);
+        DIR *dir = opendir(dir_path);
+        if (!dir) continue;
+
+        struct dirent *ent;
+        while ((ent = readdir(dir)) != NULL) {
+            char stem[256];
+            if (!mon_file_stem(ent->d_name, stem, sizeof(stem)) ||
+                !module_name_is_valid(stem))
+                continue;
+
+            char source_path[1280];
+            snprintf(source_path, sizeof(source_path), "%s/%s", dir_path,
+                     ent->d_name);
+            FILE *source_file = fopen(source_path, "rb");
+            if (!source_file) continue;
+
+            bool marked = false;
+            char line[512];
+            while (fgets(line, sizeof(line), source_file)) {
+                char *start = line;
+                while (*start == ' ' || *start == '\t') start++;
+                if (strncmp(start, ":bootstrap primitive", 20) == 0 &&
+                    (start[20] == '\0' || start[20] == '\r' ||
+                     start[20] == '\n' || start[20] == ' ' ||
+                     start[20] == '\t')) {
+                    marked = true;
+                    break;
+                }
+                /* Metadata belongs in the module header. */
+                if (strncmp(start, "module ", 7) == 0 ||
+                    strncmp(start, "(module ", 8) == 0)
+                    break;
+            }
+            fclose(source_file);
+            if (!marked) continue;
+
+            modules.items = realloc(modules.items,
+                                    sizeof(char *) * (modules.count + 1));
+            modules.items[modules.count++] = strdup(stem);
+        }
+        closedir(dir);
+    }
     free(core_dir);
 
-    FILE *manifest = fopen(path, "rb");
-    if (!manifest) {
-        fprintf(stderr, "core bootstrap error: cannot read %s\n", path);
-        return modules;
-    }
-
-    char line[256];
-    while (fgets(line, sizeof(line), manifest)) {
-        char *start = line;
-        while (*start == ' ' || *start == '\t') start++;
-        char *end = start + strlen(start);
-        while (end > start &&
-               (end[-1] == '\r' || end[-1] == '\n' ||
-                end[-1] == ' ' || end[-1] == '\t')) {
-            *--end = '\0';
+    /* readdir order is platform-dependent.  Module dependencies are explicit;
+     * lexical discovery order keeps bootstrap reproducible across hosts. */
+    for (size_t i = 0; i < modules.count; i++) {
+        for (size_t j = i + 1; j < modules.count; j++) {
+            if (strcmp(modules.items[i], modules.items[j]) > 0) {
+                char *tmp = modules.items[i];
+                modules.items[i] = modules.items[j];
+                modules.items[j] = tmp;
+            }
         }
-        if (!*start || *start == ';') continue;
-        if (!module_name_is_valid(start)) {
-            fprintf(stderr, "core bootstrap error: invalid module '%s' in %s\n",
-                    start, path);
-            continue;
-        }
-        modules.items = realloc(modules.items,
-                                sizeof(char *) * (modules.count + 1));
-        modules.items[modules.count++] = strdup(start);
     }
-    fclose(manifest);
     return modules;
 }
 
@@ -1457,8 +1506,11 @@ static void compile_prelude_dir(const char *dir, const char *current_source,
 
         if (is_current_module)
             continue;
-        if (registry_find(module_name))
+        CompiledModule *cached_prelude = registry_find(module_name);
+        if (cached_prelude) {
+            register_compiled_module_wisp_arities(cached_prelude);
             continue;
+        }
 
         char path[1024];
         snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name);
@@ -1561,7 +1613,14 @@ static CompiledModule *compile_one(const char *source_path,
         char *guessed = path_to_module_name(my_source_path);
         CompiledModule *cached = registry_find(guessed);
         free(guessed);
-        if (cached) return cached;
+        if (cached) {
+            /* Reusing code must also replay the frontend contract.  A fresh
+             * module parse still needs dependency function arities even when
+             * their object code was compiled earlier in this REPL. */
+            register_compiled_module_wisp_arities(cached);
+            free(my_source_path);
+            return cached;
+        }
     }
 
     char *base     = base_no_ext(my_source_path);
@@ -2163,13 +2222,14 @@ skip_primitive_type_autoload:
 
     if (!module_decl) {
         char *guessed = path_to_module_name(my_source_path);
-        module_decl = module_decl_create(guessed, EXPORT_ALL);
-        if (!module_decl) {
-            free(guessed);
-            module_decl = module_decl_create("Main", EXPORT_ALL);
-        } else {
-            free(guessed);
-        }
+        /* Scripts need no declaration. A lowercase filename such as
+         * `test.mon` is not a legal library namespace, so give it the
+         * conventional anonymous executable module instead of diagnosing
+         * an invalid declaration and only then falling back. */
+        module_decl = module_name_is_valid(guessed)
+            ? module_decl_create(guessed, EXPORT_ALL)
+            : module_decl_create("Main", EXPORT_ALL);
+        free(guessed);
         module_context_set_decl(mod_ctx, module_decl);
     }
     module_context_add_prelude_imports(mod_ctx);
@@ -2401,8 +2461,33 @@ skip_primitive_type_autoload:
         printf("[dep] running bidirectional type checker...\n");
     bool dep_failed = false;
 
+    /* Recursive dependency compilation clears the transient type-name
+     * registry. Republish this unit's nominal declarations here, after all
+     * imports, so both dependent annotations and codegen layout fields retain
+     * the ADT identity established while parsing this source. Coverage is
+     * likewise declaration-order independent: publish every local ADT's
+     * constructor family before checking any function body. */
+    for (size_t i = first_code; i < exprs.count; i++)
+        if (exprs.exprs[i] && exprs.exprs[i]->type == AST_DATA) {
+            if (!type_nominal_register(exprs.exprs[i]->data.name)) {
+                fprintf(stderr, "%s:%d: error: could not register data type '%s'\n",
+                        my_source_path, exprs.exprs[i]->line,
+                        exprs.exprs[i]->data.name);
+                exit(1);
+            }
+            dep_register_data_type(dep_ctx, exprs.exprs[i]);
+            AST *data = exprs.exprs[i];
+            for (int ctor = 0; ctor < data->data.constructor_count; ctor++) {
+                ASTDataConstructor *constructor = &data->data.constructors[ctor];
+                if (constructor->name && constructor->type_signature)
+                    env_hm_register_type(ctx.env, constructor->name,
+                                         type_from_name(constructor->type_signature));
+            }
+        }
+
     for (size_t i = first_code; i < exprs.count; i++) {
         AST *expr = exprs.exprs[i];
+
 
         // Skip module/import nodes for the type checker
         if (expr->type == AST_LIST && expr->list.count > 0 && expr->list.items[0]->type == AST_SYMBOL) {
@@ -2489,8 +2574,9 @@ skip_primitive_type_autoload:
     /* Nominal layouts are declarations, not order-sensitive computations.
      * Register them before function predeclaration so annotated parameters
      * and returns receive their real ABI even in large grouped modules. */
-    for (size_t i = first_code; i < exprs.count; i++) {
-        if (exprs.exprs[i]->type == AST_LAYOUT)
+    for (size_t i = 0; i < exprs.count; i++) {
+        if (exprs.exprs[i]->type == AST_LAYOUT ||
+            exprs.exprs[i]->type == AST_TYPE_SET)
             (void)codegen_expr(&ctx, exprs.exprs[i]);
     }
     codegen_predeclare_toplevel_functions(&ctx, exprs.exprs, exprs.count,
@@ -2523,7 +2609,7 @@ skip_primitive_type_autoload:
     CodegenResult last = {NULL, NULL};
     for (size_t i = first_code; i < exprs.count; i++) {
         AST *expr = exprs.exprs[i];
-        if (expr->type == AST_LAYOUT)
+        if (expr->type == AST_LAYOUT || expr->type == AST_TYPE_SET)
             continue; /* registered in the nominal-declaration pass above */
         if (expr->type == AST_LIST && expr->list.count > 0 &&
             expr->list.items[0]->type == AST_SYMBOL) {
@@ -2624,7 +2710,48 @@ skip_primitive_type_autoload:
 
             /* Force-export closure-ABI functions so inner closures work in .so */
             bool force_export = (ent->kind == ENV_FUNC && ent->is_closure_abi);
+            /* A constructor belongs to the head constructor of its result
+             * type.  For an ordinary ADT that is a TYPE_LAYOUT (Maybe a),
+             * while an indexed/GADT result such as Vec (S n) t is retained
+             * as TYPE_APP.  Treat both forms alike: exporting Vec must also
+             * export [] and '.', just as exporting a non-indexed data type
+             * exports all of its constructors. */
+            const char *adt_result_name = NULL;
+            if (ent->kind == ENV_ADT_CTOR && ent->type) {
+                if (ent->type->kind == TYPE_LAYOUT)
+                    adt_result_name = ent->type->layout_name;
+                else if (ent->type->kind == TYPE_APP)
+                    adt_result_name = ent->type->app_constructor;
+            }
+            bool exported_adt_constructor =
+                adt_result_name &&
+                module_decl_is_exported(module_decl, adt_result_name);
+            bool exported_adt_accessor =
+                ent->kind == ENV_FUNC &&
+                strncmp(ent->name, "__field_", 8) == 0 &&
+                ent->param_count == 1 && ent->params && ent->params[0].type &&
+                ent->params[0].type->kind == TYPE_LAYOUT &&
+                ent->params[0].type->layout_name &&
+                module_decl_is_exported(module_decl,
+                                        ent->params[0].type->layout_name);
+            bool exported_type_method = false;
+            if (ent->kind == ENV_FUNC) {
+                const char *method_dot = strchr(ent->name, '.');
+                if (method_dot && method_dot != ent->name) {
+                    size_t receiver_len = (size_t)(method_dot - ent->name);
+                    char receiver_name[256];
+                    if (receiver_len < sizeof(receiver_name)) {
+                        memcpy(receiver_name, ent->name, receiver_len);
+                        receiver_name[receiver_len] = '\0';
+                        exported_type_method =
+                            module_decl_is_exported(module_decl, receiver_name);
+                    }
+                }
+            }
             if (!force_export &&
+                !exported_adt_constructor &&
+                !exported_adt_accessor &&
+                !exported_type_method &&
                 !module_decl_is_exported(module_decl, ent->name) &&
                 !module_decl_is_exported(module_decl, _local_name)) {
                 /* Also check if this is an alias for an exported symbol. */
@@ -3039,6 +3166,10 @@ static bool compile(CompilerFlags *flags) {
             for (size_t i = 0; i < n; i++)
                 if (!is_persistent_core_object(objs[i]))
                     remove(objs[i]);
+        if (flags->run_after_compile) {
+            fflush(stdout);
+            rc = cmd_run_executable(exec_name);
+        }
     } else {
         fprintf(stderr, "[error] linking failed\n");
     }
@@ -3054,6 +3185,13 @@ static bool compile(CompilerFlags *flags) {
 
 bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {
     const char *mod_name = imp->module_name;
+
+    /* A REPL can compile many unrelated modules in one process.  Wisp's
+     * frontend arity table is compilation-local; retaining the previous
+     * module's ordinary identifiers changes how later source and prose are
+     * grouped.  Dependencies and builtins are registered again by
+     * compile_one, so start every imported module from a clean parser state. */
+    wisp_clear_arities();
 
     char *src_path = module_name_to_path(mod_name);
     if (!src_path) {
@@ -3127,6 +3265,7 @@ int main(int argc, char **argv) {
     if (argc > 0)
         g_program_path = argv[0];
     CompilerFlags flags = parse_flags(argc, argv);
+    env_require_explicit_effect_arrows(!flags.allow_implicit_effects);
     switch (flags.mode) {
     case CMD_REPL:    repl_run();                        return 0;
     case CMD_NEW:     cmd_new(flags.package_name);       return 0;
@@ -3138,6 +3277,9 @@ int main(int argc, char **argv) {
     case CMD_CHECK:   cmd_check(flags.input_file);       return 0;
     case CMD_LINT:    return cmd_lint(flags.input_file, flags.lint_json,
                                      flags.lint_fix);
+    case CMD_FORMAT:  return cmd_format(flags.input_file,
+                              flags.format_ascii ? FORMAT_CONTROL_ASCII : FORMAT_CONTROL_GLYPH,
+                              flags.format_write, flags.format_check);
     case CMD_LSP:     cmd_lsp();                         return 0;
     case CMD_EVAL:    cmd_eval(flags.eval_code);         return 0;
     case CMD_DEBUG:   cmd_debug(&flags);                 return 0;

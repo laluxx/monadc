@@ -555,6 +555,15 @@ Expected Wisp shape:
   bindings. =x -> body= in lambda position creates a lambda with parameter =x=.
   In define position, =define f x -> body= creates (define (f x) body).
 
+[DEC id:dec.reader.sugar.glyph-control-flow-2026-09-08 date:2026-09-08 by:human+codex src:wisp.c,tests/test_wisp_glyph_control_flow.py]
+  Glyph control flow has one canonical diagram grammar. =├─= introduces a
+  guarded branch, =->= terminates a guarded leaf, =▶= terminates the catch-all,
+  and =╮= descends without producing a value. Short subjects may precede the
+  first =├─= inline; long or multi-argument subjects end in =─╮=. The Wisp
+  front end validates and lowers this spelling to receiver-relative guards before
+  other two-dimensional sugar, preserving source line numbers. Glyphs in strings
+  and comments remain data.
+
 [FIX id:fix.reader.wisp-arrow-value-binding-2026-07-14 date:2026-07-14 by:codex src:wisp.c,tests/reader-sugars.tsv conf:high]
   Top-level Wisp =name -> expr= now desugars as a value binding
   =(define name expr)= when =name= is a simple identifier. This rule runs after

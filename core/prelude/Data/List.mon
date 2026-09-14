@@ -1,8 +1,8 @@
 ;;; List.mon --- Productive finite-list algorithms
 
-:author "Laluxx"
-:version "1.0.0"
-:keywords "list partition span chunks intersperse intercalate replace"
+:author   Laluxx
+:version  1.0.0
+:keywords list partition span chunks intersperse intercalate replace
 
 ;;; Commentary:
 
@@ -51,19 +51,19 @@ method span :: [a] -> (a -> Bool) -> ([a], [a])
 
 
 method split-at :: Int -> [a] -> ([a], [a])
-  amount values -> (take values amount, drop values amount)
+  amount values -> (take amount values, drop amount values)
 
 
 method chunks-of :: Int -> [a] -> [[a]]
   amount _ | amount <= 0 -> []
   _ []                   -> []
-  amount values -> prepend (take values amount) (chunks-of amount (drop values amount))
+  amount values -> prepend (take amount values) (chunks-of amount (drop amount values))
 
 
 ;;; Positional Updates
 
 method replace-at :: Int -> a -> [a] -> [a]
-  index _ _ | index < 0      -> []
+  index _ values | index < 0 -> values
   _ _ []                     -> []
   0 value [_|xs]             -> prepend value xs
   index value [x|xs]         -> prepend x (replace-at (index - 1) value xs)
@@ -94,11 +94,11 @@ method cadr :: [a] -> a
 
 
 method cdar :: [[a]] -> [a]
-  xs -> drop (nth xs 0) 1
+  xs -> drop 1 (nth xs 0)
 
 
 method cddr :: [a] -> [a]
-  xs -> drop xs 2
+  xs -> drop 2 xs
 
 
 method caddr :: [a] -> a
@@ -106,7 +106,7 @@ method caddr :: [a] -> a
 
 
 method cdddr :: [a] -> [a]
-  xs -> drop xs 3
+  xs -> drop 3 xs
 
 
 tests
@@ -120,6 +120,7 @@ tests
   assert-eq (show (chunks-of 2 (list 1 2 3 4 5))) "((1 2) (3 4) (5))" "Data.List chunks-of retains a short final chunk"
   assert-eq (show (replace-at 1 9 (list 1 2 3))) "(1 9 3)" "Data.List replace-at updates one position"
   assert-eq (show (replace-at 9 9 (list 1 2 3))) "(1 2 3)" "Data.List replace-at preserves out-of-range input"
+  assert-eq (show (replace-at -1 9 (list 1 2 3))) "(1 2 3)" "Data.List replace-at preserves negative-index input"
   :partitioning:
 
   :composition:

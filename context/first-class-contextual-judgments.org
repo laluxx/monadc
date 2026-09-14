@@ -1,0 +1,771 @@
+#+TITLE: First-Class Contextual Judgments and Focused Derivation Diagnostics
+#+LANGUAGE: en
+#+OPTIONS: toc:3 num:t
+#+CATEGORY: monadc-context
+#+FILETAGS: :monadc:type-theory:judgments:contexts:proofs:diagnostics:
+
+* Executive decision
+
+Monad should make explicit judgments first-class, but the value returned by
+=Gamma |- e : A= must be a *kernel-checked contextual object*, not the runtime
+value of =e= and not a Boolean success flag.  The recommended surface reading is
+
+#+begin_src monad
+p = {x: Int} ⊢ x + 3 : Int
+#+end_src
+
+with the elaborated type
+
+#+begin_example
+p : [x : Int ⊢ Int]
+#+end_example
+
+and an inspectable proposition
+
+#+begin_example
+conclusion p = ({x : Int} ⊢ x + 3 : Int)
+#+end_example
+
+The contextual type =[Gamma |- A]= classifies an open term of type =A= whose
+free variables are exactly governed by =Gamma=. This follows contextual modal
+type theory and Beluga more closely than introducing a nominal
+=Proof(Judgment)= wrapper alone. Beluga explicitly pairs an LF term with the
+context in which it makes sense and supports abstraction over contexts; its
+proofs are programs under Curry--Howard.[fn:beluga-clf] [fn:beluga-overview]
+
+Monad should nevertheless expose =Judgment= as quoted, inspectable data to the
+Lisp layer. The crucial stratification is:
+
+| Layer | Object | Forgeable? | Runtime relevance |
+|-------+--------+------------+-------------------|
+| Surface/meta | =Syntax Judgment= | yes | compile-time data |
+| Elaborated | =Checked Γ A= | only through checking | contextual program |
+| Logical | =Proof J= | only by kernel constructors | erased by default |
+| Diagnostic | =DerivationTrace= | untrusted explanation | never establishes truth |
+
+** Reflective sets of judgments and =*context*=
+
+The Lisp/meta surface may present a context as an ordinary immutable finite set
+of declaration judgments:
+
+#+begin_example
+{ (x : Int), (y : Float), (z : Bool) } : Set Judgment
+#+end_example
+
+This extensional view is valuable for membership, filtering, synthesis, and
+teaching. It must not replace the kernel telescope. Elaboration checks the set
+for a unique dependency-respecting linearization and produces the ordered
+telescope =x : Int, y : Float, z : Bool=. If declaration =y : B x= depends on
+=x=, the dependency graph forces =x= before =y=; cycles, duplicates, and
+ambiguous declarations are rejected. Thus set equality can remain extensional
+while substitution and de Bruijn levels use the elaborated order.
+
+=Judgment= is reflective syntax/data. =Proof J= is sealed evidence of
+derivability. Consequently =j : Judgment= is a typing assertion, not a Boolean;
+the Boolean query is =derivable? j=, while =check j= returns a proof or a
+structured error. Collapsing all three notions into =True= would discard the
+evidence and make invalid/unknown judgments indistinguishable.
+
+=*context*= is an implicitly bound lexical value whose public type is
+=Set Judgment=. A separate nominal =Context= type adds no semantic value at the
+reflective boundary: indexing, filtering, and membership belong to the ordinary
+set interface. Internally, elaboration reifies that public set into the ordered,
+well-formed telescope described above. It denotes a snapshot at the exact source
+point:
+
+- local lambda/let/pattern binders are included;
+- earlier module declarations are exposed separately as =*signature*= so
+  imports do not make every local context enormous;
+- shadowing creates distinct binder identities even if printed names coincide;
+- mutation never changes an earlier snapshot;
+- macro expansion receives the expansion-site context explicitly;
+- runtime code sees it only when reflection is retained rather than erased.
+
+This preserves the metaprogramming ergonomics of a regular set without
+confusing exchange-insensitive presentation with dependency-sensitive kernel
+structure.
+
+A trace explains why checking succeeded or failed; it is not itself the trusted
+proof. This is the same trust boundary used by Lean: elaboration constructs core
+terms and metadata, while a small kernel independently checks core terms before
+they enter the environment.[fn:lean-pipeline]
+
+** What exactly is the returned proof?
+
+Three objects are easy to blur together:
+
+1. =e=, the object-language term;
+2. =[Gamma |- e] : [Gamma |- A]=, the contextual term;
+3. =D : Derivable(Gamma |- e : A)=, evidence that the typing judgment has a
+   derivation.
+
+In an intrinsically typed core, (2) already carries enough evidence for the
+kernel: an ill-typed contextual term cannot be constructed. In a logical
+framework such as Beluga, (3) can instead be represented explicitly by an LF
+type family such as =hastype e A=, whose inhabitants mirror typing-rule trees.
+These representations serve different clients.
+
+Monad should return a first-class =Derivation= facade containing the checked
+contextual term, with its constructor sealed:
+
+#+begin_example
+Derivation (Gamma |- e : A)
+  checked    : Checked Gamma A
+  rule       : TypingRule                 -- reflective/meta view
+  premises   : Vector Derivation          -- reflective/meta view
+#+end_example
+
+At the trusted boundary, only =checked= (a kernel-recheckable core term) is
+logical authority. =rule= and =premises= are proof-relevant intensional evidence
+useful for teaching, transformations, and explanations; they must replay to the
+same conclusion under the kernel. This hybrid gives the requested proof object
+without enlarging the trusted kernel to include a second unchecked logic.
+
+Thus the REPL may print a compact derivation conclusion:
+
+#+begin_example
+proof : {x : Int} |- x + 3 : Int
+#+end_example
+
+and =show-proof proof= may reveal the rule tree. Passing the proof through an
+ordinary function preserves its indexed conclusion. Extracting its contextual
+term is explicit; instantiating that term requires a typed substitution.
+
+* Mathematical foundation
+
+** Signatures, contexts, and substitutions
+
+Keep the existing separation and make it explicit in every API:
+
+#+begin_example
+Sigma ::= . | Sigma, c : A | Sigma, c := t : A
+Gamma ::= . | Gamma, x : A
+sigma : Delta => Gamma
+#+end_example
+
+=Sigma= is the persistent global signature. =Gamma= is an ordered telescope,
+not mathematically a set: later assumptions may depend on earlier ones, and
+shadowing/order affect lookup. Surface braces may present a finite context, but
+the elaborated representation must preserve telescope order. Calling Gamma a
+set is safe only for the non-dependent introductory subset.
+
+The core judgments are:
+
+#+begin_example
+Sigma ; Gamma ctx
+Sigma ; Gamma |- A : Type u
+Sigma ; Gamma |- t => A          synthesis
+Sigma ; Gamma |- t <= A          checking
+Sigma ; Gamma |- t == u : A      definitional equality
+Sigma ; Delta |- sigma : Gamma   simultaneous substitution
+#+end_example
+
+The substitution judgment is indispensable once contextual objects become
+usable. Applying an open object requires evidence that every assumption in its
+captured context is supplied:
+
+#+begin_example
+Sigma ; Gamma |- t : A
+Sigma ; Delta |- sigma : Gamma
+-------------------------------- contextual elimination
+Sigma ; Delta |- t[sigma] : A[sigma]
+#+end_example
+
+Contextual modal type theory was developed precisely to give metavariables and
+explicit substitutions a uniform foundation.[fn:cmtt] Later work extends this
+to first-class contexts and substitutions that programs can pass and link in a
+type-safe way.[fn:pientka-subst]
+
+** Contextual introduction and elimination
+
+Use a contextual type constructor =[Gamma |- A]=. Its canonical inhabitant
+contains core syntax closed relative to =Gamma=:
+
+#+begin_example
+Sigma ; Gamma |- t : A
+-------------------------------- box
+Sigma ; Delta |- [Gamma |- t] : [Gamma |- A]
+
+Sigma ; Delta |- q : [Gamma |- A]
+Sigma ; Delta |- sigma : Gamma
+-------------------------------- instantiate
+Sigma ; Delta |- q @ sigma : A[sigma]
+#+end_example
+
+The surrounding =Delta= cannot leak into the boxed term. This prevents a value
+advertised as depending only on =Gamma= from silently capturing additional
+locals. Globals from =Sigma= remain available; they are not members of =Gamma=.
+
+For the running example, evaluation at the prompt should print a contextual
+value, not attempt to evaluate =x + 3=:
+
+#+begin_example
+Monad lambda> {x: Int} |- x + 3 : Int
+[x : Int |- x + 3] : [x : Int |- Int]
+#+end_example
+
+Instantiation then computes normally:
+
+#+begin_src monad
+p = {x: Int} ⊢ x + 3 : Int
+p @{x = 5}                       ; 8
+#+end_src
+
+This is stronger and more useful than returning an opaque proof token alone:
+the contextual term is compositional program data, while its type prevents
+scope escape.
+
+** Typing evidence versus equality evidence
+
+Monad must preserve the distinction between judgmental equality and
+propositional equality.
+
+1. =Gamma |- t == u : A= is an algorithmic/kernel judgment. It is decided by
+   normalization and typed conversion and has no ordinary source-level
+   eliminator.
+2. =Eq A t u : Type= is an internal type. Its inhabitants (for example =refl=)
+   may be assigned, passed, returned, and eliminated by transport.
+
+The surface expression =Gamma |- t ≡ u : A= currently asks the kernel to
+establish definitional equality. Its returned value should therefore be a
+contextual reflexivity witness after elaboration and normalization:
+
+#+begin_example
+{Gamma} |- t ≡ u : A
+    : [Gamma |- Eq A t u]
+#+end_example
+
+but only when conversion succeeds. Do *not* add equality reflection (turning
+every propositional proof into definitional equality): extensional type theory
+with equality reflection loses decidable type checking in general.
+[fn:harper-equality] [fn:winterhalter]
+
+** Proof relevance and erasure
+
+There are two legitimate kinds of first-class evidence:
+
+- =Checked Gamma A= contains computational syntax and is proof-relevant. Two
+  checked terms may compute differently.
+- =Proof P= for propositions may be proof-irrelevant and erased, provided Monad
+  restricts elimination from erased proofs into computational data.
+
+Lean treats proof terms as ordinary terms but makes proofs in =Prop=
+definitionally proof-irrelevant.[fn:lean-prop] Rocq extraction similarly removes
+logical material when producing executable programs.[fn:rocq-extraction]
+
+Therefore “first-class” and “runtime allocated” must not be conflated. Proofs
+can be bound, passed, returned, and type-checked while still erasing after all
+computationally relevant uses have been ruled out. Contextual programs remain
+at compile time for Lisp/meta programming and may lower to closures only after
+an explicit, well-typed substitution supplies their environment.
+
+* Trusted representation
+
+** Target calculus and implementation correspondence
+
+The target is a two-level calculus, not a single undifferentiated =Proof=
+datatype.  Monad's ordinary dependent core is the object level; contextual
+objects, context variables, and substitution variables inhabit a distinct
+computation/meta level.  This follows the central Cocon separation between an
+intensional LF-like layer for syntax with binders and an extensional layer for
+recursive computation over contextual objects.[fn:cocon]
+
+The kernel-facing syntax should converge on:
+
+#+begin_example
+Contexts       Gamma, Delta ::= . | psi | Gamma, x : A
+Substitutions  sigma       ::= id | wk | . | sigma, t | sigma o tau
+Contextual ty  U           ::= [Gamma |- A] | [Gamma |- t : A]
+Meta terms     E           ::= box(Gamma.t) | E[sigma]
+                              | lambda psi. E | lambda #s. E
+#+end_example
+
+The implementation correspondence is intentionally direct:
+
+| Mathematical object | Kernel representation | Surface responsibility |
+|---------------------+-----------------------+------------------------|
+| well-formed telescope =Gamma= | immutable ordered entries with core types | braces preserve order; reject duplicates |
+| =Delta |- sigma : Gamma= | typed vector/closure with explicit domain and codomain | substitution literal or variable |
+| =[Gamma |- A]= | contextual type with telescope and core family | inferred from a checked judgment |
+| =[Gamma |- t]= | sealed core closure, not a native closure | =Gamma |- t : A= introduction |
+| =t[sigma]= | hereditary/lazy substitution followed by kernel checking | explicit instantiation only |
+| context schema | inductive grammar of allowed telescope blocks | schema declaration and context quantification |
+
+Beluga's documentation emphasizes that the substitution attached to a
+metavariable mediates between the metavariable's declaration context and its
+use-site context; omission means identity only when that is type-correct.
+[fn:beluga-clf] The explicit-substitution calculus additionally supports lazy
+closures over expressions and substitutions, including composition, rather
+than eagerly traversing every contextual object.[fn:beluga-explicit-subst]
+
+** Required substitution rules and laws
+
+The initial kernel rules are:
+
+#+begin_example
+Delta |- . : .
+
+Delta |- sigma : Gamma        Delta |- t : A[sigma]
+--------------------------------------------------- extend
+Delta |- (sigma, t) : (Gamma, x : A)
+
+Delta |- id_Gamma : Gamma
+
+Theta |- tau : Delta          Delta |- sigma : Gamma
+----------------------------------------------------- compose
+Theta |- sigma o tau : Gamma
+#+end_example
+
+Every implementation operation must preserve the equations
+
+#+begin_example
+t[id]             == t
+t[sigma o tau]    == t[sigma][tau]
+id o sigma        == sigma
+sigma o id        == sigma
+(sigma o tau) o u == sigma o (tau o u)
+#+end_example
+
+and substitution must act functorially on types and terms. These are semantic
+contracts, not optimizer conveniences. Beluga programs rely on the equational
+theory of simultaneous substitutions, and its context-relation examples make
+domain/range direction explicit as =sigma : [Delta |- Gamma]=.
+[fn:beluga-context-relation] The categorical reading is that contexts are
+objects and substitutions are morphisms; contextual types form a dependent
+presheaf/CwF structure over that category.[fn:contextual-category]
+
+** Decidability and metatheory obligations
+
+The implementation is not entitled to claim CMTT/Cocon parity until the
+following properties have either machine-checked proofs or a kernel small
+enough for a conventional metatheoretic proof:
+
+1. Context well-formedness and uniqueness of lookup.
+2. Renaming and weakening.
+3. Substitution preserves typing.
+4. Substitution composition and identity.
+5. Subject reduction for both object and meta computation.
+6. Decidable bidirectional checking for the supported fragment.
+7. Canonicity/consistency of the logical fragment.
+8. Normalization, or an explicitly delimited partial/meta-computational layer.
+9. Phase separation: reflected syntax and diagnostics cannot forge checked
+   contextual objects.
+10. Serialization integrity: imported evidence is replayed by the kernel.
+
+Cocon establishes normalization through a Kripke-style model and derives
+subject reduction and consistency; matching its claim requires comparable
+evidence, not merely matching its syntax.[fn:cocon] CMTT supplies the logical
+account of contextual necessity and explicit substitutions on which the
+programming interpretation rests.[fn:cmtt]
+
+** Delivery sequence
+
+Each phase must land with native Monad positive and negative tests.
+
+1. *Telescope kernel*: immutable ordered contexts, dependency-respecting
+   extension, duplicate rejection, stable alpha-insensitive identity.
+2. *Renamings*: identity, weakening, lifting under binders, and laws.
+3. *Typed substitutions*: empty/extension/composition plus checking
+   =Delta |- sigma : Gamma=.
+4. *Contextual closure*: =Checked Gamma A= retains core term, core type, and
+   telescope; the runtime string ceases to be its semantic payload.
+5. *Instantiation*: applying a typed substitution produces =t[sigma]= and
+   =A[sigma]=; incomplete or ill-typed substitutions are rejected.
+6. *Context schemas and variables*: quantify over admissible telescope shapes.
+7. *Meta-level eliminators*: structural recursion over contextual syntax while
+   respecting binders and substitutions.
+8. *Proof relevance/erasure*: separate computational contextual objects from
+   erasable propositions and enforce elimination restrictions.
+9. *Modules and reflection*: serialize kernel-replayable evidence; expose only
+   safe constructors to Lisp.
+10. *Mechanized metatheory*: formalize the implemented core and connect each
+    compiler invariant to its theorem.
+
+Current status after the first slices is phase 1 in progress: explicit Gamma
+is checked in telescope order and duplicate names are rejected, but immutable
+first-class telescope values, renamings, typed substitutions, schemas, and
+meta-level recursion are not yet implemented. Therefore Monad must not yet be
+described as Beluga- or Cocon-equivalent.
+
+** Do not expose a forgeable certificate record
+
+The public abstraction may look conceptually like:
+
+#+begin_example
+Checked Gamma A
+  context      : Context Gamma
+  term         : CoreTerm
+  type         : CoreTerm
+  conclusion   : Judgment
+  provenance   : SourceMap
+#+end_example
+
+but no public constructor may accept these fields. A Lisp macro may construct
+=Syntax Judgment= and call =check=; only the kernel returns =Checked Gamma A=.
+Deserialization, module import, and cache loading must replay kernel checking or
+verify a versioned kernel certificate whose payload is independently checkable.
+
+The certificate should be a core term plus its claimed type, not a serialized
+“success” bit and not the diagnostic trace. Lean's architecture similarly keeps
+unification and elaboration outside the kernel and checks their resulting core
+term.[fn:lean-pipeline]
+
+** Recommended core objects
+
+#+begin_example
+ContextSchema                 classifies admissible contexts
+Context Gamma                 a well-formed telescope witness
+Substitution Delta Gamma      simultaneous, typed substitution
+Checked Gamma A               contextual core term
+Proof P                       erased inhabitant of a proposition
+Judgment                      quoted proposition/inspection data
+DerivationTrace               provenance DAG, not trusted evidence
+#+end_example
+
+Contexts need stable binder identities internally. Names are presentation only;
+de Bruijn levels/indices or typed binder IDs prevent alpha-equivalence bugs.
+Monad already uses a locally nameless dependent core, so =DepCtxEntry= should
+become the elaboration-time view of an immutable/context-owned telescope rather
+than the long-term public proof representation.
+
+** First-class operations
+
+The minimal safe interface is:
+
+#+begin_src monad
+quote-judgment : Syntax -> Result Judgment Diagnostic
+check          : (j : Judgment) -> Result (Proof j) Diagnostic
+term           : Proof (Gamma ⊢ e : A) -> Checked Gamma A
+context        : Checked Gamma A -> Context Gamma
+instantiate    : Checked Gamma A -> Substitution Delta Gamma -> Checked Delta A
+close          : Checked {} A -> A
+normalize      : Checked Gamma A -> Checked Gamma A
+conclusion     : Proof j -> Judgment
+#+end_src
+
+“Return the proof object” then has an exact meaning. A successful explicit
+typing judgment returns a checked contextual term. A successful equality
+judgment returns an equality proof. Both can be stored and transported without
+allowing arbitrary syntax to acquire trusted status.
+
+* Elaboration architecture for Monad
+
+** One authoritative route
+
+The desired pipeline is:
+
+#+begin_example
+surface judgment
+  -> parsed Judgment AST
+  -> elaborate Gamma as telescope
+  -> elaborate/check core term bidirectionally
+  -> zonk all metavariables
+  -> kernel recheck
+  -> contextual value + provenance DAG
+  -> erase proof fields or retain Checked syntax according to use
+#+end_example
+
+Bidirectional typing is the right algorithmic basis because annotations drive
+checking inward and synthesis remains local. The literature emphasizes its
+scalability, predictability, and error locality.[fn:bidir-survey]
+
+The present =dep_check_surface_judgment= is a useful prototype, but it currently
+returns =bool= and destroys its child context and core terms. It should instead
+return an owned result:
+
+#+begin_example
+DepCheckResult {
+  status
+  contextual_term
+  contextual_type
+  proof_term
+  zonked_context
+  trace
+  diagnostic
+}
+#+end_example
+
+=env.c= should route requests and ownership; it should not reconstruct a second
+HM proof. =codegen.c= should lower =Checked= according to erasure/instantiation,
+not replace it unconditionally with Unit. The REPL and file compiler must call
+the same entry point with different renderers only.
+
+** Soundness obligations
+
+Before calling the feature complete, establish at least these metatheoretic
+properties for the core fragment:
+
+- Context well-formedness: every declaration type is well-formed in its prefix.
+- Weakening and exchange only where permitted by dependency/quantity rules.
+- Substitution: typed substitution preserves typing.
+- Subject reduction: reduction preserves types.
+- Conversion soundness: NbE equality implies declarative definitional equality.
+- Decidability/fuel contract: well-typed terminating fragment decides; exhaustion
+  is reported as indeterminate, never accepted.
+- Elaboration soundness: successful surface elaboration yields a kernel-typable
+  core term.
+- Scope safety: a contextual value contains no local outside its indexed Gamma.
+- Erasure safety: erased proof fields cannot affect computational results.
+
+Normalization by evaluation is a well-established route to normal forms and
+typed equality judgments.[fn:coquand-dybjer] Monad should make the existing
+fuel behavior part of the result taxonomy: =Equal=, =NotEqual=, or
+=Indeterminate(FuelExhausted)=. A timeout must never become a proof of inequality.
+
+* Focused derivation diagnostics
+
+** Design principle
+
+The checker should record a compact provenance DAG during normal checking. Each
+node represents an attempted rule application:
+
+#+begin_example
+TraceNode {
+  rule              CheckApp | InferVar | Conv | ...
+  mode              Check | Infer | Form | Convert
+  subject_span
+  subject_core
+  expected
+  synthesized
+  context_snapshot  persistent context ID
+  premises[]
+  status            Success | Failure | Skipped
+  cause             optional atomic conflict
+}
+#+end_example
+
+Recording provenance is preferable to reconstructing a story after failure:
+normalization, implicit insertion, overload selection, and metavariable solving
+otherwise erase the causal path. Constraint-oriented systems such as Helium
+likewise separate constraint generation from strategies for selecting and
+explaining conflicts.[fn:helium]
+
+** Minimal failing derivation slice
+
+The default diagnostic is not the complete trace. Compute a deterministic
+bounded slice:
+
+1. Select the earliest atomic failure according to source containment, then
+   rule priority; do not simply select the last propagated failure.
+2. Follow primary-cause edges upward to the smallest source expression whose
+   judgment explains the conflict.
+3. Retain at most two successful sibling premises when they establish facts
+   cited by the failure (for example the type of =+= and lookup of =x=).
+4. Retain at most two ancestors above the focus.
+5. Replace unchecked later premises with one =skipped after failure= leaf.
+6. Normalize displayed types only to weak-head form by default; preserve source
+   aliases where they are not causal.
+7. Render names from source maps, never internal metavariable IDs unless
+   =--verbose= is requested.
+
+This is a derivation analogue of an inclusion-minimal unsatisfiable core, not a
+globally minimum explanation. Global minimum cores are expensive and can be
+unstable under small edits; deterministic local minimality is better for an
+interactive compiler. For genuinely non-local inference failures, retain
+constraint provenance and calculate a bounded inclusion-minimal conflict set.
+Research on total error localization also warns against arbitrarily blaming one
+use when several constraints jointly make a hole impossible.[fn:hazel-total]
+
+** Exact target rendering
+
+For
+
+#+begin_src monad
+{x: Bool} ⊢ x + 3 : Int
+#+end_src
+
+the default renderer should produce:
+
+#+begin_example
+Test.mon:1:15: Dependent Type Error
+  Couldn't match:
+    expected: Int
+    actual:   Bool
+
+  while checking:
+    {x : Bool} ⊢ x + 3 ⇐ Int
+
+  derivation:
+    check (+ x 3) ⇐ Int
+    ├─ infer (+) ⇒ Int → Int → Int
+    ├─ check x ⇐ Int
+    │  ├─ lookup x in Γ ⇒ Bool
+    │  └─ mismatch: Bool ≠ Int
+    └─ argument 3 skipped after failure
+
+  Hint: Γ explicitly fixes x : Bool; explicit assumptions are not inferred.
+#+end_example
+
+The first line remains editor-clickable. The prose summary is stable and
+accessible without interpreting the tree. The tree then exposes the actual
+kernel path. Unicode branches should have an ASCII fallback under =NO_COLOR= or
+an explicit =--diagnostic-style= option.
+
+The source column should point to =x=, the smallest conflicting subterm, while
+the “while checking” line preserves the enclosing judgment. This reconciles
+local actionability with mathematical context.
+
+** Verbosity levels
+
+| Mode | Output |
+|------+--------|
+| default | summary + bounded failing slice + one semantic hint |
+| =-v= | full types, implicit arguments relevant to the slice |
+| =-vv= | complete derivation DAG, metavariables, reductions, substitutions |
+| JSON | stable node IDs, spans, rules, premises, causes; no ANSI |
+
+Lean similarly separates ordinary messages from optional diagnostics and trace
+facilities.[fn:lean-interactive] Monad should go further by making the bounded
+slice a stable structured diagnostic rather than terminal-only text.
+
+* Implementation sequence
+
+1. Define native =DepTraceNode= and =DepFailureCause= without changing output.
+   Add Monad fixtures asserting structured causes through the compiler's native
+   test metadata.
+2. Instrument variable lookup, application checking, conversion, universe
+   formation, and metavariable solving. Keep tracing allocation bounded and
+   independent of global =-vv= printing.
+3. Implement slice selection and the exact renderer above. Golden output should
+   be tested by native =.mon= diagnostic fixtures, not Python semantic tests.
+4. Replace the Boolean judgment API with owned =DepCheckResult=. Preserve its
+   contextual term and zonked telescope through =env.c=.
+5. Introduce internal =Context= and =Substitution= core types plus kernel
+   checking. Test weakening, shadowing, dependent telescope order, capture, and
+   substitution composition.
+6. Expose opaque =Checked Gamma A= and =Proof j= values to Monad/Lisp. Prohibit
+   public constructors; add safe inspection and rechecking APIs.
+7. Add erasure analysis. Proofs erase by default; contextual syntax survives at
+   compile time and becomes executable only after typed instantiation.
+8. Add module/interface serialization with versioning and kernel replay.
+
+Do not begin with a heap record called =Proof= whose only field is =true=. That
+would provide first-class tokens without the substitution discipline, trust
+boundary, or metatheory that makes first-class judgments profound.
+
+* Acceptance criteria
+
+- Assigning, passing, and returning a successful contextual judgment works.
+- Open checked terms cannot be evaluated before a complete typed substitution.
+- Contexts are ordered, well-formed telescopes and may contain dependent types.
+- No Lisp or FFI path can forge =Checked= or =Proof=.
+- Imported/cached proofs are kernel-rechecked or cryptographically tied to an
+  independently checkable core payload and kernel version.
+- Definitional equality and propositional equality remain distinct.
+- Proof erasure cannot influence computational data.
+- REPL and file compilation share parsing, elaboration, kernel checking, and
+  diagnostic slicing.
+- The contradictory-Bool example renders exactly the bounded tree above.
+- Full traces remain available without appearing in default diagnostics.
+
+* Implementation record
+
+[FIX id:fix.contextual-judgments.focused-derivation-slice-2026-09-13 date:2026-09-13 by:codex src:dep.h,dep.c,codegen.h,codegen.c,tests/codegen/errors/infer/judgments/atom.type.judgment.context-assumption/context_assumption.mon conf:high]
+  The first state-of-the-art diagnostic slice is implemented for an application
+  argument whose rigid Gamma type conflicts with its expected type. The
+  dependent checker records the closest application premise, failed argument,
+  expected and synthesized semantic values, and local-context lookup origin as
+  structured borrowed provenance. Rendering occurs only after checking fails
+  and therefore cannot become logical authority. The default renderer shows the
+  enclosing judgment, function synthesis, Gamma lookup, atomic mismatch, and
+  skipped later premise. Regression command: =python3 tests/run.py codegen
+  --name judgment=. Required output fragments live beside the native Monad
+  fixture; the current runner validates compile failure, while direct fixture
+  compilation is the temporary exact-rendering check until native diagnostic
+  fragment assertions are supported by the runner.
+
+[FIX id:fix.contextual-judgments.first-class-proof-value-2026-09-13 date:2026-09-13 by:codex src:dep.h,dep.c,env.h,env.c,codegen.c,runtime.h,runtime.c,reader.c,tests/codegen/branches/type-system/judgments/atom.type.judgment.first-class/first_class_judgment.mon conf:high]
+  A successful surface judgment now produces an owned, kernel-sealed
+  derivation containing cloned core term, type, optional equality right-hand
+  side, and its checked conclusion. Code generation consumes that derivation
+  exactly once and materializes a =Derivation {conclusion}= value rather than
+  discarding the result as =Unit=. Such values can be bound, passed through
+  polymorphic functions, returned, compared proof-irrelevantly by conclusion,
+  and displayed consistently by compiled programs and the REPL. Runtime proof
+  data is presentation evidence only; trusted logical authority remains the
+  checker-created derivation. Typed contextual substitution, proof
+  serialization/rechecking, erasure, and a restricted inspection API remain
+  later milestones and are not implied by this slice.
+
+[FIX id:fix.contextual-judgments.proof-surface-and-abi-2026-09-13 date:2026-09-13 by:codex src:wisp.c,types.c,codegen.c,runtime.c,tests/codegen/branches/type-system/judgments/atom.type.judgment.first-class/first_class_judgment.mon conf:high]
+  The public existential type is named =Proof=; a concrete judgment has the
+  internally indexed type =Proof J= for its checked conclusion =J=, while a
+  source annotation =Proof= hides that index and accepts any kernel-issued
+  proof. Unparenthesized assignment right-hand sides preserve the judgment as
+  one reader-owned expression rather than allowing Wisp infix promotion to
+  cross its colon. Proof equality is a trusted primitive comparing checked
+  conclusions and deliberately does not admit a user-definable =Eq Proof=
+  instance. The runtime tag validator includes =RT_PROOF=, preventing proof
+  pointers from being reinterpreted as legacy list pointers. The regression
+  binds an unparenthesized judgment, passes it through =Proof -> Proof=, and
+  evaluates equality and display in generated code.
+
+[FIX id:fix.contextual-judgments.context-spelling-normalization-2026-09-13 date:2026-09-13 by:codex src:dep.c,tests/codegen/branches/type-system/judgments/atom.type.judgment.first-class/first_class_judgment.mon conf:high]
+  Explicit-context elaboration normalizes the reader's three legal colon
+  encodings, so =x:Int=, =x: Int=, and =x : Int= construct the same telescope
+  entry and render canonically as =x : Int=. The normalization is confined to
+  Gamma elaboration; ordinary keyword and annotation syntax retains its
+  existing AST meaning.
+
+[FIX id:fix.contextual-judgments.lexical-context-reflection-2026-09-13 date:2026-09-13 by:codex src:infer.c,dep.c,codegen.c,tests/codegen/branches/type-system/judgments/atom.type.judgment.first-class/first_class_judgment.mon conf:medium]
+  =*context*= now evaluates in compiled code and the REPL to an immutable set
+  containing the visible user bindings introduced no later than its exact
+  source point. Compiler-provided bindings, imported module entries, future
+  predeclared functions, internal names, and shadowed entries are excluded.
+  The dependent checker, ordinary inferencer, code generator, and generic
+  =show= path agree that it is a set-valued language primitive. This first
+  reflective slice represents declaration judgments as canonical symbols at
+  runtime; the dedicated indexed =Judgment= element type, binder identities,
+  local-lambda capture, typed context operations, and hygienic macro API remain
+  explicit later milestones. The kernel environment remains an ordered
+  telescope and is not reconstructed from these untrusted reflective values.
+
+* Sources
+
+[fn:cmtt] Aleksandar Nanevski, Frank Pfenning, and Brigitte Pientka,
+“[[https://www.cs.cmu.edu/~fp/papers/cmtt05.pdf][Contextual Modal Type Theory]],” ACM Transactions on Computational Logic 9(3), 2008.
+
+[fn:pientka-subst] Brigitte Pientka, “[[https://www.sciencedirect.com/science/article/pii/S1571066107002526][Functional Programming with Higher-Order Abstract Syntax and Explicit Substitutions]],” ENTCS 174(7), 2007.
+
+[fn:beluga-explicit-subst] Brigitte Pientka and Joshua Dunfield,
+“[[https://complogic.cs.mcgill.ca/beluga/lfmtp10/lfmtp10.pdf][Beluga: A Framework for Programming and Reasoning with Deductive Systems (System Description) / Explicit Substitutions for Contextual Type Theory]],” LFMTP material, 2010.
+
+[fn:beluga-clf] Beluga Project, “[[https://beluga-lang.readthedocs.io/en/latest/common/contextual-lf.html][Contextual LF]],” current documentation.
+
+[fn:beluga-overview] Complogic Group, McGill University,
+“[[https://complogic.cs.mcgill.ca/beluga/][Beluga]],” project overview and bibliography.
+
+[fn:beluga-context-relation] Beluga Project,
+“[[https://complogic.cs.mcgill.ca/beluga/examples/literate_beluga/1Intermediate/Untyped_Algorithmic_Equality_-_Context_Relation.html][Untyped Algorithmic Equality — Context Relation]],” literate example documenting first-class substitutions between contexts.
+
+[fn:cocon] Brigitte Pientka et al., “[[https://www.cs.mcgill.ca/~bpientka/papers/cocon-long.pdf][Cocon: Computation in Contextual Type Theory]],” 2019.
+
+[fn:contextual-category] Jason Z. S. Hu, Brigitte Pientka, and Ulrich Schöpp,
+“[[https://arxiv.org/abs/2206.02831][A Category Theoretic View of Contextual Types: from Simple Types to Dependent Types]],” 2022.
+
+[fn:lean-prop] Lean Project, “[[https://docs.lean-lang.org/theorem_proving_in_lean4/Propositions-and-Proofs/][Propositions and Proofs]],” Theorem Proving in Lean 4.
+
+[fn:lean-pipeline] Lean Project, “[[https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/][Elaboration and Compilation]],” Lean Language Reference.
+
+[fn:lean-interactive] Lean Project, “[[https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/][Elaboration and Compilation]],” and “[[https://lean-lang.org/doc/reference/latest/Error-Explanations/][Error Explanations]],” Lean Language Reference.
+
+[fn:rocq-extraction] Rocq Project, “[[https://docs.rocq-prover.org/V8.15.0/refman/addendum/extraction.html][Program Extraction]],” Rocq Reference Manual 8.15.
+
+[fn:bidir-survey] Jana Dunfield and Neel Krishnaswami,
+“[[https://arxiv.org/abs/1908.05839][Bidirectional Typing]],” ACM Computing Surveys 54(5), 2021.
+
+[fn:lambda-pi] Andres Löh, Conor McBride, and Wouter Swierstra,
+“[[https://www.andres-loeh.de/LambdaPi/LambdaPi.pdf][A Tutorial Implementation of a Dependently Typed Lambda Calculus]],” Fundamenta Informaticae 102(2), 2010.
+
+[fn:coquand-dybjer] Thierry Coquand and Peter Dybjer,
+“[[https://www.cambridge.org/core/services/aop-cambridge-core/content/view/15AE4B790FF9E4B1998CE92054DBD3CF/S0960129596002150a.pdf/intuitionistic-model-constructions-and-normalization-proofs.pdf][Intuitionistic Model Constructions and Normalization Proofs]],” Mathematical Structures in Computer Science 7(1), 1997.
+
+[fn:harper-equality] Robert Harper, “[[https://www.cs.cmu.edu/~rwh/courses/atpl/pdfs/dependency.pdf][Dependent Type Theory for Programming and Proving]],” course notes, section on equality reflection.
+
+[fn:winterhalter] Théo Winterhalter, Matthieu Sozeau, and Nicolas Tabareau,
+“[[https://doi.org/10.1145/3293880.3294095][Eliminating Reflection from Type Theory]],” CPP 2019.
+
+[fn:helium] Bastiaan Heeren, Daan Leijen, and Arjan van IJzendoorn,
+“[[https://cs.ou.nl/members/bastiaan/heeren-cp03.pdf][Constraint Based Type Inferencing in Helium]],” 2003.
+
+[fn:hazel-total] Eric Zhao et al., “[[https://hazel.org/papers/marking-popl24.pdf][Total Type Error Localization and Recovery with Holes]],” POPL 2024.

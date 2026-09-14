@@ -1,0 +1,71 @@
+;;; Strictness.mon --- A gentle tour of immediate evaluation
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "strict eager immediate identity evaluation"
+
+;;; Commentary:
+
+ Strictness is the ordinary evaluation rhythm of Monad: compute an argument
+ before passing it to a function. =Strict= makes that rhythm visible in a type.
+ A value of type =Strict Int= does not contain a suspended integer computation;
+ it contains an integer that has already been produced.
+
+         expression ──evaluate──> result ──strict──> Strict value
+
+ Consequently, =run-strict= performs no delayed work. It merely removes the
+ wrapper. At the level of pure values, =Strict a= behaves like =a= with an
+ explicit label:
+
+                 run-strict (strict value)  ≃  value
+
+ Why keep a wrapper that a compiler may erase? Because evaluation policy can
+ then be stated locally in types. A tree may store recursive branches beneath
+ =Strict= when every branch must be available immediately, while the same
+ shape may use =Lazy= when branches should be produced on demand. Algorithms
+ can talk about the structure without hiding its evaluation policy.
+
+ Strictness is shallow. A =Strict (Lazy Int)= says that the outer Lazy value is
+ available now; it does not force the computation inside that Lazy value.
+ There is no implicit walk through lists, trees, tuples, or user data.
+
+ The general =Evaluation= operation =defer= accepts a nullary callback. Under
+ Strict, that callback is executed immediately and its result is wrapped.
+ Under Lazy, the same callback is stored until demand. This callback boundary
+ is the precise place where the two strategies differ.
+
+ Since every inhabited Strict value already contains its result, demanding it
+ is total. =total-strict= turns that operational fact into =TotalDemand=
+ evidence. This is useful to generic code that must distinguish an ordinary
+ possibly-diverging demand from one whose termination is known.
+
+;;; Code:
+
+import Control.Strict
+import Control.Lazy
+import Control.Evaluation
+
+module StrictnessExample []
+
+
+define strict-answer :: Strict Int
+  strict (40 + 2)
+
+
+define immediately-deferred :: Strict Int
+  strict (40 + 2)
+
+
+define strict-double :: Strict Int
+  strict ((run-strict strict-answer) * 2)
+
+
+define strict-around-lazy :: Strict (Lazy Int)
+  strict (delay (40 + 2))
+
+
+tests
+  assert-eq (run-strict strict-answer) 42 "Strict contains an already evaluated value"
+  assert-eq (run-strict immediately-deferred) 42 "Strict construction receives an evaluated value"
+  assert-eq (run-strict strict-double) 84 "derived work is performed before Strict stores it"
+  assert-eq (force (run-strict strict-around-lazy)) 42 "Strict is shallow and does not erase an inner Lazy"

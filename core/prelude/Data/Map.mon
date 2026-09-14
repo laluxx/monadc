@@ -1,4 +1,9 @@
 ;;; Map.mon --- Typed finite maps
+:bootstrap primitive
+
+:author   Laluxx
+:version  1.0.0
+:keywords map finite hash lookup association collection
 
 ;;; Commentary:
 
@@ -12,7 +17,7 @@
 import Data.Bool
 
 module Data.Map
-  [member? keys values insert delete merge
+  [member? keys values insert delete merge lookup?
    assoc assoc! dissoc dissoc! contains? find vals]
 
 
@@ -65,10 +70,16 @@ method contains? :: [a] -> a -> Bool
   values value -> __rt_contains? values value
 
 
-;; find is the deliberately partial lookup operation; total optional lookup
-;; belongs to Lookup once polymorphic guard proof lowering is available.
+;; find is deliberately partial. lookup? is the ordinary zero-or-one
+;; observation and follows Core's T?/nil convention rather than introducing
+;; Maybe merely to represent absence.
 method find :: Map k v -> k -> v
   table key -> __rt_map_find table key
+
+
+method lookup? :: Map k v -> k -> v?
+  table key | member? table key -> find table key
+            | otherwise         -> nil
 
 
 method vals :: Map k v -> [v]
@@ -80,3 +91,5 @@ tests
   assert-eq (member? {:answer -> 42} :missing) False "Data.Map missing key"
   assert-eq (member? (insert {:answer -> 42} :extra 7) :extra) True "Data.Map insert"
   assert-eq (member? (delete {:answer -> 42, :extra -> 7} :extra) :extra) False "Data.Map delete"
+  assert-eq (show (lookup? {:answer -> 42} :answer)) "42" "Data.Map total lookup present"
+  assert-eq (show (lookup? {:answer -> 42} :missing)) "nil" "Data.Map total lookup absent"

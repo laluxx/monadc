@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-12
 #+CREATED: 2026-06-12
-#+LAST_MODIFIED: 2026-08-21
+#+LAST_MODIFIED: 2026-09-10
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -43,6 +43,11 @@
 [OBS id:obs.style.file src:context/style.org conf:high]
   This file records MonadC source-code style families. It is about how valid
   MonadC programs are written and read, not about compiler implementation style.
+
+[DEC id:dec.style.org-code-spans-in-commentary-2026-09-10 date:2026-09-10 by:human src:user-request conf:high]
+  In =;;; Commentary:= sections, inline code and identifiers use Org markup
+  =like this=, never Markdown backtick markup. Apply this consistently whenever
+  commentary is added or edited.
 
 * Style Taxonomy
 :PROPERTIES:
@@ -542,3 +547,9 @@ define expanded
   =method lookup :: Self -> Key -> Value=. Keep the sugar receiver-only and
   reject it at top level or anywhere =Self= is ambiguous. This is a design
   record, not currently accepted syntax.
+[DEC id:dec.style-concrete-effect-arrows-2026-09-11 src:context/style.org conf:high]
+  Prefer a concrete dotted effect directly in the arrow when a function has
+  one known effect: =A -state.writee-> B=. The terminal =e= belongs to the
+  concrete effect-arrow delimiter and is not part of the effect identity.
+  Reserve =A -e-> B where e has state.write= for genuinely polymorphic or
+  multiply constrained effect rows.

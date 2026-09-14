@@ -1,0 +1,22 @@
+:TEST-ID tests.type.judgment.context-telescope
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY 90-diagnostics
+:TEST-SUBSET judgments
+:TEST-QUALITY semantic-regression
+:TEST-CODEGEN-ATOM atom.type.judgment.context-telescope
+:TEST-CONTEXT monadc.context.type-theory.first-class-judgments
+:TEST-PURPOSE Explicit contexts are ordered telescopes and reject duplicate binders.
+:TEST-ATOM A telescope cannot extend Gamma with a name already bound in Gamma.
+:TEST-EXPECT fail:compile
+:TEST-ERROR-MESSAGE duplicate binder 'x' in explicit context
+:TEST-COVERAGE dep.c:surface telescope well-formedness and unique binder invariant
+:TEST-USES-ATOM atom.type.judgment.context-telescope
+:TEST-MENU errors/infer/judgments/atom.type.judgment.context-telescope
+:TEST-MENU-PATH codegen/errors/infer/judgments/atom.type.judgment.context-telescope
+:TEST-ATOM-LEAF atom.type.judgment.context-telescope
+:TEST-CLI-TARGET codegen errors infer judgments
+
+(module Main)
+{x: Int, x: Bool} ⊢ x : Int

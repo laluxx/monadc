@@ -1,0 +1,191 @@
+;;; Evaluation.mon --- Orthogonal evaluation strategies for recursive structure
+
+:author   Laluxx
+:version  0.2.0
+:keywords evaluation strategy strict lazy suspension modality demand totality evidence
+
+;;; Commentary:
+
+ Evaluation is the Core boundary between what a value is and when recursive
+ work needed to obtain that value is performed.
+
+ Structural abstractions such as Sequence, Tree, Graph, Trie, and future user
+ structures must not duplicate strict and lazy variants of their semantics.
+ They describe shape. An Evaluation instance describes the operational policy
+ used at recursive positions. In the intended architecture:
+
+   Sequence + Strict = strict sequence
+   Sequence + Lazy   = lazy sequence
+   Tree     + Strict = strict tree
+   Tree     + Lazy   = lazy tree.
+
+ The class is intentionally tiny. A strategy receives a suspended pure
+ computation as a nullary callback and decides when that callback is executed.
+ Passing a callback rather than an eager value is essential: in an eager host
+ language, an ordinary =defer value= could not implement call-by-need because
+ VALUE would already have been evaluated before the method was called.
+
+;;; Semantic Model
+
+ For each evaluation strategy E, think of E as an endofunctor on the category
+ of pure Monad values. Core exposes
+
+                 defer_E  : (1 -> A) -> E A
+                 demand_E : E A -> A.
+
+ Extensionally, demand is a retraction of defer:
+
+                 demand_E (defer_E k)  ≃  k ().
+
+ Here ≃ is equality of the resulting pure value, not equality of evaluation
+ trace, allocation, or sharing. Those intensional properties distinguish
+ Strict from Lazy and are specified by their owning modules.
+
+ The observer =demand= respects Applicative structure. In categorical language
+ it is an applicative natural transformation from E to the identity functor:
+
+        demand_E (pure x)       ≃  x
+        demand_E (map f x)      ≃  f (demand_E x)
+        demand_E (liftA2 f x y) ≃  f (demand_E x) (demand_E y).
+
+ Evaluation deliberately does not claim Monad, Comonad, idempotence, or a
+ proof-theoretic modal structure. Those stronger structures require their own
+ laws and must not be inferred merely from strict/lazy timing.
+
+ =pure= does not replace =defer=. In an eager language the argument to =pure e=
+ is evaluated before pure is called, whereas defer receives a closure whose
+ body the strategy may execute now or later. Applicative describes combination
+ of strategy values; defer describes evaluation timing.
+
+;;; Total Demand Evidence
+
+ =E A= alone does not imply that demanding the value terminates. This matters
+ most for Lazy, where an unrestricted thunk may contain pure divergence.
+
+ =TotalDemand E A= is an opaque refinement of =E A= carrying the proposition
+
+                    demand_E value terminates : A.
+
+ The wrapper is proof-relevant to the type checker but representation-irrelevant
+ to execution. Its constructor is intentionally private. Ordinary Core can
+ introduce evidence through =total-defer=: the callback has the plain total
+ arrow, so Evaluation's beta law proves the resulting demand total. =pure= is
+ total for the same reason. Functor and Applicative preserve the evidence when
+ their callbacks are themselves total.
+
+                    TotalDemand E A  ->  E A
+                    TotalDemand E A  ->  A
+
+ are eliminations. The first forgets the proof. The second demands the value
+ without introducing the =diverge= effect.
+
+ This is deliberately weaker than a guarded-recursion later modality. It proves
+ one concrete demand total; it does not by itself prove an infinite recursive
+ object productive. Recursive productivity is obtained when a representation
+ places TotalDemand evidence at every continuation produced by its coalgebra.
+
+ The distinction is crucial for value-level reasoning. =Lazy A= contains both
+ terminating and diverging thunks, while =TotalDemand Lazy A= selects only the
+ former without pretending that every Lazy value is total.
+
+;;; Effects and Quantities
+
+ The callback accepted by defer has no externally observable effects. It may be
+ total or may carry only the distinguished =diverge= effect; IO, mutation,
+ exceptions, foreign calls, allocation with observable identity, and similar
+ effects are excluded. Changing Strict to Lazy must never change the
+ multiplicity of an observable effect. A future effectful suspension belongs to
+ a distinct abstraction with explicit sharing semantics.
+
+ The compact signatures below cannot yet spell the difference between a total
+ callback and one carrying =diverge=. Normatively, =total-defer= accepts only the
+ former. The ordinary =defer= may accept either. This distinction is part of the
+ higher-order effect contract the compiler must implement.
+
+ Evaluation also respects Monad's quantitative type theory. A deferred
+ computation captures its environment with the quantities inferred for that
+ closure. A strategy may not duplicate a quantity-1 capture merely because it
+ stores or memoizes the closure. TotalDemand adds proof, never duplicability.
+ The quantity of the underlying evaluation value remains authoritative.
+
+;;; Research Basis
+
+ John Launchbury, "A Natural Semantics for Lazy Evaluation", POPL 1993.
+   https://doi.org/10.1145/158511.158618
+
+ Zena Ariola and Matthias Felleisen, "The Call-by-Need Lambda Calculus",
+ Journal of Functional Programming, 1997.
+   https://doi.org/10.1017/S0956796898003037
+
+ Paul Blain Levy, "Call-by-Push-Value: A Subsuming Paradigm", TLCA 1999.
+   https://doi.org/10.1007/3-540-48959-2_17
+
+ Hiroshi Nakano, "A Modality for Recursion", LICS 2000.
+   https://doi.org/10.1109/LICS.2000.855774
+
+ Robert Atkey and Conor McBride, "Productive Coprogramming with Guarded
+ Recursion", ICFP 2013.
+   https://doi.org/10.1145/2500365.2500597
+
+ Aleš Bizjak, Hans Bugge Grathwohl, Ranald Clouston, Rasmus E. Møgelberg, and
+ Lars Birkedal, "Guarded Dependent Type Theory with Coinductive Types", 2016.
+   https://doi.org/10.1007/978-3-662-49630-5_2
+
+ Operational call-by-need motivates Evaluation. Guarded-recursion work motivates
+ compositional productivity evidence, while also showing why unrestricted Lazy
+ must not simply be identified with the logical later modality. TotalDemand is
+ the operational refinement at exactly that boundary.
+
+;;; Code:
+
+import Control.Applicative
+import Data.Functor
+import Data.Bool
+
+module Control.Evaluation
+  [Evaluation defer demand
+   TotalDemand total-defer total-pure forget-total demand-total]
+
+
+class Applicative e => Evaluation e where
+  defer  :: (() -> a) -> e a
+  demand :: e a -> a
+
+  ;; Minimal complete definition: defer and demand.
+  ;;
+  ;; The equations in Commentary are meta-theoretic laws. They are deliberately
+  ;; not executable laws yet: evaluating both sides could duplicate quantity-1
+  ;; captures. A later proof language may quantify over unrestricted values.
+
+
+data TotalDemand e a
+  = TotalDemandValue (e a)
+
+
+;; Normatively THUNK has an empty effect row, including no diverge
+define total-defer :: Evaluation e => (() -> a) -> TotalDemand e a
+  thunk -> TotalDemandValue (defer thunk)
+
+
+define total-pure :: Evaluation e => a -> TotalDemand e a
+  value -> TotalDemandValue (pure value)
+
+
+define forget-total :: TotalDemand e a -> e a
+  [TotalDemandValue value] -> value
+
+
+| Normatively this elimination is total because the stored evidence discharges
+| the latent divergence of demand.
+define demand-total :: Evaluation e => TotalDemand e a -> a
+  [TotalDemandValue value] -> demand value
+
+
+instance Evaluation e => Functor (TotalDemand e)
+  map f [TotalDemandValue value] -> TotalDemandValue (map f value)
+
+
+instance Evaluation e => Applicative (TotalDemand e)
+  pure value -> total-pure value
+  applyA [TotalDemandValue f] [TotalDemandValue value] ->
+    TotalDemandValue (applyA f value)

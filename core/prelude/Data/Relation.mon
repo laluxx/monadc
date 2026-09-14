@@ -1,0 +1,225 @@
+;;; Relation.mon --- Finite extensional binary relations
+
+:author   Laluxx
+:version  1.1.0
+:keywords relation finite set product converse composition query map
+
+;;; Commentary:
+
+ A Relation a b is a finite extensional subset of a x b.  It is not a Map:
+ one left value may be related to any finite number of right values.  The
+ private list is only a presentation of that set of ordered pairs, so exported
+ observations never promise presentation order or multiplicity.
+
+ Map is the functional subspace of Relation:
+
+   functional r iff
+     for every x y z, r(x,y) and r(x,z) implies y = z.
+
+ Domain and range forget the opposite endpoint extensionally; composition joins
+ equal middle endpoints and therefore states exactly the Eq premise it needs.
+ Likewise membership, cardinality, and functionality expose their equality
+ requirements in their public types instead of relying on implicit operator use.
+
+ The compiler owns only the brace-arrow surface and may optimize this module.
+ The observable algebra and the criterion separating Map from Relation live
+ here in Core.
+
+;;; Code:
+
+import Data.Bool
+import Data.Eq
+import Data.Tuple
+import Sequence
+import Data.Set
+
+module Data.Relation
+  [Relation relation-edge relation-from-list relates? relation-size
+   converse relation-domain relation-range compose-relation functional?]
+
+
+data RelationEdge a b
+  = RelationEdge (a, b)
+
+
+data Relation a b
+  = RelationValue [RelationEdge a b]
+
+
+define relation-edge :: a -> b -> RelationEdge a b
+  left right -> RelationEdge (left, right)
+
+
+define relation-edge-left :: RelationEdge a b -> a
+  [RelationEdge (left, _)] -> left
+
+
+define relation-edge-right :: RelationEdge a b -> b
+  [RelationEdge (_, right)] -> right
+
+
+define relation-from-list :: [RelationEdge a b] -> Relation a b
+  pairs -> RelationValue pairs
+
+
+define relation-list-member? :: (Eq a, Eq b) => a -> b -> [RelationEdge a b] -> Bool
+  _ _ [] -> False
+  left right [edge|edges] | relation-edge-left-equals? left edge -> relation-right-member? left right edge edges
+  left right [_|edges] -> relation-list-member? left right edges
+
+
+define relation-edge-left-equals? :: Eq a => a -> RelationEdge a b -> Bool
+  left [RelationEdge (candidate, _)] -> (= left candidate)
+
+
+define relation-edge-right-equals? :: Eq b => b -> RelationEdge a b -> Bool
+  right [RelationEdge (_, candidate)] -> (= right candidate)
+
+
+define relation-right-member? :: (Eq a, Eq b) => a -> b -> RelationEdge a b -> [RelationEdge a b] -> Bool
+  _ right edge _ | relation-edge-right-equals? right edge -> True
+  left right _ edges -> relation-list-member? left right edges
+
+
+define relates? :: (Eq a, Eq b) => Relation a b -> a -> b -> Bool
+  [RelationValue edges] left right -> relation-list-member? left right edges
+
+
+define relation-pair-seen? :: (Eq a, Eq b) => RelationEdge a b -> [RelationEdge a b] -> Bool
+  edge edges -> relation-list-member? (relation-edge-left edge) (relation-edge-right edge) edges
+
+
+define relation-edges-left-equal? :: Eq a => RelationEdge a b -> RelationEdge a c -> Bool
+  [RelationEdge (left, _)] [RelationEdge (right, _)] -> (= left right)
+
+
+define relation-edges-right-equal? :: Eq b => RelationEdge a b -> RelationEdge c b -> Bool
+  [RelationEdge (_, left)] [RelationEdge (_, right)] -> (= left right)
+
+
+define relation-pair-right-seen? :: (Eq a, Eq b) => RelationEdge a b -> RelationEdge a b -> [RelationEdge a b] -> Bool
+  edge candidate _ | relation-edges-right-equal? edge candidate -> True
+  edge _ rest -> relation-pair-seen? edge rest
+
+
+define relation-size-into :: (Eq a, Eq b) => [RelationEdge a b] -> [RelationEdge a b] -> Int
+  _ [] -> 0
+  seen [edge|edges] | relation-pair-seen? edge seen -> relation-size-into seen edges
+  seen [edge|edges] -> 1 + (relation-size-into (prepend edge seen) edges)
+
+
+define relation-size :: (Eq a, Eq b) => Relation a b -> Int
+  [RelationValue edges] -> relation-size-into [] edges
+
+
+define relation-converse-list :: [RelationEdge a b] -> [RelationEdge b a]
+  [] -> []
+  [edge|edges] -> prepend (relation-edge (relation-edge-right edge) (relation-edge-left edge)) (relation-converse-list edges)
+
+
+define converse :: Relation a b -> Relation b a
+  [RelationValue edges] -> RelationValue (relation-converse-list edges)
+
+
+define relation-left-values :: [RelationEdge a b] -> [a]
+  [] -> []
+  [edge|edges] -> prepend (relation-edge-left edge) (relation-left-values edges)
+
+
+define relation-right-values :: [RelationEdge a b] -> [b]
+  [] -> []
+  [edge|edges] -> prepend (relation-edge-right edge) (relation-right-values edges)
+
+
+define relation-domain :: Relation a b -> Data.Set.Set a
+  [RelationValue edges] -> from-list (relation-left-values edges)
+
+
+define relation-range :: Relation a b -> Data.Set.Set b
+  [RelationValue edges] -> from-list (relation-right-values edges)
+
+
+define compose-edge-with :: Eq b => RelationEdge a b -> [RelationEdge b c] -> [RelationEdge a c]
+  _ [] -> []
+  left [right|rights] ->
+    if (= (relation-edge-right left) (relation-edge-left right))
+      then prepend (relation-edge (relation-edge-left left) (relation-edge-right right)) (compose-edge-with left rights)
+      else compose-edge-with left rights
+
+
+define compose-relation-lists :: Eq b => [RelationEdge a b] -> [RelationEdge b c] -> [RelationEdge a c]
+  [] _ -> []
+  [left|lefts] rights -> append (compose-edge-with left rights) (compose-relation-lists lefts rights)
+
+
+define compose-relation :: Eq b => Relation a b -> Relation b c -> Relation a c
+  [RelationValue left] [RelationValue right] -> RelationValue (compose-relation-lists left right)
+
+
+define relation-edge-conflicts? :: (Eq a, Eq b) => a -> b -> RelationEdge a b -> Bool
+  left right edge | relation-edge-left-equals? left edge -> relation-right-conflicts? right edge
+  _ _ _ -> False
+
+
+define relation-right-conflicts? :: Eq b => b -> RelationEdge a b -> Bool
+  right edge | relation-edge-right-equals? right edge -> False
+  _ _ -> True
+
+
+define relation-left-functional? :: (Eq a, Eq b) => a -> b -> [RelationEdge a b] -> Bool
+  _ _ [] -> True
+  left right [edge|edges] -> if relation-edge-conflicts? left right edge then False else relation-left-functional? left right edges
+
+
+define relation-functional-list? :: (Eq a, Eq b) => [RelationEdge a b] -> Bool
+  [] -> True
+  [edge|edges] ->
+    if relation-left-functional? (relation-edge-left edge) (relation-edge-right edge) edges
+      then relation-functional-list? edges
+      else False
+
+
+define functional? :: (Eq a, Eq b) => Relation a b -> Bool
+  [RelationValue edges] -> relation-functional-list? edges
+
+
+define relation-test-likes :: Relation Int Int
+  relation-from-list (prepend (relation-edge 1 10) (prepend (relation-edge 2 20) (prepend (relation-edge 1 20) [])))
+define relation-test-direct :: Relation Int Int
+  relation-from-list (prepend (relation-edge 1 10) [])
+define relation-test-edge :: RelationEdge Int Int
+  relation-edge 1 10
+define relation-test-functional :: Relation Int Int
+  relation-from-list (prepend (relation-edge 1 10) (prepend (relation-edge 2 20) []))
+define relation-test-duplicate :: Relation Int Int
+  relation-from-list (prepend (relation-edge 1 10) (prepend (relation-edge 1 10) []))
+define relation-test-left :: Relation Int Int
+  relation-from-list (prepend (relation-edge 1 2) (prepend (relation-edge 2 3) []))
+define relation-test-right :: Relation Int Int
+  relation-from-list (prepend (relation-edge 2 20) (prepend (relation-edge 3 30) []))
+define relation-test-unmatched-left :: Relation Int Int
+  relation-from-list (prepend (relation-edge 1 2) [])
+define relation-test-unmatched-right :: Relation Int Int
+  relation-from-list (prepend (relation-edge 3 30) [])
+
+define relation-test-one :: Int
+  1
+
+define relation-test-ten :: Int
+  10
+
+
+tests
+  assert-eq (relation-edge-left relation-test-edge) 1 "relation edge exposes its left endpoint"
+  assert-eq (relation-list-member? relation-test-one relation-test-ten (prepend relation-test-edge [])) True "edge-list membership works"
+  assert-eq (relates? relation-test-direct 1 10) True "direct relation construction works"
+  assert-eq (relates? relation-test-likes 1 10) True "relations contain ground facts"
+  assert-eq (relates? relation-test-likes 2 10) False "relations reject absent facts"
+  assert-eq (relation-size relation-test-likes) 3 "one-to-many edges survive construction"
+  assert-eq (relation-size relation-test-duplicate) 1 "relation size ignores duplicate edges"
+  assert-eq (functional? relation-test-likes) False "one left value with two rights is not a map"
+  assert-eq (functional? relation-test-functional) True "left-unique relations are map-shaped"
+  assert-eq (show (to-ascending-list (relation-domain relation-test-likes))) "(1 2)" "relation domain is extensional"
+  assert-eq (show (to-ascending-list (relation-range relation-test-likes))) "(10 20)" "relation range is extensional"
+  assert-eq (relates? (compose-relation relation-test-left relation-test-right) 1 20) True "relation composition joins matching middle values"
+  assert-eq (relates? (compose-relation relation-test-unmatched-left relation-test-unmatched-right) 1 30) False "relation composition rejects unmatched middle values"

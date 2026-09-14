@@ -1,0 +1,12 @@
+module Main
+
+type t = {1..23}
+
+define identity-t :: t -> t
+  x -> x
+
+f = λt : t. t
+
+show t
+show (identity-t 23)
+show (f 23)

@@ -1,0 +1,4 @@
+[
+  {"line":26,"col":2,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"module"},{"line":0,"col":0,"type":"symbol","name":"Main"},{"line":0,"col":0,"type":"array","is_heap":false,"elements":[]}]},
+  {"line":27,"col":1,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"__judgment"},{"line":27,"col":1,"type":"set","elements":[{"line":27,"col":2,"type":"symbol","name":"x:"},{"line":27,"col":5,"type":"symbol","name":"Bool"}]},{"line":27,"col":15,"type":"list","items":[{"line":27,"col":17,"type":"symbol","name":"+"},{"line":27,"col":15,"type":"symbol","name":"x"},{"line":27,"col":19,"type":"number","value":"3"}]},{"line":27,"col":23,"type":"symbol","name":"Int"}]}
+]

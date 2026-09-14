@@ -1,17 +1,20 @@
 ;;; HTML.mon --- Safe HTML trees and an indentation-owned HTML reader
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "web html dsl escaping reader syntax"
+:author   Laluxx
+:version  0.2.0
+:keywords web html dsl escaping reader syntax
 
 ;;; Commentary:
 
  HTML values are immutable, safely rendered values. Text and attribute values
  are escaped during construction; callers must opt into RawHTML explicitly
- for trusted markup. The current representation deliberately stays opaque
- until recursive cross-module ADT projection is reliable; see the linked
- Web HTML context TODO rather than assuming this is already an inspectable
- DOM.
+ for trusted markup. Element and attribute names are restricted to a
+ conservative ASCII structural grammar so dynamic names cannot inject spaces,
+ quotes, delimiters, or additional attributes.
+
+ The current representation deliberately stays opaque until recursive
+ cross-module ADT projection is reliable; callers should not assume this is
+ already an inspectable DOM.
  Importing this module activates an indentation reader. The compiler knows
  only how to preserve block lines and indentation: this module owns tags,
  attributes, mixed content, interpolation, and the resulting Syntax.
@@ -38,8 +41,49 @@ layout HTML
   [element-node? :: Bool]
 
 
+
+
+define html-alpha-byte? :: Int -> Bool
+  byte | (>= byte 0x41) and (<= byte 0x5a) -> True
+       | (>= byte 0x61) and (<= byte 0x7a) -> True
+       | otherwise                         -> False
+
+
+define html-digit-byte? :: Int -> Bool
+  byte | (>= byte 0x30) and (<= byte 0x39) -> True
+       | otherwise                         -> False
+
+
+define html-name-tail-byte? :: Int -> Bool
+  byte | html-alpha-byte? byte -> True
+       | html-digit-byte? byte -> True
+       | (= byte 0x2d)         -> True
+       | (= byte 0x5f)         -> True
+       | (= byte 0x3a)         -> True
+       | (= byte 0x2e)         -> True
+       | otherwise             -> False
+
+
+define valid-html-name-from? :: String -> Int -> Bool
+  value index | (>= index (length value)) -> True
+  value index
+    | html-name-tail-byte? (__rt_string_byte value index) ->
+        valid-html-name-from? value (index + 1)
+    | otherwise -> False
+
+
+define valid-html-name? :: String -> Bool
+  value | (= value "") -> False
+  value
+    | html-alpha-byte? (__rt_string_byte value 0) ->
+        valid-html-name-from? value 1
+    | otherwise -> False
+
 define Element :: String -> [Attribute] -> [HTML] -> HTML
-  name attributes children -> HTML (render-element-value name attributes children) (not (inline-element-name? name))
+  name attributes children
+    | valid-html-name? name ->
+        HTML (render-element-value name attributes children) (not (inline-element-name? name))
+    | otherwise -> error "Web.HTML.Element: invalid element name"
 
 
 define inline-element-name? :: String -> Bool
@@ -60,7 +104,9 @@ define RawHTML :: String -> HTML
 
 
 define attribute :: String -> String -> Attribute
-  name value -> Attribute name value
+  name value
+    | valid-html-name? name -> Attribute name value
+    | otherwise -> error "Web.HTML.attribute: invalid attribute name"
 
 
 define element :: String -> [Attribute] -> [HTML] -> HTML
@@ -92,7 +138,7 @@ define escape-html :: String -> String
 define render-attributes :: [Attribute] -> String
   attributes
     | null? attributes -> ""
-    | otherwise -> join-html (render-attribute (rt_coll_head attributes)) (render-attributes (drop attributes 1))
+    | otherwise -> join-html (render-attribute (rt_coll_head attributes)) (render-attributes (drop 1 attributes))
 
 
 define render-attribute :: Attribute -> String
@@ -101,7 +147,7 @@ define render-attribute :: Attribute -> String
 
 define render-inline :: [HTML] -> String
   nodes | null? nodes -> ""
-        | otherwise   -> join-html (html-rendered (rt_coll_head nodes)) (render-inline (drop nodes 1))
+        | otherwise   -> join-html (html-rendered (rt_coll_head nodes)) (render-inline (drop 1 nodes))
 
 
 define html-rendered :: HTML -> String
@@ -114,7 +160,7 @@ define html-element? :: HTML -> Bool
 
 define element-children-inline? :: [HTML] -> Bool
   children | null? children -> True
-           | not (html-element? (rt_coll_head children)) -> element-children-inline? (drop children 1)
+           | not (html-element? (rt_coll_head children)) -> element-children-inline? (drop 1 children)
            | otherwise -> False
 
 
@@ -128,7 +174,7 @@ define indent-html-lines :: String -> Bool -> String
 
 define render-indented-children :: [HTML] -> String
   children | null? children -> ""
-           | otherwise -> join-html "\n" (join-html (indent-html-lines (html-rendered (rt_coll_head children)) True) (render-indented-children (drop children 1)))
+           | otherwise -> join-html "\n" (join-html (indent-html-lines (html-rendered (rt_coll_head children)) True) (render-indented-children (drop 1 children)))
 
 
 define render-element-value :: String -> [Attribute] -> [HTML] -> String
@@ -285,3 +331,31 @@ define expand-html :: Syntax -> Syntax -> Syntax -> Syntax
                                              (syntax-list (syntax-symbol "attribute") (syntax-string "lang") language))
                                 (html-nodes (syntax-list-tail body)))
                                         (syntax-error language-keyword "html expects the :lang attribute"))
+
+
+tests
+  :escaping:
+  assert-eq
+    (render-html (text "<script>\"'&"))
+    "&lt;script&gt;&quot;&#39;&amp;"
+    "Web.HTML escapes text in all markup-significant positions"
+  assert-eq
+    (render-html (element "a" (list (attribute "title" "\"<&")) (list (text "ok"))))
+    "<a title=\"&quot;&lt;&amp;\">ok</a>"
+    "Web.HTML escapes attribute values"
+  :escaping:
+
+  :structure:
+  assert-eq (valid-html-name? "div") True "Web.HTML accepts ordinary element names"
+  assert-eq (valid-html-name? "my-widget") True "Web.HTML accepts custom-element names"
+  assert-eq (valid-html-name? "data-value") True "Web.HTML accepts data-style attribute names"
+  assert-eq (valid-html-name? "x onload") False "Web.HTML rejects structural whitespace in names"
+  assert-eq (valid-html-name? "x>") False "Web.HTML rejects markup delimiters in names"
+  :structure:
+
+  :raw-boundary:
+  assert-eq
+    (render-html (raw-html "<strong>trusted</strong>"))
+    "<strong>trusted</strong>"
+    "Web.HTML RawHTML remains the explicit trusted-markup escape hatch"
+  :raw-boundary:

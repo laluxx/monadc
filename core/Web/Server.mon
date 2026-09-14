@@ -1,8 +1,8 @@
 ;;; Server.mon --- small complete HTTP/1.1 server boundary
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "web http server response routing io"
+:author   Laluxx
+:version  0.3.0
+:keywords web http server response routing io
 
 ;;; Commentary:
 
@@ -11,11 +11,17 @@
  decoding, complete response writes, and cleanup. Applications provide one
  pure request handler.
 
+ Response construction is also the trust boundary for status/header metadata.
+ Status codes must be three-digit HTTP codes; reason phrases and Content-Type
+ values have C0/DEL controls neutralized so application data cannot create
+ additional response header lines.
+
 ;;; Code:
 
 import Network.Socket
 import System.Posix.Process
 import Data.Queue
+import Data.Char
 import Sequence
 import Text.Parser.Stream
 import Text.Format
@@ -40,7 +46,26 @@ layout HttpServerConfig
   [request-timeout :: Int]
 
 
-;;; Response values
+ ;;; Response values
+
+define valid-http-status? :: Int -> Bool
+  status -> (>= status 100) and (<= status 999)
+
+
+define response-meta-from :: String -> Int -> String
+  value index | (>= index (length value)) -> ""
+  value index -> response-meta-byte value index (ord (value index))
+
+
+define response-meta-byte :: String -> Int -> Int -> String
+  value index byte | byte < 0x20 -> " " ++ (response-meta-from value (index + 1))
+  value index byte | byte = 0x7f -> " " ++ (response-meta-from value (index + 1))
+  value index _ -> (char->text (value index)) ++ (response-meta-from value (index + 1))
+
+
+define response-meta :: String -> String
+  value -> response-meta-from value 0
+
 
 define standard-http-limits :: HttpLimits
   HttpLimits 16384 8192 8192 64 1048576
@@ -55,9 +80,11 @@ define request-head-ending :: [Byte]  ⌜0x0d 0x0a 0x0d 0x0a⌝
 
 
 define response :: Int -> String -> String -> String -> HttpResponse
-  :doc "Create an HTTP response with STATUS, REASON, CONTENT-TYPE, and BODY."
-  status reason content-type body ->
-    HttpResponse status reason content-type body
+  :doc "Create an HTTP response, validating STATUS and neutralizing control bytes in header metadata."
+  status reason content-type body
+    | valid-http-status? status ->
+        HttpResponse status (response-meta reason) (response-meta content-type) body
+    | otherwise -> error "Web.Server.response: HTTP status must be between 100 and 999"
 
 
 define text-response :: Int -> String -> String -> HttpResponse
@@ -124,7 +151,7 @@ define request-fragment :: SocketBuffer -> Int -> ParserStream -> ParserStreamRe
 
 define complete-http-body :: HttpDecode -> [Byte] -> HttpDecode
   request bytes ->
-    complete-request-body request (take bytes (request-content-length-or 0 request))
+    complete-request-body request (take (request-content-length-or 0 request) bytes)
 
 
 define continue-body-read :: Socket -> SocketBuffer -> HttpDecode -> [Byte] -io-> HttpDecode
@@ -228,7 +255,7 @@ define worker-launch-status :: Int -> Int -> Int -> Int -> Int
 
 define await-http-workers :: Int -io-> Int
   launched | < 0 -> launched
-  _ -> wait-child 0
+  _ -> wait-any-child ()
 
 
 define run-http-server :: HttpServerConfig -> SocketResult -> (HttpRequest -> HttpResponse) -io-> Int
@@ -251,3 +278,23 @@ define serve-http-with :: HttpServerConfig -> (HttpRequest -> HttpResponse) -io-
 define serve-http :: Int -> (HttpRequest -> HttpResponse) -io-> Int
   :doc "Serve HTTP/1.1 on loopback PORT with production-oriented defaults."
   port handler -> serve-http-with (standard-http-server port) handler
+
+
+tests
+  :response-rendering:
+  def safe-response
+    (response 200 "OK\r\nInjected: yes" "text/plain\r\nX-Evil: yes" "body")
+  def safe-rendered (render-response safe-response)
+  assert-eq
+    (safe-rendered.includes? "\r\nInjected:")
+    False
+    "Web.Server reason phrase cannot inject a response header"
+  assert-eq
+    (safe-rendered.includes? "\r\nX-Evil:")
+    False
+    "Web.Server Content-Type cannot inject a response header"
+  assert-eq
+    (safe-rendered.endsWith? "\r\n\r\nbody")
+    True
+    "Web.Server renders one header terminator before the body"
+  :response-rendering:

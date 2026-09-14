@@ -70,6 +70,8 @@ define cell-at :: [Int] -> Int -> Int
   c i | i >= count c -> 0
   c i -> c[i]
 
+
+╭─ multi line
 define next-cell :: [Int] -> Int -> Int
   :doc "Return the Rule 101 value for the cell at INDEX in the next generation."
   cells index ->
@@ -111,7 +113,7 @@ define next-row-background :: [Int] -> Int -> [Int]
 
 
 ╭─ returns exactly generations rows, including the initial row.
-define evolve :: [Int] -> Int -> [ [Int] ]
+define evolve :: [Int] -> Int -> [[Int]]
   _     0           -> []
   cells generations ->
     prepend cells (evolve (next-row cells) (generations - 1))
@@ -204,7 +206,7 @@ tests
   :boundaries:
 
   :seed:
-  assert-eq (count (seed-row 9)) 9 "seed keeps the requested width"
+  assert-eq (count (seed-row 9))     9 "seed keeps the requested width"
   assert-eq (cell-at (seed-row 9) 4) 1 "seed places one live cell in the centre"
   assert-eq (cell-at (seed-row 9) 3) 0 "cell before the seed remains dead"
   assert-eq (cell-at (seed-row 9) 5) 0 "cell after the seed remains dead"

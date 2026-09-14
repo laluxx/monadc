@@ -1,0 +1,38 @@
+:TEST-ID tests.codegen.type.dep.indexed-vec.imported-core
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY integration-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Exporting an indexed ADT carries symbolic constructors, dependent methods, and typed field accessors across its module boundary.
+:TEST-EXPECT compile
+:TEST-MENU branches/control-flow/pattern-match/atom.type.dep.indexed-vec.imported-core
+:TEST-MENU-PATH codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-vec.imported-core
+:TEST-ATOM-LEAF atom.type.dep.indexed-vec.imported-core
+:TEST-CLI-TARGET codegen branches control-flow pattern-match
+
+(module Main)
+
+import Data.Nat
+import Data.Vec
+import Data.Functor
+
+define imported-head :: Vec (S n) t -> t
+  [. x _] -> x
+
+define imported-tail :: Vec (S n) t -> Vec n t
+  [. _ xs] -> xs
+
+define imported-method-head :: Vec (S n) t -> t
+  value -> value.head
+
+define imported-method-tail :: Vec (S n) t -> Vec n t
+  value -> value.tail
+
+define imported-method-map :: Vec n a -> (a -> b) -> Vec n b
+  values f -> Vec.map f values
+
+define imported-functor-map :: Vec n a -> (a -> b) -> Vec n b
+  values f -> map f values

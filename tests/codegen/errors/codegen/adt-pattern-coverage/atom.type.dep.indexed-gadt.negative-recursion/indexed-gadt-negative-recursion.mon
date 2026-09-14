@@ -1,0 +1,19 @@
+:TEST-ID tests.codegen.type.dep.indexed-gadt.negative-recursion
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadt-refinement
+:TEST-PURPOSE Strict positivity rejects a recursive family occurrence to the left of a constructor-field function arrow.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR constructor MkBad is not strictly positive: Bad occurs negatively
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.negative-recursion
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.negative-recursion
+:TEST-ATOM-LEAF atom.type.dep.indexed-gadt.negative-recursion
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+data Bad :: Type -> Type
+  MkBad : (Bad t -> t) -> Bad t

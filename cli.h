@@ -13,6 +13,7 @@ typedef enum {
     CMD_TEST,
     CMD_CHECK,
     CMD_LINT,
+    CMD_FORMAT,
     CMD_LSP,
     CMD_EVAL,
     CMD_DEBUG,
@@ -44,6 +45,10 @@ typedef struct {
     bool trace_codegen;
     bool lint_json;
     bool lint_fix;
+    bool format_write;
+    bool format_check;
+    bool format_ascii;
+    bool allow_implicit_effects;
     bool debug_no_mouse;
     bool debug_truecolor;
     int debug_target_fps;
@@ -51,6 +56,7 @@ typedef struct {
     int debug_blink_count;
     bool start_repl;    bool test_mode;      // emit test blocks
     bool test_run;       // run and delete test binary (monad test)
+    bool run_after_compile; // `monad run file.mon`
     char *test_suite;
     char *output_name;
     char *input_file;
@@ -66,6 +72,7 @@ char *get_base_executable_name(const char *path);
 void cmd_new(const char *package_name);
 void cmd_build(const CompilerFlags *flags);
 void cmd_run(const CompilerFlags *flags);
+int cmd_run_executable(const char *path);
 void cmd_clean(void);
 void cmd_install(void);
 void cmd_test(const CompilerFlags *flags);

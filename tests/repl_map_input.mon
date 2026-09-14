@@ -1,0 +1,5 @@
+define double :: Int -> Int
+  n -> 2 * n
+
+map double [1 2 3]
+

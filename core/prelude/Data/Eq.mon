@@ -1,8 +1,8 @@
 ;;; Eq.mon --- Equality typeclass
 
-:author "Laluxx"
-:version "1.2.0"
-:keywords "eq equality inequality typeclass relation"
+:author   Laluxx
+:version  1.2.0
+:keywords eq equality inequality typeclass relation
 
 ;;; Commentary:
 
@@ -12,6 +12,9 @@
 
  Primitive representations may optimize equality, but the public relation,
  its complement, and their law belong to this core abstraction.
+
+ Float equality follows the primitive comparison surface, including IEEE NaN
+ behavior.
 
 ;;; Code:
 
@@ -64,9 +67,6 @@ instance Eq Float
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Eq registers Eq"
-  :registration:
 
   :int-instance:
   assert-eq (eq? 1 1)     True  "Eq Int eq? true"

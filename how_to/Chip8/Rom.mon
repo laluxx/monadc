@@ -1,0 +1,121 @@
+;;; Rom.mon --- ROM sources and loading for the CHIP-8 example
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "how-to chip8 rom file io builtin demo"
+
+;;; Commentary:
+
+ A useful emulator should start without ceremony.  BuiltinDemo is a tiny ROM
+ written for this example; it moves an M-shaped sprite across the display and
+ exercises clear, drawing, jumps, arithmetic, index loading, and the delay
+ timer.  RomFile switches the exact same machine over to an external program.
+
+ Change `selected-rom` in Chip8.mon to move between them.
+
+;;; Code:
+
+import Machine
+import IO
+import System.Posix.FileDescriptor
+
+module Rom
+  [RomSource BuiltinDemo RomFile
+   RomResult RomLoaded RomTooLarge RomReadFailed
+   rom-label load-rom]
+
+
+data RomSource
+  = BuiltinDemo
+  | RomFile String
+
+
+data RomResult
+  = RomLoaded Int
+  | RomTooLarge Int
+  | RomReadFailed
+
+
+;;; Built-in demonstration ROM
+
+;; Program at 0x200, followed by its five-byte sprite at 0x220.
+;;
+;;   CLS
+;;   V0 <- 0                  ; x
+;;   V1 <- 12                 ; y
+;;   I  <- 0x220              ; M sprite
+;; loop:
+;;   draw V0,V1,5
+;;   DT <- 2
+;; wait:
+;;   V3 <- DT
+;;   skip next if V3 = 0
+;;   jump wait
+;;   draw V0,V1,5             ; erase old position (XOR)
+;;   V0 <- V0 + 1
+;;   skip next if V0 = 57
+;;   jump loop
+;;   V0 <- 0
+;;   jump loop
+
+define demo-rom :: [37]
+[
+  0x00 0xe0
+  0x60 0x00
+  0x61 0x0c
+  0xa2 0x20
+  0xd0 0x15
+  0x62 0x02
+  0xf2 0x15
+  0xf3 0x07
+  0x33 0x00
+  0x12 0x0e
+  0xd0 0x15
+  0x70 0x01
+  0x30 0x39
+  0x12 0x08
+  0x60 0x00
+  0x12 0x08
+  0x88 0xd8 0xa8 0x88 0x88
+]
+
+
+define copy-demo-rom :: Int -e-> Int where e has state.write
+  offset | >= 37 -> offset
+  offset ->
+    write-memory (program-start + offset) (demo-rom offset)
+    copy-demo-rom (offset + 1)
+
+
+define load-demo :: Int -e-> RomResult where e has state.write
+  _ -> RomLoaded (copy-demo-rom 0)
+
+
+;;; External ROMs
+
+define program-capacity :: Int
+  memory-size - program-start
+
+
+define load-file-handle :: Int -> Int -io-> RomResult
+  handle offset ->
+    def byte (read-byte handle)
+    (if (< byte 0) (RomLoaded offset) (if (>= offset program-capacity) (RomTooLarge (offset + 1)) (begin (write-memory (program-start + offset) byte) (load-file-handle handle (offset + 1)))))
+
+
+define load-file-rom :: String -io-> RomResult
+  path ->
+    def handle (sys-open path O_RDONLY 420)
+    (if (< handle 0) RomReadFailed (begin (def result (load-file-handle handle 0)) (sys-close handle) result))
+
+
+;;; Public source boundary
+
+define rom-label :: RomSource -> String
+  [BuiltinDemo]   -> "built-in M demo"
+  [RomFile path] -> path
+
+
+define load-rom :: RomSource -io-> RomResult
+  [BuiltinDemo]   -> load-demo 0
+  [RomFile path] -> load-file-rom path

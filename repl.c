@@ -21,6 +21,7 @@
 #include "types.h"
 #include "module.h"
 #include "infer.h"
+#include "dep.h"
 #include "typeclass.h"
 #include "ffi.h"
 #include "features.h"
@@ -38,6 +39,8 @@
 #include <sys/stat.h>
 #if !defined(_WIN32)
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #else
 /* winnt.h declares an enum member named TokenType, which collides with the
  * compiler's TokenType typedef.  Keep the Windows SDK name out of this TU. */
@@ -67,6 +70,7 @@ static const char *dlerror(void) {
 #include <signal.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <readline/keymaps.h>
 
 #include <llvm-c/Core.h>
 #include <llvm-c/Error.h>
@@ -89,6 +93,19 @@ static const char *dlerror(void) {
             (out) = NULL; \
         } else { \
             (out) = parse(src); \
+            g_reader_escape_set = false; \
+        } \
+    } while(0)
+
+#define REPL_PARSE_ALL(out, src, filename) \
+    do { \
+        (out) = (ASTList){0}; \
+        g_reader_escape_set = true; \
+        if (setjmp(g_reader_escape) != 0) { \
+            g_reader_escape_set = false; \
+            (out) = (ASTList){0}; \
+        } else { \
+            (out) = wisp_parse_all((src), (filename)); \
             g_reader_escape_set = false; \
         } \
     } while(0)
@@ -540,8 +557,11 @@ static bool repl_ensure_host_global(REPLContext *ctx, EnvEntry *e) {
         return true;
 
     for (int i = 0; i < g_repl_host_global_count; i++) {
-        if (strcmp(g_repl_host_globals[i].name, name) == 0)
+        if (strcmp(g_repl_host_globals[i].name, name) == 0) {
+            LLVMSetInitializer(e->value, NULL);
+            LLVMSetLinkage(e->value, LLVMExternalLinkage);
             return true;
+        }
     }
 
     if (g_repl_host_global_count >= MAX_REPL_HOST_GLOBALS) {
@@ -567,6 +587,10 @@ static bool repl_ensure_host_global(REPLContext *ctx, EnvEntry *e) {
     slot->name[sizeof(slot->name) - 1] = '\0';
     slot->addr = addr;
     slot->size = size;
+    /* The host allocation is the sole definition.  This snippet only emits
+     * stores/loads through an external declaration of that storage. */
+    LLVMSetInitializer(e->value, NULL);
+    LLVMSetLinkage(e->value, LLVMExternalLinkage);
     return true;
 }
 
@@ -663,7 +687,8 @@ static void redeclare_env_symbols(REPLContext *ctx) {
                     LLVMSetLinkage(getter, LLVMExternalLinkage);
                 }
             }
-            else if (e->kind == ENV_FUNC && e->func_ref) {
+            else if ((e->kind == ENV_FUNC || e->kind == ENV_ADT_CTOR) &&
+                     e->func_ref) {
                 const char *name = (e->llvm_name && e->llvm_name[0])
                                    ? e->llvm_name : e->name;
 
@@ -837,6 +862,38 @@ static void repl_define_value_getter(REPLContext *ctx, EnvEntry *e) {
 
     if (saved_bb)
         LLVMPositionBuilderAtEnd(ctx->cg.builder, saved_bb);
+}
+
+/* Every submitted definition lives in its own permanent ORC module.  ORC
+ * cannot replace an exported symbol in-place, so give all functions emitted
+ * for a definition (including lifted `where` helpers) a generation-qualified
+ * linker name while retaining their source names as Env keys. */
+static void repl_version_definition_symbols(REPLContext *ctx) {
+    if (!ctx || !ctx->cg.module || !ctx->cg.env)
+        return;
+
+    for (LLVMValueRef fn = LLVMGetFirstFunction(ctx->cg.module); fn;
+         fn = LLVMGetNextFunction(fn)) {
+        if (LLVMCountBasicBlocks(fn) == 0 ||
+            strcmp(LLVMGetValueName(fn), g_wrapper_name) == 0)
+            continue;
+
+        const char *old_name = LLVMGetValueName(fn);
+        char versioned[768];
+        snprintf(versioned, sizeof(versioned), "__repl_%u.%s",
+                 ctx->expr_count, old_name);
+        LLVMSetValueName(fn, versioned);
+
+        Env *env = ctx->cg.env;
+        for (size_t bi = 0; bi < env->size; bi++) {
+            for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
+                if (e->func_ref != fn)
+                    continue;
+                free(e->llvm_name);
+                e->llvm_name = strdup(versioned);
+            }
+        }
+    }
 }
 
 static void open_wrapper(REPLContext *ctx) {
@@ -1150,8 +1207,11 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         LLVMValueRef v  = LLVMTypeOf(val) != i64
             ? LLVMBuildSExt(ctx->cg.builder, val, i64, "ext")
             : val;
-        LLVMValueRef a[] = {get_fmt_int(&ctx->cg), v};
-        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        LLVMValueRef fn = get_rt_print_int_grouped(&ctx->cg);
+        LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->cg.context),
+            (LLVMTypeRef[]){i64, LLVMInt32TypeInContext(ctx->cg.context)}, 2, 0);
+        LLVMBuildCall2(ctx->cg.builder, ft, fn,
+            (LLVMValueRef[]){v, LLVMConstInt(LLVMInt32TypeInContext(ctx->cg.context), 1, 0)}, 2, "");
         break; }
 
     case TYPE_U8:
@@ -1162,9 +1222,11 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
         LLVMValueRef v  = LLVMTypeOf(val) != i64
             ? LLVMBuildZExt(ctx->cg.builder, val, i64, "ext")
             : val;
-        LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%lu\n", "fmt_uint");
-        LLVMValueRef a[] = {fmt, v};
-        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        LLVMValueRef fn = get_rt_print_uint_grouped(&ctx->cg);
+        LLVMTypeRef ft = LLVMFunctionType(LLVMVoidTypeInContext(ctx->cg.context),
+            (LLVMTypeRef[]){i64, LLVMInt32TypeInContext(ctx->cg.context)}, 2, 0);
+        LLVMBuildCall2(ctx->cg.builder, ft, fn,
+            (LLVMValueRef[]){v, LLVMConstInt(LLVMInt32TypeInContext(ctx->cg.context), 1, 0)}, 2, "");
         break; }
 
     case TYPE_I128:
@@ -1279,9 +1341,24 @@ static void emit_auto_print(REPLContext *ctx, LLVMValueRef val, Type *t, bool li
     case TYPE_RATIO:
     case TYPE_SYMBOL:
     case TYPE_UNKNOWN:
+    case TYPE_APP:
+    case TYPE_OPTIONAL:
+    case TYPE_NIL:
         /* val is RuntimeValue* */
         EMIT_RV_PRINT(val);
         break;
+
+    case TYPE_COLL:
+        /* Erased collection results carry a tagged RuntimeValue so the REPL
+         * must dispatch on the runtime representation (Array/List/Set). */
+        EMIT_RV_PRINT(val);
+        break;
+
+    case TYPE_PTR: {
+        LLVMValueRef fmt = LLVMBuildGlobalStringPtr(ctx->cg.builder, "%p\n", "fmt_ptr");
+        LLVMValueRef a[] = {fmt, val};
+        LLVMBuildCall2(ctx->cg.builder, LLVMGlobalGetValueType(pf), pf, a, 2, "");
+        break; }
 
     case TYPE_ARR: {
         /* Fat pointer path — val is arr.fat* */
@@ -1953,6 +2030,9 @@ static void repl_cache_module_stem(const char *module_name,
 typedef struct {
     char path[1400];
     bool held;
+#if !defined(_WIN32)
+    int fd;
+#endif
 } ReplCacheLease;
 
 static void repl_cache_pause(void) {
@@ -1967,6 +2047,9 @@ static void repl_cache_pause(void) {
 static bool repl_cache_lease_acquire(const char *module_name,
                                      ReplCacheLease *lease) {
     memset(lease, 0, sizeof(*lease));
+#if !defined(_WIN32)
+    lease->fd = -1;
+#endif
     char cache_dir[1024];
     if (!repl_cache_prepare_dir(cache_dir, sizeof(cache_dir)))
         return true; /* A read-only/no-HOME environment simply runs uncached. */
@@ -1977,6 +2060,31 @@ static bool repl_cache_lease_acquire(const char *module_name,
 
     char stem[256];
     repl_cache_module_stem(module_name, stem, sizeof(stem));
+#if !defined(_WIN32)
+    /* flock is owned by the open file description.  The kernel releases it
+     * on normal close, process exit, signal termination, and crashes, so an
+     * abandoned REPL can never strand future startups behind a stale lease.
+     * Use a new suffix so legacy directory locks are harmless. */
+    snprintf(lease->path, sizeof(lease->path), "%s/%s.lease", lock_dir, stem);
+    lease->fd = open(lease->path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (lease->fd < 0) return false;
+
+    for (int attempt = 0; attempt < 3000; attempt++) {
+        if (flock(lease->fd, LOCK_EX | LOCK_NB) == 0) {
+            lease->held = true;
+            return true;
+        }
+        if (errno != EWOULDBLOCK && errno != EAGAIN) {
+            close(lease->fd);
+            lease->fd = -1;
+            return false;
+        }
+        repl_cache_pause();
+    }
+    close(lease->fd);
+    lease->fd = -1;
+    return false;
+#else
     snprintf(lease->path, sizeof(lease->path), "%s/%s.lock", lock_dir, stem);
 
     for (int attempt = 0; attempt < 3000; attempt++) {
@@ -1999,6 +2107,7 @@ static bool repl_cache_lease_acquire(const char *module_name,
         repl_cache_pause();
     }
     return false;
+#endif
 }
 
 static void repl_cache_lease_release(ReplCacheLease *lease) {
@@ -2006,7 +2115,9 @@ static void repl_cache_lease_release(ReplCacheLease *lease) {
 #if defined(_WIN32)
     _rmdir(lease->path);
 #else
-    rmdir(lease->path);
+    flock(lease->fd, LOCK_UN);
+    close(lease->fd);
+    lease->fd = -1;
 #endif
     lease->held = false;
 }
@@ -2156,7 +2267,7 @@ static void harvest_one_form(Env *env, const char *mod_name,
     /* (module Name body...) or (begin body...) — recurse into children */
     if ((strcmp(head->symbol, "module") == 0 ||
          strcmp(head->symbol, "begin")  == 0) &&
-        form->list.count >= 2)
+        form->list.count >= 2 && form_src)
     {
         /* We don't have per-child source offsets here, so we re-parse the
          * form_src to find each child's source range.  form_src is the
@@ -2197,25 +2308,16 @@ static void harvest_source_for_module(Env *env, const char *mod_name,
                                       const char *src_path,
                                       const char *src_buf)
 {
-    const char *p = src_buf;
-    while (*p) {
-        size_t form_len = 0;
-        const char *form_src = advance_form(&p, &form_len);
-        if (!form_src) break;
-        if (*form_src != '(') continue;
-
-        char *form_copy = strndup(form_src, form_len);
-        if (!form_copy) continue;
-
-        parser_set_context(src_path, form_copy);
-        AST *form = NULL;
-        REPL_PARSE(form, form_copy);
-        if (form) {
-            harvest_one_form(env, mod_name, form, form_src, form_len);
-            ast_free(form);
-        }
-        free(form_copy);
+    /* Module sources are Wisp, not a sequence of parenthesized reader forms.
+     * Reusing the raw-form walker here made commentary and layout syntax emit
+     * spurious diagnostics after an otherwise successful import. */
+    ASTList forms = {0};
+    REPL_PARSE_ALL(forms, src_buf, src_path);
+    for (size_t i = 0; i < forms.count; i++) {
+        harvest_one_form(env, mod_name, forms.exprs[i], NULL, 0);
+        ast_free(forms.exprs[i]);
     }
+    free(forms.exprs);
 }
 
 static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
@@ -2510,6 +2612,11 @@ static bool handle_import(REPLContext *ctx, AST *ast, bool announce) {
 /// API
 
 void repl_init(REPLContext *ctx) {
+    ctx->types_state = types_persistent_state_create();
+    if (!ctx->types_state || !types_persistent_state_enter(ctx->types_state)) {
+        fprintf(stderr, "REPL: failed to create persistent type environment\n");
+        _Exit(1);
+    }
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
@@ -2550,6 +2657,8 @@ void repl_init(REPLContext *ctx) {
     ctx->cg.module     = NULL;
     ctx->cg.builder    = NULL;
     ctx->cg.env        = env_create();
+    ctx->cg.env->dep_ctx = dep_ctx_create("<repl>");
+    dep_register_builtins(ctx->cg.env->dep_ctx);
     env_init_infer(ctx->cg.env);
     ctx->cg.module_ctx = module_context_create();
     ctx->cg.init_fn    = NULL;
@@ -2644,21 +2753,24 @@ void repl_init(REPLContext *ctx) {
     fresh_module(ctx, "__repl_1");
     ctx->expr_count = 1;
 
-    /* The REPL has the same implicit functional prelude as compiled source.
-     * Import the core-owned definitions once, without user-facing import
-     * chatter.  Their exported environment entries provide Wisp arities, so
-     * applications such as `id 3` parse as one form without compiler-owned
-     * knowledge of individual core functions. */
-    {
+    /* Import the core-owned prelude definitions used directly at the prompt,
+     * without user-facing import chatter.  Their exported environment entries
+     * provide Wisp arities, so applications such as `id 3` and `take xs 3`
+     * parse as one form without compiler-owned knowledge of those functions. */
+    const char *implicit_prelude_modules[] = {
+        "Function", "Sequence", "Data.Set", NULL
+    };
+    for (size_t i = 0; implicit_prelude_modules[i]; i++) {
         AST *imp = ast_new_list();
         ast_list_append(imp, ast_new_symbol("import"));
-        ast_list_append(imp, ast_new_symbol("Function"));
+        ast_list_append(imp,
+                        ast_new_symbol(implicit_prelude_modules[i]));
         if (!handle_import(ctx, imp, false))
-            fprintf(stderr, "REPL: failed to load the core Function prelude\n");
+            fprintf(stderr, "REPL: failed to load the core %s prelude\n",
+                    implicit_prelude_modules[i]);
         ast_free(imp);
     }
 
-    printf("\n");
 }
 
 void repl_dispose(REPLContext *ctx) {
@@ -2685,7 +2797,14 @@ void repl_dispose(REPLContext *ctx) {
     }
     module_context_free(ctx->cg.module_ctx);
     ctx->cg.module_ctx = NULL;
+    DepCtx *dep_ctx = ctx->cg.env ? ctx->cg.env->dep_ctx : NULL;
     env_free(ctx->cg.env);
+    dep_ctx_free(dep_ctx);
+    if (ctx->types_state) {
+        types_persistent_state_leave(ctx->types_state);
+        types_persistent_state_destroy(ctx->types_state);
+        ctx->types_state = NULL;
+    }
 }
 
 int cmp_entry(const void *a, const void *b) {
@@ -2747,10 +2866,10 @@ static void repl_seed_wisp_arities(REPLContext *ctx) {
     wisp_register_arity("import", 1);
     wisp_register_arity("module", -1);
 
-    wisp_register_arity("+", 2);
-    wisp_register_arity("-", 2);
-    wisp_register_arity("*", 2);
-    wisp_register_arity("/", 2);
+    wisp_register_arity("+", -1);
+    wisp_register_arity("-", -1);
+    wisp_register_arity("*", -1);
+    wisp_register_arity("/", -1);
     wisp_register_arity("%", 2);
 
     wisp_register_arity("=", 2);
@@ -2778,6 +2897,26 @@ static void repl_seed_wisp_arities(REPLContext *ctx) {
                 wisp_register_arity(e->name, e->param_count);
                 break;
 
+            case ENV_ADT_CTOR:
+                /* Symbolic constructors (notably Vec's `.`) must replace
+                 * any prelude syntax arity after an import.  Otherwise the
+                 * Wisp parser can group the same constructor call according
+                 * to stale builtin/function metadata.  Imported polymorphic
+                 * constructors may not retain source parameter metadata, so
+                 * use their callable ABI as the authoritative fallback. */
+                {
+                    int ctor_arity = e->param_count;
+                    if (ctor_arity == 0 && e->func_ref) {
+                        LLVMTypeRef fn_type =
+                            LLVMGlobalGetValueType(e->func_ref);
+                        if (fn_type && LLVMGetTypeKind(fn_type) ==
+                                           LLVMFunctionTypeKind)
+                            ctor_arity = LLVMCountParamTypes(fn_type);
+                    }
+                    wisp_register_arity(e->name, ctor_arity);
+                }
+                break;
+
             case ENV_BUILTIN:
                 if (e->arity_max == -1)
                     wisp_register_arity(e->name, -1);
@@ -2801,6 +2940,10 @@ static void repl_seed_wisp_arities(REPLContext *ctx) {
 }
 
 static bool repl_infer(REPLContext *ctx, AST *ast) {
+    /* File compilation and the REPL must share the dependent judgment
+     * checker.  Avoid a second, legacy HM interpretation here. */
+    if (ast && ast->type == AST_JUDGMENT)
+        return true;
     InferEnv *ienv = env_get_infer(ctx->cg.env);
     InferCtx *ictx = infer_ctx_create(ienv, ctx->cg.env->dep_ctx, parser_get_filename());
     Type *t = infer_toplevel(ictx, ast);
@@ -2824,9 +2967,37 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     while (*p && isspace((unsigned char)*p)) p++;
     if (!*p) return true;
 
-    // ,command dispatch
-    if (*p == ',') {
+    /* Colon forms dispatch only when their keyword is registered as a REPL
+     * command.  Every other colon form remains an ordinary keyword value. */
+    bool legacy_command = (*p == ',');
+    bool colon_command = false;
+    if (*p == ':') {
+        static const char *commands[] = {"env", "load", "complete", "help", "ir", NULL};
+        for (int i = 0; commands[i]; i++) {
+            size_t n = strlen(commands[i]);
+            if (strncmp(p + 1, commands[i], n) == 0 &&
+                (p[n + 1] == '\0' || isspace((unsigned char)p[n + 1]))) {
+                colon_command = true;
+                break;
+            }
+        }
+    }
+    if (legacy_command || colon_command) {
         const char *cmd = p + 1;
+
+        if (strncmp(cmd, "ir", 2) == 0 && isspace((unsigned char)cmd[2])) {
+            const char *name = cmd + 3;
+            while (*name && isspace((unsigned char)*name)) name++;
+            EnvEntry *e = env_lookup(ctx->cg.env, name);
+            if (!e || !e->repl_ir) {
+                fprintf(stderr, "No REPL IR recorded for '%s'\n", name);
+                return false;
+            }
+            fputs(e->repl_ir, stdout);
+            if (e->repl_ir[0] && e->repl_ir[strlen(e->repl_ir) - 1] != '\n')
+                putchar('\n');
+            return true;
+        }
 
         if (strncmp(cmd, "env", 3) == 0 && (!cmd[3] || isspace((unsigned char)cmd[3]))) {
             env_print(ctx->cg.env);
@@ -2858,28 +3029,29 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             src[fsz] = '\0';
             fclose(f);
 
-            /* ---- detect module declaration in first form ---- */
-            const char *cursor = src;
+            /* Parse the source through the same Wisp/layout pipeline as the
+             * compiler.  The old loader fed whitespace-delimited fragments
+             * to the parenthesized reader, so an export list such as
+             * `[Vec vec-head ...]` was misread as a standalone form. */
+            repl_seed_wisp_arities(ctx);
+            ASTList load_forms = {0};
+            REPL_PARSE_ALL(load_forms, src, fpath);
             char *found_module = NULL;
-            while (*cursor) {
-                while (*cursor && isspace((unsigned char)*cursor)) cursor++;
-                if (!*cursor) break;
-                if (*cursor == ';') { while (*cursor && *cursor != '\n') cursor++; continue; }
-
-                parser_set_context(fpath, cursor);
-                AST *form = NULL;
-                REPL_PARSE(form, cursor);
+            for (size_t form_index = 0; form_index < load_forms.count;
+                 form_index++) {
+                AST *form = load_forms.exprs[form_index];
                 if (form && form->type == AST_LIST && form->list.count >= 2 &&
                     form->list.items[0]->type == AST_SYMBOL &&
                     strcmp(form->list.items[0]->symbol, "module") == 0 &&
                     form->list.items[1]->type == AST_SYMBOL) {
                     found_module = strdup(form->list.items[1]->symbol);
-                    ast_free(form);
-                } else {
-                    if (form) ast_free(form);
+                    break;
                 }
-                break;
             }
+            for (size_t form_index = 0; form_index < load_forms.count;
+                 form_index++)
+                ast_free(load_forms.exprs[form_index]);
+            free(load_forms.exprs);
             free(src);
 
             if (found_module) {
@@ -2912,7 +3084,7 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             src[fsz] = '\0';
             fclose(f2);
 
-            cursor = src;
+            const char *cursor = src;
             int loaded = 0, failed = 0, skipped = 0;
 
             while (*cursor) {
@@ -3113,12 +3285,21 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
             while (*prefix && isspace((unsigned char)*prefix)) prefix++;
             size_t plen = strlen(prefix);
 
+            /* An empty editor request used to serialize the entire compiler
+             * environment into the user's terminal.  Besides being enormous,
+             * that exposed implementation symbols and made startup appear
+             * nondeterministic when an editor probed completion eagerly. */
+            if (plen == 0) {
+                return true;
+            }
+
             printf("__COMPLETIONS__\n");
 
             Env *env = ctx->cg.env;
             for (size_t bi = 0; bi < env->size; bi++) {
                 for (EnvEntry *e = env->buckets[bi]; e; e = e->next) {
                     if (!e->name) continue;
+                    if (e->name[0] == '_' && e->name[1] == '_') continue;
                     if (strncmp(e->name, prefix, plen) != 0) continue;
 
                     char sig[256] = "";
@@ -3219,15 +3400,16 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
 
         if (strncmp(cmd, "help", 4) == 0) {
             printf("REPL commands:\n");
-            printf("  ,env              dump all bindings\n");
-            printf("  ,complete <pfx>   list completions for prefix\n");
-            printf("  ,load <path>      load and evaluate a source file\n");
-            printf("  ,help             show this help\n");
+            printf("  :env              dump all bindings\n");
+            printf("  :complete <pfx>   list completions for prefix\n");
+            printf("  :load <path>      load and evaluate a source file\n");
+            printf("  :ir <name>        print a REPL definition's LLVM IR\n");
+            printf("  :help             show this help\n");
             return true;
         }
 
-        fprintf(stderr, "Unknown command: ,%s\n", cmd);
-        fprintf(stderr, "Try ,help for a list of commands.\n");
+        fprintf(stderr, "Unknown command: %c%s\n", *p, cmd);
+        fprintf(stderr, "Try :help for a list of commands.\n");
         return false;
     }
 
@@ -3247,6 +3429,13 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
 
     repl_seed_wisp_arities(ctx);
     forms = wisp_parse_all(line, "<input>");
+    if (forms.count == 0 && *chk == ':') {
+        free(forms.exprs);
+        forms.exprs = malloc(sizeof(*forms.exprs));
+        parser_set_context("<input>", line);
+        forms.exprs[0] = parse(line);
+        forms.count = forms.exprs[0] ? 1 : 0;
+    }
     g_reader_escape_set = false;
 
     if (forms.count == 0) {
@@ -3270,6 +3459,31 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     AST *ast = forms.exprs[0];
     free(forms.exprs);
 
+    /* String is a concrete sequence rather than the higher-kinded Coll
+     * instance that owns list take.  Preserve the public `take amount value`
+     * spelling for an immediately visible String operand by selecting the
+     * matching primitive before inference/codegen chooses the Coll method. */
+    if (ast->type == AST_LIST && ast->list.count == 3 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        (strcmp(ast->list.items[0]->symbol, "take") == 0 ||
+         strcmp(ast->list.items[0]->symbol, "drop") == 0) &&
+        ast->list.items[2]->type == AST_STRING) {
+        bool is_take = strcmp(ast->list.items[0]->symbol, "take") == 0;
+        AST *amount = ast->list.items[1];
+        ast->list.items[1] = ast->list.items[2];
+        ast->list.items[2] = amount;
+        free(ast->list.items[0]->symbol);
+        ast->list.items[0]->symbol = strdup(is_take ? "__rt_string_take"
+                                                    : "__rt_string_drop");
+    }
+
+    /* Wisp's transformed buffer is intentionally temporary.  Later import,
+     * inference, and macro work may also replace the global reader context;
+     * restore a lifetime-safe context for every diagnostic emitted while
+     * this REPL input is being compiled. */
+    parser_set_context("<input>", line);
+    parser_set_original_source(line);
+
     /* Special: (import ...) */
     if (ast->type == AST_LIST && ast->list.count >= 1 &&
         ast->list.items[0]->type == AST_SYMBOL &&
@@ -3292,6 +3506,14 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     if (!silent && ast->type == AST_SYMBOL) {
         Type *lay = env_lookup_layout(ctx->cg.env, ast->symbol);
         if (lay && lay->kind == TYPE_LAYOUT) {
+            bool erased_adt = lay->layout_field_count > 0 &&
+                lay->layout_fields[0].name &&
+                strcmp(lay->layout_fields[0].name, "__tag") == 0;
+            if (erased_adt) {
+                printf("%s : data type\n", lay->layout_name);
+                ast_free(ast);
+                return true;
+            }
             printf("(layout %s\n", lay->layout_name);
             for (int i = 0; i < lay->layout_field_count; i++) {
                 LayoutField *f = &lay->layout_fields[i];
@@ -3399,6 +3621,27 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
     CodegenResult res = codegen_expr(&ctx->cg, ast);
     ctx->cg.error_jmp_set = false;
 
+    if (ast && ast->type == AST_LIST && ast->list.count >= 1 &&
+        ast->list.items[0]->type == AST_SYMBOL &&
+        strcmp(ast->list.items[0]->symbol, "define") == 0) {
+        repl_version_definition_symbols(ctx);
+        if (ast->list.count >= 2) {
+            AST *name_expr = ast->list.items[1];
+            const char *name = name_expr->type == AST_SYMBOL
+                ? name_expr->symbol
+                : (name_expr->type == AST_LIST && name_expr->list.count > 0 &&
+                   name_expr->list.items[0]->type == AST_SYMBOL
+                    ? name_expr->list.items[0]->symbol : NULL);
+            EnvEntry *e = name ? env_lookup(ctx->cg.env, name) : NULL;
+            if (e && e->func_ref) {
+                char *printed = LLVMPrintValueToString(e->func_ref);
+                free(e->repl_ir);
+                e->repl_ir = printed ? strdup(printed) : NULL;
+                if (printed) LLVMDisposeMessage(printed);
+            }
+        }
+    }
+
     if (ast && ast->type == AST_LIST && ast->list.count >= 3 &&
         ast->list.items[0]->type == AST_SYMBOL &&
         strcmp(ast->list.items[0]->symbol, "define") == 0) {
@@ -3442,8 +3685,13 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         ast->list.items[0]->type == AST_SYMBOL &&
         strcmp(ast->list.items[0]->symbol, "define") == 0) {
         AST *name_expr = ast->list.items[1];
-        if (name_expr->type == AST_SYMBOL) {
-            EnvEntry *e = env_lookup(ctx->cg.env, name_expr->symbol);
+        const char *binding_name = name_expr->type == AST_SYMBOL
+            ? name_expr->symbol
+            : (name_expr->type == AST_LIST && name_expr->list.count > 0 &&
+               name_expr->list.items[0]->type == AST_SYMBOL
+                ? name_expr->list.items[0]->symbol : NULL);
+        if (binding_name) {
+            EnvEntry *e = env_lookup(ctx->cg.env, binding_name);
             if (!repl_ensure_host_global(ctx, e)) {
                 if (ast) ast_free(ast);
                 recover_module(ctx);
@@ -3473,14 +3721,22 @@ bool repl_eval_line(REPLContext *ctx, const char *line) {
         ast->type == AST_LIST && ast->list.count > 0 &&
         ast->list.items[0]->type == AST_SYMBOL) {
         EnvEntry *ce = env_lookup(ctx->cg.env, ast->list.items[0]->symbol);
-        if (ce && ce->module_name)
+        const char *callee = ast->list.items[0]->symbol;
+        /* Function-call collection results cross the uniform boxed ABI.
+         * Only the three primitive list constructors return raw RuntimeList*.
+         * Typeclass methods such as map are often re-exported without a
+         * module_name, so module provenance is not a representation proof. */
+        if ((strcmp(callee, "list") != 0 &&
+             strcmp(callee, "cons") != 0 &&
+             strcmp(callee, ".") != 0) ||
+            (ce && ce->module_name) || strcmp(callee, "quote") == 0)
             list_is_rv = true;
     }
 
     ast_free(ast);
     ast = NULL;
 
-    if (!silent && res.type != NULL)
+    if (!silent && !definition_or_layout && res.type != NULL)
         emit_auto_print(ctx, res.value, res.type, list_is_rv);
 
     /* Phase 3: JIT compile + run */
@@ -3566,6 +3822,7 @@ char *repl_completion_generator(const char *text, int state) {
             EnvEntry *e = cur;
             cur = cur->next;     /* advance BEFORE returning so next call is safe */
             if (!e->name) continue;  /* FIX: null-check */
+            if (e->name[0] == '_' && e->name[1] == '_') continue;
             if (strncmp(e->name, text, len) == 0)
                 return strdup(e->name);
         }
@@ -3627,8 +3884,332 @@ static int electric_insert_pair(int count, int key) {
     return 0;
 }
 
+static int electric_skip_close(int count, int key) {
+    (void)count;
+    if (rl_point < rl_end && rl_line_buffer[rl_point] == key) {
+        rl_point++;
+        return 0;
+    }
+    return rl_insert(1, key);
+}
+
+static int repl_accept_or_continue(int count, int key) {
+    (void)count; (void)key;
+
+    /* Return in the middle of a buffer is an editing operation: split at
+     * point and move the suffix onto an indented continuation.  Completeness
+     * only decides whether Return at the end submits the form. */
+    if (rl_point < rl_end) {
+        int point_line_start = rl_point;
+        while (point_line_start > 0 &&
+               rl_line_buffer[point_line_start - 1] != '\n')
+            point_line_start--;
+
+        int indent = 10;
+        if (point_line_start > 0) {
+            indent = 0;
+            while (point_line_start + indent < rl_point &&
+                   rl_line_buffer[point_line_start + indent] == ' ')
+                indent++;
+        }
+        int word_end = rl_point;
+        while (word_end > point_line_start &&
+               isspace((unsigned char)rl_line_buffer[word_end - 1]))
+            word_end--;
+        int word_start = word_end;
+        while (word_start > point_line_start &&
+               !isspace((unsigned char)rl_line_buffer[word_start - 1]))
+            word_start--;
+        if (word_end - word_start == 5 &&
+            strncmp(rl_line_buffer + word_start, "where", 5) == 0)
+            indent += 2;
+
+        char inserted[128];
+        if (indent > (int)sizeof(inserted) - 2)
+            indent = (int)sizeof(inserted) - 2;
+        inserted[0] = '\n';
+        memset(inserted + 1, ' ', (size_t)indent);
+        inserted[indent + 1] = '\0';
+        rl_insert_text(inserted);
+        return 0;
+    }
+
+    const char *line_start = strrchr(rl_line_buffer, '\n');
+    line_start = line_start ? line_start + 1 : rl_line_buffer;
+    bool current_line_blank = true;
+    for (const char *p = line_start; *p; p++) {
+        if (*p != ' ' && *p != '\t') {
+            current_line_blank = false;
+            break;
+        }
+    }
+    bool blank_terminator = line_start != rl_line_buffer && current_line_blank;
+    WispInputStatus status =
+        wisp_classify_input(rl_line_buffer, blank_terminator);
+
+    if (status != WISP_INPUT_INCOMPLETE || blank_terminator) {
+        /* Do not retain indentation from the terminating blank line. */
+        if (blank_terminator) {
+            int new_end = (int)(line_start - rl_line_buffer) - 1;
+            rl_delete_text(new_end, rl_end);
+            rl_end = rl_point = new_end;
+            rl_line_buffer[rl_end] = '\0';
+        }
+        rl_crlf();
+        rl_done = 1;
+        return 0;
+    }
+
+    /* Readline redisplays an embedded newline at terminal column zero rather
+     * than beneath the first input character.  Preserve the current semantic
+     * indentation and add one Wisp level after `where`; the first continuation
+     * starts below the prompt plus Wisp's normal two-column body indent. */
+    int indent = 10;
+    if (line_start != rl_line_buffer) {
+        indent = 0;
+        while (line_start[indent] == ' ')
+            indent++;
+
+        const char *end = rl_line_buffer + rl_end;
+        while (end > line_start && isspace((unsigned char)end[-1]))
+            end--;
+        const char *word = end;
+        while (word > line_start && !isspace((unsigned char)word[-1]))
+            word--;
+        if ((size_t)(end - word) == 5 && strncmp(word, "where", 5) == 0)
+            indent += 2;
+    }
+
+    char continuation[128];
+    if (indent > (int)sizeof(continuation) - 2)
+        indent = (int)sizeof(continuation) - 2;
+    continuation[0] = '\n';
+    memset(continuation + 1, ' ', (size_t)indent);
+    continuation[indent + 1] = '\0';
+    rl_point = rl_end;
+    rl_insert_text(continuation);
+    return 0;
+}
+
+static int repl_previous_logical_line(int count, int key) {
+    (void)count; (void)key;
+    int start = rl_point;
+    while (start > 0 && rl_line_buffer[start - 1] != '\n') start--;
+    if (start == 0)
+        return rl_get_previous_history(1, key);
+    int column = rl_point - start;
+    int previous_end = start - 1;
+    int previous_start = previous_end;
+    while (previous_start > 0 && rl_line_buffer[previous_start - 1] != '\n')
+        previous_start--;
+    int previous_length = previous_end - previous_start;
+    if (previous_start == 0) {
+        column -= 8;
+        if (column < 0) column = 0;
+    }
+    rl_point = previous_start + (column < previous_length ? column
+                                                          : previous_length);
+    return 0;
+}
+
+static int repl_next_logical_line(int count, int key) {
+    (void)count; (void)key;
+    int start = rl_point;
+    while (start > 0 && rl_line_buffer[start - 1] != '\n') start--;
+    int column = rl_point - start;
+    int end = rl_point;
+    while (end < rl_end && rl_line_buffer[end] != '\n') end++;
+    if (end == rl_end)
+        return rl_get_next_history(1, key);
+    int next_start = end + 1;
+    int next_end = next_start;
+    while (next_end < rl_end && rl_line_buffer[next_end] != '\n') next_end++;
+    int next_length = next_end - next_start;
+    if (start == 0)
+        column += 8;
+    rl_point = next_start + (column < next_length ? column : next_length);
+    return 0;
+}
+
+static int repl_beginning_of_logical_line(int count, int key) {
+    (void)count; (void)key;
+    int start = rl_point;
+    while (start > 0 && rl_line_buffer[start - 1] != '\n') start--;
+    while (start < rl_end &&
+           (rl_line_buffer[start] == ' ' || rl_line_buffer[start] == '\t'))
+        start++;
+    rl_point = start;
+    return 0;
+}
+
+static int repl_end_of_logical_line(int count, int key) {
+    (void)count; (void)key;
+    while (rl_point < rl_end && rl_line_buffer[rl_point] != '\n')
+        rl_point++;
+    return 0;
+}
+
+static int repl_beginning_of_input(int count, int key) {
+    (void)count; (void)key;
+    rl_point = 0;
+    return 0;
+}
+
+static int repl_end_of_input(int count, int key) {
+    (void)count; (void)key;
+    rl_point = rl_end;
+    return 0;
+}
+
+static int repl_open_line(int count, int key) {
+    (void)key;
+    if (count < 1) count = 1;
+    int saved_point = rl_point;
+    while (count-- > 0)
+        rl_insert_text("\n        ");
+    rl_point = saved_point;
+    return 0;
+}
+
+static int repl_backward_char_protected(int count, int key) {
+    (void)key;
+    while (count-- > 0 && rl_point > 0) {
+        int line_start = rl_point;
+        while (line_start > 0 && rl_line_buffer[line_start - 1] != '\n')
+            line_start--;
+        if (line_start > 0 && rl_point <= line_start + 8)
+            rl_point = line_start - 1;
+        else
+            rl_point--;
+    }
+    return 0;
+}
+
+static int repl_forward_char_protected(int count, int key) {
+    (void)key;
+    while (count-- > 0 && rl_point < rl_end) {
+        if (rl_line_buffer[rl_point] == '\n') {
+            int next = rl_point + 1;
+            int padding = 0;
+            while (next + padding < rl_end && padding < 8 &&
+                   rl_line_buffer[next + padding] == ' ')
+                padding++;
+            rl_point = next + padding;
+        } else {
+            rl_point++;
+        }
+    }
+    return 0;
+}
+
+static bool repl_pair_matches(char open, char close) {
+    return (open == '(' && close == ')') ||
+           (open == '[' && close == ']') ||
+           (open == '{' && close == '}');
+}
+
+static int repl_forward_pair(int count, int key) {
+    (void)key;
+    while (count-- > 0) {
+        int origin = rl_point;
+        while (rl_point < rl_end &&
+               isspace((unsigned char)rl_line_buffer[rl_point]))
+            rl_point++;
+        if (rl_point >= rl_end) return 0;
+
+        char open = rl_line_buffer[rl_point];
+        if (open != '(' && open != '[' && open != '{') {
+            rl_point = origin;
+            return 0;
+        }
+
+        char stack[256];
+        int depth = 0;
+        bool in_string = false;
+        for (int i = rl_point; i < rl_end; i++) {
+            char c = rl_line_buffer[i];
+            if (in_string) {
+                if (c == '\\') i++;
+                else if (c == '"') in_string = false;
+                continue;
+            }
+            if (c == '"') { in_string = true; continue; }
+            if (c == '(' || c == '[' || c == '{') {
+                if (depth < (int)sizeof(stack)) stack[depth++] = c;
+            } else if (c == ')' || c == ']' || c == '}') {
+                if (depth > 0 && repl_pair_matches(stack[depth - 1], c)) depth--;
+                if (depth == 0) { rl_point = i + 1; break; }
+            }
+        }
+    }
+    return 0;
+}
+
+static int repl_backward_pair(int count, int key) {
+    (void)key;
+    while (count-- > 0) {
+        int origin = rl_point;
+        while (rl_point > 0 &&
+               isspace((unsigned char)rl_line_buffer[rl_point - 1]))
+            rl_point--;
+        if (rl_point <= 0) return 0;
+
+        char close = rl_line_buffer[rl_point - 1];
+        if (close != ')' && close != ']' && close != '}') {
+            rl_point = origin;
+            return 0;
+        }
+
+        char stack[256];
+        int depth = 0;
+        for (int i = rl_point - 1; i >= 0; i--) {
+            char c = rl_line_buffer[i];
+            if (c == ')' || c == ']' || c == '}') {
+                if (depth < (int)sizeof(stack)) stack[depth++] = c;
+            } else if (c == '(' || c == '[' || c == '{') {
+                if (depth > 0 && repl_pair_matches(c, stack[depth - 1])) depth--;
+                if (depth == 0) { rl_point = i; break; }
+            }
+        }
+    }
+    return 0;
+}
+
+static int repl_kill_forward_pair(int count, int key) {
+    (void)key;
+    int start = rl_point;
+    repl_forward_pair(count, key);
+    int end = rl_point;
+    if (end == start) {
+        while (rl_point < rl_end &&
+               isspace((unsigned char)rl_line_buffer[rl_point]))
+            rl_point++;
+        while (rl_point < rl_end &&
+               !isspace((unsigned char)rl_line_buffer[rl_point]))
+            rl_point++;
+        end = rl_point;
+    }
+    rl_point = start;
+    if (end > start)
+        return rl_kill_text(start, end);
+    return 0;
+}
+
 static int electric_backspace(int count, int key) {
     (void)count; (void)key;
+
+    int line_start = rl_point;
+    while (line_start > 0 && rl_line_buffer[line_start - 1] != '\n')
+        line_start--;
+    if (line_start > 0 && rl_point == line_start + 8) {
+            int previous_end = line_start - 1;
+            memmove(rl_line_buffer + previous_end,
+                    rl_line_buffer + line_start + 8,
+                    (size_t)(rl_end - line_start - 7));
+            rl_end -= 9; /* newline plus eight protected display spaces */
+            rl_point = previous_end;
+            return 0;
+    }
 
     if (rl_point > 0 && rl_point < rl_end) {
         char prev = rl_line_buffer[rl_point - 1];
@@ -3638,8 +4219,12 @@ static int electric_backspace(int count, int key) {
                       (prev == '{' && next == '}') ||
                       (prev == '"' && next == '"');
         if (is_pair) {
-            rl_delete(1, 0);
-            rl_rubout(1, '\b');
+            int pair_start = rl_point - 1;
+            memmove(rl_line_buffer + pair_start,
+                    rl_line_buffer + pair_start + 2,
+                    (size_t)(rl_end - pair_start - 1));
+            rl_end -= 2;
+            rl_point = pair_start;
             return 0;
         }
     }
@@ -3652,15 +4237,57 @@ static void setup_electric_pairs(void) {
     rl_bind_key('[',    electric_insert_pair);
     rl_bind_key('{',    electric_insert_pair);
     rl_bind_key('"',    electric_insert_pair);
+    rl_bind_key(')',    electric_skip_close);
+    rl_bind_key(']',    electric_skip_close);
+    rl_bind_key('}',    electric_skip_close);
+    rl_bind_key('\n',   repl_accept_or_continue);
+    rl_bind_key('\r',   repl_accept_or_continue);
+    rl_bind_key(16,     repl_previous_logical_line); /* C-p */
+    rl_bind_key(14,     repl_next_logical_line);     /* C-n */
+    rl_bind_key(1,      repl_beginning_of_logical_line); /* C-a */
+    rl_bind_key(5,      repl_end_of_logical_line);       /* C-e */
+    rl_bind_key(15,     repl_open_line);                 /* C-o */
+    rl_bind_key(2,      repl_backward_char_protected);   /* C-b */
+    rl_bind_key(6,      repl_forward_char_protected);    /* C-f */
+    rl_bind_key_in_map(16, repl_previous_logical_line, emacs_standard_keymap);
+    rl_bind_key_in_map(14, repl_next_logical_line, emacs_standard_keymap);
+    rl_bind_key_in_map(1, repl_beginning_of_logical_line, emacs_standard_keymap);
+    rl_bind_key_in_map(5, repl_end_of_logical_line, emacs_standard_keymap);
+    rl_bind_key_in_map(15, repl_open_line, emacs_standard_keymap);
+    rl_bind_key_in_map(2, repl_backward_char_protected, emacs_standard_keymap);
+    rl_bind_key_in_map(6, repl_forward_char_protected, emacs_standard_keymap);
+    rl_bind_key_in_map(16, repl_previous_logical_line, vi_insertion_keymap);
+    rl_bind_key_in_map(14, repl_next_logical_line, vi_insertion_keymap);
+    rl_bind_key_in_map(1, repl_beginning_of_logical_line, vi_insertion_keymap);
+    rl_bind_key_in_map(5, repl_end_of_logical_line, vi_insertion_keymap);
+    rl_bind_key_in_map(15, repl_open_line, vi_insertion_keymap);
+    rl_bind_key_in_map(2, repl_backward_char_protected, vi_insertion_keymap);
+    rl_bind_key_in_map(6, repl_forward_char_protected, vi_insertion_keymap);
+    rl_bind_keyseq("\\ep", rl_get_previous_history); /* M-p */
+    rl_bind_keyseq("\\en", rl_get_next_history);     /* M-n */
+    rl_bind_keyseq("\\ea", repl_beginning_of_input); /* M-a */
+    rl_bind_keyseq("\\ee", repl_end_of_input);       /* M-e */
+    rl_bind_keyseq("\\e\\C-p", repl_backward_pair);  /* C-M-p */
+    rl_bind_keyseq("\\e\\C-n", repl_forward_pair);   /* C-M-n */
+    rl_bind_keyseq("\\e\\C-k", repl_kill_forward_pair); /* C-M-k */
     /* C-h (ASCII 8) — traditional backspace */
     rl_bind_key('\b',   electric_backspace);
     /* DEL (127) — the actual Backspace key on most terminals.
      * rl_bind_key() clips its argument to 0-127 but key 127 sits exactly
-     * at the boundary; some readline builds mis-handle it.  Use
-     * rl_bind_keyseq() with the raw escape sequence to be safe. */
+     * at the boundary.  Bind both the direct keymap slot and key-sequence
+     * spelling because Readline versions differ in which path handles it. */
+    rl_bind_key(127,    electric_backspace);
+    rl_bind_key_in_map(127, electric_backspace, emacs_standard_keymap);
+    rl_bind_key_in_map(127, electric_backspace, vi_insertion_keymap);
     rl_bind_keyseq("\\177", electric_backspace);   /* \177 = octal 127 = DEL */
     /* Also bind the VT220 / xterm "Backspace sends ^?" sequence */
     rl_bind_keyseq("\\C-?", electric_backspace);
+}
+
+static int repl_readline_startup(void) {
+    /* Readline may select/reload a keymap while entering readline(). */
+    setup_electric_pairs();
+    return 0;
 }
 
 /* -------------------------------------------------------------------------
@@ -3707,8 +4334,13 @@ void repl_run(void) {
                          strcmp(getenv("MONAD_NO_PROMPT"), "0") != 0);
 
     if (use_readline) {
+        /* Force inputrc/keymap initialization before installing application
+         * bindings; otherwise the first readline() call can overwrite them. */
+        rl_readline_name = "monad";
+        rl_initialize();
         rl_attempted_completion_function = repl_completion;
         setup_electric_pairs();
+        rl_startup_hook = repl_readline_startup;
     }
 
     /* Readline needs \001/\002 wrappers around invisible escape sequences
@@ -3724,6 +4356,7 @@ void repl_run(void) {
 
     char *line;
     while (1) {
+        bool readline_submission = false;
         if (use_readline) {
             if (repl_setjmp(g_repl_input_escape) != 0) {
                 g_input_escape_armed = 0;
@@ -3739,6 +4372,7 @@ void repl_run(void) {
             }
             g_input_escape_armed = 1;
             line = readline(multiline ? "" : prompt);
+            readline_submission = true;
             g_input_escape_armed = 0;
             if (!line) break;
         } else {
@@ -3775,7 +4409,8 @@ void repl_run(void) {
         }
 
         bool line_blank = repl_line_is_blank_or_comment(line);
-        bool blank_terminator = multiline && line_blank;
+        bool blank_terminator = readline_submission ||
+                                (multiline && line_blank);
 
         /* Skip blank lines when not mid-expression */
         if (!multiline && line_blank) {

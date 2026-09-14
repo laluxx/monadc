@@ -1,0 +1,227 @@
+#+TITLE: CHIP-8 in Monad
+#+SUBTITLE: A small complete emulator built with the language as it already exists
+#+OPTIONS: toc:2 num:nil
+
+* What this is
+
+This directory is a deliberately straightforward CHIP-8 emulator written as a
+~how_to~ chapter.  It does not require a new effect, type-system extension,
+reader, macro facility, or compiler lowering.  The point is to have fun using
+Monad as a programming language.
+
+The implementation is split by responsibility rather than by abstraction for
+its own sake:
+
+#+begin_example
+Chip8.mon
+    |
+    +-- Rom.mon       program bytes
+    +-- Input.mon     host keyboard -> CHIP-8 keypad
+    +-- Opcodes.mon   fetch / decode / execute
+    +-- Machine.mon   registers, RAM, stack, timers, pixels
+    `-- Display.mon   CHIP-8 pixels -> Raylib window
+#+end_example
+
+For an implementation-first reading order, use:
+
+#+begin_example
+Machine.mon -> Input.mon -> Opcodes.mon -> Rom.mon -> Display.mon -> Chip8.mon
+#+end_example
+
+Each file starts with the smallest vocabulary it needs and progresses toward
+its public boundary.
+
+* Run the built-in demo
+
+The default source is a bundled animated ROM:
+
+#+begin_src monad
+define selected-rom -> RomSource
+  BuiltinDemo
+#+end_src
+
+Compile and run from this directory:
+
+#+begin_src sh
+monad Chip8.mon
+./Chip8
+#+end_src
+
+No external file is required.
+
+* Run a ROM
+
+Copy a ROM into this directory and change ~selected-rom~ to:
+
+#+begin_src monad
+define selected-rom -> RomSource
+  RomFile "game.ch8"
+#+end_src
+
+Only classic CHIP-8 opcodes are implemented.  Super-CHIP/XO-CHIP extensions are
+intentionally outside this chapter.
+
+* Keyboard
+
+The traditional hexadecimal keypad is mapped as follows:
+
+#+begin_example
+CHIP-8       Keyboard
+
+1 2 3 C      1 2 3 4
+4 5 6 D      Q W E R
+7 8 9 E      A S D F
+A 0 B F      Z X C V
+#+end_example
+
+* Instruction set
+
+The executor covers the classic set:
+
+- ~00E0~, ~00EE~
+- ~1nnn~, ~2nnn~
+- ~3xkk~, ~4xkk~, ~5xy0~, ~9xy0~
+- ~6xkk~, ~7xkk~
+- ~8xy0~, ~8xy1~, ~8xy2~, ~8xy3~, ~8xy4~, ~8xy5~, ~8xy6~, ~8xy7~, ~8xyE~
+- ~Annn~, ~Bnnn~, ~Cxkk~, ~Dxyn~
+- ~Ex9E~, ~ExA1~
+- ~Fx07~, ~Fx0A~, ~Fx15~, ~Fx18~, ~Fx1E~, ~Fx29~, ~Fx33~, ~Fx55~, ~Fx65~
+
+Unknown encodings stop the emulated CPU and leave the offending opcode in the
+machine fault field rather than silently doing something surprising.
+
+* Compatibility choices
+
+This example uses a small, explicit baseline rather than a large quirk matrix:
+
+- ~8xy6~ and ~8xyE~ shift ~Vx~;
+- ~Fx55~ and ~Fx65~ leave ~I~ unchanged;
+- ~Bnnn~ uses ~V0~;
+- drawing wraps at the 64x32 screen edges;
+- timers tick at 60 Hz;
+- the interpreter runs 12 instructions per display frame (720 Hz).
+
+Those choices keep every semantic decision visible.  A future compatibility
+layer can make them configurable without changing the machine architecture.
+
+* Monad style used here
+
+This revision intentionally follows the language rather than writing C-shaped
+Monad.
+
+Nullary operations are genuinely nullary:
+
+#+begin_src monad
+define cpu-cycle -> Int
+  ...
+
+run-cycles 12 ->
+  cpu-cycle
+  ...
+#+end_src
+
+There is no meaningless integer argument passed only to make a function call.
+At real effect boundaries, Unit is explicit instead:
+
+#+begin_src monad
+define open-display :: Int -io-> Int
+  _ -> ...
+
+open-display 0
+#+end_src
+
+Fixed-array reads are explicit applications such as ~(ram address)~ and
+~(registers index)~.  This both reads like indexed hardware access and avoids
+ambiguity for the dependent checker.
+
+Sequential mutation is also written sequentially.  The emulator does not use
+arithmetic identities such as ~status + (written - written)~ merely to force an
+order that the body already expresses.
+
+Tests follow the section layout used throughout the newer examples:
+
+#+begin_src monad
+tests
+  :decode:
+  assert-eq (opcode-family 0xd125)  0xd   "high nibble selects opcode family"
+  assert-eq (opcode-x 0xd125)       1     "x register nibble"
+  :decode:
+#+end_src
+
+* File tour
+
+** Machine.mon
+
+The hardware model.  It owns:
+
+- 4096 bytes of RAM;
+- V0-VF;
+- I, PC, SP;
+- the call stack;
+- delay and sound timers;
+- 64x32 XOR pixels;
+- the sixteen-key state;
+- the built-in 0-F font;
+- deterministic pseudo-random bytes.
+
+The rest of the emulator goes through small operations such as
+~write-register~, ~toggle-pixel~, and ~push-stack~ instead of reproducing
+storage rules.
+
+** Opcodes.mon
+
+The CPU chapter.  It starts with six tiny decode helpers and then proceeds in
+the same order as a CHIP-8 opcode table.  The hexadecimal families remain
+visible rather than disappearing behind an interpreter framework.
+
+The program counter advances before an instruction executes.  Calls therefore
+push the natural return address and skips add exactly one additional ~+2~.
+~Fx0A~ waits without a scheduler by moving PC back to the same instruction when
+no key is held.
+
+** Input.mon
+
+One table maps hexadecimal CHIP-8 keys to Raylib keyboard constants.  Opcode
+semantics see only ~key-down?~ and ~first-key-down~.
+
+** Display.mon
+
+A tiny immediate-mode renderer.  CHIP-8 remains 64x32; Raylib only scales each
+emulated pixel to a visible square and draws a small status bar.  The sound
+timer is represented by a ~BEEP~ indicator so timer semantics stay visible
+without introducing audio-generation infrastructure.
+
+** Rom.mon
+
+Owns both program sources. External files are streamed through the small Core
+POSIX descriptor boundary directly into program memory; the built-in demo is
+copied through that same memory boundary.
+
+** Chip8.mon
+
+The application.  It picks a ROM, resets the machine, opens the display, and
+per frame performs:
+
+#+begin_example
+refresh keys
+    -> run 12 CPU instructions
+    -> tick 60 Hz timers
+    -> draw framebuffer
+#+end_example
+
+There is intentionally almost no emulator logic in the entry point.
+
+* Things that would be fun to add later
+
+None of these are prerequisites for the emulator itself:
+
+- selectable compatibility profiles for historical interpreter quirks;
+- a tiny debugger panel with PC, I, V0-VF and the current opcode;
+- pause / single-step keys;
+- drag-and-drop ROM loading;
+- generated audio while the sound timer is nonzero;
+- Super-CHIP high-resolution mode;
+- instruction tracing to a file;
+- a small ROM conformance suite.
+
+They are application work, not reasons to redesign Monad.

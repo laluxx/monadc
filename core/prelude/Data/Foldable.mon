@@ -1,8 +1,8 @@
 ;;; Foldable.mon --- Folding abstractions
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "foldable fold keyed fold generic aggregation"
+:author   Laluxx
+:version  1.2.0
+:keywords foldable fold keyed fold generic aggregation
 
 ;;; Commentary:
 
@@ -14,9 +14,10 @@
 ;;; Code:
 
 import Data.Bool
+import Data.Semigroup
 
 module Data.Foldable
-  [Foldable foldr foldl fold-list-left
+  [Foldable foldr foldl foldMap fold-list-left
    FoldableWithKey foldMapWithKey foldrWithKey foldlWithKey
    sumWith productWith]
 
@@ -24,8 +25,12 @@ module Data.Foldable
 class Foldable t where
   foldr       :: (a -> b -> b) -> b -> t a -> b
   foldl       :: (b -> a -> b) -> b -> t a -> b
+  foldMap     :: Monoid m => (a -> m) -> t a -> m
   sumWith     :: a -> (a -> a -> a) -> t a -> a
   productWith :: a -> (a -> a -> a) -> t a -> a
+
+  foldMap transform values ->
+    foldr (lambda (value accumulated) (append (transform value) accumulated)) mempty values
 
   sumWith identity add values ->
     foldl add identity values
@@ -35,6 +40,7 @@ class Foldable t where
 
   ;; higher-kinded: t :: Type -> Type
   ;; minimal complete definition: foldr and foldl
+  ;; foldMap is derived once from the structure's right-fold order.
 
 
 method fold-list-left :: (b -> a -> b) -> b -> [a] -> b
@@ -54,23 +60,26 @@ instance Foldable Coll
 
 class Foldable t => FoldableWithKey t where
   type Key t
-  foldMapWithKey :: (Key t -> a -> m) -> t a -> m
+  foldMapWithKey :: Monoid m => (Key t -> a -> m) -> t a -> m
   foldrWithKey   :: (Key t -> a -> b -> b) -> b -> t a -> b
   foldlWithKey   :: (b -> Key t -> a -> b) -> b -> t a -> b
 
+  foldMapWithKey transform values ->
+    foldrWithKey
+      (lambda (key value accumulated) (append (transform key value) accumulated))
+      mempty
+      values
+
+  ;; minimal complete definition: foldrWithKey and foldlWithKey
   ;; Map-like structures should use their lookup key; indexed sequences should
   ;; use Int keys.
 
 
 tests
   :generic-numeric-folds:
-  assert-eq (sumWith 0 (lambda (x y) (+ x y)) (list 1 2 3 4)) 10 "Foldable sumWith Int"
-  assert-eq (sumWith 0.0 (lambda ([x : Float] [y : Float] -> Float) (+ x y)) (list 1.5 2.5)) 4.0 "Foldable sumWith Float"
-  assert-eq (productWith 1 (lambda (x y) (* x y)) (list 2 3 4)) 24 "Foldable productWith Int"
+  assert-eq (sumWith 0 (lambda (x y) (+ x y)) (list 1 2 3 4))                                    10  "Foldable sumWith Int"
+  assert-eq (sumWith 0.0 (lambda ([x : Float] [y : Float] -> Float) (+ x y)) (list 1.5 2.5))     4.0 "Foldable sumWith Float"
+  assert-eq (productWith 1 (lambda (x y) (* x y)) (list 2 3 4))                                  24  "Foldable productWith Int"
   assert-eq (productWith 1.0 (lambda ([x : Float] [y : Float] -> Float) (* x y)) (list 1.5 2.0)) 3.0 "Foldable productWith Float"
+  assert-eq (foldMap (lambda (x) x) (list "a" "b" "c")) "abc" "Foldable foldMap respects traversal order"
   :generic-numeric-folds:
-
-  :registration:
-  assert-eq 1 1 "Foldable registers Foldable"
-  assert-eq 1 1 "Foldable registers FoldableWithKey"
-  :registration:

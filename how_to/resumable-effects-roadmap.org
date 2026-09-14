@@ -1,0 +1,360 @@
+#+TITLE: Resumable Effects Roadmap
+#+SUBTITLE: Intent for Generator, Amb, and executable resumptions in Monad
+#+DATE: 2026-08-27
+#+OPTIONS: toc:2 num:nil
+
+* Purpose
+
+This file records the intended next direction for Monad's effect system so the
+idea is not lost while work continues elsewhere.
+
+The core observation is that Monad already contains most of the *semantic*
+groundwork for resumable algebraic effects:
+
+- effect rows and typed operations;
+- ~perform~ and ~handle~;
+- executable abortive handlers;
+- exact resumption quantities:
+  - ~0~ for abortive effects;
+  - ~1~ for one-shot resumptions;
+  - finite ~n~ for bounded multi-shot resumptions;
+  - ~omega~ for unrestricted resumptions;
+- quantitative handler checking;
+- deep-handler reasoning;
+- effect/handler metadata and portable proofs.
+
+The missing part is primarily the *executable control mechanism*: capturing,
+representing, invoking, and eventually duplicating resumable continuations.
+
+This should be developed through real examples rather than as an isolated
+compiler feature.
+
+* Why this direction fits Monad
+
+The effect system already distinguishes abortive and resumable operations in
+its calculus.  In particular, ~Core.Control.yield~ is declared with an
+unrestricted resumption quantity while existing policies can constrain how a
+particular handler uses that continuation.
+
+This separation is important:
+
+#+begin_example
+operation capability
+        |
+        | declares what resumptions are permitted
+        v
+resumption bound
+
+handler policy
+        |
+        | declares how the continuation is actually used
+        v
+handler usage
+#+end_example
+
+The natural next step is therefore not to redesign the effect system, but to
+make the resumable half executable.
+
+* Intended progression
+
+** Phase 1: Generator.mon
+
+Start with one-shot resumptions.
+
+The goal is to make a small generator/yield example force the compiler to
+capture a continuation and resume it exactly once.
+
+Conceptually:
+
+#+begin_src monad
+define numbers :: Generator Int
+  yield 10
+  yield 20
+  yield 30
+#+end_src
+
+and a consumer should be able to request successive values.
+
+The important implementation behavior is:
+
+#+begin_example
+perform yield
+     |
+     v
+capture continuation k
+     |
+     v
+handler receives value and k
+     |
+     v
+resume k ()
+     |
+     v
+continue the suspended computation
+#+end_example
+
+The quantitative type system should make illegal duplication of a one-shot
+continuation impossible.
+
+For example, a continuation with usage ~1~ must reject behavior equivalent to:
+
+#+begin_src monad
+resume k ()
+resume k ()
+#+end_src
+
+This phase should establish the executable semantics for resumption quantity
+~1~ before attempting general multi-shot continuations.
+
+** Phase 2: Amb.mon
+
+Once one-shot resumptions are sound and executable, use nondeterministic
+search to force multi-shot resumptions.
+
+The motivating surface program should remain ordinary Monad code:
+
+#+begin_src monad
+define answer :: Int
+  x = choose '(1 2 3 4 5)
+  y = choose '(1 2 3 4 5)
+  require (x * y = 12)
+  x + y
+#+end_src
+
+~choose~ should be an algebraic effect, not a compiler primitive.
+
+A search handler should capture the continuation at ~choose~ and resume it for
+each candidate value.
+
+Conceptually:
+
+#+begin_example
+perform choose
+      |
+      v
+capture continuation k
+      |
+      +--> resume k choice-1
+      |
+      +--> resume k choice-2
+      |
+      `--> resume k choice-3
+#+end_example
+
+This phase should force the implementation of finite multi-shot or unrestricted
+continuations, depending on the selected semantics.
+
+Useful examples after the primitive machinery works:
+
+- Cartesian search;
+- Pythagorean triples;
+- N-Queens;
+- a tiny maze/path search;
+- parser-style backtracking.
+
+The point is to make continuation duplication useful and visible rather than
+merely proving that it exists.
+
+** Phase 3: Async.mon
+
+After resumptions are robust, structured concurrency becomes a natural later
+consumer of the same machinery.
+
+Potential areas:
+
+- suspension and wakeup;
+- fibers;
+- cancellation;
+- structured lifetime;
+- scheduler-facing effects;
+- interaction between resumptions and resource ownership.
+
+This should not be attempted before Generator and Amb have made continuation
+semantics precise.
+
+* Compiler/runtime work expected
+
+The exact implementation can change, but the following capabilities will
+probably be required.
+
+** Continuation representation
+
+Introduce a typed internal representation for captured resumptions.
+
+Questions to settle:
+
+- Is the continuation represented directly in IR, through selective CPS, or by
+  another explicit control node?
+- Which stack frames are captured?
+- How are effect-handler boundaries represented?
+- How are captured values/environment slots stored?
+- What is the ownership/lifetime model?
+
+** Resume operation
+
+There must be an executable operation corresponding conceptually to:
+
+#+begin_src monad
+resume k value
+#+end_src
+
+The final surface syntax is not important yet.
+
+The important invariant is that the type/effect system knows:
+
+- the input type expected by the suspended operation;
+- the result type of the continuation;
+- the continuation's allowed usage quantity;
+- the effects produced by resuming it.
+
+** One-shot enforcement
+
+A continuation with resumption quantity ~1~ should have linear/affine behavior
+consistent with the rest of QTT.
+
+The implementation must prevent accidental reuse both statically and, where
+necessary, defensively at runtime.
+
+** Multi-shot continuations
+
+For finite ~n~ and ~omega~, the compiler/runtime must define what duplication
+means.
+
+Possible implementation strategies include:
+
+- cloning an explicit continuation object;
+- persistent continuation frames;
+- selective CPS where duplication is ordinary functional reuse;
+- another representation proven compatible with the quantitative rules.
+
+This decision should be driven by correctness first, then by runtime cost.
+
+** Selective CPS
+
+The existing design already points toward selective-CPS lowering.
+
+The intended property is that ordinary direct-style Monad code should remain
+ordinary direct-style code whenever possible.  Only computations that cross a
+resumable effect boundary should pay the continuation machinery cost.
+
+Avoid turning the whole language into CPS merely to support one feature.
+
+* Important semantic distinction to preserve
+
+Before executable resumptions are added, review the meanings of the existing
+quantities involved in handler elaboration.
+
+In particular, keep separate concepts for:
+
+- the resumption bound declared by the operation;
+- the number of times a particular handler actually resumes the continuation;
+- resource usage per resumption;
+- total captured-resource demand;
+- capture allowance.
+
+These quantities must not accidentally collapse into one value.
+
+A useful conceptual law is closer to:
+
+#+begin_example
+actual continuation demand
+  =
+handler resume usage
+  *
+captured resource usage per resume
+#+end_example
+
+while the operation's declared resumption quantity constrains which handler
+usages are legal.
+
+This matters much more once ~omega~ and finite multi-shot handlers become
+executable.
+
+* Non-goals for the first implementation
+
+Do not try to solve everything in Generator.mon.
+
+In particular, the first pass does not need:
+
+- unrestricted multi-shot continuations;
+- async scheduling;
+- delimited-control surface syntax beyond what handlers need;
+- continuation serialization;
+- exotic continuation reflection;
+- generalized call/cc;
+- whole-program CPS conversion.
+
+The first milestone is deliberately narrow:
+
+#+begin_quote
+A typed one-shot resumable algebraic effect can suspend direct-style Monad
+code, hand its continuation to a handler, and resume that continuation exactly
+once with correct QTT enforcement.
+#+end_quote
+
+If that works cleanly, the rest can grow from it.
+
+* Success criteria
+
+Generator.mon is successful when all of the following are true:
+
+- a resumable operation executes, not merely elaborates;
+- the handler receives a real continuation;
+- resuming that continuation continues at the correct program point;
+- nested handlers behave predictably;
+- effect rows remain correct across suspension/resumption;
+- one-shot usage is statically enforced;
+- resources captured by the continuation obey QTT constraints;
+- ordinary code outside resumable regions keeps its normal lowering;
+- tests cover invalid duplicate resume attempts;
+- tests cover handler nesting and escaping restrictions;
+- the example is pleasant enough to serve as documentation, not merely a test.
+
+Amb.mon is successful when:
+
+- the same continuation can legally be resumed multiple times when permitted;
+- each branch observes the correct captured environment;
+- branch-local mutation/resources follow explicit, documented semantics;
+- search/backtracking examples work without compiler magic;
+- continuation duplication is tested for both correctness and memory behavior.
+
+* Guiding principle
+
+Do not add resumable continuations as an isolated feature.
+
+Let a real example demand them.
+
+The intended arc is:
+
+#+begin_example
+AbortiveEffects.mon
+        |
+        v
+resumption quantity 0 is executable
+        |
+        v
+Generator.mon
+        |
+        v
+resumption quantity 1 becomes executable
+        |
+        v
+Amb.mon
+        |
+        v
+finite / omega multi-shot resumptions become executable
+        |
+        v
+Async.mon and other control abstractions
+#+end_example
+
+The compiler work should emerge from making each example complete, small,
+readable, and real.
+
+* Deferred
+
+This is intentionally *not* the next task.
+
+Keep the design in mind, but return to it only when there is appetite to push
+the effect implementation forward.  The semantic groundwork already present in
+Core should be preserved rather than replaced.

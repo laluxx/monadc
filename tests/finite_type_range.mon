@@ -1,0 +1,9 @@
+module Main
+
+type t = {1..23}
+
+define lower :: t
+  1
+
+define upper :: t
+  23

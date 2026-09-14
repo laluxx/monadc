@@ -157,6 +157,16 @@ Stable compatibility ID for the original receiver-relative guard decision.
 :END:
 An unconditional block clause terminates its preceding guarded alternatives.
 
+** Canonical glyph control flow
+:PROPERTIES:
+:ID: monadc.context.style.glyph-control-flow
+:END:
+The four canonical diagram shapes (inline subject, dropped multi-argument
+subject, nested descent, and catch-all leaf) compile and execute through the
+same receiver-relative guard semantics. Noncanonical use of =▶= is rejected,
+while glyphs inside strings and comments remain literal data. Regression:
+=python3 tests/test_wisp_glyph_control_flow.py -v=.
+
 * Wisp
 :PROPERTIES:
 :ID: monadc.context.wisp

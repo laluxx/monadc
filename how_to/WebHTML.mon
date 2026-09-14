@@ -3,7 +3,7 @@
 ;;; Commentary:
 
  This chapter constructs HTML without concatenating untrusted markup.
- `Web.HTML` owns both the typed HTML value and the indentation reader; the
+ =Web.HTML= owns both the typed HTML value and the indentation reader; the
  compiler contains no table of HTML elements or attributes.
 
 ;;; Code:

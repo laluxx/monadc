@@ -299,7 +299,7 @@ static int levenshtein(const char *a, const char *b)
 static const char *SUBCOMMANDS[] = {
     "new", "build", "run", "clean", "install",
     "test", "check", "lint", "trace", "debug", "lsp", "eval",
-    "repl", "jit", "spirv", "menu", "flags", "help", NULL
+    "repl", "jit", "spirv", "format", "help", NULL
 };
 
 static bool parse_optimization_flag(const char *arg, int *level)
@@ -564,6 +564,8 @@ static bool parse_common_flag(int argc, char **argv, int *index, CompilerFlags *
              !strcmp(arg, "-c"          ) || !strcmp(arg, "obj"       )) flags->emit_obj   = true;
     else if (!strcmp(arg, "--emit-json" ) || !strcmp(arg, "emit-json" )) flags->emit_json  = true;
     else if (!strcmp(arg, "--emit-typst") || !strcmp(arg, "emit-typst")) flags->emit_typst = true;
+    else if (!strcmp(arg, "--allow-implicit-effects") ||
+             !strcmp(arg, "allow-implicit-effects")) flags->allow_implicit_effects = true;
     else if (parse_bytecode_flag(arg, flags)) {}
     else if (parse_debug_flag(argc, argv, index, flags)) {}
     else if (!strcmp(arg, "--test"      ) || !strcmp(arg, "test"      )) flags->test_mode  = true;
@@ -672,6 +674,7 @@ static bool is_common_option_word(const char *arg)
            strcmp(arg, "obj") == 0 ||
            strcmp(arg, "emit-json") == 0 ||
            strcmp(arg, "emit-typst") == 0 ||
+           strcmp(arg, "allow-implicit-effects") == 0 ||
            strcmp(arg, "emit-bytecode") == 0 ||
            strcmp(arg, "bytecode") == 0 ||
            strcmp(arg, "bytecode-verify") == 0 ||
@@ -738,6 +741,13 @@ CompilerFlags parse_flags(int argc, char **argv) {
         argc = normalized_argc;
     }
 
+    /* Help is a suffix in the command grammar: `monad <command> help`.
+     * Keep the prefix spelling as a compatibility convenience. */
+    if (argc >= 3 && is_help_word(argv[argc - 1])) {
+        print_subcommand_menu(argv[1]);
+        exit(0);
+    }
+
     if (strcmp(argv[1], "trace") == 0) {
         if (argc < 3) {
             fprintf(stderr, "Usage: %s trace <pass> [file.mon] [options]\n", argv[0]);
@@ -771,7 +781,8 @@ CompilerFlags parse_flags(int argc, char **argv) {
         exit(0);
     }
     if (strcmp(argv[1], "menu") == 0 || strcmp(argv[1], "flags") == 0) {
-        exit(completion_menu_main(argv[0]));
+        fprintf(stderr, "Unknown command: %s\n", argv[1]);
+        exit(2);
     }
 
     if (strcmp(argv[1], "-d") == 0 || strcmp(argv[1], "--debug") == 0 ||
@@ -814,7 +825,7 @@ CompilerFlags parse_flags(int argc, char **argv) {
     if (strcmp(argv[1], "spirv") == 0) {
         if (argc < 3) {
             fprintf(stderr,
-                    "Usage: %s spirv <shader> -o <module.mon> [--name <binding>]\n",
+                    "Usage: %s spirv <shader> [-o <module.mon>] [--name <binding>]\n",
                     argv[0]);
             exit(1);
         }
@@ -836,11 +847,17 @@ CompilerFlags parse_flags(int argc, char **argv) {
     if (strcmp(argv[1], "run") == 0 || strcmp(argv[1], "build") == 0) {
         flags.mode = strcmp(argv[1], "run") == 0 ? CMD_RUN : CMD_BUILD;
         for (int i = 2; i < argc; i++) {
-            if (!parse_common_flag(argc, argv, &i, &flags)) {
+            if (parse_common_flag(argc, argv, &i, &flags)) {
+                continue;
+            } else if (strcmp(argv[1], "run") == 0 && !flags.input_file) {
+                flags.input_file = argv[i];
+                flags.run_after_compile = true;
+            } else {
                 fprintf(stderr, "Unknown flag: %s\n", argv[i]);
                 print_usage(argv[0]); exit(1);
             }
         }
+        if (flags.run_after_compile) flags.mode = CMD_COMPILE;
         return flags;
     }
     if (strcmp(argv[1], "clean")   == 0) { flags.mode = CMD_CLEAN;   return flags; }
@@ -868,6 +885,26 @@ CompilerFlags parse_flags(int argc, char **argv) {
             else {
                 fprintf(stderr, "Unknown lint argument: %s\n", argv[i]);
                 exit(1);
+            }
+        }
+        return flags;
+    }
+    if (strcmp(argv[1], "format") == 0) {
+        flags.mode = CMD_FORMAT;
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "--control-flow=glyph") == 0)
+                flags.format_ascii = false;
+            else if (strcmp(argv[i], "--control-flow=ascii") == 0)
+                flags.format_ascii = true;
+            else if (strcmp(argv[i], "--write") == 0)
+                flags.format_write = true;
+            else if (strcmp(argv[i], "--check") == 0)
+                flags.format_check = true;
+            else if (!flags.input_file)
+                flags.input_file = argv[i];
+            else {
+                fprintf(stderr, "Unknown format argument: %s\n", argv[i]);
+                exit(2);
             }
         }
         return flags;
@@ -1306,10 +1343,30 @@ void cmd_run(const CompilerFlags *flags) {
     printf("\n│\n├─ \x1b[32m✓\x1b[0m Build %s\n╰─▶ ", bi.exe_name);
     fflush(stdout);
 
-    rc = system(bi.out_path);
+    rc = cmd_run_executable(bi.out_path);
     printf("\n");
     build_info_free(&bi);
     exit(rc == 0 ? 0 : 1);
+}
+
+int cmd_run_executable(const char *path) {
+    if (!path || !path[0]) return 1;
+
+    char executable[2048];
+    bool has_separator = strchr(path, '/') != NULL || strchr(path, '\\') != NULL;
+#if defined(_WIN32)
+    snprintf(executable, sizeof(executable), "%s%s",
+             has_separator ? "" : ".\\", path);
+#else
+    snprintf(executable, sizeof(executable), "%s%s",
+             has_separator ? "" : "./", path);
+#endif
+    char quoted[4096];
+    if (!shell_quote_arg(executable, quoted, sizeof(quoted))) {
+        fprintf(stderr, "error: executable path is too long\n");
+        return 1;
+    }
+    return system(quoted) == 0 ? 0 : 1;
 }
 
 static void clean_ext_in_dir(const char *dir, const char *ext) {
@@ -1346,7 +1403,75 @@ static void rmdir_recursive(const char *path) {
     rmdir(path);
 }
 
+static bool clean_has_package(void) {
+    char path[1024] = "package.yaml";
+    for (int level = 0; level < 5; level++) {
+        if (access(path, F_OK) == 0) return true;
+        char parent[1024];
+        snprintf(parent, sizeof(parent), "../%s", path);
+        snprintf(path, sizeof(path), "%s", parent);
+    }
+    return false;
+}
+
+static bool clean_generated_suffix(const char *name) {
+    static const char *suffixes[] = {
+        ".mqti", ".o", ".ll", ".s", ".bc", NULL,
+    };
+    size_t length = strlen(name);
+    for (size_t i = 0; suffixes[i]; i++) {
+        size_t suffix_length = strlen(suffixes[i]);
+        if (length > suffix_length &&
+            strcmp(name + length - suffix_length, suffixes[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool clean_matches_source_executable(const char *directory,
+                                             const char *name,
+                                             const struct stat *st) {
+    if (!directory || !name || !st || !S_ISREG(st->st_mode) ||
+        !(st->st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
+        return false;
+    char source[1024];
+    int written = snprintf(source, sizeof(source), "%s/%s.mon", directory, name);
+    return written > 0 && (size_t)written < sizeof(source) &&
+        access(source, F_OK) == 0;
+}
+
+static size_t clean_standalone_directory(const char *directory) {
+    DIR *opened = opendir(directory);
+    if (!opened) return 0;
+    size_t removed = 0;
+    struct dirent *entry;
+    while ((entry = readdir(opened)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+        char path[1024];
+        int written = snprintf(
+            path, sizeof(path), "%s/%s", directory, entry->d_name);
+        if (written <= 0 || (size_t)written >= sizeof(path)) continue;
+        struct stat st;
+        if (lstat(path, &st) != 0 || !S_ISREG(st.st_mode)) continue;
+        if (!clean_generated_suffix(entry->d_name) &&
+            !clean_matches_source_executable(
+                directory, entry->d_name, &st))
+            continue;
+        if (remove(path) == 0) removed++;
+    }
+    closedir(opened);
+    return removed;
+}
+
 void cmd_clean(void) {
+    if (!clean_has_package()) {
+        size_t removed = clean_standalone_directory(".");
+        printf("╭─ Clean standalone directory\n");
+        printf("│  removed %zu generated artifact%s\n",
+               removed, removed == 1 ? "" : "s");
+        printf("╰─ \x1b[32m✓\x1b[0m sources preserved\n");
+        return;
+    }
     BuildInfo bi = resolve_build_info();
 
     printf("╭─ Clean %s\n", bi.pkg_name);

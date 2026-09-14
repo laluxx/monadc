@@ -1,0 +1,10 @@
+module Main
+
+define local-filter :: (a -> Bool) -> [a] -> [a]
+  _ [] -> []
+  predicate [value|rest] ->
+    if predicate value
+      then prepend value (local-filter predicate rest)
+      else local-filter predicate rest
+
+show (local-filter (lambda (x) x > 1) (list 1 2 3))

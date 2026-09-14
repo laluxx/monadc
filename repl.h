@@ -16,6 +16,7 @@ typedef struct {
     CodegenContext         cg;          // module/builder replaced per expr
     unsigned int           expr_count;
     InferEnv              *infer_env;   // persistent HM type environment
+    TypesPersistentState  *types_state; // aliases/refinements/finite types across inputs
 } REPLContext;
 
 void  repl_init(REPLContext *ctx);

@@ -62,6 +62,43 @@ its environment; quantitative usage describes what it requires from its
 environment. They interact through typing rules but are not forced into one
 algebra.
 
+* First-class explicit judgments
+:PROPERTIES:
+:ID: monadc.context.type-theory.first-class-judgments
+:CUSTOM_ID: first-class-judgments
+:CONTEXT_KIND: decision
+:CONTEXT_UPDATED: 2026-09-12
+:SOURCE: user-request,reader.c,infer.c,codegen.c
+:CONFIDENCE: high
+:END:
+
+[DEC id:dec.type-theory.explicit-judgment-surface-2026-09-12 date:2026-09-12 by:human src:user-request conf:high]
+  Monad accepts explicit typing judgments ={Γ} ⊢ e : T= and explicit
+  definitional-equality judgments ={Γ} ⊢ e ≡ e' : T=. Omitting the context
+  and turnstile retains the ordinary inferred-context language.
+
+[DEC id:dec.type-theory.explicit-context-boundary-2026-09-12 date:2026-09-12 by:human+codex src:user-request conf:high]
+  An explicit Γ is a checking boundary, not a request to add bindings to the
+  ambient environment. Every free term variable must occur in Γ; lambda-bound
+  variables remain locally available, and callable heads resolve through the
+  language environment. Thus ={} ⊢ e : T= is a closed-term check.
+
+[OBS id:obs.type-theory.judgment-ast-2026-09-12 src:reader.c conf:high]
+  The reader preserves judgments as =__judgment= AST forms containing the
+  context, left term, optional right term, and claimed type. The representation
+  survives JSON emission and quotation/macro traversal, allowing Lisp-layer
+  inspection and transformation as syntax.
+
+[OBS id:obs.type-theory.judgment-conversion-kernel-2026-09-12 src:infer.c conf:high]
+  Equality judgments presently decide beta reduction plus integer arithmetic
+  for the executable lambda-calculus fragment. Unsupported conversion forms
+  fail closed; each extension requires a native =.mon= regression fixture.
+
+[INF id:inf.type-theory.contextual-precedent-2026-09-12 from:dec.type-theory.explicit-context-boundary-2026-09-12 conf:medium]
+  Keeping Γ as structured syntax and enforcing its boundary follows the central
+  separation in contextual modal type theory and systems such as Beluga: an
+  object-language context is data, not an alias for mutable ambient scope.
+
 * Function Types
 :PROPERTIES:
 :ID: monadc.context.type-theory.arrows
@@ -111,6 +148,32 @@ QTT scheme carries correlated grades beside it. Migration must preserve HM
   elaborated effectful arrow uses the compact form =A -epsilon-> B=, for
   example =a -io.read-> b=. Ordinary inferred source remains =A -> B=; the
   effect spelling is shown only for intentional contracts or inspection.
+
+[DEC id:dec.type-theory.mandatory-inferred-effect-arrows-2026-08-30 src:user-request,env.c,tests/test_effect_arrow_syntax.py conf:high]
+  This decision supersedes the optional-annotation policy above for explicit
+  source signatures.  When inference proves that a stage is effectful, a plain
+  =A -> B= at that stage is rejected before code generation.  The diagnostic
+  reports the one-based arrow stage, the inferred row (or a stable lexical
+  =e= for an otherwise anonymous open row), and the exact =A -effect-> B=
+  replacement.  Pure plain arrows remain valid.  Regression contract:
+  =tests.test_effect_arrow_syntax.EffectArrowSyntaxTests.test_definition_requires_inferred_effect_on_plain_arrow=.
+
+[DEC id:dec.type-theory.implicit-effect-arrow-opt-out-2026-08-30 src:user-request,cli.c,env.c,tests/test_effect_arrow_syntax.py conf:high]
+  Mandatory labels remain the default language policy.  The common compiler
+  option =--allow-implicit-effects= (also =allow-implicit-effects=) disables
+  only the missing-label rejection; inference, effect contracts, and explicit
+  annotation validation remain active.  The option is accepted on the command
+  line and in configured default flags.
+
+[FIX id:fix.type-theory.mandatory-effect-core-migration-2026-08-30 date:2026-08-30 by:codex src:env.c,core/System/Posix/Term.mon,core/Data/Json.mon,tests/run_core.py conf:high]
+  The strict default was validated against every active Core and prelude test.
+  POSIX terminal wrappers now declare =foreign= on the arrow stage that invokes
+  =ioctl=; curried wrappers keep earlier application stages pure. Diagnostics
+  collapse open or multi-label internal row renderings to the legal lexical
+  suggestion =e= rather than emitting an unparseable compact arrow. The same
+  gate exposed and repaired an unrelated multiline named-layout constant in
+  =Data.Json=. Regression command: =./monad test core=, covering 46 modules and
+  763 assertions.
 
 [DEC id:dec.type-theory.core-owned-effect-vocabulary-2026-08-03 src:user-request,effects/README.org conf:high]
   Core owns the declarative effect vocabulary, operation signatures, handler
@@ -292,6 +355,16 @@ fields, and maturity prose alone do not complete a roadmap item.
   constructs join child effects; lambda construction is pure; direct lambda
   application includes its latent body effect. Verification independently
   re-derives the closed-row judgment from typed Core and rejects disagreement.
+
+[FIX id:fix.type-theory-applied-guard-lambda-effects-2026-09-11 date:2026-09-11 by:codex src:infer.c,how_to/Donut.mon,tests/test_effect_arrow_syntax.py conf:high]
+  Source effect validation distinguishes pure lambda construction from a fully
+  applied syntactic lambda, whose body executes and contributes its latent
+  effects. Wisp guard clauses lower through this IIFE shape, so guarded and
+  plain clauses now infer identical effects. Stateful Donut functions declare
+  and propagate =state.write= instead of relying on guard syntax to hide it.
+  The preferred concrete spelling =-state.writee->= is normalized by the
+  reader to the canonical =state.write= identity and also works during the
+  foundational bootstrap before nominal Core effect declarations are loaded.
 
 [FIX id:fix.type-theory.latent-effect-contracts-2026-08-01 date:2026-08-01 by:codex src:qtt/signature.c,qtt/signature.h,qtt/semantic_ir.c,qtt/module.c,tests/test_qtt_signature.py,tests/test_qtt_semantic_ir.py conf:high]
   Derived callable signatures own canonical closed latent-effect rows and bind
@@ -1271,3 +1344,272 @@ Regression contracts: =tests.test_core_io_effects.CoreIOTests.test_io_modules_ha
 requires the wildcard and rejects the misleading named =unit= binder;
 =tests.test_core_io_console.CoreIOConsoleTests.test_unit_value_can_be_passed_to_a_unit_domain=
 executes the Unit inhabitant through a function domain.
+* Indexed GADT Surface Foundation
+
+[DEC id:dec.type-theory.indexed-gadt-syntax date:2026-08-26 by:human]
+  Indexed data uses a where-free kind-and-constructor-signature form. Symbolic
+  constructors are first-class declaration names. The canonical core example is
+  =data Vec :: Nat -> Type -> Type= with =[] : Vec 0 t= and
+  =. : t -> Vec n t -> Vec (S n) t=.
+
+[FIX id:fix.type-theory.indexed-gadt-ast-2026-08-26 date:2026-08-26 by:codex src:reader.c,reader.h,dep.c,core/prelude/Data/Nat.mon,core/prelude/Data/Vec.mon,tests/codegen/branches/data-layout/adt-constructors/atom.type.dep.indexed-vec.syntax conf:high]
+  Data AST nodes now retain their kind signature and each constructor's full
+  type and indexed result. The dependent environment registers the declared
+  kind and constructor result application instead of discarding indices.
+  Branch-local equality refinement and impossible-constructor elimination are
+  the remaining semantic step for full Idris-style dependent pattern matching.
+
+[FIX id:fix.type-theory.indexed-gadt-coverage-2026-08-27 date:2026-08-27 by:codex src:dep.c,pmatch.c,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-gadt.impossible-elimination,tests/codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.missing-possible,tests/codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.invalid-result conf:high]
+  Indexed coverage now unifies each constructor result with the annotated
+  scrutinee family before constructing obligations. Impossible constructors do
+  not need clauses; possible constructors do. Constructor declarations must
+  return their declared family at the arity determined by its kind. The
+  symbolic vector pattern =[. x xs]= is represented as constructor =.= rather
+  than as a collection pattern.
+
+[TODO id:todo.type-theory.indexed-gadt-branch-evidence date:2026-08-27 src:dep.c,infer.c]
+  Full Idris-level GADT elaboration still requires branch-local equality
+  evidence to flow into term checking, shared implicit constructor binders,
+  strict positivity and universe checks, inaccessible patterns, and interface
+  serialization of indexed constructor schemes. Index-aware coverage alone is
+  not evidence that these obligations have been implemented.
+
+[FIX id:fix.type-theory.dependent-core-foundation-2026-08-27 date:2026-08-27 by:codex src:dep.c,core/prelude/Data/Nat.mon,core/prelude/Data/Fin.mon,core/prelude/Data/Vec.mon,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-fin.impossible-zero,tests/codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.nat-zero-missing conf:high]
+  The initial dependent core hierarchy now contains =Nat=, =Fin=, and =Vec=.
+  Natural index syntax treats =0=, =zero=, and =Z= as the same zero normal
+  form, and =succ= and =S= as the same successor head during indexed
+  constructor unification. This makes the canonical =[] : Vec 0 t= spelling
+  participate correctly in coverage rather than becoming accidentally
+  impossible. The existing kernel equality transport and natural eliminator
+  are now reachable from surface terms as =(subst h P pa)= and
+  =(nat-elim P pz ps n)=; equality formation also checks both endpoints
+  against its explicitly declared carrier.
+
+[TODO id:todo.type-theory.dependent-core-library-2026-08-27 src:dep.c,core/prelude/Data]
+  Do not represent derived equality operations as unconstrained placeholder
+  globals. Give =sym=, =trans=, and =cong= checked universe-polymorphic schemes
+  (or checked core definitions), then add dependent records/Sigma library
+  syntax, =Dec=, =Void= elimination, positivity, termination, and totality
+  checking. These are required before describing the implementation as an
+  Idris-level dependent language rather than a sound incremental foundation.
+
+[FIX id:fix.type-theory.indexed-head-static-rejection-2026-08-27 date:2026-08-27 by:codex src:core/prelude/Data/Vec.mon,tests/codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.impossible-application conf:high]
+  =vec-head : Vec (S n) t -> t= is accepted with only the cons clause because
+  indexed coverage proves the zero constructor impossible. Conversely,
+  applying it to =[]= is a compile-time type error; the regression contract
+  ensures this never degrades into a runtime partiality check.
+
+[TODO id:todo.type-theory.dependent-clause-elaboration-2026-08-27 src:dep.c,pmatch.c,infer.c]
+  Pattern-clause bodies must be elaborated under contexts extended by their
+  constructor arguments and the equalities obtained by unifying constructor
+  results with scrutinee indices. Indexed field projections and expected-type
+  resolution now cover first-order branch results such as =tail= and reject
+  =vec-head []= in the dependent pass. Explicit equality hypotheses,
+  multi-scrutinee refinement, nested dependent patterns, and proof terms for
+  impossible cases still require a clause elaborator over the original pattern
+  matrix rather than relying on projection-based runtime desugaring.
+
+[FIX id:fix.type-theory.indexed-field-refinement-2026-08-27 date:2026-08-27 by:codex src:dep.c,core/prelude/Data/Vec.mon,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-gadt.impossible-elimination,tests/codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.impossible-application conf:high]
+  Declaration type applications are parsed as one grouped form, preserving
+  every index instead of silently retaining only the family head. GADT field
+  projections now require the constructor's indexed result as their domain.
+  Pattern desugaring therefore transports constructor-result refinement into
+  branch bodies: =vec-tail= checks as =Vec (S n) t -> Vec n t=. Empty brackets
+  are resolved bidirectionally as constructor =[]= when an indexed expected
+  type is present, producing a dependent diagnostic for =vec-head []= that
+  reports =Vec 0 t= versus =Vec (S n) t= before the HM collection fallback.
+
+[FIX id:fix.type-theory.strict-positivity-2026-08-27 date:2026-08-27 by:codex src:dep.c,tests/codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.indexed-gadt.negative-recursion conf:high]
+  Indexed data constructors are checked for strict positivity before entering
+  the dependent environment. A recursive family occurrence to the left of a
+  function arrow is rejected, preventing negative encodings such as
+  =MkBad : (Bad t -> t) -> Bad t=. Direct recursive applications remain valid.
+  Recursive occurrences nested beneath an unrelated type constructor are
+  conservatively rejected until that constructor has declared, checked
+  variance; accepting unknown variance would compromise consistency.
+
+[FIX id:fix.type-theory.indexed-module-boundary-2026-08-27 date:2026-08-27 by:codex src:main.c,pmatch.c,pmatch.h,codegen.c,dep.c,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-vec.imported-core conf:high]
+  Exporting an ADT exports its constructors and the typed projection helpers
+  required by pattern elaboration. Internal projection symbols hex-escape
+  symbolic constructor bytes, so constructor =.= cannot be misread as a module
+  qualifier. Imported =Data.Vec= therefore supports =[]=, =[. x xs]=,
+  =vec-head=, and =vec-tail= through both workspace and installed-core module
+  resolution. The public installed verification is =monad check= on a source
+  outside the repository importing =Data.Nat= and =Data.Vec=.
+
+[FIX id:fix.type-theory.dependent-legacy-adt-boundary-2026-08-27 date:2026-08-27 by:codex src:dep.c,core/Text/Format.mon,core/Text/Parser.mon,how_to/Parse.mon conf:high]
+  Dependent type application is enabled only for families whose registered
+  kind is a Pi type. Legacy parameterized declarations such as
+  =data ParseReply a= remain owned by HM instead of being reinterpreted as
+  indexed families. Atomic lambda annotations retain their established parse
+  path, while grouped parsing is restricted to indexed data kinds,
+  constructor signatures, results, and fields. Coverage treats a guarded
+  constructor clause ending in =otherwise= (lowered to =True=) as total. The
+  deployment-topology regression is the exact command
+  =monad Parse.mon && ./Parse= from =how_to/=.
+
+[FIX id:fix.type-theory.indexed-infix-patterns-2026-08-27 date:2026-08-27 by:codex src:pmatch.c,reader.c,wisp.c,core/prelude/Data/Vec.mon,tests/codegen/branches/data-layout/adt-constructors/atom.type.dep.indexed-vec.syntax,tests/test_core_standalone_compile.py conf:high]
+  Binary symbolic constructors have the same infix spelling in patterns as in
+  expressions: =[x . xs]= is equivalent to the prefix form =[. x xs]= and
+  binds the constructor's two fields. A column-one =| prose= line is
+  documentation and is erased before Wisp lowering and direct reader parsing;
+  indented =|= remains available for pattern guards. The canonical core
+  =Data.Vec= module and the focused indexed-Vec fixture exercise these forms.
+
+[FIX id:fix.type-theory.indexed-receiver-methods-2026-08-27 date:2026-08-27 by:codex src:wisp.c,main.c,codegen.c,core/prelude/Data/Vec.mon,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-vec.imported-core conf:high]
+  Unguarded top-level method clauses remain ordinary exhaustive clauses rather
+  than being rewritten to a synthetic =True= guard. Exporting a nominal type
+  also exports its =Type.method= implementations, so an imported indexed value
+  supports receiver syntax such as =value.head= and =value.tail=. Receiver
+  calls use the imported function's actual LLVM signature instead of the
+  primitive-method i64 ABI, preserving pointer-represented ADT arguments and
+  dependent return annotations across module boundaries.
+[FIX id:fix.type-theory.indexed-hkt-functor-2026-08-27 date:2026-08-27 by:codex src:reader.c,dep.c,dep.h,infer.c,env.c,env.h,main.c,codegen.c,typeclass.c,types.c,pmatch.c,core/prelude/Data/Vec.mon,tests/codegen/branches/control-flow/pattern-match/atom.type.dep.indexed-vec.imported-core conf:high]
+  Applied instance heads such as =Functor (Vec n)= are parsed structurally and
+  receive collision-free dictionary symbols. Constructor HM schemes are
+  published before definitions, including symbolic constructors that shadow
+  ordinary operators. HM erases indexed arguments only for registered indexed
+  families while dependent unification remains responsible for their proof
+  equalities. Methods retain their original clause matrices, so indexed
+  coverage survives method lowering. =Vec.map= now implements the canonical
+  Functor contract once; the instance delegates through receiver dispatch.
+  Fresh-home standalone core compilation, imported direct/receiver/Functor
+  mapping, impossible-constructor coverage, and =how_to/Parse.mon= all check.
+* User-defined type and term notation
+
+Surface notation can be owned by a core module instead of naming a compiler
+builtin.  A declaration such as =type-syntax {_} Set= elaborates ={a}= to
+=Set a= in type positions.  The corresponding
+=term-syntax {_} empty-set from-list filter-set= declaration lowers empty
+literals, finite presentations, and bounded comprehensions to ordinary core
+functions.  The declarations are scoped through module imports; the compiler
+knows the notation protocol, not the semantics of =Set=.
+
+The reference =Data.Set= is therefore the finite-list presentation quotient by
+permutation and duplication.  Constructors such as =image= and =union= may
+retain duplicates and need no result =Eq= constraint.  Membership, extensional
+equality, cardinality, intersection, and difference are the operations that
+legitimately request equality evidence.  Native runtime sets remain available
+as a representation/optimization path, not as the definition of the type.
+
+Reader-syntax expression holes use =$=, while =_= remains the operator-spacing
+metavariable.  Thus a one-expression circumfix rule is declared as
+=|$| cardinality= and used as =|values|=.  Keeping these roles distinct avoids
+making a spacing marker ambiguously mean an arbitrary typed expression.
+
+Nullary typeclass members are source values even though each concrete
+implementation is a zero-argument backend function.  Within a constrained
+generic function they may be invoked explicitly, as =(universe)=;
+result-directed specialization then selects the concrete instance.  The
+erased generic body carries only an ABI-correct placeholder, so this mechanism
+does not move class semantics into the runtime.
+[FIX id:fix.type-theory.local-nominal-republish-2026-09-11 date:2026-09-11 by:codex src:main.c,tests/test_how_to_examples.py conf:high]
+  Recursive import compilation clears transient HM type aliases and nominal
+  names.  After imports finish, the current compilation unit must republish
+  every local =data= name before dependent checking and code generation.
+  Otherwise an annotated top-level ADT value is stored as =?= and fails when a
+  later function expects =__type_Name=; layout fields using that same ADT also
+  become unknown.  The Scheme how-to compile/run regression retains this
+  declaration-lifecycle contract.
+[DEC id:dec.type-theory.first-class-judgment-gamma-sigma-2026-09-13 src:user-request,TODO.org,dep.h,dep.c,env.c,codegen.c,repl.c conf:high]
+  Surface judgments elaborate through the dependent core's existing context
+  model: =DepCtx= is the local telescope Gamma and =DepEnv= is the global
+  signature Sigma. Explicit ={x: A} ⊢ e : B= replaces only Gamma; it does
+  not hide globally declared constants in Sigma. Assumptions are rigid inputs
+  to checking and are never re-inferred from their uses. Typing, term equality,
+  type formation, and type equality all use the same bidirectional checker and
+  NbE conversion in files and in the REPL. Open judgments erase to Unit at
+  runtime because a hypothetical term containing Gamma variables has no
+  runtime environment from which those variables could be loaded.
+
+[FIX id:fix.type-theory.first-class-judgments-2026-09-13 date:2026-09-13 by:codex src:reader.c,dep.h,dep.c,env.h,env.c,codegen.c,repl.c,tests/codegen/branches/type-system/judgments,tests/codegen/errors/infer/judgments conf:high]
+  The explicit judgment forms =Gamma ⊢ e : A=, =Gamma ⊢ e1 ≡ e2 : A=,
+  =Gamma ⊢ A : Type=, and =Gamma ⊢ A ≡ B : Type= are parsed as
+  structured expressions and checked by one dependent-core entry point.
+  Native Monad regression fixtures establish positive derivations and rejection
+  of absent assumptions, contradictory assumptions, false typing claims, and
+  failed term/type conversion.
+** Colon/set-builder disambiguation
+:PROPERTIES:
+:ID: fix.judgment.comprehension-colon-disambiguation-2026-09-14
+:END:
+
+The shared prefix ={x : T}= denotes a set comprehension only when the same
+outer brace contains a top-level =|=.  Without that separator it is an
+assumption context and may be followed by =⊢=.  Nested braces in a bounded
+comprehension domain do not affect this decision.  Regression:
+=tests/explicit_judgment_colon_disambiguation.mon=.
+
+** Finite ranges as types
+:PROPERTIES:
+:ID: feature.type.finite-range-2026-09-14
+:END:
+
+A closed integral range in a finite type declaration is its extensional set
+of singleton inhabitants: =type t = {1..23}= is equivalent to listing the 23
+integer members.  The declaration equals sign is punctuation, and the REPL
+normalizes it before Wisp form counting.  Associated-type equations inside
+classes remain untouched.  Regression: =tests/finite_type_range.mon=.
+
+** Reified finite types and typed lambda binders
+:PROPERTIES:
+:ID: feature.type.reified-finite-type-typed-lambda-2026-09-14
+:END:
+
+A finite type declaration contributes both a type-level judgment
+=t : Type= and an extensional term-level reflection of its inhabitants.
+Consequently evaluating =t= yields its finite set and =*context*= includes
+=t : Type=.  Lowercase type names remain legal for mathematical notation, but
+produce a style warning because nominal type names conventionally begin with
+a capital letter.
+
+The surface binder =λx : T. e= elaborates to the ordinary annotated lambda
+=(lambda ([x : T]) e)=, so it shares the same inference, dependent checking,
+and code generation paths in files and in the REPL.  Term and type namespaces
+remain distinct: in =λt : t. t= the annotation resolves the declared type
+=t=, while the body resolves the term binder.  Regression:
+=tests/first_class_finite_type_typed_lambda.mon=.
+
+** First-class context-free typing judgments
+:PROPERTIES:
+:ID: feature.type.first-class-implicit-judgment-2026-09-14
+:END:
+
+Colon has three deliberately distinct grammatical roles.  =name = e= is an
+ordinary definition; =name : T = e= is a typed definition whose declaration
+head retains =T=; and =e : T= in expression position constructs an
+=AST_JUDGMENT=.  Assignment binds less tightly than the latter, hence
+=proof = e : T= parses as =proof = (e : T)=.  Explicit contextual judgments
+and context-free judgments share this node, with the latter carrying the empty
+context.
+
+The dependent kernel checks the claimed type with its existing bidirectional
+checking and definitional equality.  Successful checking issues a sealed
+derivation, which code generation consumes exactly once to construct a
+runtime =Proof= value.  HM inference reports =Proof J= rather than the claimed
+type =T=; the checked expression is not returned or erased to =Unit=.  Proofs
+therefore use the ordinary value paths for binding, arguments, returns,
+equality, display, and homogeneous containers.  AST cloning, freeing,
+printing, JSON serialization, file compilation, and REPL evaluation all know
+the dedicated node.  Regressions:
+=tests/first_class_implicit_judgment.mon=,
+=tests/standalone_implicit_judgment.mon=, and
+=tests/invalid_implicit_judgment.mon=.
+
+Bracketed Unicode binders are accepted as surface parameter-list notation:
+=λ[x]. e= elaborates to =λx. e=.  This does not change the established meaning
+of =[T]= as a collection type; the type of =λ[x]. x= is =T -> T=, not =[T]=.
+
+[FIX id:fix.type-theory.lambda-ascii-and-collection-diagnostic-2026-09-14 date:2026-09-14 by:codex src:reader.c,dep.c,tests/ascii_lambda_literal.mon,tests/invalid_lambda_collection_judgment.mon conf:high]
+  ASCII =\x. x= and Unicode =λx. x= produce the same lambda token and AST;
+  this is a lexical alias rather than a second abstraction construct.  When a
+  lambda is falsely claimed to inhabit =[A]=, the dependent diagnostic states
+  the relevant distinction: lambdas inhabit function types such as =A -> B=,
+  while =[A]= denotes =Coll A=.  The rigid-Gamma hint is reserved for failures
+  involving an actual explicit assumption.
+
+[FIX id:fix.type-theory.runtime-polymorphic-evidence-values-2026-09-14 date:2026-09-14 by:codex src:codegen.c,tests/polymorphic_identity_values.mon conf:high]
+  Parametric functions that become ordinary values use one boxed runtime
+  representation at their unspecialized boundary.  Their polymorphic source
+  scheme remains available for concrete monomorphization, but sound execution
+  never depends on every higher-order flow being statically specialized.

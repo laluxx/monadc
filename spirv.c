@@ -209,16 +209,30 @@ static char *binding_name_from_source(const char *path) {
 }
 
 static char *output_name_from_source(const char *path) {
-    char *stem = binding_name_from_source(path);
-    if (!stem) return NULL;
-    stem[0] = (char)toupper((unsigned char)stem[0]);
-    for (char *cursor = stem; *cursor; cursor++)
-        if (*cursor == '-') *cursor = '_';
-    size_t length = strlen(stem);
-    char *output = malloc(length + 5);
-    if (output) snprintf(output, length + 5, "%s.mon", stem);
-    free(stem);
-    return output;
+    const char *base = path_basename(path);
+    if (!base || !base[0]) return NULL;
+    /* Keep the shader stage in the derived module name so fragment and
+     * vertex sources never collide: Triangle.frag -> TriangleFrag.mon and
+     * Triangle.vert -> TriangleVert.mon. */
+    const char *dot = strrchr(base, '.');
+    int has_extension = dot && dot != base;
+    size_t stem_length = has_extension ? (size_t)(dot - base) : strlen(base);
+    const char *extension = has_extension ? dot + 1 : NULL;
+    size_t extension_length = has_extension ? strlen(extension) : 0;
+    if (stem_length == 0) return NULL;
+    size_t length = stem_length + extension_length;
+    char *name = malloc(length + 5);
+    if (!name) return NULL;
+    memcpy(name, base, stem_length);
+    if (has_extension) {
+        memcpy(name + stem_length, extension, extension_length);
+        name[stem_length] = (char)toupper((unsigned char)name[stem_length]);
+    }
+    name[0] = (char)toupper((unsigned char)name[0]);
+    for (size_t index = 0; index < length; index++)
+        if (name[index] == '-') name[index] = '_';
+    memcpy(name + length, ".mon", 5);
+    return name;
 }
 
 int spirv_write_monad_module(const char *source_path,
@@ -288,8 +302,8 @@ int spirv_write_monad_module(const char *source_path,
 
     fprintf(output, ";;; %s --- SPIR-V embedded from %s\n\n",
             path_basename(destination), path_basename(source_path));
-    fprintf(output, "module %s\n\n\n", module_name);
-    fprintf(output, "define %s-size :: Int\n  %zu\n\n\n",
+    fprintf(output, "module %s\n\n", module_name);
+    fprintf(output, "define %s-size :: Int %zu\n\n",
             name, count * sizeof(uint32_t));
     fprintf(output, "define %s :: [%zu U32]\n[\n", name, count);
     for (size_t index = 0; index < count; index++) {

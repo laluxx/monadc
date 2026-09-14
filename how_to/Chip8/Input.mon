@@ -1,0 +1,77 @@
+;;; Input.mon --- CHIP-8 keypad mapped onto a desktop keyboard
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "how-to chip8 input keypad raylib"
+
+;;; Commentary:
+
+ CHIP-8 programs see a hexadecimal keypad:
+
+     1 2 3 C          1 2 3 4
+     4 5 6 D    ->    Q W E R
+     7 8 9 E          A S D F
+     A 0 B F          Z X C V
+
+ The left diagram is the original machine; the right diagram is the host
+ keyboard.  Nothing in the opcode executor needs to know that mapping.
+
+;;; Code:
+
+import Machine
+
+module Input
+  [refresh-keys first-key-down]
+
+include <raylib.h>
+
+
+;;; Key map
+
+define host-key :: Int -> Int
+  0x0 -> KEY_X
+  0x1 -> KEY_ONE
+  0x2 -> KEY_TWO
+  0x3 -> KEY_THREE
+  0x4 -> KEY_Q
+  0x5 -> KEY_W
+  0x6 -> KEY_E
+  0x7 -> KEY_A
+  0x8 -> KEY_S
+  0x9 -> KEY_D
+  0xa -> KEY_Z
+  0xb -> KEY_C
+  0xc -> KEY_FOUR
+  0xd -> KEY_R
+  0xe -> KEY_F
+  _   -> KEY_V
+
+
+;;; Host -> CHIP-8 state
+
+define refresh-key :: Int -io-> Int
+  key -> set-key key (IsKeyDown (host-key key))
+
+
+define refresh-keys-from :: Int -io-> Int
+  key | >= key-count -> 0
+  key ->
+    refresh-key key
+    refresh-keys-from (key + 1)
+
+
+define refresh-keys :: Int -io-> Int
+  _ -> refresh-keys-from 0
+
+
+;;; Key queries
+
+;; -1 means that no CHIP-8 key is currently held.
+define first-key-down-from :: Int -> Int
+  key | >= key-count  -> 0 - 1
+  key | key-down? key -> key
+      | otherwise     -> first-key-down-from (key + 1)
+
+
+define first-key-down -> Int
+  first-key-down-from 0

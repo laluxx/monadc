@@ -84,6 +84,11 @@ Type *infer_freshen_annotation_vars(InferCtx *ctx, Type *t,
             : type_unknown();
         return ret;
     }
+    case TYPE_SET:
+        return type_set_of(t->element_type
+            ? infer_freshen_annotation_vars(ctx, t->element_type,
+                                             from, to, count)
+            : NULL);
     case TYPE_ARR: {
         Type *ret = type_arr(t->arr_element_type
                                  ? infer_freshen_annotation_vars(ctx, t->arr_element_type,
@@ -373,7 +378,8 @@ static Type *subst_apply_depth(Substitution *s, Type *t, int depth) {
 
     case TYPE_OPTIONAL:
     case TYPE_PTR:
-    case TYPE_COLL: {
+    case TYPE_COLL:
+    case TYPE_SET: {
         if (!t->element_type) return t;
         Type *inner = subst_apply_depth(s, t->element_type, depth + 1);
         if (inner == t->element_type) return t;
@@ -682,6 +688,20 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
      * compiler truth representation used by primitive operations. */
     if (type_is_bool(a) && type_is_bool(b)) return true;
 
+    /* The runtime set representation and the surface constructor application
+     * `{a}` denote the same type. Preserve and relate the element index rather
+     * than erasing a bound set literal to the unparameterized ground Set. */
+    if (a->kind == TYPE_SET && b->kind == TYPE_APP &&
+        b->app_constructor && strcmp(b->app_constructor, "Set") == 0) {
+        return !a->element_type || !b->app_arg ||
+            infer_unify_one(ctx, a->element_type, b->app_arg, line, col);
+    }
+    if (b->kind == TYPE_SET && a->kind == TYPE_APP &&
+        a->app_constructor && strcmp(a->app_constructor, "Set") == 0) {
+        return !b->element_type || !a->app_arg ||
+            infer_unify_one(ctx, b->element_type, a->app_arg, line, col);
+    }
+
     // Both ground — must match structurally
     if (a->kind != b->kind) {
         /* A literal's ground representation may be checked against a finite
@@ -912,6 +932,20 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
             if (a->app_constructor && b->app_constructor &&
                 strcmp(a->app_constructor, b->app_constructor) == 0) {
                 /* Same constructor: unify arguments */
+                if (a->app_arg && b->app_arg && ctx->dctx &&
+                    dep_is_indexed_family(ctx->dctx, a->app_constructor) &&
+                    a->app_arg->kind == TYPE_LIST &&
+                    b->app_arg->kind == TYPE_LIST &&
+                    a->app_arg->list_count > 0 && b->app_arg->list_count > 0) {
+                    /* Indices are compile-time evidence and are checked by
+                     * dependent unification.  HM only relates the final,
+                     * runtime type parameter. */
+                    return infer_unify_one(
+                        ctx,
+                        a->app_arg->list_types[a->app_arg->list_count - 1],
+                        b->app_arg->list_types[b->app_arg->list_count - 1],
+                        line, col);
+                }
                 if (a->app_arg && b->app_arg)
                     return infer_unify_one(ctx, a->app_arg, b->app_arg, line, col);
                 return true;
@@ -999,6 +1033,11 @@ static bool infer_unify_one_internal(InferCtx *ctx, Type *a, Type *b, int line, 
 
     /* Recurse for compound types */
     switch (a->kind) {
+    case TYPE_SET:
+        if (a->element_type && b->element_type)
+            return infer_unify_one(ctx, a->element_type, b->element_type,
+                                   line, col);
+        return true;
     case TYPE_LIST:
         if (a->list_count == 1 && b->list_count > 1) {
             for (int i = 0; i < b->list_count; i++) {
@@ -3022,8 +3061,23 @@ static bool infer_source_constrain_stage_label(
             return false;
         }
     } else if (ambiguous || (name && strchr(name, '.'))) {
-        judgment->append_failed = true;
-        return false;
+        /* Foundational effects may be validated before Core.Effect has
+         * populated the nominal declaration registry. Their established
+         * dotted surface names still denote the same bootstrap atoms. */
+        if (name && strcmp(name, "state.write") == 0) {
+            InferCtx *ctx = judgment->ctx;
+            QttEffectRow *declared = qtt_effect_extend(
+                ctx->effect_arena, name,
+                qtt_effect_empty(ctx->effect_arena));
+            if (!declared || !qtt_effect_constrain_equal(
+                    judgment->constraints, row, declared)) {
+                judgment->append_failed = true;
+                return false;
+            }
+        } else {
+            judgment->append_failed = true;
+            return false;
+        }
     }
     return infer_source_constrain_named_stage(
         judgment, name, row, prior_names, prior_rows, prior_count);
@@ -3380,6 +3434,30 @@ static QttEffectRow *infer_source_effect_expr(
     const char *head = ast->list.count && ast->list.items[0] &&
             ast->list.items[0]->type == AST_SYMBOL
         ? ast->list.items[0]->symbol : NULL;
+
+    /* Constructing a lambda is pure, but fully applying a syntactic lambda
+     * executes its body. Guard-clause lowering uses exactly this IIFE shape;
+     * treating the head as merely a pure child used to hide state.write from
+     * guarded definitions while the equivalent plain clause was rejected. */
+    if (ast->list.count > 0 && ast->list.items[0] &&
+        ast->list.items[0]->type == AST_LAMBDA) {
+        const AST *lambda = ast->list.items[0];
+        size_t supplied = ast->list.count - 1;
+        for (size_t i = 1; summary && i < ast->list.count; i++) {
+            QttEffectRow *argument = infer_source_effect_expr(
+                judgment, ast->list.items[i]);
+            summary = infer_source_effect_join(judgment, summary, argument);
+        }
+        if (supplied >= (size_t)lambda->lambda.param_count) {
+            for (int i = 0; summary && i < lambda->lambda.body_count; i++) {
+                QttEffectRow *body = infer_source_effect_expr(
+                    judgment, lambda->lambda.body_exprs[i]);
+                summary = infer_source_effect_join(judgment, summary, body);
+            }
+        }
+        return summary;
+    }
+
     if (head && strcmp(head, "perform") == 0) {
         if (ast->list.count != 3 || !ast->list.items[1] ||
             ast->list.items[1]->type != AST_SYMBOL ||
@@ -3869,6 +3947,102 @@ static bool infer_type_contains_unknown_or_var(Type *t) {
     }
 }
 
+static bool judgment_name_is_bound(const AST *node, const char *name) {
+    if (!node || !name || node->type != AST_SET) return false;
+    for (size_t i = 0; i < node->set.element_count; i++) {
+        AST *entry = node->set.elements[i];
+        if (!entry || entry->type != AST_SYMBOL || !entry->symbol) continue;
+        size_t n = strlen(entry->symbol);
+        if (n && entry->symbol[n - 1] == ':' &&
+            strlen(name) == n - 1 && strncmp(entry->symbol, name, n - 1) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool judgment_term_is_closed(const AST *term, const AST *gamma,
+                                    const AST *lambda_scope, bool head) {
+    if (!term) return true;
+    if (term->type == AST_SYMBOL) {
+        if (head || judgment_name_is_bound(gamma, term->symbol)) return true;
+        if (strcmp(term->symbol, "True") == 0 ||
+            strcmp(term->symbol, "False") == 0 ||
+            strcmp(term->symbol, "nil") == 0 ||
+            strcmp(term->symbol, "undefined") == 0) return true;
+        if (lambda_scope && lambda_scope->type == AST_LAMBDA)
+            for (int i = 0; i < lambda_scope->lambda.param_count; i++)
+                if (strcmp(lambda_scope->lambda.params[i].name, term->symbol) == 0)
+                    return true;
+        return false;
+    }
+    if (term->type == AST_LAMBDA) {
+        for (int i = 0; i < term->lambda.body_count; i++)
+            if (!judgment_term_is_closed(term->lambda.body_exprs[i], gamma,
+                                         term, false)) return false;
+        return true;
+    }
+    if (term->type == AST_LIST) {
+        for (size_t i = 0; i < term->list.count; i++)
+            if (!judgment_term_is_closed(term->list.items[i], gamma,
+                                         lambda_scope, i == 0)) return false;
+    } else if (term->type == AST_ARRAY) {
+        for (size_t i = 0; i < term->array.element_count; i++)
+            if (!judgment_term_is_closed(term->array.elements[i], gamma,
+                                         lambda_scope, false)) return false;
+    }
+    return true;
+}
+
+typedef struct JudgmentIntBinding {
+    const char *name;
+    long long value;
+    const struct JudgmentIntBinding *parent;
+} JudgmentIntBinding;
+
+static bool judgment_eval_int(const AST *term, const JudgmentIntBinding *env,
+                              long long *out) {
+    if (!term || !out) return false;
+    if (term->type == AST_NUMBER &&
+        (!term->literal_str || (!strchr(term->literal_str, '.') &&
+                               !strchr(term->literal_str, 'e') &&
+                               !strchr(term->literal_str, 'E')))) {
+        *out = term->has_raw_int ? (long long)term->raw_int
+                                 : (long long)term->number;
+        return true;
+    }
+    if (term->type == AST_SYMBOL) {
+        for (const JudgmentIntBinding *b = env; b; b = b->parent)
+            if (strcmp(b->name, term->symbol) == 0) {
+                *out = b->value;
+                return true;
+            }
+        return false;
+    }
+    if (term->type != AST_LIST || term->list.count == 0) return false;
+    AST *head = term->list.items[0];
+    if (head->type == AST_LAMBDA && term->list.count == 2 &&
+        head->lambda.param_count == 1) {
+        long long argument;
+        if (!judgment_eval_int(term->list.items[1], env, &argument)) return false;
+        JudgmentIntBinding binding = {
+            head->lambda.params[0].name, argument, env
+        };
+        return judgment_eval_int(head->lambda.body, &binding, out);
+    }
+    if (head->type == AST_SYMBOL && term->list.count == 3) {
+        long long left, right;
+        if (!judgment_eval_int(term->list.items[1], env, &left) ||
+            !judgment_eval_int(term->list.items[2], env, &right)) return false;
+        if (strcmp(head->symbol, "+") == 0) *out = left + right;
+        else if (strcmp(head->symbol, "-") == 0) *out = left - right;
+        else if (strcmp(head->symbol, "*") == 0) *out = left * right;
+        else if (strcmp(head->symbol, "/") == 0 && right != 0) *out = left / right;
+        else return false;
+        return true;
+    }
+    return false;
+}
+
 Type *infer_expr(InferCtx *ctx, AST *ast) {
     if (!ast) return type_unknown();
 
@@ -3923,6 +4097,18 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         break;
 
     case AST_SYMBOL: {
+        TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
+        if (strcmp(ast->symbol, "*context*") == 0) {
+            result = type_set();
+            break;
+        }
+        const FiniteTypeSetEntry *named_finite =
+            finite_type_set_lookup(ast->symbol);
+        if (named_finite && !sc) {
+            result = type_set_of(type_finite_set(named_finite->name,
+                                                  named_finite->member_count));
+            break;
+        }
         if (finite_type_set_member_type_count(ast->symbol) > 1) {
             /* Overlapping singleton sets are resolved by the expected type
              * at the call/check site, not by global declaration order. */
@@ -3952,7 +4138,6 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             break;
         }
 
-        TypeScheme *sc = infer_env_lookup(ctx, ast->symbol);
         if (!sc) {
             /* Unbound variable — allocate a fresh type var but mark the
              * AST node so that if unification later fails we can emit a
@@ -3979,7 +4164,7 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
             Type *et = infer_expr(ctx, ast->set.elements[i]);
             infer_constrain(ctx, et, elem_t, ast->line, ast->column);
         }
-        result = type_set();
+        result = type_set_of(elem_t);
         break;
     }
 
@@ -4012,6 +4197,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
 
     case AST_ARRAY: {
         if (ast->array.element_count == 0) {
+            if (ast->inferred_type &&
+                (ast->inferred_type->kind == TYPE_APP ||
+                 ast->inferred_type->kind == TYPE_LAYOUT)) {
+                result = type_clone(ast->inferred_type);
+                break;
+            }
             result = type_coll();
             result->element_type = infer_fresh(ctx);
             break;
@@ -4136,6 +4327,25 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         break;
     }
 
+    case AST_JUDGMENT: {
+        char judgment_error[2048] = {0};
+        if (!ctx->dctx || !dep_check_surface_judgment(
+                ctx->dctx, ast, judgment_error, sizeof(judgment_error))) {
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg), "%s",
+                     judgment_error[0] ? judgment_error
+                                       : "typing judgment is not derivable");
+            result = type_unknown();
+            break;
+        }
+        DepDerivation *derivation = dep_take_surface_derivation(ctx->dctx);
+        const char *conclusion = dep_derivation_conclusion(derivation);
+        result = type_app("Proof", type_finite_set(
+            conclusion ? conclusion : "?", 1));
+        dep_derivation_free(derivation);
+        break;
+    }
+
     case AST_LIST: {
         if (ast->list.count == 0) {
             /* () is the canonical inhabitant of Unit.  It is deliberately
@@ -4145,6 +4355,70 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
         }
 
         AST *head = ast->list.items[0];
+
+        if (head->type == AST_SYMBOL &&
+            strcmp(head->symbol, "__judgment") == 0) {
+            if ((ast->list.count != 4 && ast->list.count != 5) ||
+                ast->list.items[1]->type != AST_SET ||
+                ast->list.items[ast->list.count - 1]->type != AST_SYMBOL) {
+                ctx->had_error = true;
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                         "%s:%d:%d: error: malformed explicit judgment",
+                         ctx->filename, ast->line, ast->column);
+                result = type_unknown();
+                break;
+            }
+            AST *gamma = ast->list.items[1];
+            AST *left = ast->list.items[2];
+            AST *right = ast->list.count == 5 ? ast->list.items[3] : NULL;
+            AST *type_node = ast->list.items[ast->list.count - 1];
+            if (!judgment_term_is_closed(left, gamma, NULL, false) ||
+                (right && !judgment_term_is_closed(right, gamma, NULL, false))) {
+                ctx->had_error = true;
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                         "%s:%d:%d: error: explicit context does not bind every free variable",
+                         ctx->filename, ast->line, ast->column);
+                result = type_unknown();
+                break;
+            }
+            InferEnv *saved = ctx->env;
+            InferEnv *local = infer_env_create_child(saved);
+            ctx->env = local;
+            for (size_t i = 0; i + 1 < gamma->set.element_count; i += 2) {
+                AST *name = gamma->set.elements[i];
+                AST *annotation = gamma->set.elements[i + 1];
+                if (!name || name->type != AST_SYMBOL || !name->symbol ||
+                    !annotation || annotation->type != AST_SYMBOL) continue;
+                size_t n = strlen(name->symbol);
+                if (!n || name->symbol[n - 1] != ':') continue;
+                char *plain = strndup(name->symbol, n - 1);
+                Type *binding_type = type_from_name(annotation->symbol);
+                if (!binding_type) binding_type = type_unknown();
+                infer_env_insert(local, plain, scheme_mono(binding_type));
+                free(plain);
+            }
+            Type *left_type = infer_expr(ctx, left);
+            Type *right_type = right ? infer_expr(ctx, right) : NULL;
+            ctx->env = saved;
+            infer_env_free(local);
+            Type *claimed = type_from_name(type_node->symbol);
+            if (!claimed) claimed = type_unknown();
+            infer_constrain(ctx, left_type, claimed, ast->line, ast->column);
+            if (right) infer_constrain(ctx, right_type, claimed,
+                                       ast->line, ast->column);
+            if (right) {
+                long long lv, rv;
+                if (!judgment_eval_int(left, NULL, &lv) ||
+                    !judgment_eval_int(right, NULL, &rv) || lv != rv) {
+                    ctx->had_error = true;
+                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                             "%s:%d:%d: error: terms are not definitionally equal",
+                             ctx->filename, ast->line, ast->column);
+                }
+            }
+            result = claimed;
+            break;
+        }
 
         /* check-laws is a compile-time test directive.  Its class and type
          * operands are names, not runtime values, and the code generator
@@ -4717,7 +4991,12 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                                 ast->list.items[i]->line,
                                 ast->list.items[i]->column);
             }
-            result = num_t;
+            /* One supplied operand denotes the section captured by codegen:
+             * (+ 3) :: Num a => a -> a.  Treating it as `a` made higher-order
+             * consumers reject it and later encouraged ABI-unsafe fallbacks. */
+            result = ast->list.count == 2
+                ? type_arrow(type_clone(num_t), num_t)
+                : num_t;
             break;
         }
 
@@ -5003,6 +5282,36 @@ Type *infer_expr(InferCtx *ctx, AST *ast) {
                         result = infer_fresh(ctx);
                     break;
                 }
+            }
+        }
+
+        /* A finite Relation is a predicate when both endpoints are ground.
+         * Its algorithms remain Core-owned; this is only callable-value
+         * typing, analogous to the existing Set/Map callable protocol. */
+        if (head->type == AST_SYMBOL && ast->list.count == 3) {
+            TypeScheme *relation_sc = infer_env_lookup(ctx, head->symbol);
+            Type *relation_t = relation_sc
+                ? subst_apply(ctx->subst, relation_sc->type) : NULL;
+            if (relation_t && relation_t->kind == TYPE_APP &&
+                relation_t->app_constructor &&
+                strcmp(relation_t->app_constructor, "Relation") == 0) {
+                bool left_hole = ast->list.items[1]->type == AST_SYMBOL &&
+                    !infer_env_lookup(ctx, ast->list.items[1]->symbol);
+                bool right_hole = ast->list.items[2]->type == AST_SYMBOL &&
+                    !infer_env_lookup(ctx, ast->list.items[2]->symbol);
+                Type *args = relation_t->app_arg;
+                if (left_hole != right_hole && args &&
+                    args->kind == TYPE_LIST && args->list_count == 2) {
+                    infer_expr(ctx, ast->list.items[left_hole ? 2 : 1]);
+                    Type *element = type_clone(
+                        args->list_types[left_hole ? 0 : 1]);
+                    result = type_list(&element, 1);
+                } else {
+                    infer_expr(ctx, ast->list.items[1]);
+                    infer_expr(ctx, ast->list.items[2]);
+                    result = type_bool();
+                }
+                break;
             }
         }
 
@@ -5307,6 +5616,25 @@ static void infer_register_legacy_collection_builtins(InferCtx *ctx) {
                      scheme_mono(type_arrow(type_char(), type_string())));
     infer_env_insert(ctx->env, "__rt_set_singleton",
                      scheme_mono(type_arrow(type_set(), type_bool())));
+    /* The sole Set representation eliminator exposed to Data.Set:
+     * forall a. Set a -> [a].  Public operations remain ordinary Monad code. */
+    Type *set_elements_a = infer_fresh(ctx);
+    Type *set_elements_in = type_set_of(type_clone(set_elements_a));
+    Type *set_elements_out = type_list(&set_elements_a, 1);
+    TypeScheme *set_elements_sc = infer_generalise(
+        ctx, type_arrow(set_elements_in, set_elements_out), ctx->env);
+    infer_env_insert(ctx->env, "__rt_set_elements", set_elements_sc);
+
+    /* forall a b. (a -> b) -> [a] -> [b].  Public map remains the Functor
+     * method; this is the single representation boundary for lazy lists. */
+    Type *map_a = infer_fresh(ctx);
+    Type *map_b = infer_fresh(ctx);
+    Type *map_in = type_list(&map_a, 1);
+    Type *map_out = type_list(&map_b, 1);
+    TypeScheme *map_closure_sc = infer_generalise(ctx,
+        type_arrow(type_arrow(type_clone(map_a), type_clone(map_b)),
+                   type_arrow(map_in, map_out)), ctx->env);
+    infer_env_insert(ctx->env, "__rt_coll_map_closure", map_closure_sc);
 
     /* ∀a. a → Bool */
     Type *a4 = infer_fresh(ctx);
@@ -5788,7 +6116,7 @@ static Type *infer_fused_fragment(
             summary = infer_source_effect_join(
                 judgment, summary, child_effect);
         }
-        type = type_set();
+        type = type_set_of(element);
         break;
     }
     case AST_MAP: {

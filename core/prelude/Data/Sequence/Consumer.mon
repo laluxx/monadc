@@ -1,0 +1,238 @@
+;;; Consumer.mon --- Generic observation and elimination of Sequence values
+
+:author   Laluxx
+:version  0.2.0
+:keywords sequence consumer observation fold prefix reify productivity
+
+;;; Commentary:
+
+ Consumer contains operations that depend only on the extensional Sequence
+ coalgebra. They do not distinguish Strict from Lazy and do not know any
+ concrete representation.
+
+ This module intentionally uses explicit =sequence-= names during the refactor.
+ The old materialized collection API still owns short names such as =head=,
+ =take=, and =foldl=. Once the generic semantics are stable, a later cycle can
+ collapse the surface vocabulary without maintaining strict/lazy variants.
+
+;;; Bounded Observation
+
+ ProductiveSequence is exactly the theorem needed for a bounded visible demand.
+ If N is finite, observing at most N elements requires only finitely many
+ continuation demands. Therefore first, nth, finite-prefix extraction, and
+ finite-prefix equality are total when their callbacks/comparisons are total.
+
+ This does not make arbitrary searches total. =find= on an infinite productive
+ sequence may inspect infinitely many visible elements without finding a match.
+ Such semidecision procedures must retain a divergence effect and are not hidden
+ behind ProductiveSequence merely to make their signatures look convenient.
+
+;;; Whole-Structure Elimination
+
+ FiniteSequence is the theorem needed for consumers that must reach the end.
+ Left folds, conversion to a strict list, and exact counting are therefore
+ defined here from =uncons= rather than being primitives of every concrete
+ sequence representation.
+
+ The certificate is erased: these consumers do not first compute a size or walk
+ the source to obtain fuel. Instead the termination checker may use the
+ FiniteSequence proof as a well-foundedness theorem for recursion through the
+ demanded continuation. This preserves Lazy demand boundaries and never consumes
+ a linear source merely to prove that the real consumer will terminate.
+
+ This is an important DRY boundary: finiteness is a semantic certificate, while
+ elimination is generic code derived from the certificate plus Sequence.
+
+;;; Strategy-Preserving Reification
+
+ =reify-spine= maps an arbitrary regular Sequence into the canonical Spine while
+ preserving its Strategy:
+
+                 S  ->  Spine (Strategy S) (Element S).
+
+ It performs exactly one visible observation immediately. The returned tail is
+ mapped under the source strategy. Under Strict this recursively constructs the
+ strict spine; under Lazy it leaves the recursive conversion suspended.
+
+ Thus one definition reifies both strict and lazy sources. The function may
+ diverge when the source's demanded observation diverges; it does not invent a
+ productivity proof.
+
+;;; Coinductive Approximation
+
+ General equality of potentially infinite sequences is undecidable. The
+ executable relation =same-prefix?= compares at most N visible observations and
+ also checks agreement about termination within that prefix.
+
+ For productive sequences, agreement at every finite N characterizes ordinary
+ extensional stream/sequence equality. The bounded checker is therefore useful
+ for laws and property tests without pretending to decide coinductive equality.
+
+;;; Research Basis
+
+ J.J.M.M. Rutten, "Universal Coalgebra: a Theory of Systems", Theoretical
+ Computer Science 249(1), 2000.
+   https://doi.org/10.1016/S0304-3975(00)00056-6
+
+ Robert Atkey and Conor McBride, "Productive Coprogramming with Guarded
+ Recursion", ICFP 2013.
+   https://doi.org/10.1145/2500365.2500597
+
+ The coalgebraic perspective justifies observation by finite experiments.
+ Guarded-recursion work motivates treating productivity as a theorem about
+ finite observations rather than as a synonym for laziness.
+
+;;; Code:
+
+import Control.Evaluation
+import Data.Bool
+import Data.Eq
+import Data.Functor
+import Data.Sequence.Spine
+import Sequence
+
+module Data.Sequence.Consumer
+  [sequence-first? sequence-rest? sequence-nth?
+   sequence-take-list sequence-fold-left sequence-count sequence-to-list
+   reify-spine same-prefix?]
+
+
+;;; Bounded Consumers
+
+
+define first-result :: (a, e s)? -> a?
+  nil -> nil
+  (value, _) -> value
+
+
+define sequence-first? :: ProductiveSequence s => s -> (Element s)?
+  values -> first-result (uncons values)
+
+
+define rest-result :: Evaluation e => (a, e s)? -> s?
+  nil -> nil
+  (_, rest) -> demand rest
+
+
+define sequence-rest? :: ProductiveSequence s => s -> s?
+  values -> rest-result (uncons values)
+
+
+define nth-result :: ProductiveSequence s =>
+  Int -> (Element s, Strategy s s)? -> (Element s)?
+  _ nil -> nil
+  0 observation -> fst observation
+  index observation ->
+    nth-result (index - 1) (uncons (demand (snd observation)))
+
+
+define sequence-nth? ::
+  ProductiveSequence s => Int -> s -> (Element s)?
+  index _
+    | index < 0 -> nil
+
+  index values -> nth-result index (uncons values)
+
+
+define take-list-result ::
+  ProductiveSequence s =>
+  Int -> (Element s, Strategy s s)? -> [Element s]
+  _ nil -> []
+  amount (value, rest) ->
+    prepend value (sequence-take-list (amount - 1) (demand rest))
+
+
+define sequence-take-list ::
+  ProductiveSequence s => Int -> s -> [Element s]
+  amount _
+    | amount <= 0 -> []
+
+  amount values -> take-list-result amount (uncons values)
+
+
+;;; Finite Consumers
+
+
+define fold-left-result ::
+  FiniteSequence s =>
+  (b -> Element s -> b) -> b -> (Element s, Strategy s s)? -> b
+  _ accumulator nil -> accumulator
+  combine accumulator (value, rest) ->
+    fold-left-result combine (combine accumulator value) (uncons (demand rest))
+
+
+define sequence-fold-left ::
+  FiniteSequence s =>
+  (b -> Element s -> b) -> b -> s -> b
+  combine accumulator values ->
+    fold-left-result combine accumulator (uncons values)
+
+
+define count-step :: Int -> a -> Int
+  count _ -> (+ count 1)
+
+
+define sequence-count :: FiniteSequence s => s -> Int
+  values -> sequence-fold-left count-step 0 values
+
+
+define list-step :: [a] -> a -> [a]
+  reversed value -> prepend value reversed
+
+
+define sequence-to-list :: FiniteSequence s => s -> [Element s]
+  values -> reverse (sequence-fold-left list-step [] values)
+
+
+;;; Canonical Reification
+
+
+define reify-result :: Sequence s =>
+  (Element s, Strategy s s)? -> Spine (Strategy s) (Element s)
+  nil -> SNil
+  (value, rest) ->
+    SCons value (map reify-spine rest)
+
+
+define reify-spine :: Sequence s => s -> Spine (Strategy s) (Element s)
+  values -> reify-result (uncons values)
+
+
+;;; Finite Observational Equality
+
+
+define same-prefix-result? :: (Eq (Element l), ProductiveSequence l, ProductiveSequence r) =>
+  Int -> (Element l, Strategy l l)? -> (Element r, Strategy r r)? -> Bool
+  _ nil nil -> True
+  _ nil (_, _) -> False
+  _ (_, _) nil -> False
+
+  amount (left, left-rest) (right, right-rest) ->
+    if not? (eq? left right)
+      then False
+      else same-prefix? (amount - 1) (demand left-rest) (demand right-rest)
+
+
+define same-prefix? :: (Eq (Element l), ProductiveSequence l, ProductiveSequence r) =>
+  Int -> l -> r -> Bool
+  amount _ _
+    | amount <= 0 -> True
+
+  amount left right ->
+    same-prefix-result? amount (uncons left) (uncons right)
+
+
+tests
+  :bounded:
+  assert-eq (show (sequence-first? (list 4 5 6))) "4" "generic first observation"
+  assert-eq (show (sequence-nth? 2 (list 4 5 6))) "6" "generic bounded indexing"
+  assert-eq (show (sequence-take-list 2 (list 4 5 6))) "(4 5)" "generic prefix"
+  :bounded:
+
+  :finite:
+  assert-eq (sequence-count (list 1 2 3 4)) 4 "generic finite count"
+  assert-eq (sequence-count "abc") 3 "finite String count derives from Sequence"
+  assert-eq (show (sequence-to-list (list 1 2 3))) "(1 2 3)" "generic reification"
+  assert-eq (same-prefix? 3 (list 1 2 3) (list 1 2 3 4)) True "bounded equality"
+  assert-eq (same-prefix? 4 (list 1 2 3) (list 1 2 3 4)) False "bounded end check"
+  :finite:

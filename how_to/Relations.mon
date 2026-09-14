@@ -1,0 +1,105 @@
+;;; Relations.mon --- Finite facts and simple relational queries
+
+:author "Laluxx"
+:version "1.0.0"
+:keywords "how-to relation predicate query symbol map converse"
+
+;;; Commentary:
+
+ A relation is a set of pairs.  It records which values are related without
+ requiring each value on the left to have only one value on the right.
+
+ A restaurant order is naturally a map because each order number identifies
+ one meal.  People's tastes are naturally a relation because Alice may like
+ both pizza and sushi:
+
+     'alice -> 'pizza
+     'alice -> 'sushi
+
+ Relation literals use braces and arrows.  Map literals use hash braces:
+
+     { 'alice -> 'pizza }   ;; Relation
+     #{'alice 'pizza}       ;; Map
+
+ The type ={a -> b}= means =Relation a b=.  For symbolic facts the compact
+ type ={'a -> 'b}= means =Relation Symbol Symbol=; the names =a= and =b=
+ describe the two roles rather than particular symbols.
+
+ A relation can be called like a predicate.  Supplying both endpoints asks a
+ yes-or-no question:
+
+     likes 'alice 'pizza
+
+ Leaving one endpoint as a fresh name asks for all matching values:
+
+     who likes 'pizza       ;; people who like pizza
+     'alice likes what      ;; foods Alice likes
+
+ In a =show= sentence, the readable subject-first form is supported directly:
+
+     show who likes 'pizza
+
+ These queries are finite and strict because a literal contains finitely many
+ facts.  Ordering is presentation order, but duplicate facts are observed only
+ once.  Open-ended or recursive logic programming will use a lazy search type
+ rather than changing this finite Relation contract.
+
+ A Map is the left-functional part of Relation: every left value has at most
+ one right value.  =functional?= checks that property.  =converse= swaps the
+ two roles, turning "person likes food" into "food is liked by person".
+
+ Try:
+
+     monad how_to/Relations.mon && ./Relations
+
+;;; Code:
+
+import Data.Relation
+
+module Main
+
+
+;;; Declare some facts
+
+define likes :: {'person -> 'food}
+{ 'alice -> 'pizza
+  'bob   -> 'sushi
+  'alice -> 'sushi
+  'carol -> 'pizza }
+
+
+;;; Ground calls are Boolean membership tests
+
+assert likes 'alice 'pizza
+assert likes 'bob 'sushi
+
+
+;;; A fresh endpoint is a query variable
+
+show who likes 'pizza
+show 'alice likes what
+
+
+;;; Relations are extensional sets of facts
+
+show (relation-size likes)
+
+
+;;; A one-to-many relation is not map-shaped
+
+show (functional? likes)
+
+define favourite :: {'person -> 'food}
+{ 'alice -> 'pizza
+  'bob   -> 'sushi }
+
+show (functional? favourite)
+
+
+;;; Converse swaps the direction of every fact
+
+define liked-by :: {'food -> 'person}
+  converse likes
+
+show food liked-by 'alice
+

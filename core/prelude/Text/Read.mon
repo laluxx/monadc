@@ -1,27 +1,90 @@
 ;;; Read.mon --- Text parsing typeclass
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: read parse string typeclass
+:author   Laluxx
+:version  1.1.0
+:keywords read parse string typeclass total optional
 
 ;;; Commentary:
 
- Read is the inverse text parsing contract for types that can be recovered
- from strings. Concrete parsers should live in focused text modules; this file
- owns the typeclass vocabulary.
+ Read owns the inverse text-parsing vocabulary for values that can be recovered
+ from strings. =readsPrec= is the compositional primitive: it may return zero,
+ one, or several parses together with their unconsumed suffixes. The ordinary
+ =read= operation is derived from that parser and requires a complete parse;
+ =read?= exposes the same complete-parse observation without partial failure.
+
+ Keeping the complete-parse policy here prevents every Read instance from
+ inventing a different rule for leftover input. Concrete lexical parsers still
+ belong in focused text modules; this file owns only the typeclass contract and
+ generic elimination policy.
 
 ;;; Code:
 
+import Data.Bool
+import Data.Tuple
+
 module Text.Read
-  [Read read readsPrec]
+  [Read read readsPrec read?]
+
+
+define complete-read-entry? :: (a, String) -> Bool
+  entry -> string-empty? (entry 1)
+
+
+define string-empty? :: String -> Bool
+  "" -> True
+  _ -> False
+
+
+define first-complete-read :: [(a, String)] -> a?
+  [] -> nil
+  [entry|remaining] | complete-read-entry? entry -> fst entry
+  [_|remaining] -> first-complete-read remaining
+
+
+define require-complete-read :: a? -> a
+  nil -> error "Read.read: no complete parse"
+  value -> value
 
 
 class Read a where
   read      :: String -> a
   readsPrec :: Int -> String -> [(a, String)]
 
+  read text ->
+    require-complete-read (first-complete-read (readsPrec 0 text))
+
+  ;; minimal complete definition: readsPrec
+
+
+define read? :: Read a => String -> a?
+  text -> first-complete-read (readsPrec 0 text)
+
+
+type ReadSample {ReadAlpha ReadBeta}
+
+
+instance Read ReadSample
+  read "alpha" -> ReadAlpha
+  read "beta" -> ReadBeta
+  read _ -> error "Read.read: no complete parse"
+  readsPrec _ "alpha" -> list (ReadAlpha, "")
+  readsPrec _ "beta"  -> list (ReadBeta, "")
+  readsPrec _ _       -> []
+
+
+define read-sample :: String -> ReadSample
+  text -> read text
+
+
+define read-sample? :: String -> ReadSample?
+  "alpha" -> ReadAlpha
+  "beta" -> ReadBeta
+  _ -> nil
+
 
 tests
-  :registration:
-  assert-eq 1 1 "Read registers Read"
-  :registration:
+  :derived-read:
+  assert-eq (read-sample "alpha") ReadAlpha "Read derives a complete parse from readsPrec"
+  assert-eq (read-sample "beta") ReadBeta "Read preserves the selected parse value"
+  assert-eq (show (read-sample? "unknown")) "nil" "Read read? is total on parse failure"
+  :derived-read:

@@ -1,0 +1,7 @@
+module Main
+
+sequence-id = λ[s]. s
+sequence-id-typed : (Int -> Int) = λ[s]. s
+proof = λ[s]. s : (Int -> Int)
+show (sequence-id 1)
+show proof

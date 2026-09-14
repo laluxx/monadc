@@ -1,8 +1,9 @@
 ;;; Int.mon --- Int-specific predicates
+:bootstrap primitive
 
-;; Author: Laluxx
-;; Version: 0.2.0
-;; Keywords: int integer primitive predicates
+:author   Laluxx
+:version  0.3.0
+:keywords int integer primitive predicates
 
 ;;; Commentary:
 
@@ -39,6 +40,7 @@ method negative? :: Self -> Bool
 
 
 method divisible? :: Self -> Self -> Bool
+  _ 0                         -> False
   x divisor | (= (% x divisor) 0) -> True
             | otherwise           -> False
 
@@ -50,3 +52,4 @@ tests
   assert-eq (Int.positive? 7)     True  "Data.Int positive?"
   assert-eq (Int.negative? -7)    True  "Data.Int negative?"
   assert-eq (Int.divisible? 12 3) True  "Data.Int divisible?"
+  assert-eq (Int.divisible? 12 0) False "Data.Int zero is not a valid divisor"

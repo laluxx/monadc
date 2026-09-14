@@ -1,14 +1,17 @@
 ;;; Semigroup.mon --- Associative append abstractions
+:bootstrap primitive
 
-:author "Laluxx"
-:version "1.2.0"
-:keywords "semigroup monoid append algebra typeclass fold"
+:author   Laluxx
+:version  1.3.0
+:keywords semigroup monoid append algebra typeclass fold
 
 ;;; Commentary:
 
  Semigroup owns associative same-shaped combination. An instance supplies
- only append; non-empty concatenation is derived once here for every
- instance. Monoid adds only the identity element, from which ordinary binary
+ only append; total head-plus-tail concatenation is derived once here for every
+ instance. The historical list =sconcat= remains partial only because =[a]= can
+ be empty; callers carrying structural non-emptiness can use =sconcat1= without
+ manufacturing a runtime failure. Monoid adds only the identity element, from which ordinary binary
  and whole-collection combination are also derived.
 
  This minimal basis is intentional: an instance should describe its algebra,
@@ -20,22 +23,26 @@
 import Data.Bool
 
 module Data.Semigroup
-  [Semigroup append sconcat
+  [Semigroup append sconcat1 sconcat
    Monoid mempty mappend mconcat]
 
 
 class Semigroup a where
-  append  :: a -> a -> a
-  sconcat :: [a] -> a
+  append   :: a -> a -> a
+  sconcat1 :: a -> [a] -> a
+  sconcat  :: [a] -> a
 
-  sconcat []       ->
-    error "Semigroup.sconcat: empty sequence"
+  sconcat1 head [] ->
+    head
 
-  sconcat [x|[]]   ->
-    x
+  sconcat1 head [x|xs] ->
+    append head (sconcat1 x xs)
 
-  sconcat [x|xs]   ->
-    append x (sconcat xs)
+  sconcat [] ->
+    error "Semigroup.sconcat: empty sequence; use sconcat1 when non-emptiness is structural"
+
+  sconcat [x|xs] ->
+    sconcat1 x xs
 
   law associativity :: Eq a => a -> a -> a -> Bool
     x y z -> eq? (append (append x y) z) (append x (append y z))
@@ -95,14 +102,11 @@ instance Monoid Coll
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Semigroup registers Semigroup"
-  assert-eq 1 1 "Semigroup registers Monoid"
-  :registration:
 
   :int-semigroup:
   assert-eq (append 2 3) 5 "Semigroup Int append"
   assert-eq (sconcat (list 2 3 4)) 9 "Semigroup Int sconcat folds every member"
+  assert-eq (sconcat1 2 (list 3 4)) 9 "Semigroup sconcat1 is total for a structural head and tail"
   assert-eq (append (append 1 2) 3) (append 1 (append 2 3)) "Semigroup Int append associative"
   :int-semigroup:
 

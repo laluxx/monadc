@@ -1,8 +1,8 @@
 ;;; Function.mon --- Core function combinators
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: function combinator composition prelude
+:author   Laluxx
+:version  1.0.0
+:keywords function combinator composition prelude
 
 ;;; Commentary:
 
@@ -14,8 +14,9 @@
 import Data.Bool
 
 module Function
-  [id identity const always flip compose pipe apply applyTo
+  [id identity const always flip compose pipe apply applyTo |>
    before after on argument result
+   bothPredicates
    twice thrice repeatApply until]
 
 
@@ -40,9 +41,9 @@ define function-test-at-least-10? :: Int -> Bool
 
 
 define id :: a -> a
-  x -> x
   :alias identity
   :doc "Return X unchanged."
+  x -> x
 
 
 define const :: a -> _ -> a
@@ -76,6 +77,7 @@ define apply :: (a -> b) -> a -> b
 
 
 define applyTo :: a -> (a -> b) -> b
+  :alias |>
   :doc "Apply X to F. Useful for left-to-right pipelines."
   x f -> f x
 
@@ -103,6 +105,10 @@ define argument :: (b -> c) -> (a -> b) -> a -> c
 define result :: (b -> c) -> (a -> b) -> a -> c
   :doc "Transform the result of a function. Equivalent to compose."
   f g x -> f (g x)
+
+
+define bothPredicates :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
+  left right -> lambda (value) (and (left value) (right value))
 
 
 define twice :: (a -> a) -> a -> a
@@ -153,6 +159,10 @@ tests
   assert-eq (on function-test-sub function-test-double 10 3) 14 "Function on"
   assert-eq (argument function-test-double function-test-inc 3) 8 "Function argument"
   assert-eq (result function-test-double function-test-inc 3) 8 "Function result"
+  assert-eq
+    ((bothPredicates (lambda (x) (< 0 x)) (lambda (x) (< x 4))) 3)
+    True
+    "Function combines predicates with conjunction"
 
   :transform:
   :iteration:

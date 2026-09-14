@@ -1,11 +1,14 @@
 #include "dep.h"
 #include "compat.h"
 #include "reader.h"
+#include "reader_syntax.h"
+#include "pmatch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <assert.h>
+#include <ctype.h>
 
 /// Trace Utilities
 
@@ -535,7 +538,12 @@ Term *dep_subst_fvar(Term *t, const char *name, Term *replacement) {
     case TERM_LAM:
     case TERM_SIGMA: {
         Term *dom  = dep_subst_fvar(t->binder_dom,  name, replacement);
-        Term *body = dep_subst_fvar(t->binder_body, name, replacement);
+        /* A nested binder with the same source name shadows the variable
+         * being substituted. This is the named presentation of the usual
+         * De Bruijn cutoff rule and preserves alpha-equivalence. */
+        Term *body = strcmp(t->binder_name, name) == 0
+            ? term_clone(t->binder_body)
+            : dep_subst_fvar(t->binder_body, name, replacement);
         if (t->kind == TERM_PI)    return term_pi(t->binder_name, dom, body, t->implicit);
         if (t->kind == TERM_LAM)   return term_lam(t->binder_name, dom, body);
         return term_sigma(t->binder_name, dom, body);
@@ -1178,6 +1186,24 @@ Value *dep_force(Value *v, MetaCtx *mctx) {
 //  env maps De Bruijn indices to Values via eval_env_lookup.
 //  mctx may be NULL (no metavariable resolution during pure evaluation).
 //
+static Value *dep_reduce_integer_primitive(Value *value) {
+    if (!value || value->kind != VAL_NEUTRAL || !value->neutral_name ||
+        value->spine.count != 2) return value;
+    Value *left = value->spine.args[0];
+    Value *right = value->spine.args[1];
+    if (!left || !right || left->kind != VAL_NUM_LIT ||
+        right->kind != VAL_NUM_LIT) return value;
+    unsigned long long a = left->num_lit;
+    unsigned long long b = right->num_lit;
+    if (strcmp(value->neutral_name, "+") == 0) return val_num_lit(a + b);
+    if (strcmp(value->neutral_name, "-") == 0 && a >= b)
+        return val_num_lit(a - b);
+    if (strcmp(value->neutral_name, "*") == 0) return val_num_lit(a * b);
+    if (strcmp(value->neutral_name, "/") == 0 && b != 0)
+        return val_num_lit(a / b);
+    return value;
+}
+
 Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
     if (!t) return val_universe_n(0);
 
@@ -1249,8 +1275,19 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
             Value *arg = dep_eval(t->app_args[i], env, mctx);
             fn = dep_force(fn, mctx);
             if (fn->kind == VAL_LAM) {
-                // β-reduction: substitute arg into the closure body
-                fn = dep_closure_apply(fn->closure, arg);
+                /* Surface terms retain names until this boundary. Perform
+                 * capture-avoiding named substitution before NbE evaluation;
+                 * core terms that already use BVAR continue through the
+                 * semantic environment in the ordinary way. */
+                Term *argument = dep_quote(arg,
+                    fn->closure.env ? fn->closure.env->level : 0, mctx);
+                Term *body = dep_subst_fvar(fn->closure.body,
+                                            fn->binder_name, argument);
+                EvalEnv *applied = eval_env_extend(fn->closure.env, arg);
+                fn = dep_eval(body, applied, mctx);
+                eval_env_discard_top(applied);
+                term_free(argument);
+                term_free(body);
             } else if (fn->kind == VAL_NEUTRAL) {
                 // Accumulate onto the neutral spine
                 val_spine_push(&fn->spine, arg);
@@ -1264,7 +1301,7 @@ Value *dep_eval(Term *t, EvalEnv *env, MetaCtx *mctx) {
                 fn = val_neutral("!not-a-function", -1, sp);
             }
         }
-        return fn;
+        return dep_reduce_integer_primitive(fn);
     }
 
     // ── Pairs ─────────────────────────────────────────────────────
@@ -2084,6 +2121,93 @@ DepEnvEntry *dep_env_lookup(DepEnv *env, const char *name) {
 
 /// Typing context
 
+struct DepAdtType {
+    char *name;
+    bool indexed_family;
+    char **constructors;
+    char **constructor_results;
+    size_t constructor_count;
+    struct DepAdtType *next;
+};
+
+typedef struct DepGadtType {
+    char *head;
+    struct DepGadtType **args;
+    size_t arg_count;
+} DepGadtType;
+static size_t dep_gadt_kind_arity(const char *kind);
+static DepGadtType *dep_gadt_parse(const char *text);
+static void dep_gadt_type_free(DepGadtType *type);
+static const DepAdtType *dep_adt_type_lookup(const DepCtx *ctx,
+                                              const char *name);
+
+bool dep_is_indexed_family(const DepCtx *ctx, const char *name) {
+    const DepAdtType *type = dep_adt_type_lookup(ctx, name);
+    return type && type->indexed_family;
+}
+
+static void dep_adt_types_free(DepAdtType *type) {
+    while (type) {
+        DepAdtType *next = type->next;
+        free(type->name);
+        for (size_t i = 0; i < type->constructor_count; i++)
+            free(type->constructors[i]);
+        for (size_t i = 0; i < type->constructor_count; i++)
+            free(type->constructor_results[i]);
+        free(type->constructors);
+        free(type->constructor_results);
+        free(type);
+        type = next;
+    }
+}
+
+static const DepAdtType *dep_adt_type_lookup(const DepCtx *ctx,
+                                              const char *name) {
+    if (!ctx || !name) return NULL;
+    for (const DepAdtType *type = ctx->adt_types; type; type = type->next)
+        if (strcmp(type->name, name) == 0) return type;
+    return NULL;
+}
+
+void dep_register_data_type(DepCtx *ctx, const AST *ast) {
+    if (!ctx || !ast || ast->type != AST_DATA || !ast->data.name ||
+        dep_adt_type_lookup(ctx, ast->data.name)) return;
+    DepAdtType *type = calloc(1, sizeof(*type));
+    type->name = strdup(ast->data.name);
+    type->indexed_family = false;
+    type->constructor_count = (size_t)ast->data.constructor_count;
+    type->constructors = calloc(type->constructor_count, sizeof(char *));
+    type->constructor_results = calloc(type->constructor_count, sizeof(char *));
+    for (size_t i = 0; i < type->constructor_count; i++) {
+        type->constructors[i] = strdup(ast->data.constructors[i].name);
+        type->constructor_results[i] = ast->data.constructors[i].result_type
+            ? strdup(ast->data.constructors[i].result_type) : NULL;
+    }
+    /* A kind signature alone does not make ordinary parameters into indices.
+     * `Producer e a`, for example, uses an existential constructor state but
+     * returns the family at two plain parameters.  Only constructor results
+     * that refine an argument with structure (Vec Z a, Vec (S n) a, ...)
+     * require dependent indexed-family checking. */
+    if (ast->data.kind_signature) {
+        for (size_t i = 0; i < type->constructor_count; i++) {
+            DepGadtType *result = dep_gadt_parse(type->constructor_results[i]);
+            if (!result) continue;
+            for (size_t arg = 0; arg < result->arg_count; arg++) {
+                const DepGadtType *index = result->args[arg];
+                if (!index || index->arg_count != 0 ||
+                    !(index->head[0] >= 'a' && index->head[0] <= 'z')) {
+                    type->indexed_family = true;
+                    break;
+                }
+            }
+            dep_gadt_type_free(result);
+            if (type->indexed_family) break;
+        }
+    }
+    type->next = ctx->adt_types;
+    ctx->adt_types = type;
+}
+
 DepCtx *dep_ctx_create(const char *filename) {
     DepCtx *ctx    = calloc(1, sizeof(DepCtx));
     ctx->locals    = NULL;
@@ -2091,6 +2215,9 @@ DepCtx *dep_ctx_create(const char *filename) {
     ctx->globals   = dep_env_create();
     ctx->mctx      = meta_ctx_create();
     ctx->env       = eval_env_empty();
+    ctx->adt_types = NULL;
+    ctx->owns_adt_types = true;
+    ctx->reject_unbound = false;
     ctx->filename  = filename ? filename : "<unknown>";
     ctx->had_error = false;
     return ctx;
@@ -2104,6 +2231,9 @@ DepCtx *dep_ctx_child(DepCtx *parent) {
     ctx->globals   = parent->globals;  // shared
     ctx->mctx      = parent->mctx;     // shared
     ctx->env       = eval_env_clone(parent->env);
+    ctx->adt_types = parent->adt_types;
+    ctx->owns_adt_types = false;
+    ctx->reject_unbound = parent->reject_unbound;
     ctx->filename  = parent->filename;
     ctx->had_error = false;
     return ctx;
@@ -2119,6 +2249,8 @@ void dep_ctx_free(DepCtx *ctx) {
         e = next;
     }
     eval_env_free(ctx->env);
+    dep_derivation_free(ctx->last_derivation);
+    if (ctx->owns_adt_types) dep_adt_types_free(ctx->adt_types);
     // globals and mctx are either shared or freed by the caller
     free(ctx);
 }
@@ -2369,6 +2501,13 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
             return instantiated;
         }
 
+        if (ctx->reject_unbound) {
+            dep_error_set(ctx, t->line, t->col,
+                          "unbound variable '%s' in explicit context",
+                          t->fvar_name);
+            return NULL;
+        }
+
         // TEMPORARY SHADOW PASS HACK:
         // Automatically invent a hole for any unbound global function (like 'show' or 'if')
         int id = meta_fresh(ctx->mctx, val_universe_n(0), ctx->depth, t->fvar_name);
@@ -2551,6 +2690,11 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
                               term_to_string(t));
                 return NULL;
             }
+            /* Retain the closest application frame. If checking this premise
+             * fails, it is the mathematical parent needed for the bounded
+             * derivation slice; later premises are definitionally skipped. */
+            ctx->trace_application = t;
+            ctx->trace_argument_index = i;
             if (!dep_check(ctx, t->app_args[i], fn_ty->domain)) return NULL;
             Value *arg_val = dep_eval(t->app_args[i], ctx->env, ctx->mctx);
             fn_ty = dep_closure_apply(fn_ty->closure, arg_val);
@@ -2634,11 +2778,36 @@ static Value *dep_infer_internal(DepCtx *ctx, Term *t) {
 
     // ── Equality type ─────────────────────────────────────────────
     case TERM_EQ: {
-        Value *ty = dep_infer(ctx, t->eq_lhs);
-        if (!ty) return NULL;
-        if (!dep_check(ctx, t->eq_rhs, ty)) return NULL;
+        Value *declared_ty = dep_eval(t->eq_type, ctx->env, ctx->mctx);
+        if (!dep_check(ctx, t->eq_lhs, declared_ty)) return NULL;
+        if (!dep_check(ctx, t->eq_rhs, declared_ty)) return NULL;
         // a ≡ b : A  lives in Type u where A : Type u
         return dep_infer(ctx, t->eq_type);
+    }
+
+    // ── Equality elimination / transport ─────────────────────────
+    case TERM_SUBST: {
+        Value *proof_ty = dep_infer(ctx, t->subst_proof);
+        proof_ty = dep_force(proof_ty, ctx->mctx);
+        if (!proof_ty || proof_ty->kind != VAL_EQ) {
+            dep_error_set(ctx, t->line, t->col,
+                          "subst: first argument must prove an equality");
+            return NULL;
+        }
+        Value *motive_ty = val_pi("x", proof_ty->eq_type_val,
+            (Closure){ .env = eval_env_empty(), .body = term_type_n(0) },
+            IMPLICIT_EXPLICIT);
+        if (!dep_check(ctx, t->subst_motive, motive_ty)) return NULL;
+        Value *motive = dep_eval(t->subst_motive, ctx->env, ctx->mctx);
+        motive = dep_force(motive, ctx->mctx);
+        if (!motive || motive->kind != VAL_LAM) {
+            dep_error_set(ctx, t->line, t->col,
+                          "subst: motive must elaborate to a dependent function");
+            return NULL;
+        }
+        Value *source_ty = dep_closure_apply(motive->closure, proof_ty->eq_lhs);
+        if (!dep_check(ctx, t->subst_base, source_ty)) return NULL;
+        return dep_closure_apply(motive->closure, proof_ty->eq_rhs);
     }
 
     // ── Meta ──────────────────────────────────────────────────────
@@ -2721,6 +2890,483 @@ bool dep_check(DepCtx *ctx, Term *t, Value *expected_type) {
     return res;
 }
 
+/* Outside a judgment, `:` is also reader sugar for an anonymous annotation
+ * lambda. Inside Gamma, recognize that existing AST encoding as the
+ * declaration separator so whitespace does not alter the telescope. */
+static AST *dep_surface_colon_lambda_type(AST *ast) {
+    if (!ast || ast->type != AST_LAMBDA || ast->lambda.param_count != 1 ||
+        !ast->lambda.params || !ast->lambda.params[0].name ||
+        strcmp(ast->lambda.params[0].name, ":") != 0)
+        return NULL;
+    return ast->lambda.body;
+}
+
+static bool dep_surface_gamma_push(DepCtx *ctx, AST *gamma) {
+    if (!ctx || !gamma || gamma->type != AST_SET) return false;
+    for (size_t i = 0; i < gamma->set.element_count;) {
+        AST *name = gamma->set.elements[i++];
+        if (name && name->type == AST_JUDGMENT &&
+            name->judgment.context &&
+            name->judgment.context->type == AST_SET &&
+            name->judgment.context->set.element_count == 0 &&
+            !name->judgment.equal_to && name->judgment.expression &&
+            name->judgment.expression->type == AST_SYMBOL) {
+            AST *annotation = name->judgment.claimed_type;
+            const char *plain_name = name->judgment.expression->symbol;
+            if (dep_ctx_lookup_local(ctx, plain_name)) return false;
+            Term *type_term = dep_term_of_type_ast(ctx, annotation);
+            if (!type_term || dep_infer_level(ctx, type_term) < 0) {
+                term_free(type_term);
+                return false;
+            }
+            dep_ctx_push(ctx, plain_name,
+                         dep_eval(type_term, ctx->env, ctx->mctx));
+            continue;
+        }
+        if (!name || name->type != AST_SYMBOL || !name->symbol) return false;
+        size_t name_length = strlen(name->symbol);
+        if (!name_length) return false;
+        const char *inline_colon = strchr(name->symbol, ':');
+        bool inline_annotation = inline_colon && inline_colon[1] != '\0';
+        AST compact_annotation = {0};
+        AST *annotation = NULL;
+        size_t plain_length = name_length;
+        if (inline_annotation) {
+            plain_length = (size_t)(inline_colon - name->symbol);
+            compact_annotation.type = AST_SYMBOL;
+            compact_annotation.symbol = (char *)inline_colon + 1;
+            compact_annotation.line = name->line;
+            compact_annotation.column = name->column + (int)plain_length + 1;
+            compact_annotation.end_column = name->end_column;
+            annotation = &compact_annotation;
+        } else {
+            if (i >= gamma->set.element_count) return false;
+            annotation = gamma->set.elements[i++];
+            bool separated_colon = name->symbol[name_length - 1] == ':';
+            bool compact_colon = !separated_colon && annotation &&
+                                 annotation->type == AST_KEYWORD;
+            bool standalone_colon = !separated_colon && annotation &&
+                                    annotation->type == AST_SYMBOL &&
+                                    annotation->symbol &&
+                                    strcmp(annotation->symbol, ":") == 0;
+            AST *colon_lambda_type = dep_surface_colon_lambda_type(annotation);
+            bool colon_lambda_encoded = !separated_colon && colon_lambda_type;
+            if (!separated_colon && colon_lambda_type) {
+                standalone_colon = true;
+                annotation = colon_lambda_type;
+            }
+            if (standalone_colon && !colon_lambda_encoded) {
+                if (i >= gamma->set.element_count) return false;
+                annotation = gamma->set.elements[i++];
+            }
+            if (!separated_colon && !compact_colon && !standalone_colon)
+                return false;
+            plain_length = separated_colon ? name_length - 1 : name_length;
+            if (compact_colon) {
+                compact_annotation.type = AST_SYMBOL;
+                compact_annotation.symbol = annotation->keyword;
+                compact_annotation.line = annotation->line;
+                compact_annotation.column = annotation->column;
+                compact_annotation.end_column = annotation->end_column;
+                annotation = &compact_annotation;
+            }
+        }
+        char *plain_name = strndup(name->symbol, plain_length);
+        if (dep_ctx_lookup_local(ctx, plain_name)) {
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: invalid context telescope\n"
+                     "  duplicate binder '%s' in explicit context\n"
+                     "  Hint: context extension Γ, x : A requires x not already bound in Γ.",
+                     ctx->filename, name->line, name->column, plain_name);
+            free(plain_name);
+            return false;
+        }
+        Term *type_term = dep_term_of_type_ast(ctx, annotation);
+        if (!type_term || dep_infer_level(ctx, type_term) < 0) {
+            free(plain_name);
+            term_free(type_term);
+            return false;
+        }
+        Value *type_value = dep_eval(type_term, ctx->env, ctx->mctx);
+        dep_ctx_push(ctx, plain_name, type_value);
+        free(plain_name);
+        /* Values may close over the type term, matching the ownership rule
+         * used by dependent Π/Σ binders; the child context owns the lifetime. */
+    }
+    return true;
+}
+
+static bool dep_surface_gamma_binds(AST *gamma, const char *name) {
+    if (!gamma || gamma->type != AST_SET || !name) return false;
+    for (size_t i = 0; i < gamma->set.element_count; i++) {
+        AST *entry = gamma->set.elements[i];
+        if (entry && entry->type == AST_JUDGMENT &&
+            entry->judgment.expression &&
+            entry->judgment.expression->type == AST_SYMBOL &&
+            strcmp(entry->judgment.expression->symbol, name) == 0)
+            return true;
+        if (!entry || entry->type != AST_SYMBOL || !entry->symbol) continue;
+        size_t length = strlen(entry->symbol);
+        const char *colon = strchr(entry->symbol, ':');
+        if (colon && colon[1] != '\0' &&
+            strlen(name) == (size_t)(colon - entry->symbol) &&
+            strncmp(entry->symbol, name, (size_t)(colon - entry->symbol)) == 0)
+            return true;
+        if (length && entry->symbol[length - 1] == ':' &&
+            strlen(name) == length - 1 &&
+            strncmp(entry->symbol, name, length - 1) == 0) return true;
+        if (length && i + 1 < gamma->set.element_count &&
+            gamma->set.elements[i + 1] &&
+            gamma->set.elements[i + 1]->type == AST_KEYWORD &&
+            strlen(name) == length &&
+            strncmp(entry->symbol, name, length) == 0) return true;
+        if (length && i + 2 < gamma->set.element_count &&
+            gamma->set.elements[i + 1] &&
+            gamma->set.elements[i + 1]->type == AST_SYMBOL &&
+            gamma->set.elements[i + 1]->symbol &&
+            strcmp(gamma->set.elements[i + 1]->symbol, ":") == 0 &&
+            strlen(name) == length &&
+            strncmp(entry->symbol, name, length) == 0) return true;
+        if (length && i + 1 < gamma->set.element_count &&
+            dep_surface_colon_lambda_type(gamma->set.elements[i + 1]) &&
+            strlen(name) == length &&
+            strncmp(entry->symbol, name, length) == 0) return true;
+    }
+    return false;
+}
+
+static bool dep_surface_term_scoped(DepCtx *ctx, AST *term, AST *gamma,
+                                    AST *lambda_scope, bool call_head) {
+    if (!term) return true;
+    if (term->type == AST_SYMBOL) {
+        if (dep_surface_gamma_binds(gamma, term->symbol) ||
+            dep_env_lookup(ctx->globals, term->symbol)) return true;
+        if (lambda_scope && lambda_scope->type == AST_LAMBDA)
+            for (int i = 0; i < lambda_scope->lambda.param_count; i++)
+                if (strcmp(lambda_scope->lambda.params[i].name,
+                           term->symbol) == 0) return true;
+        /* Constructors and literal sentinels are resolved by elaboration. */
+        if ((term->symbol[0] >= 'A' && term->symbol[0] <= 'Z') ||
+            strcmp(term->symbol, "nil") == 0 ||
+            strcmp(term->symbol, "undefined") == 0) return true;
+        (void)call_head;
+        return false;
+    }
+    if (term->type == AST_LAMBDA) {
+        for (int i = 0; i < term->lambda.body_count; i++)
+            if (!dep_surface_term_scoped(ctx, term->lambda.body_exprs[i],
+                                         gamma, term, false)) return false;
+        return true;
+    }
+    if (term->type == AST_LIST) {
+        for (size_t i = 0; i < term->list.count; i++)
+            if (!dep_surface_term_scoped(ctx, term->list.items[i], gamma,
+                                         lambda_scope, i == 0)) return false;
+    } else if (term->type == AST_ARRAY) {
+        for (size_t i = 0; i < term->array.element_count; i++)
+            if (!dep_surface_term_scoped(ctx, term->array.elements[i], gamma,
+                                         lambda_scope, false)) return false;
+    }
+    return true;
+}
+
+struct DepDerivation {
+    uint64_t kernel_seal;
+    char *conclusion;
+    Term *term;
+    Term *type;
+    Term *equality_rhs;
+};
+
+enum { DEP_DERIVATION_SEAL = UINT64_C(0x4d4f4e4144505246) };
+
+DepDerivation *dep_take_surface_derivation(DepCtx *ctx) {
+    if (!ctx) return NULL;
+    DepDerivation *result = ctx->last_derivation;
+    ctx->last_derivation = NULL;
+    return result;
+}
+
+const char *dep_derivation_conclusion(const DepDerivation *derivation) {
+    return derivation && derivation->kernel_seal == DEP_DERIVATION_SEAL
+        ? derivation->conclusion : NULL;
+}
+
+void dep_derivation_free(DepDerivation *derivation) {
+    if (!derivation) return;
+    derivation->kernel_seal = 0;
+    free(derivation->conclusion);
+    term_free(derivation->term);
+    term_free(derivation->type);
+    term_free(derivation->equality_rhs);
+    free(derivation);
+}
+
+static void dep_surface_context_string(AST *gamma, const char *focus_local,
+                                       char *out, size_t size) {
+    size_t used = 0;
+    if (!out || size == 0) return;
+    out[0] = '\0';
+#define GAMMA_ADD(...) do { \
+    if (used < size) { \
+        int _written = snprintf(out + used, size - used, __VA_ARGS__); \
+        if (_written > 0) used += (size_t)_written < size - used \
+            ? (size_t)_written : size - used; \
+    } \
+} while (0)
+    GAMMA_ADD("{");
+    if (gamma && gamma->type == AST_SET) {
+        for (size_t i = 0, binding = 0; i < gamma->set.element_count; binding++) {
+            AST *name = gamma->set.elements[i++];
+            if (name && name->type == AST_JUDGMENT &&
+                name->judgment.expression &&
+                name->judgment.expression->type == AST_SYMBOL) {
+                if (binding) GAMMA_ADD(", ");
+                GAMMA_ADD("%s : ", name->judgment.expression->symbol);
+                AST *annotation = name->judgment.claimed_type;
+                if (annotation && annotation->type == AST_SYMBOL)
+                    GAMMA_ADD("%s", annotation->symbol);
+                else
+                    GAMMA_ADD("?");
+                continue;
+            }
+            AST *type = i < gamma->set.element_count
+                ? gamma->set.elements[i] : NULL;
+            const char *inline_colon = name && name->type == AST_SYMBOL &&
+                                       name->symbol
+                ? strchr(name->symbol, ':') : NULL;
+            bool inline_annotation = inline_colon && inline_colon[1] != '\0';
+            if (!inline_annotation && type) {
+                i++;
+                AST *colon_lambda_type = dep_surface_colon_lambda_type(type);
+                if (colon_lambda_type) {
+                    type = colon_lambda_type;
+                } else if (type->type == AST_SYMBOL && type->symbol &&
+                    strcmp(type->symbol, ":") == 0 &&
+                    i < gamma->set.element_count)
+                    type = gamma->set.elements[i++];
+            }
+            if (binding) GAMMA_ADD(", ");
+            if (name && name->type == AST_SYMBOL && name->symbol) {
+                const char *colon = inline_colon;
+                size_t name_length = colon ? (size_t)(colon - name->symbol)
+                                           : strlen(name->symbol);
+                if (focus_local && strlen(focus_local) == name_length &&
+                    strncmp(name->symbol, focus_local, name_length) == 0)
+                    GAMMA_ADD("%s : ", focus_local);
+                else
+                    GAMMA_ADD("%.*s : ", (int)name_length, name->symbol);
+            } else GAMMA_ADD("? : ");
+            if (inline_annotation)
+                GAMMA_ADD("%s", inline_colon + 1);
+            else if (type && type->type == AST_SYMBOL && type->symbol)
+                GAMMA_ADD("%s", type->symbol);
+            else if (type && type->type == AST_KEYWORD && type->keyword)
+                GAMMA_ADD("%s", type->keyword);
+            else GAMMA_ADD("?");
+        }
+    }
+    GAMMA_ADD("}");
+#undef GAMMA_ADD
+}
+
+/* Render the bounded primary-cause slice specified by the contextual
+ * judgments design.  This consumes structured provenance captured during
+ * checking; it never participates in deciding whether the judgment holds. */
+static void dep_render_surface_failure(DepCtx *ctx, AST *gamma,
+                                       AST *claimed_ast) {
+    if (!ctx || !ctx->failure_term || !ctx->failure_expected ||
+        !ctx->failure_actual) return;
+    char gamma_text[256];
+    dep_surface_context_string(gamma, ctx->failure_local_name,
+                               gamma_text, sizeof(gamma_text));
+    const char *expected = term_to_string(dep_quote(
+        ctx->failure_expected, ctx->depth, ctx->mctx));
+    const char *actual = term_to_string(dep_quote(
+        ctx->failure_actual, ctx->depth, ctx->mctx));
+    const char *focus = term_to_string(ctx->failure_term);
+    const char *whole = ctx->failure_application
+        ? term_to_string(ctx->failure_application) : focus;
+    char surface_whole[512];
+    if (ctx->failure_application &&
+        ctx->failure_application->kind == TERM_APP &&
+        ctx->failure_application->app_argc == 2 &&
+        ctx->failure_application->app_fn->kind == TERM_FVAR) {
+        snprintf(surface_whole, sizeof(surface_whole), "%s %s %s",
+                 term_to_string(ctx->failure_application->app_args[0]),
+                 ctx->failure_application->app_fn->fvar_name,
+                 term_to_string(ctx->failure_application->app_args[1]));
+    } else {
+        snprintf(surface_whole, sizeof(surface_whole), "%s", whole);
+    }
+    const char *claimed = claimed_ast && claimed_ast->type == AST_SYMBOL
+        ? claimed_ast->symbol : expected;
+    const char *fn = "?";
+    if (ctx->failure_application &&
+        ctx->failure_application->kind == TERM_APP &&
+        ctx->failure_application->app_fn &&
+        ctx->failure_application->app_fn->kind == TERM_FVAR)
+        fn = ctx->failure_application->app_fn->fvar_name;
+    const char *fn_type = strcmp(fn, "+") == 0 || strcmp(fn, "-") == 0 ||
+                          strcmp(fn, "*") == 0 || strcmp(fn, "/") == 0
+        ? "Int → Int → Int" : "?";
+    int skipped = ctx->failure_application &&
+                  ctx->failure_argument_index + 1 <
+                      ctx->failure_application->app_argc
+        ? ctx->failure_argument_index + 3 : 0;
+    char hint[384];
+    if (ctx->failure_local_name) {
+        snprintf(hint, sizeof(hint),
+            "Γ explicitly fixes %s : %s; explicit assumptions are not inferred.",
+            ctx->failure_local_name,
+            ctx->failure_local_type ? actual : "?");
+    } else if (strncmp(actual, "Π(", 2) == 0 &&
+               strncmp(expected, "Coll ::", 7) == 0) {
+        snprintf(hint, sizeof(hint),
+            "A lambda has a function type such as A -> B; [A] denotes a collection type.");
+    } else {
+        snprintf(hint, sizeof(hint),
+            "The expression must inhabit the claimed type before a proof can be constructed.");
+    }
+
+    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+        "%s:%d:%d: Dependent Type Error\n"
+        "  Couldn't match:\n"
+        "    expected: %s\n"
+        "    actual:   %s\n\n"
+        "  while checking:\n"
+        "    %s ⊢ %s ⇐ %s\n\n"
+        "  derivation:\n"
+        "    check %s ⇐ %s\n"
+        "    ├─ infer (%s) ⇒ %s\n"
+        "    ├─ check %s ⇐ %s\n"
+        "    │  ├─ lookup %s in Γ ⇒ %s\n"
+        "    │  └─ mismatch: %s ≠ %s\n"
+        "%s"
+        "\n  Hint: %s",
+        ctx->filename, ctx->failure_term->line, ctx->failure_term->col,
+        expected, actual, gamma_text, surface_whole, claimed,
+        whole, claimed, fn, fn_type, focus, expected,
+        ctx->failure_local_name ? ctx->failure_local_name : focus,
+        ctx->failure_local_type ? actual : "?", actual, expected,
+        skipped ? "    └─ argument 3 skipped after failure\n" : "",
+        hint);
+}
+
+bool dep_check_surface_judgment(DepCtx *base, AST *judgment,
+                                char *error, size_t error_size) {
+    if (!base || !judgment || judgment->type != AST_JUDGMENT)
+        return false;
+    /* A failed check must never leave a previously issued proof available to
+     * its caller. Each derivation belongs to exactly one successful request. */
+    dep_derivation_free(base->last_derivation);
+    base->last_derivation = NULL;
+    DepCtx *ctx = dep_ctx_child(base);
+    ctx->reject_unbound = true;
+    AST *gamma = judgment->judgment.context;
+    AST *left_ast = judgment->judgment.expression;
+    AST *right_ast = judgment->judgment.equal_to;
+    AST *claimed_ast = judgment->judgment.claimed_type;
+    bool ok = dep_surface_gamma_push(ctx, gamma);
+    if (!ok && !ctx->had_error) {
+        ctx->had_error = true;
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                 "%s:%d:%d: invalid assumption in explicit context",
+                 ctx->filename, gamma->line, gamma->column);
+    }
+    if (ok && (!dep_surface_term_scoped(ctx, left_ast, gamma, NULL, false) ||
+               (right_ast && !dep_surface_term_scoped(
+                   ctx, right_ast, gamma, NULL, false)))) {
+        ok = false;
+        ctx->had_error = true;
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                 "%s:%d:%d: explicit context does not bind every free variable",
+                 ctx->filename, judgment->line, judgment->column);
+    }
+
+    bool universe_judgment = claimed_ast->type == AST_SYMBOL &&
+        strcmp(claimed_ast->symbol, "Type") == 0;
+    Term *claimed = NULL;
+    Term *left = NULL;
+    Term *right = NULL;
+    Value *expected = NULL;
+    if (ok && universe_judgment) {
+        left = dep_term_of_type_ast(ctx, left_ast);
+        ok = left && dep_infer_level(ctx, left) >= 0;
+        if (ok && right_ast) {
+            right = dep_term_of_type_ast(ctx, right_ast);
+            ok = right && dep_infer_level(ctx, right) >= 0;
+        }
+    } else if (ok) {
+        claimed = dep_term_of_type_ast(ctx, claimed_ast);
+        if (!claimed || dep_infer_level(ctx, claimed) < 0) ok = false;
+        if (ok) expected = dep_eval(claimed, ctx->env, ctx->mctx);
+        if (ok) {
+            left = dep_term_of_ast(ctx, left_ast);
+            ok = left && dep_check(ctx, left, expected);
+        }
+        if (ok && right_ast) {
+            right = dep_term_of_ast(ctx, right_ast);
+            ok = right && dep_check(ctx, right, expected);
+        }
+    }
+    if (ok && right_ast) {
+        ConvCtx conversion = conv_ctx_make(ctx, ctx->depth);
+        Value *left_value = dep_eval(left, ctx->env, ctx->mctx);
+        Value *right_value = dep_eval(right, ctx->env, ctx->mctx);
+        ok = dep_conv(&conversion, left_value, right_value,
+                      universe_judgment ? NULL : expected);
+        if (!ok && !ctx->had_error) {
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "%s:%d:%d: terms are not definitionally equal: %s",
+                     ctx->filename, judgment->line, judgment->column,
+                     conversion.error_msg);
+        }
+    }
+    if (!ok && ctx->failure_term)
+        dep_render_surface_failure(ctx, gamma, claimed_ast);
+    if (ok) {
+        char gamma_text[256];
+        dep_surface_context_string(gamma, NULL, gamma_text,
+                                   sizeof(gamma_text));
+        const char *left_text = term_to_string(left);
+        const char *type_text = universe_judgment
+            ? "Type" : term_to_string(claimed);
+        const char *right_text = right ? term_to_string(right) : NULL;
+        DepDerivation *derivation = calloc(1, sizeof(*derivation));
+        derivation->kernel_seal = DEP_DERIVATION_SEAL;
+        if (right_text)
+            asprintf(&derivation->conclusion, "%s ⊢ %s ≡ %s : %s",
+                     gamma_text, left_text, right_text, type_text);
+        else
+            asprintf(&derivation->conclusion, "%s ⊢ %s : %s",
+                     gamma_text, left_text, type_text);
+        derivation->term = term_clone(left);
+        derivation->type = claimed ? term_clone(claimed) : term_type_n(0);
+        derivation->equality_rhs = right ? term_clone(right) : NULL;
+        dep_derivation_free(base->last_derivation);
+        base->last_derivation = derivation;
+    }
+    if (!ok && error && error_size)
+        snprintf(error, error_size, "%s", ctx->error_msg[0]
+            ? ctx->error_msg : "explicit judgment is not derivable");
+    term_free(claimed);
+    term_free(left);
+    term_free(right);
+    dep_ctx_free(ctx);
+    return ok;
+}
+
+
+static Term *dep_term_of_embedded_arrow(Type *type) {
+    if (!type) return term_hole();
+    if (type->kind != TYPE_ARROW) return term_embed(type_clone(type));
+    return term_pi("_", dep_term_of_embedded_arrow(type->arrow_param),
+                   dep_term_of_embedded_arrow(type->arrow_ret),
+                   IMPLICIT_EXPLICIT);
+}
 
 static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
     expected_type = dep_force(expected_type, ctx->mctx);
@@ -2743,6 +3389,16 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
 
     // ── Lambda — check against Π ──────────────────────────────────
     case TERM_LAM: {
+        if (expected_type->kind == VAL_EMBED &&
+            expected_type->embed_type &&
+            expected_type->embed_type->kind == TYPE_ARROW) {
+            Term *pi_term = dep_term_of_embedded_arrow(
+                expected_type->embed_type);
+            Value *pi_value = dep_eval(pi_term, ctx->env, ctx->mctx);
+            bool checked = dep_check_internal(ctx, t, pi_value);
+            term_free(pi_term);
+            return checked;
+        }
         if (expected_type->kind != VAL_PI) {
             goto check_default;
         }
@@ -2813,6 +3469,23 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
 
     // ── Hole / meta — generate a fresh metavariable ───────────────
     case TERM_HOLE: {
+        if (t->source_ast && t->source_ast->type == AST_ARRAY &&
+            t->source_ast->array.element_count == 0) {
+            DepEnvEntry *nil_ctor = dep_env_lookup(ctx->globals, "__ctor_[]");
+            if (nil_ctor && nil_ctor->type) {
+                ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
+                if (!dep_conv(&cc, nil_ctor->type, expected_type, NULL)) {
+                    dep_error_set(ctx, t->line, t->col,
+                                  ": indexed constructor [] has type %s, expected %s",
+                                  term_to_string(dep_quote(nil_ctor->type, ctx->depth,
+                                                           ctx->mctx)),
+                                  term_to_string(dep_quote(expected_type, ctx->depth,
+                                                           ctx->mctx)));
+                    return false;
+                }
+                return true;
+            }
+        }
         int id = meta_fresh(ctx->mctx, expected_type, ctx->depth, "_");
         (void)id;     // The hole is now represented as ?id in the mctx
         return true;  // Always succeeds; solver fills it later
@@ -2881,6 +3554,21 @@ static bool dep_check_internal(DepCtx *ctx, Term *t, Value *expected_type) {
         if (!inferred) return false;
         ConvCtx cc = conv_ctx_make(ctx, ctx->depth);
         if (!dep_conv(&cc, inferred, expected_type, NULL)) {
+            if (!ctx->failure_term) {
+                ctx->failure_term = t;
+                ctx->failure_application = ctx->trace_application;
+                ctx->failure_argument_index = ctx->trace_argument_index;
+                ctx->failure_expected = expected_type;
+                ctx->failure_actual = inferred;
+                if (t->kind == TERM_FVAR) {
+                    DepCtxEntry *origin = dep_ctx_lookup_local(
+                        ctx, t->fvar_name);
+                    if (origin) {
+                        ctx->failure_local_name = origin->name;
+                        ctx->failure_local_type = origin->type;
+                    }
+                }
+            }
             dep_error_set(ctx, t->line, t->col,
                           "\n"
                           "    • Couldn't match expected type:  %s\n"
@@ -3028,6 +3716,80 @@ static char *dep_type_parse_source(const char *type_name) {
     return strndup(start, (size_t)(end - start));
 }
 
+/* parse() returns one top-level form. Type annotations such as `Vec n t`
+ * therefore need grouping when they originate from declaration strings;
+ * otherwise only the head symbol is retained and all dependent indices are
+ * silently lost. */
+static AST *dep_parse_type_text(const char *text) {
+    char *trimmed = dep_type_parse_source(text);
+    if (!trimmed) return NULL;
+    char *expanded = reader_type_syntax_expand(trimmed);
+    if (expanded) {
+        free(trimmed);
+        trimmed = expanded;
+    }
+    char *start = trimmed;
+    size_t length = strlen(start);
+    /* Reader annotations may already carry one or more grouping layers.
+     * Collapse only wrappers that enclose the entire source, then add exactly
+     * one group so multi-token applications remain one parse form. */
+    while (length >= 2 && start[0] == '(' && start[length - 1] == ')') {
+        int depth = 0;
+        bool wraps_all = true;
+        for (size_t i = 0; i < length; i++) {
+            if (start[i] == '(') depth++;
+            else if (start[i] == ')') depth--;
+            if (depth == 0 && i + 1 < length) {
+                wraps_all = false;
+                break;
+            }
+        }
+        if (!wraps_all) break;
+        start++;
+        length -= 2;
+        while (length && isspace((unsigned char)*start)) { start++; length--; }
+        while (length && isspace((unsigned char)start[length - 1])) length--;
+    }
+    bool atomic = length > 0;
+    for (size_t i = 0; i < length && atomic; i++)
+        atomic = isalnum((unsigned char)start[i]) || start[i] == '_' ||
+                 start[i] == '?' || start[i] == '*';
+    if (atomic) {
+        char *single = strndup(start, length);
+        AST *ast = parse(single);
+        free(single);
+        free(trimmed);
+        return ast;
+    }
+    char *grouped = malloc(length + 3);
+    grouped[0] = '(';
+    memcpy(grouped + 1, start, length);
+    grouped[length + 1] = ')';
+    grouped[length + 2] = '\0';
+    AST *ast = parse(grouped);
+    free(grouped);
+    free(trimmed);
+    return ast;
+}
+
+static bool dep_type_mentions_dependent_family(DepCtx *ctx, const char *text) {
+    if (!ctx || !text) return false;
+    for (const char *at = text; *at;) {
+        if (!(isalpha((unsigned char)*at) || *at == '_')) { at++; continue; }
+        const char *start = at++;
+        while (isalnum((unsigned char)*at) || *at == '_') at++;
+        size_t length = (size_t)(at - start);
+        if (length >= 240) continue;
+        char internal[256] = "__type_";
+        memcpy(internal + 7, start, length);
+        internal[7 + length] = '\0';
+        DepEnvEntry *family = dep_env_lookup(ctx->globals, internal);
+        if (family && family->type && family->type->kind == VAL_PI)
+            return true;
+    }
+    return false;
+}
+
 static bool dep_ast_numeric_index(AST *ast, int *out_index) {
     if (!ast || ast->type != AST_NUMBER)
         return false;
@@ -3118,6 +3880,12 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
     }
     case AST_KEYWORD: return term_ann(term_hole(), term_embed(type_keyword()));
     case AST_SYMBOL:
+        /* The reflective lexical context is a language-provided value, not a
+         * user variable.  Keep it visible to the dependent checker as the
+         * same Set value inferred and materialized by the ordinary pipeline. */
+        if (strcmp(ast->symbol, "*context*") == 0) {
+            return term_ann(term_hole(), term_embed(type_set()));
+        }
         // Explicit hole — ? and generated undefined sentinels in any position
         if (strcmp(ast->symbol, "?") == 0 || strcmp(ast->symbol, "undefined") == 0) {
             Term *h = term_hole();
@@ -3170,6 +3938,17 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
             // (refl t)
             if (head->type == AST_SYMBOL && strcmp(head->symbol, "refl") == 0 && ast->list.count == 2)
                 return term_refl(dep_term_of_ast(ctx, ast->list.items[1]));
+            // (subst equality motive base) — transport along propositional equality
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "subst") == 0 && ast->list.count == 4)
+                return term_subst(dep_term_of_ast(ctx, ast->list.items[1]),
+                                  dep_term_of_ast(ctx, ast->list.items[2]),
+                                  dep_term_of_ast(ctx, ast->list.items[3]));
+            // (nat-elim motive zero-case successor-case scrutinee)
+            if (head->type == AST_SYMBOL && strcmp(head->symbol, "nat-elim") == 0 && ast->list.count == 5)
+                return term_nat_elim(dep_term_of_ast(ctx, ast->list.items[1]),
+                                     dep_term_of_ast(ctx, ast->list.items[2]),
+                                     dep_term_of_ast(ctx, ast->list.items[3]),
+                                     dep_term_of_ast(ctx, ast->list.items[4]));
             // (if cond then else)
             if (head->type == AST_SYMBOL && strcmp(head->symbol, "if") == 0 && ast->list.count >= 3) {
                 bool infix_subtype_cond =
@@ -3338,13 +4117,21 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
         return result;
     }
     case AST_LAMBDA: {
-        Term *body = dep_term_of_ast(ctx, ast->lambda.body);
+        /* Indexed pattern clauses carry branch-local equalities.  Their
+         * erased decision tree cannot be checked under one unrefined context;
+         * coverage uses pattern_match and HM checks the runtime body. */
+        bool pattern_match_body = ast->lambda.pattern_match &&
+            ast->lambda.pattern_match->type == AST_PMATCH;
+        Term *body = pattern_match_body
+            ? term_hole()
+            : dep_term_of_ast(ctx, ast->lambda.body);
         Term *ty   = NULL;
 
         if (ast->lambda.return_type) {
             char *rname = dep_type_parse_source(ast->lambda.return_type);
 
-            AST *ret_ast = parse(rname);
+            AST *ret_ast = dep_type_mentions_dependent_family(ctx, rname)
+                ? dep_parse_type_text(rname) : parse(rname);
             if (ret_ast) {
                 ty = dep_term_of_type_ast(ctx, ret_ast);
                 /* Intentional leak to prevent UAF in HM phase */
@@ -3365,7 +4152,8 @@ static Term *dep_term_of_ast_internal(DepCtx *ctx, AST *ast) {
                             tname ? tname : "<null>");
                 }
 
-                AST *ty_ast = parse(tname);
+                AST *ty_ast = dep_type_mentions_dependent_family(ctx, tname)
+                    ? dep_parse_type_text(tname) : parse(tname);
                 if (ty_ast) {
                     dom = dep_term_of_type_ast(ctx, ty_ast);
                     /* Intentional leak to prevent UAF in HM phase */
@@ -3613,10 +4401,34 @@ Term *dep_term_of_type_ast(DepCtx *ctx, AST *ast) {
                  * do not free them here. This file already uses intentional
                  * leaks in type elaboration to avoid closure UAF. */
             } else {
-                res = term_meta(meta_fresh(ctx->mctx,
-                                           val_universe_n(0),
-                                           ctx->depth,
-                                           "?ty"));
+                /* Dependent type application, e.g. Vec (S n) t. Type
+                 * constructors live under __type_Name; their indices are
+                 * ordinary terms, not erased HM type arguments. */
+                if (ast->list.count > 0 &&
+                    ast->list.items[0]->type == AST_SYMBOL) {
+                    const char *head_name = ast->list.items[0]->symbol;
+                    char internal[256];
+                    snprintf(internal, sizeof(internal), "__type_%s", head_name);
+                    DepEnvEntry *family = dep_env_lookup(ctx->globals, internal);
+                    Term *fn = family ? term_fvar(internal)
+                                      : dep_term_of_ast(ctx, ast->list.items[0]);
+                    int argc = (int)ast->list.count - 1;
+                    bool dependent_family = family && family->type &&
+                                            family->type->kind == VAL_PI;
+                    if (argc && dependent_family) {
+                        Term **args = malloc(sizeof(Term *) * (size_t)argc);
+                        for (int i = 0; i < argc; i++)
+                            args[i] = dep_term_of_ast(ctx, ast->list.items[i + 1]);
+                        res = term_app(fn, args, argc);
+                    } else {
+                        res = fn;
+                    }
+                } else {
+                    res = term_meta(meta_fresh(ctx->mctx,
+                                               val_universe_n(0),
+                                               ctx->depth,
+                                               "?ty"));
+                }
             }
         }
     }
@@ -3670,30 +4482,334 @@ static bool dep_finite_pattern_matches(const FiniteTypeMember *member,
     return false;
 }
 
+typedef struct {
+    const char *text;
+    size_t at;
+} DepGadtParser;
+
+static void dep_gadt_skip_space(DepGadtParser *p) {
+    while (p->text[p->at] && isspace((unsigned char)p->text[p->at])) p->at++;
+}
+
+static DepGadtType *dep_gadt_parse_expr(DepGadtParser *p, bool stop_at_close);
+
+static DepGadtType *dep_gadt_parse_atom(DepGadtParser *p) {
+    dep_gadt_skip_space(p);
+    if (p->text[p->at] == '(') {
+        p->at++;
+        DepGadtType *inside = dep_gadt_parse_expr(p, true);
+        dep_gadt_skip_space(p);
+        if (p->text[p->at] == ')') p->at++;
+        return inside;
+    }
+    size_t start = p->at;
+    while (p->text[p->at] && !isspace((unsigned char)p->text[p->at]) &&
+           p->text[p->at] != '(' && p->text[p->at] != ')') p->at++;
+    if (p->at == start) return NULL;
+    DepGadtType *type = calloc(1, sizeof(*type));
+    type->head = strndup(p->text + start, p->at - start);
+    return type;
+}
+
+static DepGadtType *dep_gadt_parse_expr(DepGadtParser *p, bool stop_at_close) {
+    DepGadtType *head = dep_gadt_parse_atom(p);
+    if (!head) return NULL;
+    while (true) {
+        dep_gadt_skip_space(p);
+        if (!p->text[p->at] || (stop_at_close && p->text[p->at] == ')')) break;
+        DepGadtType *arg = dep_gadt_parse_atom(p);
+        if (!arg) break;
+        head->args = realloc(head->args, sizeof(*head->args) * (head->arg_count + 1));
+        head->args[head->arg_count++] = arg;
+    }
+    return head;
+}
+
+static DepGadtType *dep_gadt_parse(const char *text) {
+    if (!text) return NULL;
+    DepGadtParser parser = {.text = text, .at = 0};
+    return dep_gadt_parse_expr(&parser, false);
+}
+
+static void dep_gadt_type_free(DepGadtType *type) {
+    if (!type) return;
+    for (size_t i = 0; i < type->arg_count; i++) dep_gadt_type_free(type->args[i]);
+    free(type->args); free(type->head); free(type);
+}
+
+static bool dep_gadt_heads_definitionally_equal(const DepGadtType *a,
+                                                const DepGadtType *b) {
+    if (!a || !b || a->arg_count != b->arg_count) return false;
+    if (strcmp(a->head, b->head) == 0) return true;
+    if (a->arg_count == 0) {
+        bool a_zero = strcmp(a->head, "0") == 0 || strcmp(a->head, "Z") == 0 ||
+                      strcmp(a->head, "zero") == 0;
+        bool b_zero = strcmp(b->head, "0") == 0 || strcmp(b->head, "Z") == 0 ||
+                      strcmp(b->head, "zero") == 0;
+        return a_zero && b_zero;
+    }
+    if (a->arg_count == 1) {
+        bool a_succ = strcmp(a->head, "S") == 0 || strcmp(a->head, "succ") == 0;
+        bool b_succ = strcmp(b->head, "S") == 0 || strcmp(b->head, "succ") == 0;
+        return a_succ && b_succ;
+    }
+    return false;
+}
+
+static bool dep_gadt_type_equal(const DepGadtType *a, const DepGadtType *b) {
+    if (!dep_gadt_heads_definitionally_equal(a, b)) return false;
+    for (size_t i = 0; i < a->arg_count; i++)
+        if (!dep_gadt_type_equal(a->args[i], b->args[i])) return false;
+    return true;
+}
+
+typedef struct DepGadtBinding {
+    const char *name;
+    const DepGadtType *value;
+    struct DepGadtBinding *next;
+} DepGadtBinding;
+
+static bool dep_gadt_unify_result(const DepGadtType *constructor,
+                                  const DepGadtType *scrutinee,
+                                  DepGadtBinding **bindings) {
+    if (!constructor || !scrutinee) return false;
+    if (constructor->head[0] >= 'a' && constructor->head[0] <= 'z' &&
+        constructor->arg_count == 0) {
+        for (DepGadtBinding *b = *bindings; b; b = b->next)
+            if (strcmp(b->name, constructor->head) == 0)
+                return dep_gadt_type_equal(b->value, scrutinee) ||
+                       (scrutinee->head[0] >= 'a' && scrutinee->head[0] <= 'z');
+        DepGadtBinding *binding = calloc(1, sizeof(*binding));
+        binding->name = constructor->head;
+        binding->value = scrutinee;
+        binding->next = *bindings;
+        *bindings = binding;
+        return true;
+    }
+    if (scrutinee->head[0] >= 'a' && scrutinee->head[0] <= 'z' &&
+        scrutinee->arg_count == 0) return true;
+    if (!dep_gadt_heads_definitionally_equal(constructor, scrutinee)) return false;
+    for (size_t i = 0; i < constructor->arg_count; i++)
+        if (!dep_gadt_unify_result(constructor->args[i], scrutinee->args[i], bindings))
+            return false;
+    return true;
+}
+
+static bool dep_gadt_constructor_possible(const char *result,
+                                          const DepGadtType *scrutinee) {
+    DepGadtType *constructor = dep_gadt_parse(result);
+    DepGadtBinding *bindings = NULL;
+    bool possible = dep_gadt_unify_result(constructor, scrutinee, &bindings);
+    while (bindings) { DepGadtBinding *next = bindings->next; free(bindings); bindings = next; }
+    dep_gadt_type_free(constructor);
+    return possible;
+}
+
+static bool dep_clause_has_total_guards(const ASTPMatchClause *clause) {
+    if (!clause || clause->guard_count == 0) return true;
+    for (int i = 0; i < clause->guard_count; i++) {
+        AST *guard = clause->guard_conds[i];
+        if (guard && guard->type == AST_SYMBOL && guard->symbol &&
+            (strcmp(guard->symbol, "otherwise") == 0 ||
+             strcmp(guard->symbol, "True") == 0))
+            return true;
+    }
+    return false;
+}
+
+static bool dep_check_indexed_adt_coverage(DepCtx *ctx, AST *lambda) {
+    AST *pm = lambda->lambda.pattern_match;
+    if (!pm || pm->type != AST_PMATCH || pm->pmatch.clause_count == 0)
+        return true;
+    for (int column = 0; column < lambda->lambda.param_count; column++) {
+        const char *annotation = lambda->lambda.params[column].type_name;
+        DepGadtType *scrutinee = dep_gadt_parse(annotation);
+        if (!scrutinee) continue;
+        const DepAdtType *adt = dep_adt_type_lookup(ctx, scrutinee->head);
+        if (!adt || !adt->constructor_results || !adt->constructor_results[0]) {
+            dep_gadt_type_free(scrutinee);
+            continue;
+        }
+        for (size_t ctor = 0; ctor < adt->constructor_count; ctor++) {
+            bool possible = dep_gadt_constructor_possible(adt->constructor_results[ctor], scrutinee);
+            if (!possible)
+                continue;
+            bool covered = false;
+            for (int row = 0; row < pm->pmatch.clause_count && !covered; row++) {
+                ASTPMatchClause *clause = &pm->pmatch.clauses[row];
+                if (column >= clause->pattern_count ||
+                    !dep_clause_has_total_guards(clause)) continue;
+                ASTPattern *pattern = &clause->patterns[column];
+                covered = pattern->kind == PAT_WILDCARD || pattern->kind == PAT_VAR ||
+                    (pattern->kind == PAT_CONSTRUCTOR && pattern->var_name &&
+                     strcmp(pattern->var_name, adt->constructors[ctor]) == 0) ||
+                    (pattern->kind == PAT_LIST_EMPTY &&
+                     strcmp(adt->constructors[ctor], "[]") == 0);
+            }
+            if (!covered) {
+                dep_error_set(ctx, lambda->line, lambda->column,
+                              ": non-exhaustive patterns for %s; missing: %s",
+                              adt->name, adt->constructors[ctor]);
+                dep_gadt_type_free(scrutinee);
+                return false;
+            }
+        }
+        dep_gadt_type_free(scrutinee);
+    }
+    return true;
+}
+
+static size_t dep_gadt_kind_arity(const char *kind) {
+    size_t arity = 0;
+    int depth = 0;
+    if (!kind) return 0;
+    for (size_t i = 0; kind[i]; i++) {
+        if (kind[i] == '(' || kind[i] == '[') depth++;
+        else if (kind[i] == ')' || kind[i] == ']') depth--;
+        else if (depth == 0 && kind[i] == '-' && kind[i + 1] == '>') {
+            arity++;
+            i++;
+        }
+    }
+    return arity;
+}
+
+static bool dep_identifier_occurs(const char *text, const char *name) {
+    size_t length = strlen(name);
+    for (const char *at = text; (at = strstr(at, name)) != NULL; at++) {
+        bool left = at == text || !(isalnum((unsigned char)at[-1]) || at[-1] == '_');
+        bool right = !(isalnum((unsigned char)at[length]) || at[length] == '_');
+        if (left && right) return true;
+    }
+    return false;
+}
+
+static void dep_type_text_trim(const char **text, size_t *length) {
+    while (*length && isspace((unsigned char)**text)) { (*text)++; (*length)--; }
+    while (*length && isspace((unsigned char)(*text)[*length - 1])) (*length)--;
+    while (*length >= 2 && (*text)[0] == '(' && (*text)[*length - 1] == ')') {
+        int depth = 0;
+        bool wraps = true;
+        for (size_t i = 0; i < *length; i++) {
+            if ((*text)[i] == '(') depth++;
+            else if ((*text)[i] == ')') depth--;
+            if (depth == 0 && i + 1 < *length) { wraps = false; break; }
+        }
+        if (!wraps) break;
+        (*text)++; *length -= 2;
+        while (*length && isspace((unsigned char)**text)) { (*text)++; (*length)--; }
+        while (*length && isspace((unsigned char)(*text)[*length - 1])) (*length)--;
+    }
+}
+
+static bool dep_family_occurs_nonpositive(const char *text, size_t length,
+                                          const char *family, bool positive) {
+    dep_type_text_trim(&text, &length);
+    int depth = 0;
+    for (size_t i = 0; i + 1 < length; i++) {
+        if (text[i] == '(' || text[i] == '[') depth++;
+        else if (text[i] == ')' || text[i] == ']') depth--;
+        else if (depth == 0 && text[i] == '-' && text[i + 1] == '>') {
+            return dep_family_occurs_nonpositive(text, i, family, !positive) ||
+                   dep_family_occurs_nonpositive(text + i + 2, length - i - 2,
+                                                  family, positive);
+        }
+    }
+    char *atom = strndup(text, length);
+    bool occurs = dep_identifier_occurs(atom, family);
+    if (!occurs) { free(atom); return false; }
+    if (!positive) { free(atom); return true; }
+
+    /* For an unapplied family or direct recursive application `F indices`,
+     * positivity is preserved. An occurrence nested as an argument of an
+     * unknown constructor has unknown variance, so reject conservatively. */
+    const char *head = atom;
+    while (*head && isspace((unsigned char)*head)) head++;
+    size_t family_len = strlen(family);
+    bool direct = strncmp(head, family, family_len) == 0 &&
+                  !(isalnum((unsigned char)head[family_len]) || head[family_len] == '_');
+    free(atom);
+    return !direct;
+}
+
+static bool dep_validate_indexed_data(DepCtx *ctx, const AST *ast) {
+    if (!ast || ast->type != AST_DATA || !ast->data.kind_signature) return true;
+    size_t expected_arity = dep_gadt_kind_arity(ast->data.kind_signature);
+    for (int i = 0; i < ast->data.constructor_count; i++) {
+        const ASTDataConstructor *ctor = &ast->data.constructors[i];
+        for (int field = 0; field < ctor->field_count; field++) {
+            const char *field_type = ctor->field_types[field];
+            if (field_type && dep_family_occurs_nonpositive(
+                    field_type, strlen(field_type), ast->data.name, true)) {
+                dep_error_set(ctx, ast->line, ast->column,
+                              ": constructor %s is not strictly positive: %s occurs negatively in %s",
+                              ctor->name ? ctor->name : "<unnamed>", ast->data.name,
+                              field_type);
+                return false;
+            }
+        }
+        DepGadtType *result = dep_gadt_parse(ctor->result_type);
+        bool valid = result && strcmp(result->head, ast->data.name) == 0 &&
+                     result->arg_count == expected_arity;
+        if (!valid) {
+            dep_error_set(ctx, ast->line, ast->column,
+                          ": constructor %s must return %s applied to %zu indices; got %s",
+                          ctor->name ? ctor->name : "<unnamed>", ast->data.name,
+                          expected_arity,
+                          ctor->result_type ? ctor->result_type : "<missing>");
+            dep_gadt_type_free(result);
+            return false;
+        }
+        dep_gadt_type_free(result);
+    }
+    return true;
+}
+
+static bool dep_adt_pattern_matches(const DepAdtType *type, size_t ordinal,
+                                    const ASTPattern *pattern) {
+    if (pattern->kind == PAT_WILDCARD || pattern->kind == PAT_VAR) return true;
+    return pattern->kind == PAT_CONSTRUCTOR && pattern->var_name &&
+           ordinal < type->constructor_count &&
+           strcmp(pattern->var_name, type->constructors[ordinal]) == 0;
+}
+
 static bool dep_check_finite_coverage(DepCtx *ctx, AST *lambda) {
     AST *pm = lambda->lambda.pattern_match;
     if (!pm || pm->type != AST_PMATCH) return true;
 
     const FiniteTypeSetEntry **domains = calloc((size_t)lambda->lambda.param_count,
                                                 sizeof(*domains));
+    const DepAdtType **adt_domains = calloc((size_t)lambda->lambda.param_count,
+                                            sizeof(*adt_domains));
     size_t tuple_count = 1;
     int finite_columns = 0;
     for (int i = 0; i < lambda->lambda.param_count; i++) {
         const char *type_name = lambda->lambda.params[i].type_name;
-        domains[i] = type_name ? finite_type_set_lookup(type_name) : NULL;
-        if (!domains[i]) continue;
+        char *expanded_type = type_name
+            ? reader_type_syntax_expand(type_name) : NULL;
+        const char *lookup_name = expanded_type ? expanded_type : type_name;
+        if (expanded_type) {
+            char *application = strchr(expanded_type, ' ');
+            if (application) *application = '\0';
+        }
+        domains[i] = lookup_name ? finite_type_set_lookup(lookup_name) : NULL;
+        adt_domains[i] = domains[i] || !type_name
+            ? NULL : dep_adt_type_lookup(ctx, lookup_name);
+        free(expanded_type);
+        if (!domains[i] && !adt_domains[i]) continue;
         finite_columns++;
-        if (domains[i]->member_count > 0 &&
-            tuple_count <= 1048576 / domains[i]->member_count)
-            tuple_count *= domains[i]->member_count;
+        size_t member_count = domains[i] ? domains[i]->member_count
+                                         : adt_domains[i]->constructor_count;
+        if (member_count > 0 && tuple_count <= 1048576 / member_count)
+            tuple_count *= member_count;
         else {
             dep_error_set(ctx, lambda->line, lambda->column,
                           ": finite pattern matrix is too large to check");
-            free(domains);
+            free(adt_domains); free(domains);
             return false;
         }
     }
-    if (finite_columns == 0) { free(domains); return true; }
+    if (finite_columns == 0) { free(adt_domains); free(domains); return true; }
 
     /* A finite projection cannot prove usefulness when another column has
      * refutable patterns over an unknown/infinite domain. Defer until that
@@ -3702,9 +4818,10 @@ static bool dep_check_finite_coverage(DepCtx *ctx, AST *lambda) {
         ASTPMatchClause *clause = &pm->pmatch.clauses[ci];
         for (int pi = 0; pi < clause->pattern_count &&
                          pi < lambda->lambda.param_count; pi++) {
-            if (!domains[pi] && clause->patterns[pi].kind != PAT_WILDCARD &&
-                                clause->patterns[pi].kind != PAT_VAR) {
-                free(domains);
+            if (!domains[pi] && !adt_domains[pi] &&
+                clause->patterns[pi].kind != PAT_WILDCARD &&
+                clause->patterns[pi].kind != PAT_VAR) {
+                free(adt_domains); free(domains);
                 return true;
             }
         }
@@ -3719,12 +4836,18 @@ static bool dep_check_finite_coverage(DepCtx *ctx, AST *lambda) {
             bool matches = true;
             for (int pi = lambda->lambda.param_count - 1; pi >= 0; pi--) {
                 const FiniteTypeSetEntry *domain = domains[pi];
-                if (!domain) continue;
-                size_t ordinal = cursor % domain->member_count;
-                cursor /= domain->member_count;
+                const DepAdtType *adt_domain = adt_domains[pi];
+                if (!domain && !adt_domain) continue;
+                size_t member_count = domain ? domain->member_count
+                                             : adt_domain->constructor_count;
+                size_t ordinal = cursor % member_count;
+                cursor /= member_count;
                 if (pi >= clause->pattern_count ||
-                    !dep_finite_pattern_matches(&domain->members[ordinal],
-                                                &clause->patterns[pi])) {
+                    (domain
+                        ? !dep_finite_pattern_matches(&domain->members[ordinal],
+                                                      &clause->patterns[pi])
+                        : !dep_adt_pattern_matches(adt_domain, ordinal,
+                                                   &clause->patterns[pi]))) {
                     matches = false;
                     break;
                 }
@@ -3733,20 +4856,24 @@ static bool dep_check_finite_coverage(DepCtx *ctx, AST *lambda) {
                 useful = true;
                 /* Guarded clauses are not total unless an unguarded clause
                  * proves the same row; conservatively leave them uncovered. */
-                if (clause->guard_count == 0) covered[tuple] = true;
+                if (dep_clause_has_total_guards(clause)) covered[tuple] = true;
             }
         }
-        if (!useful && clause->guard_count == 0) {
+        if (!useful && dep_clause_has_total_guards(clause)) {
             const char *type_name = "finite product";
             if (finite_columns == 1)
                 for (int pi = 0; pi < lambda->lambda.param_count; pi++)
-                    if (domains[pi]) { type_name = domains[pi]->name; break; }
+                    if (domains[pi] || adt_domains[pi]) {
+                        type_name = domains[pi] ? domains[pi]->name
+                                                : adt_domains[pi]->name;
+                        break;
+                    }
             const char *pattern_name = clause->patterns[0].var_name
                 ? clause->patterns[0].var_name : "_";
             dep_error_set(ctx, lambda->line, lambda->column,
                           ": redundant pattern clause %d for %s: %s",
                           ci + 1, type_name, pattern_name);
-            free(covered); free(domains);
+            free(covered); free(adt_domains); free(domains);
             return false;
         }
     }
@@ -3755,26 +4882,32 @@ static bool dep_check_finite_coverage(DepCtx *ctx, AST *lambda) {
         if (covered[tuple]) continue;
         if (finite_columns == 1) {
             int column = 0;
-            while (column < lambda->lambda.param_count && !domains[column]) column++;
+            while (column < lambda->lambda.param_count &&
+                   !domains[column] && !adt_domains[column]) column++;
             const FiniteTypeSetEntry *domain = domains[column];
+            const DepAdtType *adt_domain = adt_domains[column];
             dep_error_set(ctx, lambda->line, lambda->column,
                           ": non-exhaustive patterns for %s; missing: %s",
-                          domain->name, domain->members[tuple].spelling);
+                          domain ? domain->name : adt_domain->name,
+                          domain ? domain->members[tuple].spelling
+                                 : adt_domain->constructors[tuple]);
         } else {
             dep_error_set(ctx, lambda->line, lambda->column,
                           ": non-exhaustive patterns for finite product");
         }
-        free(covered); free(domains);
+        free(covered); free(adt_domains); free(domains);
         return false;
     }
-    free(covered); free(domains);
+    free(covered); free(adt_domains); free(domains);
     return true;
 }
 
 static bool dep_validate_pattern_coverage(DepCtx *ctx, AST *ast) {
     if (!ast) return true;
-    if (ast->type == AST_LAMBDA && !dep_check_finite_coverage(ctx, ast))
-        return false;
+    if (ast->type == AST_LAMBDA) {
+        if (!dep_check_indexed_adt_coverage(ctx, ast)) return false;
+        if (!dep_check_finite_coverage(ctx, ast)) return false;
+    }
     if (ast->type == AST_LIST)
         for (size_t i = 0; i < ast->list.count; i++)
             if (!dep_validate_pattern_coverage(ctx, ast->list.items[i])) return false;
@@ -3783,6 +4916,27 @@ static bool dep_validate_pattern_coverage(DepCtx *ctx, AST *ast) {
 
 Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     if (!ast) return NULL;
+
+    if (ast->type == AST_JUDGMENT) {
+        char error[2048] = {0};
+        if (!dep_check_surface_judgment(ctx, ast, error, sizeof(error))) {
+            if (!ctx->had_error) {
+                ctx->had_error = true;
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg), "%s",
+                         error[0] ? error : "typing judgment is not derivable");
+            }
+            return NULL;
+        }
+        DepDerivation *checked = dep_take_surface_derivation(ctx);
+        dep_derivation_free(checked);
+        Type *proof = type_app("Proof", type_unknown());
+        if (out_type) *out_type = term_embed(type_clone(proof));
+        return term_embed(proof);
+    }
+
+    if (ast->type == AST_DATA) dep_register_data_type(ctx, ast);
+
+    if (ast->type == AST_DATA && !dep_validate_indexed_data(ctx, ast)) return NULL;
 
     if (!dep_validate_pattern_coverage(ctx, ast)) return NULL;
 
@@ -3909,7 +5063,18 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
     if (ast->type == AST_DATA) {
         char type_name[256];
         snprintf(type_name, sizeof(type_name), "__type_%s", ast->data.name);
-        dep_env_declare(ctx->globals, type_name, val_universe_n(0));
+        Value *data_kind = val_universe_n(0);
+        if (ast->data.kind_signature) {
+            AST *kind_ast = dep_parse_type_text(ast->data.kind_signature);
+            Term *kind_term = kind_ast ? dep_term_of_type_ast(ctx, kind_ast) : NULL;
+            if (kind_term) {
+                EvalEnv *kind_env = eval_env_empty();
+                data_kind = dep_eval(kind_term, kind_env, ctx->mctx);
+                eval_env_free(kind_env);
+                /* data_kind closures retain kind_term/kind_ast. */
+            }
+        }
+        dep_env_declare(ctx->globals, type_name, data_kind);
 
         for (int i = 0; i < ast->data.constructor_count; i++) {
             ASTDataConstructor *c = &ast->data.constructors[i];
@@ -3917,6 +5082,19 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
             /* Build result type: if data has type params, apply them.
              * data Maybe a => __type_Maybe applied to fresh meta for a */
             Term *ctor_result = term_fvar(type_name);
+            bool indexed_constructor = dep_is_indexed_family(ctx, ast->data.name);
+            if (ast->data.kind_signature && !indexed_constructor) {
+                term_free(ctor_result);
+                ctor_result = term_hole();
+            } else if (indexed_constructor && c->result_type) {
+                AST *result_ast = dep_parse_type_text(c->result_type);
+                if (result_ast) {
+                    term_free(ctor_result);
+                    ctor_result = dep_term_of_type_ast(ctx, result_ast);
+                    /* Result terms retain source pointers in this elaborator;
+                     * keep the tiny parsed AST alive with the term. */
+                }
+            }
             /* For parameterized types, the constructor returns the applied type.
              * We represent Maybe a as __type_Maybe for now (monomorphic codegen). */
             Term *ctor_ty = ctor_result;
@@ -3934,7 +5112,9 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
                         }
                     }
                 }
-                if (is_type_param) {
+                if (ast->data.kind_signature && !indexed_constructor) {
+                    dom = term_hole();
+                } else if (is_type_param) {
                     /* Type parameter 'a' is erased to Universe at the dep level.
                      * Codegen handles it via pointer indirection (opaque/generic).
                      * We do NOT call meta_fresh here — the meta would be immediately
@@ -3946,15 +5126,24 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
                     if (!ftype_str) {
                         dom = term_hole();
                     } else {
-                        AST *tast = parse(ftype_str);
+                        AST *tast = ast->data.kind_signature
+                            ? dep_parse_type_text(ftype_str)
+                            : parse(ftype_str);
                         dom = dep_term_of_type_ast(ctx, tast);
                         ast_free(tast);
                     }
                 }
 
                 char acc_name[256];
-                snprintf(acc_name, sizeof(acc_name), "__field_%s_%d", c->name, j);
-                Term *acc_ty = term_pi("v", term_fvar(type_name), term_clone(dom), IMPLICIT_EXPLICIT);
+                pmatch_field_accessor_name(acc_name, sizeof(acc_name), c->name, j);
+                /* A GADT field projection is only available from values in
+                 * this constructor's indexed result, not from the bare family
+                 * head. Keeping that domain is the equality refinement used
+                 * when a pattern branch projects its fields. */
+                Term *accessor_domain = indexed_constructor
+                    ? term_clone(ctor_result) : term_hole();
+                Term *acc_ty = term_pi("v", accessor_domain,
+                                        term_clone(dom), IMPLICIT_EXPLICIT);
                 EvalEnv *empty_env1 = eval_env_empty();
                 Value *acc_val_ty = dep_eval(acc_ty, empty_env1, ctx->mctx);
                 eval_env_free(empty_env1);
@@ -3963,6 +5152,13 @@ Term *dep_toplevel(DepCtx *ctx, AST *ast, Term **out_type) {
 
                 char pname[32]; snprintf(pname, sizeof(pname), "__ctor_p%d", j);
                 ctor_ty = term_pi(pname, dom, ctor_ty, IMPLICIT_EXPLICIT);
+            }
+            if (indexed_constructor && c->type_signature) {
+                AST *signature_ast = dep_parse_type_text(c->type_signature);
+                Term *signature_ty = signature_ast
+                    ? dep_term_of_type_ast(ctx, signature_ast) : NULL;
+                if (signature_ty) ctor_ty = signature_ty;
+                /* The dependent value below may close over this syntax tree. */
             }
             char ctor_name[256];
             snprintf(ctor_name, sizeof(ctor_name), "__ctor_%s", c->name);
@@ -4167,6 +5363,8 @@ void dep_register_builtins(DepCtx *ctx) {
     #define ARROW(a, b) term_pi("_", (a), (b), IMPLICIT_EXPLICIT)
 
     Term *bool_bool_bool = ARROW(term_clone(t_bool), ARROW(term_clone(t_bool), term_clone(t_bool)));
+    Term *int_int_int = ARROW(term_clone(t_int),
+                             ARROW(term_clone(t_int), term_clone(t_int)));
 
     Term *poly_poly_bool =
         term_pi("A", term_type_n(0),
@@ -4219,10 +5417,13 @@ void dep_register_builtins(DepCtx *ctx) {
     EvalEnv *ee = eval_env_empty();
 
     // Math & Logic
-    dep_env_declare(env, "+",   dep_eval(poly_poly_poly, ee, NULL));
-    dep_env_declare(env, "-",   dep_eval(poly_poly_poly, ee, NULL));
-    dep_env_declare(env, "*",   dep_eval(poly_poly_poly, ee, NULL));
-    dep_env_declare(env, "/",   dep_eval(poly_poly_poly, ee, NULL));
+    /* Arithmetic is not unconstrained polymorphism.  Until dependent
+     * typeclass dictionaries are represented here, give these primitives
+     * their honest kernel type; otherwise Bool + Int is derivable. */
+    dep_env_declare(env, "+",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "-",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "*",   dep_eval(int_int_int, ee, NULL));
+    dep_env_declare(env, "/",   dep_eval(int_int_int, ee, NULL));
     /* Private representation primitive used by the core Semigroup Coll
      * instance.  Its public meaning and laws live in Data.Semigroup; the
      * dependent checker only needs the exact same-shaped append boundary. */
@@ -4233,6 +5434,17 @@ void dep_register_builtins(DepCtx *ctx) {
     dep_env_declare(env, "rt_coll_is_empty", dep_eval(poly_bool, ee, NULL));
     dep_env_declare(env, "__rt_count", dep_eval(poly_int, ee, NULL));
     dep_env_declare(env, "__rt_set_singleton", dep_eval(poly_bool, ee, NULL));
+    /* The HM layer preserves the shared element index.  The dependent bridge
+     * records the representation shape rather than pretending this is an
+     * unconstrained A -> A primitive. */
+    Type *set_elements_list = type_coll();
+    set_elements_list->element_type = type_unknown();
+    Term *set_elements_ty = ARROW(term_fvar("__type_Set"),
+                                  term_embed(set_elements_list));
+    dep_env_declare(env, "__rt_set_elements",
+                    dep_eval(set_elements_ty, ee, NULL));
+    dep_env_declare(env, "__rt_coll_map_closure",
+                    dep_eval(poly_poly_poly, ee, NULL));
     dep_env_declare(env, "and", dep_eval(bool_bool_bool, ee, NULL));
     dep_env_declare(env, "or",  dep_eval(bool_bool_bool, ee, NULL));
 

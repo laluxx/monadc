@@ -432,15 +432,31 @@ void module_context_add_prelude_imports(ModuleContext *ctx)
         char path[1024];
         snprintf(path, sizeof(path), "%s/prelude", env_core);
         module_context_add_prelude_dir(ctx, path);
+        snprintf(path, sizeof(path), "%s/prelude/Data/Relation.mon", env_core);
+        if (!module_context_is_core_library_file(ctx) &&
+            access(path, F_OK) == 0 &&
+            !module_context_has_import(ctx, "Data.Relation"))
+            module_context_add_import(ctx,
+                import_decl_create("Data.Relation", NULL, IMPORT_UNQUALIFIED));
         return;
     }
 
     if (access("core/prelude", F_OK) == 0) {
         module_context_add_prelude_dir(ctx, "core/prelude");
+        if (!module_context_is_core_library_file(ctx) &&
+            access("core/prelude/Data/Relation.mon", F_OK) == 0 &&
+            !module_context_has_import(ctx, "Data.Relation"))
+            module_context_add_import(ctx,
+                import_decl_create("Data.Relation", NULL, IMPORT_UNQUALIFIED));
         return;
     }
 
     module_context_add_prelude_dir(ctx, "/usr/local/lib/monad/core/prelude");
+    if (!module_context_is_core_library_file(ctx) &&
+        access("/usr/local/lib/monad/core/prelude/Data/Relation.mon", F_OK) == 0 &&
+        !module_context_has_import(ctx, "Data.Relation"))
+        module_context_add_import(ctx,
+            import_decl_create("Data.Relation", NULL, IMPORT_UNQUALIFIED));
 }
 
 /* Find an import by prefix.  The prefix is matched against:

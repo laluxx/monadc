@@ -660,3 +660,9 @@
   Cycle 42 adds releasable =Int -> Int= handles, immediate retired-image
   reclamation, and preflight busy-close semantics that preserve a usable host
   when explicit handles remain outstanding.
+
+[FIX id:fix.embedding.infer-dependent-family-shim-2026-09-01 date:2026-09-01 by:codex src:embed/infer_support.c,tests/test_embedding.py conf:high]
+  The embedding compiler intentionally omits the CLI dependent checker and
+  supplies conservative inference support shims.  Any dependent-family query
+  introduced into shared HM inference must have an embedding shim so both the
+  static and shared SDK libraries remain self-contained and linkable.

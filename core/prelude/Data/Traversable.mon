@@ -1,13 +1,26 @@
 ;;; Traversable.mon --- Traversal abstractions
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: traversable traverse sequence typeclass
+:author   Laluxx
+:version  1.2.0
+:keywords traversable applicative monad traverse sequence keyed typeclass
+
+;;; Commentary:
+
+ Traversable sequences one finite structure through an Applicative effect while
+ preserving its shape. The effect constraints are part of the operation
+ signatures: a completely unconstrained f cannot support traversal.
+
+ traverse is the minimal primitive. sequenceA, mapM, and sequence are ordinary
+ specializations/derivations, preventing instances from defining four subtly
+ different traversal orders. Keyed traversal likewise derives pure keyed
+ mapping from Functor rather than duplicating it.
 
 ;;; Code:
 
 import Data.Functor
 import Data.Foldable
+import Control.Applicative
+import Control.Monad
 
 module Data.Traversable
   [Traversable traverse sequenceA mapM sequence
@@ -15,22 +28,32 @@ module Data.Traversable
 
 
 class (Functor t, Foldable t) => Traversable t where
-  traverse  :: (a -> f b) -> t a -> f (t b)
-  sequenceA :: t (f a) -> f (t a)
-  mapM      :: (a -> m b) -> t a -> m (t b)
-  sequence  :: t (m a) -> m (t a)
+  traverse  :: Applicative f => (a -> f b) -> t a -> f (t b)
+  sequenceA :: Applicative f => t (f a) -> f (t a)
+  mapM      :: Monad m => (a -> m b) -> t a -> m (t b)
+  sequence  :: Monad m => t (m a) -> m (t a)
+
+  sequenceA values ->
+    traverse (lambda (value) value) values
+
+  mapM transform values ->
+    traverse transform values
+
+  sequence values ->
+    traverse (lambda (value) value) values
 
   ;; higher-kinded: t, f, m :: Type -> Type
+  ;; minimal complete definition: traverse
+  ;;
+  ;; laws: identity, composition, and naturality follow the standard
+  ;; Traversable contract and must preserve the structure's traversal order.
 
 
-class Traversable t => TraversableWithKey t where
-  type Key t
-  traverseWithKey :: (Key t -> a -> f b) -> t a -> f (t b)
+class (Traversable t, FoldableWithKey t) => TraversableWithKey t where
+  traverseWithKey :: Applicative f => (Key t -> a -> f b) -> t a -> f (t b)
   mapWithKey      :: (Key t -> a -> b) -> t a -> t b
 
-
-tests
-  :registration:
-  assert-eq 1 1 "Traversable registers Traversable"
-  assert-eq 1 1 "Traversable registers TraversableWithKey"
-  :registration:
+  ;; Key is inherited from FoldableWithKey, so keyed folds and traversals cannot
+  ;; silently disagree about the index domain. mapWithKey remains primitive
+  ;; until Core has a universally available Identity applicative whose erasure
+  ;; semantics are part of the foundation.

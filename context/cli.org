@@ -18,6 +18,19 @@
 #+PROPERTY: CONTEXT_OPEN_POLICY showeverything
 #+PROPERTY: CONTEXT_MUTATION_POLICY append-or-supersede
 #+PROPERTY: CONTEXT_LINK_POLICY file-links-and-stable-ids
+
+[DEC id:dec.cli.command-local-suffix-help-2026-09-09 date:2026-09-09 by:human+codex src:cli.c,completion.c,tests/test_format_cli.py conf:high]
+  Help is command-local and accepts the uniform suffix grammar
+  =monad COMMAND help=. Every command page uses the same header, usage,
+  options, and behavioral-contract presentation. The interactive =menu= and
+  =flags= commands are removed from the public CLI; top-level help contains no
+  browser advertisement.
+
+[DEC id:dec.cli.format-control-flow-2026-09-09 date:2026-09-09 by:human+codex src:tooling/format.c,tooling/format.h,tests/test_format_cli.py conf:high]
+  =monad format --control-flow=glyph|ascii= is the compiler-owned reversible
+  notation interface. File output defaults to stdout, =--check= is read-only,
+  and =--write= uses same-directory temporary publication. Same-policy output
+  is idempotent and canonical glyph output survives an ASCII round trip.
 #+TODO: TODO(t) ACTIVE(a) VERIFY(v) WAIT(w) | DONE(d) SUPERSEDED(s) BLOCKED(b)
 #+COLUMNS: %38ITEM(Node) %18CONTEXT_KIND(Kind) %14CONTEXT_STATUS(Status) %12CONFIDENCE(Confidence) %26SOURCE(Source)
 

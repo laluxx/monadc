@@ -325,6 +325,17 @@
   binary) ·
   `monadc.context.cli.cmd-clean` (=cmd_clean= removes built artifacts)
 
+[FIX id:fix.buildsystem.standalone-clean-2026-08-30 date:2026-08-30 by:codex src:cli.c,tests/test_clean_command.py conf:high]
+  =monad clean= now supports source directories without =package.yaml=. The
+  operation is deliberately non-recursive: it removes compiler interfaces
+  (=*.mqti=), objects, LLVM IR, assembly, and bitcode in the current directory.
+  It removes an executable only when that executable is a regular executable
+  file with a same-named local =.mon= source. Monad sources, documentation,
+  unrelated data, unrelated executables, hidden files, symlinks, and
+  subdirectories are preserved. Package cleanup retains its established
+  =build/= and source-artifact behavior. Regression command:
+  =python3 -m unittest tests.test_clean_command=.
+
 [INF id:inf.buildsystem.module-connects from:obs.buildsystem.dep.extract-imports,obs.buildsystem.struct.module-artifact conf:high]
   connects-to -> `monadc.context.module.context` (=ModuleContext=, =ModuleDecl=,
   =ImportDecl= are the module system types that the build system's import
@@ -430,6 +441,22 @@
   tooling to mistake a missing executable for a successful build.  The
   regression supplies a deliberately missing runtime archive and checks both
   the diagnostic and failure status.
+
+[FIX id:fix.buildsystem.embedding-context-dependency-2026-09-03 date:2026-09-03 by:codex src:Makefile,tests/test_embedding_native_string.py conf:high]
+  =embed/native_compile.o= allocates =CodegenContext= by value and must be
+  rebuilt whenever =codegen.h= changes.  Omitting that header dependency let
+  incremental builds combine an old, smaller stack allocation with a newer
+  =codegen_init=, causing stack-canary aborts throughout the installed
+  embedding tests.  The object now depends explicitly on =codegen.h= and
+  =runtime.h=; the full =make test-embedding= suite is the runtime regression.
+
+[FIX id:fix.buildsystem.independent-test-targets-2026-09-03 date:2026-09-03 by:codex src:Makefile,tests/test_make_test_routing.py conf:high]
+  Test families are independently selectable.  =make test= runs the general
+  regression runner, =make core= runs core/prelude module tests, and
+  =make test-embedding= runs the embedding suite.  Core and bytecode targets
+  no longer depend on =test=, and =test= no longer implicitly depends on the
+  expensive embedding suite.  Multiple explicit goals still run each named
+  family, so =make test core= runs general plus core tests only.
 
 [THINK id:think.buildsystem.project-vs-single-file conf:medium]
   The build system supports two modes: single-file compilation

@@ -1,8 +1,8 @@
 ;;; Enum.mon --- Extensible enumeration typeclasses and helpers
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "enum range successor predecessor bounded executable laws"
+:author   Laluxx
+:version  1.1.0
+:keywords enum range successor predecessor bounded executable laws
 
 ;;; Commentary:
 
@@ -109,10 +109,6 @@ method rangeBy :: Int -> Int -> Int -> [Int]
 
 
 tests
-  :registration:
-  assert-eq 1 1 "Enum registers Enum"
-  assert-eq 1 1 "Enum registers Bounded"
-  :registration:
 
   :successor-predecessor:
   assert-eq (succ 3) 4 "Enum succ"

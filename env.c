@@ -2,7 +2,14 @@
 #include "qtt/pipeline.h"
 #include "qtt/compiler.h"
 #include "infer.h"
+#include "dep.h"
 #include "effects/effect.h"
+
+static bool require_explicit_effect_arrows = true;
+
+void env_require_explicit_effect_arrows(bool required) {
+    require_explicit_effect_arrows = required;
+}
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -77,6 +84,7 @@ static void free_entry_fields(EnvEntry *e) {
     free(e->docstring);     e->docstring   = NULL;
     free(e->module_name);   e->module_name = NULL;
     free(e->source_text);   e->source_text = NULL;
+    free(e->repl_ir);       e->repl_ir     = NULL;
     free(e->llvm_name);     e->llvm_name   = NULL;
     type_free(e->type);     e->type        = NULL;
     type_free(e->return_type); e->return_type = NULL;
@@ -181,8 +189,16 @@ void env_insert_layout(Env *table, const char *name, Type *layout_type,
 }
 
 Type *env_lookup_layout(Env *table, const char *name) {
-    EnvEntry *e = env_lookup(table, name);
-    if (e && e->kind == ENV_LAYOUT) return e->type;
+    if (!name) return NULL;
+    for (Env *scope = table; scope; scope = scope->parent) {
+        unsigned index = hash(name) % scope->size;
+        for (EnvEntry *entry = scope->buckets[index]; entry;
+             entry = entry->next) {
+            if (entry->kind == ENV_LAYOUT && entry->name &&
+                strcmp(entry->name, name) == 0)
+                return entry->type;
+        }
+    }
     return NULL;
 }
 
@@ -224,8 +240,19 @@ void env_insert_adt_ctor(Env *table, const char *name, int tag,
 }
 
 EnvEntry *env_lookup_adt_ctor(Env *table, const char *name) {
-    EnvEntry *e = env_lookup(table, name);
-    if (e && e->kind == ENV_ADT_CTOR) return e;
+    /* Constructor tags live in their own semantic namespace.  A generated
+     * specialization may introduce a value binding with the same spelling as
+     * a constructor (notably `Stop` in Producer machinery); ordinary lookup
+     * would stop at that binding and make pattern lowering forget the tag. */
+    for (Env *scope = table; scope; scope = scope->parent) {
+        unsigned index = hash(name) % scope->size;
+        for (EnvEntry *entry = scope->buckets[index]; entry;
+             entry = entry->next) {
+            if (entry->kind == ENV_ADT_CTOR && entry->name &&
+                strcmp(entry->name, name) == 0)
+                return entry;
+        }
+    }
     return NULL;
 }
 
@@ -587,6 +614,22 @@ struct InferEnv *env_get_infer(Env *env) {
     return NULL;
 }
 
+bool env_check_judgment(Env *env, AST *ast, char *error, size_t error_size) {
+    DepCtx *dctx = env_get_dep(env);
+    if (!dctx) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "dependent context is unavailable for explicit judgment");
+        return false;
+    }
+    return dep_check_surface_judgment(dctx, ast, error, error_size);
+}
+
+DepDerivation *env_take_judgment_derivation(Env *env) {
+    DepCtx *dctx = env_get_dep(env);
+    return dctx ? dep_take_surface_derivation(dctx) : NULL;
+}
+
 void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
     EnvEntry *e = env_lookup(env, name);
     if (!e) return;
@@ -596,6 +639,19 @@ void env_set_scheme(Env *env, const char *name, struct TypeScheme *scheme) {
     }
     e->scheme = scheme ? scheme_clone(scheme) : NULL;
     e->scheme_codegen_evidence_only = false;
+}
+
+void env_hm_register_type(Env *env, const char *name, Type *type) {
+    InferEnv *ienv = env_get_infer(env);
+    if (!ienv || !name || !type) {
+        type_free(type);
+        return;
+    }
+    InferCtx *ctx = infer_ctx_create(ienv, env_get_dep(env), "<constructor>");
+    TypeScheme *scheme = infer_generalise(ctx, type, ienv);
+    infer_env_insert(ienv, name, scheme);
+    env_set_scheme(env, name, scheme);
+    infer_ctx_free(ctx);
 }
 
 bool env_install_hm_scheme(
@@ -724,6 +780,49 @@ static bool compact_effect_label_is_trait(const char *label) {
     return label[1] != '\0' || qtt_effect_trait_is_declared(label);
 }
 
+static char *missing_effect_arrow_label(
+    InferCtx *ctx, const TypeScheme *scheme, size_t stage) {
+    for (size_t i = 0; i < scheme_effect_trait_predicate_count(scheme); i++)
+        if (scheme_effect_trait_predicate_stage(scheme, i) == stage)
+            return strdup(scheme_effect_trait_predicate_name(scheme, i));
+
+    Type *arrow = scheme ? scheme->type : NULL;
+    for (size_t i = 0;
+         arrow && arrow->kind == TYPE_ARROW && i < stage; i++)
+        arrow = arrow->arrow_ret;
+    QttEffectScheme *effects = NULL;
+    if (arrow && arrow->kind == TYPE_ARROW && arrow->arrow_effect_scheme)
+        effects = qtt_effect_scheme_deserialize(arrow->arrow_effect_scheme);
+    else if (scheme && stage < scheme->arrow_effect_count &&
+             scheme->arrow_effect_schemes[stage])
+        effects = qtt_effect_scheme_retain(
+            scheme->arrow_effect_schemes[stage]);
+    if (!effects || qtt_effect_scheme_is_empty(effects)) {
+        qtt_effect_scheme_free(effects);
+        return NULL;
+    }
+    QttEffectRow *row = qtt_effect_instantiate(ctx->effect_arena, effects);
+    char *formatted = row
+        ? qtt_effect_format(ctx->effect_solver, row) : NULL;
+    qtt_effect_scheme_free(effects);
+    if (!formatted) return strdup("e");
+    size_t length = strlen(formatted);
+    if (length >= 2 && formatted[0] == '<' &&
+            formatted[length - 1] == '>') {
+        memmove(formatted, formatted + 1, length - 2);
+        formatted[length - 2] = '\0';
+    }
+    if (!formatted[0]) {
+        free(formatted);
+        return strdup("e");
+    }
+    if (formatted[0] == '|' || strchr(formatted, ',') || strchr(formatted, '|')) {
+        free(formatted);
+        return strdup("e");
+    }
+    return formatted;
+}
+
 static void normalize_vars(Type *t, int *map, int *next_id) {
     if (!t) return;
     if (t->kind == TYPE_VAR) {
@@ -791,6 +890,32 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
 
     if (ctx->had_error) {
         Type *sig = hm_signature_from_lambda(ctx, lambda_ast);
+
+        /* Unification can report a spurious occurs-check when two explicitly
+         * polymorphic signatures differ only in freshly allocated variable
+         * ids (especially under Optional tuples and associated applications).
+         * Accept the declaration when their alpha-normalized structures are
+         * identical; the signature remains authoritative. */
+        if (inferred && sig) {
+            Type *inferred_alpha = type_clone(inferred);
+            Type *sig_alpha = type_clone(sig);
+            int inferred_map[128], sig_map[128];
+            int inferred_next = 0, sig_next = 0;
+            normalize_vars(inferred_alpha, inferred_map, &inferred_next);
+            normalize_vars(sig_alpha, sig_map, &sig_next);
+            bool alpha_equal = types_equal(inferred_alpha, sig_alpha);
+            type_free(inferred_alpha);
+            type_free(sig_alpha);
+            if (alpha_equal) {
+                scheme = infer_generalise(ctx, sig, ienv);
+                infer_env_insert(ienv, name, scheme);
+                env_set_scheme(env, name, scheme_clone(scheme));
+                infer_expression_judgment_free(&inferred_judgment);
+                infer_ctx_free(ctx);
+                infer_env_free(child);
+                return scheme;
+            }
+        }
 
         /* Class defaults have already been checked once in their generic
          * class context.  Their specialized signature is authoritative here;
@@ -1081,6 +1206,28 @@ struct TypeScheme *env_hm_infer_define(Env *env, const char *name,
 
         size_t failing_effect_stage = SIZE_MAX;
         const char *failing_effect_label = NULL;
+        if (require_explicit_effect_arrows && scheme && declared_t) {
+            Type *arrow = scheme->type;
+            for (size_t stage = 0;
+                 arrow && arrow->kind == TYPE_ARROW;
+                 stage++, arrow = arrow->arrow_ret) {
+                if (arrow->arrow_effect_name) continue;
+                char *required = missing_effect_arrow_label(
+                    ctx, scheme, stage);
+                if (!required) continue;
+                const char *parameter = type_to_string(arrow->arrow_param);
+                const char *result = type_to_string(arrow->arrow_ret);
+                READER_ERROR(lambda_ast->line, lambda_ast->column,
+                    "\n"
+                    "    • Missing effect annotation for definition ‘%s’\n"
+                    "    • Arrow stage: %zu\n"
+                    "    • Inferred effect: %s\n"
+                    "    • Required arrow: %s -%s-> %s\n"
+                    "   - Hint: add the inferred effect to the function signature",
+                    name, stage + 1, required,
+                    parameter, required, result);
+            }
+        }
         if (scheme && !infer_validate_effect_annotations(
                 ctx, scheme, &failing_effect_stage,
                 &failing_effect_label)) {
@@ -1258,6 +1405,9 @@ static Type *collection_element_type(Type *t) {
     if (t->kind == TYPE_LIST  && t->list_count == 1 &&
         t->list_types)                                  return t->list_types[0];
     if (t->kind == TYPE_ARR   && t->arr_element_type)   return t->arr_element_type;
+    if (t->kind == TYPE_SET   && t->element_type)       return t->element_type;
+    if (t->kind == TYPE_APP && t->app_constructor &&
+        strcmp(t->app_constructor, "Set") == 0)        return t->app_arg;
     /* untyped Coll — element type unknown */
     return NULL;
 }
@@ -1292,12 +1442,18 @@ static bool call_types_compatible(Type *param, Type *arg) {
         (arg_is_int && param_is_float))
         return true;
 
+    bool arg_is_set_app = arg->kind == TYPE_APP && arg->app_constructor &&
+                          strcmp(arg->app_constructor, "Set") == 0;
+    bool param_is_set_app = param->kind == TYPE_APP && param->app_constructor &&
+                            strcmp(param->app_constructor, "Set") == 0;
     bool arg_is_coll  = (arg->kind == TYPE_LIST || arg->kind == TYPE_ARR ||
                          arg->kind == TYPE_SET  || arg->kind == TYPE_MAP ||
-                         arg->kind == TYPE_COLL || arg->kind == TYPE_STRING);
+                         arg->kind == TYPE_COLL || arg->kind == TYPE_STRING ||
+                         arg_is_set_app);
     bool param_is_coll = (param->kind == TYPE_LIST || param->kind == TYPE_ARR ||
                           param->kind == TYPE_SET  || param->kind == TYPE_MAP ||
-                          param->kind == TYPE_COLL || param->kind == TYPE_STRING);
+                          param->kind == TYPE_COLL || param->kind == TYPE_STRING ||
+                          param_is_set_app);
     return arg_is_coll && param_is_coll;
 }
 

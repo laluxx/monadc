@@ -1,0 +1,21 @@
+:TEST-ID tests.codegen.type.dep.adt-pattern-coverage.product
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET adt-pattern-coverage
+:TEST-QUALITY diagnostic-contract-regression
+:TEST-CONTEXT monadc.context.pmatch.adt-coverage
+:TEST-PURPOSE Coverage checks the constructor product for multi-argument matches rather than each column independently.
+:TEST-EXPECT fail:compile
+:TEST-READER-ERROR non-exhaustive patterns for finite product
+:TEST-MENU errors/codegen/adt-pattern-coverage/atom.type.dep.adt-pattern-coverage.product
+:TEST-MENU-PATH codegen/errors/codegen/adt-pattern-coverage/atom.type.dep.adt-pattern-coverage.product
+:TEST-ATOM-LEAF atom.type.dep.adt-pattern-coverage.product
+:TEST-CLI-TARGET codegen errors adt-pattern-coverage
+
+(module Main)
+(data Bit Zero | One)
+(define (same? [left : Bit] [right : Bit] -> Bool)
+  Zero Zero -> True
+  One  One  -> True)

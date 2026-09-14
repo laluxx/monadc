@@ -1,8 +1,8 @@
 ;;; Category.mon --- Category abstraction
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "category identity composition typeclass"
+:author   Laluxx
+:version  1.1.0
+:keywords category identity composition typeclass
 
 ;;; Commentary:
 
@@ -26,9 +26,3 @@ class Category cat where
 
   ;; higher-kinded: cat :: Type -> Type -> Type
   ;; minimal complete definition: idCategory and composeCategory
-
-
-tests
-  :registration:
-  assert-eq 1 1 "Category registers Category"
-  :registration:

@@ -6,21 +6,21 @@
 
 ;;; Commentary:
 
- Laws are typed predicates owned by a class. `check-laws` proves them by
+ Laws are typed predicates owned by a class. =check-laws= proves them by
  complete enumeration when the selected type is a finite set. Infinite and
- opaque types require `Arbitrary` evidence and are checked with deterministic
+ opaque types require =Arbitrary= evidence and are checked with deterministic
  size-graded generation.
 
- In a `tests` block, `laws Class Type` runs the parent check and may contain
- `seeded Class Type Count Seed` children. `seeded` is a contextual sub-keyword
- of `laws`, not a globally reserved word. The compact `seeded law Class Type`
+ In a =tests= block, =laws Class Type= runs the parent check and may contain
+ =seeded Class Type Count Seed= children. =seeded= is a contextual sub-keyword
+ of =laws=, not a globally reserved word. The compact =seeded law Class Type=
  spelling uses the deterministic defaults of 100 cases per property and seed
  zero. Use explicit seeded children in CI and when reproducing a failure.
 
  A generated failure reports its exact case, size, full-width seed, minimized
  counterexample, shrink count, and a one-case replay command.
 
- `Arbitrary` is a core abstraction rather than compiler-owned generation
+ =Arbitrary= is a core abstraction rather than compiler-owned generation
  policy. Instances receive an explicit seed and size; shrink candidates are
  ordered from simplest to more specific and must make structural progress.
 

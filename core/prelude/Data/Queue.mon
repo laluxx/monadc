@@ -1,15 +1,17 @@
 ;;; Queue.mon --- Persistent first-in first-out queues
 
-:author "Laluxx"
-:version "1.0.0"
-:keywords "queue fifo persistent amortized"
+:author   Laluxx
+:version  1.1.0
+:keywords queue fifo persistent amortized
 
 ;;; Commentary:
 
  Queue is a persistent two-list FIFO. Front values are consumed directly;
  newly enqueued values accumulate in reverse order and are rotated only when
  the front becomes empty. This gives O(1) amortized enqueue and dequeue while
- keeping the representation immutable.
+ keeping the representation immutable. =queue-front?= is a total zero-or-one
+ observation using Core's T?/nil convention, and Functor/Foldable traverse the
+ logical FIFO order rather than the private two-list presentation.
 
 ;;; Code:
 
@@ -18,7 +20,8 @@ import Sequence
 module Data.Queue
   [QueueChain EmptyChain ChainNode
    Queue EmptyQueue QueueValue empty-queue singleton-queue
-   queue-empty? enqueue dequeue queue-to-list]
+   queue-empty? queue-front? queue-size enqueue dequeue queue-to-list
+   map-queue queue-foldl queue-foldr]
 
 
 data QueueChain a
@@ -64,6 +67,21 @@ define queue-empty? :: Queue a -> Bool
   _            -> False
 
 
+define chain-front? :: QueueChain a -> a?
+  [EmptyChain] -> nil
+  [ChainNode value _] -> value
+
+
+define queue-front? :: Queue a -> a?
+  [EmptyQueue] -> nil
+  [QueueValue [EmptyChain] back] -> chain-front? (reverse-chain-onto back EmptyChain)
+  [QueueValue front _] -> chain-front? front
+
+
+define queue-size :: Queue a -> Int
+  queue -> length (queue-to-list queue)
+
+
 define queue-to-list :: Queue a -> [a]
   [EmptyQueue] -> []
   [QueueValue front back] -> append (chain-to-list front) (chain-to-list (reverse-chain-onto back EmptyChain))
@@ -86,8 +104,43 @@ define dequeue :: Queue a -> Queue a
   [QueueValue front back] -> dequeue-front front back
 
 
+define map-queue-chain :: (a -> b) -> QueueChain a -> QueueChain b
+  _ [EmptyChain] -> EmptyChain
+  f [ChainNode value rest] -> ChainNode (f value) (map-queue-chain f rest)
+
+
+define queue-foldl-chain :: (b -> a -> b) -> b -> QueueChain a -> b
+  _ acc [EmptyChain] -> acc
+  f acc [ChainNode value rest] -> queue-foldl-chain f (f acc value) rest
+
+
+define queue-foldr-chain :: (a -> b -> b) -> b -> QueueChain a -> b
+  _ acc [EmptyChain] -> acc
+  f acc [ChainNode value rest] -> f value (queue-foldr-chain f acc rest)
+
+
+define queue-foldl :: (b -> a -> b) -> b -> Queue a -> b
+  _ acc [EmptyQueue] -> acc
+  f acc [QueueValue front back] -> queue-foldl-chain f (queue-foldl-chain f acc front) (reverse-chain-onto back EmptyChain)
+
+
+define queue-foldr :: (a -> b -> b) -> b -> Queue a -> b
+  _ acc [EmptyQueue] -> acc
+  f acc [QueueValue front back] -> queue-foldr-chain f (queue-foldr-chain f acc (reverse-chain-onto back EmptyChain)) front
+
+
+define map-queue :: (a -> b) -> Queue a -> Queue b
+  _ [EmptyQueue] -> EmptyQueue
+  f [QueueValue front back] -> QueueValue (map-queue-chain f front) (map-queue-chain f back)
+
+
 tests
   assert-eq (queue-empty? (empty-queue ())) True "Queue empty constructor"
   assert-eq (show (queue-to-list (enqueue (enqueue (empty-queue ()) 1) 2))) "(1 2)" "Queue observes FIFO order"
   assert-eq (show (queue-to-list (dequeue (enqueue (enqueue (empty-queue ()) 1) 2)))) "(2)" "Queue dequeue removes the oldest value"
   assert-eq (queue-empty? (dequeue (empty-queue ()))) True "Queue dequeue is total on empty input"
+  assert-eq (show (queue-front? (enqueue (enqueue (empty-queue ()) 4) 5))) "4" "Queue front observes the oldest value"
+  assert-eq (show (queue-front? (empty-queue ()))) "nil" "Queue front is total on empty input"
+  assert-eq (queue-size (enqueue (enqueue (empty-queue ()) 4) 5)) 2 "Queue size observes logical FIFO contents"
+  assert-eq (show (queue-to-list (map-queue (lambda (x) (x + 1)) (enqueue (enqueue (empty-queue ()) 1) 2)))) "(2 3)" "Queue mapping preserves FIFO order"
+  assert-eq (queue-foldl (lambda (sum value) (sum + value)) 0 (enqueue (enqueue (empty-queue ()) 2) 3)) 5 "Queue fold traverses FIFO order"

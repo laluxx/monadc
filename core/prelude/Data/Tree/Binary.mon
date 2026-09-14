@@ -1,0 +1,153 @@
+;;; Binary.mon --- Evaluation-parametric binary tree shape
+
+:author   Laluxx
+:version  0.3.0
+:keywords binary tree evaluation strict lazy recursive shape container
+
+;;; Commentary:
+
+ BinaryTree is a deliberate stress test of the Evaluation abstraction outside
+ Sequence. The tree shape is defined exactly once:
+
+                 T_E,A(X) = 1 + A × E X × E X.
+
+ =BinaryTree Strict A= and =BinaryTree Lazy A= therefore differ only in the
+ evaluation policy at recursive positions. There is no StrictTree, LazyTree, or
+ tree-specific suspension API.
+
+ This module is small on purpose. Its job in the research Core is to establish
+ that Evaluation is genuinely shape-orthogonal before more tree algorithms are
+ designed. If a future tree operation needs to inspect Strict or Lazy directly,
+ that is evidence either the operation is inherently evaluation-sensitive or the
+ Evaluation abstraction is missing a lawful generic operation.
+
+;;; Construction and Functoriality
+
+ =branch= receives callbacks rather than already-built children and delegates the
+ timing decision entirely to =defer=. Under Strict both callbacks are evaluated
+ while the node is constructed. Under Lazy each branch is suspended independently
+ and shared according to Lazy's call-by-need semantics.
+
+ Infinite recursive construction is evaluation-sensitive in a stronger sense. A
+ value of =BinaryTree Strict A= contains both children immediately, so a generic
+ recursive =repeat-tree= would attempt to construct the entire infinite tree
+ before returning its root. =repeat-tree= is therefore intentionally specialized
+ to Lazy. Strict infinite behavior belongs in a coalgebraic/state-machine
+ representation rather than an eagerly recursive value.
+
+ Mapping is structural and requires only Functor E. It transforms the root value
+ and maps recursive mapping under E; it never asks which evaluation strategy E is.
+
+ This is the same factorization used by Spine and is the intended pattern for
+ future recursive structures: shape owns positions, Evaluation owns timing.
+
+;;; Research Basis
+
+ Michael Abbott, Thorsten Altenkirch, and Neil Ghani, "Containers: Constructing
+ Strictly Positive Types", Theoretical Computer Science 342(1), 2005.
+   https://doi.org/10.1016/j.tcs.2005.06.002
+
+ Andreas Abel and Brigitte Pientka, "Well-founded Recursion with Copatterns and
+ Sized Types", Journal of Functional Programming 26, 2016.
+   https://doi.org/10.1017/S0956796816000022
+
+ Aleš Bizjak, Hans Bugge Grathwohl, Ranald Clouston, Rasmus E. Møgelberg, and
+ Lars Birkedal, "Guarded Dependent Type Theory with Coinductive Types", 2016.
+   https://doi.org/10.1007/978-3-662-49630-5_2
+
+ Containers motivate factoring recursive shape from the contents of positions.
+ Guarded and sized approaches explain how stronger termination/productivity
+ properties may later refine recursive positions without duplicating the tree.
+
+;;; Code:
+
+import Control.Evaluation
+import Data.Functor
+import Data.Bool
+import Control.Strict
+import Control.Lazy
+
+module Data.Tree.Binary
+  [BinaryTree Empty Node
+   empty-tree tree-empty? tree-root? tree-branches? leaf node branch repeat-tree map-tree]
+
+
+data BinaryTree e a
+  = Empty
+  | Node a (e (BinaryTree e a)) (e (BinaryTree e a))
+
+
+define empty-tree :: BinaryTree e a
+  Empty
+
+
+define tree-empty? :: BinaryTree e a -> Bool
+  Empty -> True
+  _     -> False
+
+
+define tree-root? :: BinaryTree e a -> a?
+  Empty -> nil
+  [Node value _ _] -> value
+
+
+define tree-branches? :: BinaryTree e a -> (e (BinaryTree e a), e (BinaryTree e a))?
+  Empty -> nil
+  [Node _ left right] -> (left, right)
+
+
+define leaf :: Evaluation e => a -> BinaryTree e a
+  value -> Node value
+    (defer (lambda (_) Empty))
+    (defer (lambda (_) Empty))
+
+
+define node ::
+  a -> e (BinaryTree e a) -> e (BinaryTree e a) -> BinaryTree e a
+  value left right -> Node value left right
+
+
+define branch :: Evaluation e =>
+  a -> (() -> BinaryTree e a) -> (() -> BinaryTree e a) -> BinaryTree e a
+  value left right -> Node value (defer left) (defer right)
+
+
+define repeat-tree :: a -> BinaryTree Lazy a
+  value ->
+    branch value
+      (lambda (_) (repeat-tree value))
+      (lambda (_) (repeat-tree value))
+
+
+define map-tree :: Functor e =>
+  (a -> b) -> BinaryTree e a -> BinaryTree e b
+  _ Empty -> Empty
+  f [Node value left right] ->
+    Node (f value)
+      (map (lambda (tree) (map-tree f tree)) left)
+      (map (lambda (tree) (map-tree f tree)) right)
+
+
+instance Functor e => Functor (BinaryTree e)
+  map f tree -> map-tree f tree
+
+
+define binary-test-empty :: BinaryTree Strict Int
+  empty-tree
+
+
+define binary-test-tree :: BinaryTree Strict Int
+  branch 1
+    (lambda (_) (leaf 2))
+    (lambda (_) (leaf 3))
+
+
+tests
+  :outer-observation:
+  assert-eq (tree-empty? binary-test-empty) True "BinaryTree empty observation is total"
+  assert-eq (tree-empty? binary-test-tree) False "BinaryTree node observation does not demand children"
+  assert-eq (show (tree-root? binary-test-empty)) "nil" "BinaryTree empty has no root"
+  assert-eq (show (tree-root? binary-test-tree)) "1" "BinaryTree root observation is evaluation-orthogonal"
+  assert-eq (show (tree-root? (map-tree (lambda (x) (x + 10)) binary-test-tree))) "11" "BinaryTree Functor maps the root"
+  assert-eq (show (tree-root? (repeat-tree 9))) "9" "repeat-tree returns an outer node because recursive branches are Lazy"
+  :outer-observation:

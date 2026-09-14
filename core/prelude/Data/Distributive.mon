@@ -1,8 +1,19 @@
 ;;; Distributive.mon --- Distributive and representable functors
 
-;; Author: Laluxx
-;; Version: 1.0.0
-;; Keywords: distributive representable typeclass
+:author   Laluxx
+:version  1.2.0
+:keywords distributive representable functor typeclass
+
+;;; Commentary:
+
+ Distributive is the categorical dual of Traversable's collection-oriented
+ sequencing: it turns a functor full of f-values into one f containing the
+ functor. The outer g must itself be a Functor; without that premise collect
+ cannot be derived lawfully.
+
+ Representable describes functors isomorphic to functions from a fixed
+ representation type. tabulate and index are deliberately the minimal basis;
+ their round-trip laws are the semantic contract.
 
 ;;; Code:
 
@@ -14,10 +25,19 @@ module Data.Distributive
 
 
 class Functor f => Distributive f where
-  distribute :: g (f a) -> f (g a)
-  collect    :: (a -> f b) -> g a -> f (g b)
+  distribute :: Functor g => g (f a) -> f (g a)
+  collect    :: Functor g => (a -> f b) -> g a -> f (g b)
+
+  collect transform values ->
+    distribute (map transform values)
 
   ;; higher-kinded: f, g :: Type -> Type
+  ;; minimal complete definition: distribute
+  ;; The usual identity/composition distributive laws require explicit
+  ;; Identity/Compose witnesses. Core does not currently expose those
+  ;; witnesses, so do not encode a pseudo-law using `pure`: neither f nor g
+  ;; is required to be Applicative. The executable default equation is:
+  ;; collect transform values = distribute (map transform values)
 
 
 class Functor f => Representable f where
@@ -26,10 +46,4 @@ class Functor f => Representable f where
   index    :: f a -> Rep f -> a
 
   ;; law: index (tabulate f) = f
-
-
-tests
-  :registration:
-  assert-eq 1 1 "Distributive registers Distributive"
-  assert-eq 1 1 "Distributive registers Representable"
-  :registration:
+  ;; law: tabulate (index value) = value

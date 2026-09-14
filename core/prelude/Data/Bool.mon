@@ -1,8 +1,9 @@
 ;;; Bool.mon --- Boolean operations
+:bootstrap primitive
 
-:author "Laluxx"
-:version "0.2.0"
-:keywords "Data.Bool bool boolean logic predicate finite-set"
+:author   Laluxx
+:version  0.2.0
+:keywords Data.Bool bool boolean logic predicate finite-set
 
 ;;; Commentary:
 
@@ -31,39 +32,39 @@ method bool :: a -> a -> Bool -> a
 
 
 method not? :: Bool -> Bool
-  :doc "Boolean negation."
   x | x       -> False
     | otherwise -> True
+  :doc "Boolean negation."
 
 
 method and? :: Bool -> Bool -> Bool
-  :doc "Boolean conjunction."
   x y | x       -> y
       | otherwise -> False
+    :doc "Boolean conjunction."
 
 
 method or? :: Bool -> Bool -> Bool
-  :doc "Boolean disjunction."
   x y | x       -> True
       | otherwise -> y
+    :doc "Boolean disjunction."
 
 
 method xor? :: Bool -> Bool -> Bool
-  :doc "Exclusive or."
   x y | x       -> not? y
       | otherwise -> y
+    :doc "Exclusive or."
 
 
 method implies? :: Bool -> Bool -> Bool
-  :doc "Logical implication."
   x y | x       -> y
       | otherwise -> True
+    :doc "Logical implication."
 
 
 method iff? :: Bool -> Bool -> Bool
-  :doc "Logical equivalence."
   x y | x       -> y
       | otherwise -> not? y
+    :doc "Logical equivalence."
 
 
 tests

@@ -320,6 +320,7 @@ Rules:
 - [[file:bytecode.org][Bytecode VM substrate — verifier, register VM, disassembler]]
 - [[file:infer.org][HM type inference engine — constraint gen, unification, zonking]]
 - [[file:type-theory.org][Unified QTT, inferred effects, and layered contextual modal type theory]]
+- [[file:first-class-contextual-judgments.org][First-class contextual judgments, proof values, and focused derivation diagnostics]]
 - [[file:ir.org][Monad semantic intermediate representation]]
 - [[file:runtime.org][Runtime library — values, collections, printing, bignum]]
 - [[file:codegen-ops.org][Codegen operation dispatch — 83+ strcmp handlers, 94 builtins]]

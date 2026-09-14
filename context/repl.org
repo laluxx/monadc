@@ -177,6 +177,19 @@
   can call previously defined functions via the execution engine's symbol
   table.
 
+[DEC id:dec.repl.frontend-parity-2026-09-13 date:2026-09-13 by:human src:user-request conf:high]
+  Every source form accepted by ordinary compilation must be accepted with the
+  same parse and static semantics by the REPL. REPL-only code may classify
+  incomplete interactive input and execute through JIT, but it must not own a
+  competing language grammar. New syntax requires a native =.mon= semantic
+  fixture plus a process-level REPL parity regression.
+
+[FIX id:fix.repl.explicit-judgment-parity-2026-09-13 date:2026-09-13 by:codex src:reader.c,tests/test_repl.py conf:high]
+  Explicit judgment syntax is assembled inside the shared =parse_expr= path,
+  so both file compilation and =wisp_parse_all= in the REPL see one AST form.
+  The regression sends the exact judgment through REPL stdin and rejects
+  leaked reader debug output or the historical multiple-form diagnostic.
+
 [THINK id:think.repl.module-perf from:obs.repl.eval-line conf:medium]
   Creating a new module per expression is simple but may be wasteful for
   large modules. The =compile_one= path in main.c caches compiled objects.
@@ -253,6 +266,13 @@
   registered builtin names, REPL meta-commands, and symbols from the
   current inference environment. Stateful generator pattern: returns
   one match per call, NULL when exhausted.
+
+[FIX id:fix.repl.empty-completion-probe-2026-09-14 date:2026-09-14 by:codex src:repl.c conf:high]
+  An empty-prefix =:complete = request is an editor probe, not a request to
+  serialize the entire compiler environment.  It produces no protocol dump.
+  Both protocol and readline completion hide =__*= implementation bindings,
+  preventing private runtime, alias, accessor, and instance symbols from
+  leaking into user completion.
 
 * Signal Handling and Runtime Safety
 :PROPERTIES:
@@ -379,6 +399,48 @@
   and a source-harvesting scanner that treated parentheses inside quoted strings
   as forms. The focused suite now contains 19 subprocess tests.
 
+[FIX id:fix.repl.implicit-sequence-take-2026-09-11 date:2026-09-11 by:codex src:repl.c,core/prelude/Sequence.mon,tests/test_repl.py conf:high]
+  The interactive prelude includes =Sequence= as well as =Function=.  This is
+  required before parsing, because Wisp obtains =take='s binary arity from the
+  imported export metadata; without it, =take 5 [1..20]= is diagnosed as three
+  top-level forms.  The public =take= order is the established Haskell-style
+  =take amount values= order, covered by exact piped list and String REPL
+  expressions.  A literal String operand selects the concrete string-take
+  primitive before generic Coll method dispatch; otherwise it is incorrectly
+  compiled as list take and produces the empty String.
+
+  =drop= follows the same stable amount-first convention and literal-String
+  specialization.  The REPL must keep its implicit imports aligned with the
+  public prelude contract; a file living under =core/prelude= is intended to be
+  available without an explicit user import, though concrete instance modules
+  may still be loaded through their owning prelude module rather than exposed as
+  additional names.
+
+[FIX id:fix.repl.implicit-indexed-set-prelude-2026-09-14 date:2026-09-14 by:codex src:repl.c,wisp.c,wisp_syntax_policy.c,infer.c,types.c,types.h,env.c,codegen.c,runtime.c,runtime.h,core/prelude/Data/Set.mon,tests/repl_cache_lease_recovery.mon conf:high]
+  =Data.Set= is part of the interactive prelude, so its exported operation
+  arities are installed before Wisp classifies prompt input. Both mathematical
+  =∪= and educational ASCII =U= are ordinary exported binary aliases, making
+  =s U t= one infix form without an explicit import. A later explicit
+  =import Data.Set= is idempotent.
+
+  Set literals now retain their inferred element index in =TYPE_SET= across
+  cloning, substitution, generalization, rendering, and the HM/environment
+  call bridge. The runtime =RT_SET= representation is related to the surface
+  =Set a= constructor instead of being rejected as bare =Set=. Until the whole
+  abstract =SetValue= implementation is lowered onto =RT_SET=, union dispatch
+  selects a checked runtime primitive only when both operands are proven
+  =TYPE_SET= values; module-internal abstract calls retain their existing ABI.
+  The native fixture binds two literal sets and evaluates their unparenthesized
+  union through the public REPL, covering parsing, persistent binding types,
+  imported prelude availability, runtime representation, and printing.
+  Lines beginning with a collection literal are not sent directly to the
+  reader merely because their first byte is =[]= or ={=. They pass through
+  Wisp so a following operator can combine the literal with its right operand;
+  standalone collection literals remain unchanged. Mathematical =∪= is part
+  of the shared infix syntax policy, so cached module reconstruction cannot
+  accidentally turn ={1} ∪ {2}= into three top-level reader forms when
+  secondary-alias arity metadata is absent.
+
 [FIX id:fix.repl.terminal-protocol-and-parser-completeness-2026-07-24 date:2026-07-24 by:codex src:repl.c,wisp.c,wisp.h,reader.c,tests/test_repl.py,tests/test_repl_pty.py conf:high]
   Interactive behavior is a public protocol, not an implementation detail.
   The regression suite therefore drives the shipped binary through a real
@@ -415,7 +477,237 @@
   six-way concurrent cold startup, XDG placement, and explicit opt-out. On the
   reference development machine, empty-session startup improves from about
   0.49 seconds cold to 0.048 seconds warm.
+
+[FIX id:fix.repl.kernel-owned-cache-lease-2026-09-13 date:2026-09-13 by:codex src:repl.c,Makefile,tests/repl_cache_lease_recovery.mon conf:high]
+  On Unix, per-module cache serialization uses =flock= on a =.lease= file.
+  Lease ownership therefore belongs to the kernel's open file description and
+  is released immediately on close, normal exit, signals, crashes, and forced
+  termination. The former directory lock had no owner identity: an interrupted
+  cold prelude build left =Function.lock= behind, every following REPL waited
+  30 seconds, and age-based cleanup was not permitted until 120 seconds. The
+  new suffix deliberately ignores harmless legacy lock directories. Windows
+  retains the directory fallback until its native handle-based equivalent is
+  implemented. The native Monad fixture exercises evaluation through the
+  implicitly loaded =Function= prelude; operational validation holds or leaves
+  a legacy lease and pipes that fixture into the public REPL executable.
+  Installation recreates the invalidated core cache and prewarms the implicit
+  REPL preludes, moving the roughly 30-second cold compilation out of the
+  first interactive startup. Packagers may set =PREWARM_REPL_CACHE=0= when an
+  install must not write a per-user cache.
 [FIX id:fix.repl.persistent-import-context-2026-08-10 date:2026-08-10 src:repl.c,codegen.c,tests/test_repl.py conf:high]
   The REPL retains a module context for imported modules. Qualified imported
   values resolve against that context, while imported globals load directly
   from their shared module instead of requesting REPL-owned value getters.
+[FIX id:fix.repl.load-wisp-module-2026-08-27 date:2026-08-27 by:codex src:repl.c,tests/test_repl.py conf:high]
+  =,load PATH= parses module discovery with =wisp_parse_all=, the same
+  indentation/layout pipeline used by compilation and ordinary REPL input.
+  Never split a source file into whitespace-delimited pseudo-forms and feed
+  them directly to the parenthesized reader: multiline module exports such as
+  =[Vec vec-head ...]= are one layout form, not standalone reader input.  The
+  regression loads =Data/Vec.mon= and confirms imported =Vec.*= methods are
+  visible to completion.
+
+[TODO id:todo.repl.broad-suite-defects-2026-08-27 date:2026-08-27 src:repl.c,core/IO/Directory.mon,tests/test_repl.py]
+  The broader REPL suite still exposes two independent defects: importing
+  every core module rejects a nullary-looking =Right= in =IO.Directory=, and
+  recovery after an unbound-variable codegen error can print corrupted bytes
+  in the diagnostic filename.  These are not part of the =,load= layout-parser
+  fix and need dedicated regressions/repairs.
+
+[FIX id:fix.wisp.indexed-value-annotation-2026-08-28 date:2026-08-28 by:codex src:wisp.c,tests/test_wisp_grouped_infix.py conf:high]
+  An indented value definition makes its signature boundary unambiguous:
+  =define xs :: Vec 3 Int= followed by an indented initializer treats the
+  complete remainder of the declaration line as the type application.  Do
+  not reuse the inline-value heuristic, which previously truncated the type
+  to =Vec= and parsed =3 Int= as extra operands of =define=.  Regression
+  coverage compiles the indexed Vec declaration and its infix constructor
+  chain through the public compiler.
+
+[FIX id:fix.vec.signature-head-runtime-2026-08-28 date:2026-08-28 by:codex src:reader.c,wisp.c,codegen.c,tests/test_wisp_grouped_infix.py conf:high]
+  Separate Wisp signatures retain every whitespace-applied type argument, so
+  =xs :: Vec 3 Int= followed by =xs = ...= lowers to one typed binding.
+  Symbolic Vec cons =.= is right-associative, producing
+  =1 . (2 . (3 . []))= rather than a malformed left-associated tree.
+  Dependent method projection instantiates =Vec.head='s erased result from the
+  receiver's element index and unboxes it at the concrete call boundary;
+  therefore =show xs.head= prints =1= rather than an opaque pointer.
+
+[FIX id:fix.repl.stable-multiline-and-core-gate-2026-09-05 date:2026-09-05 by:codex src:repl.c,main.c,pmatch.c,Makefile,tests/test_repl.py,tests/test_make_test_routing.py conf:high]
+  Multiline polymorphic pattern definitions are a permanent public REPL
+  contract.  Compiler-generated list-pattern cardinality checks call the
+  private =__rt_count= primitive and never depend on a user-facing =count=
+  import.  Each input restores a lifetime-safe parser diagnostic context, so
+  recovery cannot print bytes through a dangling module filename.
+
+  Module compilation starts with isolated Wisp arity state and replays cached
+  dependency/prelude arities.  Source metadata harvesting uses
+  =wisp_parse_all= rather than feeding raw Wisp commentary and layout text to
+  the parenthesized reader.  This prevents earlier imports from changing how
+  later modules parse while preserving dependency call grouping.
+
+  =make repl= is the focused stability gate.  It runs pipe, real-PTY, cache,
+  recovery, persistence, long-session, and multiline tests, and imports every
+  tracked core module through a fresh shipped REPL process.  Core modules are
+  isolated for the sweep because importing every export unqualified into one
+  namespace creates intentional name/type collisions; long-lived state is
+  covered separately in the same suite.
+
+[FIX id:fix.repl.glyph-terminator-and-origin-prompt-2026-09-08 date:2026-09-08 by:human+codex src:wisp.c,repl.c,tests/test_repl_pty.py conf:high]
+  A canonical glyph control tree is complete when its last meaningful line is
+  a nonempty =╰─...▶ expression= catch-all.  Interactive paste therefore
+  submits the whole typed definition as one form without requiring a trailing
+  blank line.  The first interactive prompt begins at terminal cell one:
+  initialization emits neither progress prose nor a padding newline.
+
+[FIX id:fix.repl.multiline-editor-and-adt-autoprint-2026-09-05 date:2026-09-05 by:codex src:repl.c,tests/test_repl.py,tests/test_repl_pty.py conf:high]
+  Interactive multiline input remains one Readline editing buffer and one
+  history entry.  Since Readline starts embedded newlines at terminal column
+  zero, Return inserts the fixed prompt's eight visible columns plus two Wisp
+  indentation columns while the form is incomplete; Return on the blank
+  continuation submits it.
+  =C-p=/=C-n= navigate logical lines and cross into history only beyond the
+  first/last line, while =M-p=/=M-n= access history immediately.  Electric
+  closing delimiters skip their already-inserted mate.
+
+  REPL auto-printing treats applied and optional ADT results as boxed runtime
+  values.  A polymorphic call such as =last [1 2 3]= therefore prints =3=
+  directly, without requiring an explicit =show=.  Pipe and real-PTY
+  regressions cover both evaluation and the editor key protocol.
+
+[FIX id:fix.repl.quote-range-generic-collections-2026-09-05 date:2026-09-05 by:codex src:wisp.c,reader.c,codegen.c,runtime.c,repl.c,tests/test_repl.py,tests/test_repl_pty.py conf:high]
+  Apostrophe is classified as a character delimiter only for complete
+  character-literal shapes; quote prefixes such as ='(...)= therefore submit
+  once their following delimiters balance.  Quoted runtime lists are printed
+  directly instead of being boxed a second time.
+
+  Bare finite ranges are accepted as expressions and bracketed ranges retain
+  array semantics.  Dynamically sized range arrays use owned fat-array
+  storage, allowing the REPL to print their elements instead of an address.
+  Variadic arithmetic operators retain variadic Wisp arity, and boxed
+  type-variable operands are unboxed before numeric LLVM operations.
+
+  A String crossing a generic list-pattern boundary is converted to a list of
+  character values.  Thus a =[a]= pattern function can consume String under
+  the language's collection contract without confusing raw C strings,
+  RuntimeValue boxes, and RuntimeList pointers.
+
+[FIX id:fix.repl-redefinition-where-indent-pair-delete-2026-09-05 date:2026-09-05 by:codex src:repl.c,tests/test_repl.py,tests/test_repl_pty.py conf:high]
+  Return after a continuation line ending in =where= adds one further
+  two-column Wisp indentation level while retaining the prompt-width display
+  offset.  Other continuation lines preserve their current semantic level.
+
+  A REPL definition keeps its source-visible environment key but every LLVM
+  function emitted for its ORC module receives a generation-qualified linker
+  name.  This permits top-level redefinition to shadow the prior binding and
+  prevents lifted =where= helpers such as =double.1= from colliding across
+  permanent JIT modules.
+
+  Empty electric pairs are deleted as one editing action.  Monad installs its
+  Backspace bindings from Readline's startup hook, after inputrc and keymap
+  selection, and covers the terminal DEL byte through a real PTY regression.
+
+[FIX id:fix.repl.colon-commands-where-values-structural-motion-2026-09-05 date:2026-09-05 by:codex src:reader.c,codegen.c,repl.c,env.c,env.h,tests/test_repl.py,tests/test_repl_pty.py conf:high]
+  A colon token dispatches only when its name is registered as a REPL command;
+  otherwise it remains a normal language keyword and auto-prints.  Legacy
+  comma spelling remains accepted for tooling compatibility.  =:ir name=
+  prints the latest generated LLVM function IR retained on the binding.
+
+  A singleton list headed by a zero-argument lambda is an immediate call, not
+  grouping.  This invokes the scope lambda introduced by =letrec=; previously
+  a polymorphic function with a =where= block returned that captured closure,
+  which was then unboxed as zero.  Exact coverage requires =quadruple 1/2/3=
+  to produce =4/8/12=.
+
+  =C-M-p= and =C-M-n= move backward and forward across balanced parentheses,
+  brackets, and braces.  Real-PTY tests combine each motion with kill-to-end
+  and evaluation to verify cursor placement independently of repaint bytes.
+
+[FIX id:fix.repl.kill-sexp-display-column-translation-2026-09-05 date:2026-09-05 by:codex src:repl.c,tests/test_repl_pty.py conf:high]
+  =C-M-k= kills the following balanced expression through Readline's kill-ring
+  API, making the exact text available to ordinary =C-y=.  This shares the
+  structural boundary logic used by =C-M-n=.
+
+  The eight spaces prepended solely to compensate for Readline's continuation
+  display are not semantic cursor columns.  =C-p= subtracts eight when moving
+  from a continuation to the first input line; =C-n= adds eight for the reverse
+  crossing.  Navigation between continuation lines remains unchanged.
+  Backspace at the leading continuation margin deletes all eight artificial
+  spaces in one operation while preserving Wisp's meaningful indentation.
+
+[FIX id:fix.repl.logical-home-end-open-line-2026-09-05 date:2026-09-05 by:codex src:repl.c,tests/test_repl_pty.py conf:high]
+  =C-a= moves to the first non-whitespace character of the current logical
+  line, and =C-e= moves to that line's end.  Whole-form motion is available as
+  =M-a= and =M-e=.  =C-o= inserts a literal newline at point without running
+  the Return completeness or automatic-indentation path.
+
+  Per the interactive editing contract, Backspace at a continuation margin
+  now removes eleven leading spaces in one operation.  This supersedes the
+  earlier eight-column bulk-delete rule; pair deletion remains unchanged.
+
+[FIX id:fix.repl.midline-return-protected-display-margin-2026-09-05 date:2026-09-05 by:codex src:repl.c,tests/test_repl_pty.py conf:high]
+  Return pressed before the end of the editable buffer splits at point and
+  inserts the appropriate continuation indentation before the moved suffix;
+  it never relocates point to the end before inserting.  End-of-buffer Return
+  retains the completeness/submission behavior, including deeper =where=
+  indentation.
+
+  The first eight spaces of a continuation are protected display padding.
+  Starting at the usual ten-space margin, two Backspaces remove the two Wisp
+  indentation spaces individually; the third removes the newline together
+  with all eight protected spaces and lands at the preceding line's end.
+  =C-b= crosses the same boundary atomically, and =C-f= symmetrically skips the
+  protected margin when moving forward.  This supersedes bulk deletion of
+  eleven spaces.
+
+[FIX id:fix.repl.open-line-pair-only-motion-persistent-arrays-2026-09-05 date:2026-09-05 by:codex src:repl.c,tests/test_repl.py,tests/test_repl_pty.py conf:high]
+  =C-o= implements Emacs-style open-line: it inserts a newline after point,
+  adds only the protected eight-column display margin, and restores point to
+  its original position.  It neither submits nor adds semantic indentation.
+
+  =C-M-n= and =C-M-p= are deliberately pair-only structural motions.  They
+  cross balanced =()=, =[]=, and ={}= expressions (including nesting) but do
+  not move across atoms such as identifiers or arrows.  =C-M-k= retains sexp
+  killing and kill-ring/yank behavior independently.
+
+  Persistent REPL values have one storage owner.  Once host storage is
+  registered with ORC, the snippet's generated global is changed from a
+  definition to an external declaration before the module is added.  Composite
+  bindings such as =xs = [x y x]= therefore persist without exporting a second
+  conflicting =xs= symbol.
+* REPL collection ABI parity (2026-09-14)
+:PROPERTIES:
+:ID: fix.repl.imported-collection-abi-2026-09-14
+:END:
+
+Imported Monad functions use a uniform boxed =RuntimeValue*= boundary for
+polymorphic collections.  Native compilation already observes this boundary;
+the REPL's forward-declared typeclass path must not derive its ABI from the
+temporary physical representation of an array literal.
+
+The native regression is =tests/repl_collections_regression.mon=.  In
+particular, =map triple [1 2 3]= must print =[3 6 9]=.  The installed REPL
+still has an open defect at this entry path: GDB observes the second argument
+of =__rt_coll_map_closure= as =0x1= instead of a tagged =RT_ARRAY=.  Do not
+paper over this in the public =map= operation; fix forward-declaration ABI
+selection so compiler and REPL share the same call contract.
+
+REPL auto-printing must likewise dispatch erased =Coll= results through their
+runtime tag, and integer auto-printing uses the same grouped decimal helpers as
+compiled =show=.
+
+* First-class polymorphic callable ABI (2026-09-14)
+:PROPERTIES:
+:ID: fix.repl.first-class-polymorphic-callable-abi-2026-09-14
+:END:
+
+A quantified function may escape before any concrete call site exists.  Its
+generic definition must therefore be executable through the uniform boxed
+closure ABI; an =extern_weak= declaration whose body is =unreachable= is not a
+valid fallback.  Concrete direct calls remain eligible for monomorphization.
+
+Unknown variable types must not be guessed to be arrays or collections merely
+because they occur in unary application position.  Explicit collection types
+and postfix-index source syntax justify indexing; otherwise application uses
+the first-class closure path.  This preserves returned functions such as
+=(λ[f]. f) (λ[x]. x)= across arrays, sets, and quoted lists.  Native regression:
+=tests/polymorphic_identity_values.mon=.

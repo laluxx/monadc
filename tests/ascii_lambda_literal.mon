@@ -1,0 +1,4 @@
+module Main
+
+identity = \value. value
+show (identity 33)

@@ -1,0 +1,27 @@
+:TEST-ID tests.codegen.type.dep.indexed-vec.syntax
+:TEST-TIER regression
+:TEST-STATUS active
+:TEST-SECTION codegen
+:TEST-CATEGORY dependent-types
+:TEST-SUBSET indexed-gadts
+:TEST-QUALITY semantic-regression
+:TEST-CONTEXT monadc.context.type-theory.indexed-gadts
+:TEST-PURPOSE The requested where-free indexed Vec declaration parses and type-checks with symbolic constructors.
+:TEST-EXPECT compile
+:TEST-MENU branches/data-layout/adt-constructors/atom.type.dep.indexed-vec.syntax
+:TEST-MENU-PATH codegen/branches/data-layout/adt-constructors/atom.type.dep.indexed-vec.syntax
+:TEST-ATOM-LEAF atom.type.dep.indexed-vec.syntax
+:TEST-CLI-TARGET codegen branches data-layout adt-constructors
+
+(module Main)
+
+data Nat :: Type
+  Z : Nat
+  S : Nat -> Nat
+
+data Vec :: Nat -> Type -> Type
+  [] : Vec Z t
+  .  : t -> Vec n t -> Vec (S n) t
+| Infix constructor patterns must elaborate exactly like ordinary infix calls.
+(define (vec-head [value : (Vec (S n) t)] -> t)
+  [x . _] -> x)

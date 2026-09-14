@@ -1,8 +1,8 @@
 ;;; Profunctor.mon --- Profunctor abstraction
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "profunctor dimap contravariant covariant typeclass"
+:author   Laluxx
+:version  1.1.0
+:keywords profunctor dimap contravariant covariant typeclass
 
 ;;; Commentary:
 
@@ -31,9 +31,3 @@ class Profunctor p where
   ;; minimal complete definition: dimap
   ;; law: lmap f = dimap f id
   ;; law: rmap g = dimap id g
-
-
-tests
-  :registration:
-  assert-eq 1 1 "Profunctor registers Profunctor"
-  :registration:

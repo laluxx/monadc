@@ -1,107 +1,1175 @@
-;;; Set.mon --- Mathematical set operations
+;;; Set.mon --- Finite extensional sets as the free finite-powerset algebra
+
+:author   Laluxx
+:version  3.0.0
+:keywords set finite powerset extensional quotient semilattice lattice boolean-algebra monad mathematics unicode
+
+;;; Commentary:
+
+ A Set is not a sequence with uniqueness bolted on.
+ It is an extensional mathematical object.
+
+ This module therefore specifies finite sets by their laws and observations,
+ not by a privileged machine representation.  The compiler may erase this
+ implementation into a hash set, tree, HAMT, bitset, perfect finite-domain
+ encoding, or a representation specialized from whole-program knowledge.  It
+ may not change the observable theory stated here.
+
+ Mathematically:
+
+   Set a  =  P_f(a)
+
+ the finite powerset of a.
+
+ Equivalently, Set a is the free finite join-semilattice with bottom generated
+ by a.  Its unit inserts a generator, its join is union, and its monadic
+ multiplication is union of a finite family:
+
+   eta_a : a -> P_f(a)
+   eta_a(x) = {x}
+
+   mu_a : P_f(P_f(a)) -> P_f(a)
+   mu_a(F) = union F
+
+ Hence the familiar finite-powerset monad:
+
+   pure x      = {x}
+   xs >>= f    = union { f x | x in xs }
+
+ This is finite nondeterminism as ordinary mathematics, not a runtime effect.
+
+
+ EXTENSIONALITY
+ ──────────────
+
+ The source implementation observes the compiler's canonical finite-set
+ representation through one private eliminator.  The resulting list is *not
+ the set*.  It is merely a representative of an extensional quotient.
+ Presentations are identified by membership:
+
+   xs ~= =ys    iff    ∀x. x in xs <=> x in ys
+
+ so, in particular:
+
+   from-list [1 1 2]  ==  from-list [2 1]  ==  {1 2}
+
+ Order and multiplicity are semantically nonexistent.
+
+ This has an important consequence for API design: no exported function may
+ reveal presentation order or multiplicity.  In particular there is no
+ unconstrained
+
+   to-list :: {a} -> [a]
+   choose  :: {a} -> Maybe a
+
+ because neither is a function on extensional sets.  A canonical sequence can
+ be observed only when the element type supplies enough structure to choose a
+ canonical ordering:
+
+   to-ascending-list :: (Eq a, Ord a) => {a} -> [a]
+
+ Likewise, no Foldable or Traversable instance is provided.  A generic fold
+ can distinguish both permutation and duplication, so it would descend from
+ presentations rather than from the quotient.  If core later gains an
+ explicit commutative-idempotent-monoid / join-semilattice abstraction, Set's
+ canonical eliminator should be the corresponding homomorphic fold.
+
+
+ EQUALITY IS AN OBSERVATION, NOT A CONSTRUCTION REQUIREMENT
+ ──────────────────────────────────────────────────────────
+
+ Construction and positive algebra do not need Eq:
+
+   singleton         :: a -> {a}
+   from-list         :: [a] -> {a}
+   insert            :: a -> {a} -> {a}
+   union             :: {a} -> {a} -> {a}
+   unions            :: {{a}} -> {a}
+   image             :: (a -> b) -> {a} -> {b}
+   cartesian-product :: {a} -> {b} -> {(a,b)}
+   power-set         :: {a} -> {{a}}
+   bind-set          :: {a} -> (a -> {b}) -> {b}
+
+ Duplicate representatives are harmless because the quotient removes them.
+ This is precisely what lets Set be an ordinary Functor and Monad without an
+ illegal Eq constraint appearing in map or bind.
+
+ Eq appears exactly where an operation must *decide* extensional identity:
+ membership, cardinality, intersection, difference, subset, deletion, and
+ canonical enumeration.
+
+
+ FINITENESS AND UNIVERSES
+ ────────────────────────
+
+ Every value of type {a} is finite, even when a itself is infinite.
+ Consequently there is always bottom:
+
+   empty-set = empty set
+
+ but in general there is no top element.  For example, {Int} cannot contain
+ every Int while remaining a finite value.
+
+ Thus finite subsets of an arbitrary a form a distributive lattice with
+ bottom and relative difference -- more precisely, a generalized Boolean
+ algebra -- not necessarily a bounded Boolean algebra.
+
+ When a type is genuinely finite, the Finite class supplies its universe:
+
+   universe :: Finite a => {a}
+
+ and {a} then becomes the full powerset Boolean algebra P(a).  Absolute
+ complement and the empty-family intersection become total only under this
+ stronger hypothesis.
+
+
+ SURFACE MATHEMATICS
+ ───────────────────
+
+ Type syntax:
+
+   Set       :: Type -> Type
+   {a}       == Set a
+   {Int}     == Set Int
+   {{Int}}   == Set (Set Int)
+
+ Value syntax:
+
+   {}          ==> empty-set
+   {x}         ==> singleton x
+   {x y z}     ==> from-list (list x y z)
+
+ Bounded comprehension:
+
+   {x in xs | p x}     ==> filter-set p xs
+
+ or, for an image-producing comprehension, equivalently via the powerset
+ monad:
+
+   {f x | x in xs}     ==> image f xs
+
+ Unbounded predicates such as
+
+   {x in Int | x > 0}
+
+ belong to refinement/proposition syntax, not to this finite value type.
+
+ The intended mathematical operators are:
+
+   x in A        membership       x ∈ A
+   A union B     join             A ∪ B
+   A intersect B meet             A ∩ B
+   A minus B     difference       A ∖ B
+   A xor B       symmetric diff   A △ B
+   A subset B    inclusion        A ⊆ B
+   A proper B    strict inclusion A ⊂ B
+   A times B     product          A × B
+   powerset A    finite powerset  ℘ A
+   union F       family join      ⋃ F
+
+
+ COMPILER CONTRACT
+ ─────────────────
+
+ The compiler should know the *shape* of set syntax and may know optimization
+ identities, but it should not own set algorithms.  The semantic lowering
+ boundary is this module:
+
+   {}        -> empty-set
+   {x}       -> singleton x
+   {x y z}   -> from-list (...)
+   {a} type  -> Set a
+
+ Optimizations are proofs of observational equivalence to these definitions.
+ The core implementation is therefore an executable specification for every
+ optimized backend representation.
+
+;;; Code:
 
 import Data.Bool
-
-module Data.Set
-  [Membership member?
-   singleton singleton? union intersection difference symmetric-difference
-   subset? proper-subset? superset? proper-superset? disjoint?]
-
-import Sequence
 import Data.Eq
-import Data.Foldable
+import Data.Either
+import Data.Maybe
+import Data.Ord
+import Data.Tuple
+import Data.Functor
+import Data.Semigroup
+import Control.Applicative
+import Control.Monad
+import Sequence
+import Test.QuickCheck
+
+module Data.Set where
+  :type
+    Set
+
+  :finite-universe
+    Finite universe complement
+
+  :membership
+    Membership membership? member? in-set? ∈ contains? ∋ not-member? ∉
+
+  :construction
+    empty-set ∅ singleton from-list
+
+  :observation
+    cardinality size null? non-empty? singleton?
+    to-ascending-list elements
+
+  :update
+    insert delete remove
+
+  :join-algebra
+    union U ∪ unions ⋃
+
+  :meet-and-difference
+    intersection ∩
+    intersections ⋂ intersections-in intersections-all
+    difference ∖ relative-complement complement-in
+    symmetric-difference △
+
+  :inclusion
+    subset? ⊆ not-subset? ⊈
+    proper-subset? ⊂ not-proper-subset? ⊄
+    superset? ⊇ not-superset? ⊉
+    proper-superset? ⊃ not-proper-superset? ⊅
+    disjoint? overlaps?
+
+  :selection
+    filter-set partition-set exists? forall?
+
+  :functorial
+    image preimage-on
+
+  :products
+    cartesian-product × disjoint-union ⊎
+
+  :powerset
+    power-set ℘
+
+  :ordered
+    minimum maximum
+
+  :monad
+    bind-set
+
+  :laws
+    SetLaws FiniteSetLaws
 
 
-class Membership s where
-  member? :: a -> s -> Bool
+;;; Mathematical reader surface
 
-  ;; Membership is the minimal set interface.  It does not imply that S can
-  ;; be enumerated or counted: predicate sets and public types may be infinite.
+type-syntax {_} Set
 
-
-instance Membership Set
-  ;; The method and its laws are public core semantics.  This private intrinsic
-  ;; is only the constant-time runtime representation operation.
-  (member? x s) => __rt_contains? s x
+| Cardinality is an observation, so |_| lowers to cardinality.  Binary set
+| operators are ordinary exported aliases and should receive their usual
+| mathematical precedence from the reader/operator table.
+reader-syntax Int
+  |$| cardinality
 
 
-method singleton :: a -> Set
+;;; Representation
+
+| Set has one representation: the compiler's canonical finite-set value.
+| This private eliminator exposes a finite presentation to the executable
+| specification below.  Public functions remain ordinary module functions;
+| the compiler never dispatches on names such as union or intersection.
+|
+| The current declaration language has no abstract type declaration yet, so
+| this private constructor registers the nominal type constructor only.  No
+| Data.Set definition constructs or eliminates it; it is not the value ABI.
+data Set a
+  = SetValue [a]
+
+
+define set-presentation :: {a} -> [a]
+  xs -> __rt_set_elements xs
+
+
+;;; Private presentation kernel
+
+| Nothing in this section is part of the public theory.  Each helper is valid
+| only because every exported use of it is invariant under permutation and
+| duplication of the private presentation.
+
+
+define set-list-member? :: Eq a => a -> [a] -> Bool
+  _ []     -> False
+  x [y|ys] -> if eq? x y then True else set-list-member? x ys
+
+
+define set-list-append :: [a] -> [a] -> [a]
+  [] ys     -> ys
+  [x|xs] ys -> prepend x (set-list-append xs ys)
+
+
+define set-list-map :: (a -> b) -> [a] -> [b]
+  _ []     -> []
+  f [x|xs] -> prepend (f x) (set-list-map f xs)
+
+
+define set-list-filter :: (a -> Bool) -> [a] -> [a]
+  _ [] -> []
+  p [x|xs] ->
+    if p x
+      then prepend x (set-list-filter p xs)
+      else set-list-filter p xs
+
+
+define set-list-foldl :: (b -> a -> b) -> b -> [a] -> b
+  _ acc []     -> acc
+  f acc [x|xs] -> set-list-foldl f (f acc x) xs
+
+
+define set-list-any? :: [a] -> (a -> Bool) -> Bool
+  [] _     -> False
+  [x|xs] p -> if p x then True else set-list-any? xs p
+
+
+define set-list-all? :: [a] -> (a -> Bool) -> Bool
+  [] _     -> True
+  [x|xs] p -> if p x then set-list-all? xs p else False
+
+
+define set-list-reverse-into :: [a] -> [a] -> [a]
+  acc []     -> acc
+  acc [x|xs] -> set-list-reverse-into (prepend x acc) xs
+
+
+define set-list-reverse :: [a] -> [a]
+  xs -> set-list-reverse-into [] xs
+
+
+| Extensional deduplication for observations that need equality.  The output
+| order is deliberately private and must never escape as a public list.
+define set-list-unique-into :: Eq a => [a] -> [a] -> [a]
+  seen [] -> set-list-reverse seen
+  seen [x|xs] ->
+    if set-list-member? x seen
+      then set-list-unique-into seen xs
+      else set-list-unique-into (prepend x seen) xs
+
+
+define set-list-unique :: Eq a => [a] -> [a]
+  xs -> set-list-unique-into [] xs
+
+
+define set-list-length :: [a] -> Int
+  []     -> 0
+  [x|xs] -> 1 + set-list-length xs
+
+
+define set-list-delete :: Eq a => a -> [a] -> [a]
+  _ [] -> []
+  x [y|ys] ->
+    if eq? x y
+      then set-list-delete x ys
+      else prepend y (set-list-delete x ys)
+
+
+| Canonicalization for the one public sequence observation.  Requiring both
+| Eq and Ord states the real obligation: equality removes multiplicity and
+| ordering chooses a presentation.  A lawful Ord should be coherent with Eq.
+define set-list-insert-ascending :: (Eq a, Ord a) => a -> [a] -> [a]
+  x [] -> list x
+  x [y|ys] -> if eq? x y then prepend y ys else if lt? x y then prepend x (prepend y ys) else prepend y (set-list-insert-ascending x ys)
+
+
+define set-list-canonical :: (Eq a, Ord a) => [a] -> [a]
+  []     -> []
+  [x|xs] -> set-list-insert-ascending x (set-list-canonical xs)
+
+
+;;; Construction
+
+
+define [empty-set :: {a}] (set)
+define [∅ :: {a}] empty-set
+
+
+define singleton :: a -> {a}
   x -> set x
 
 
-method finite-cardinality :: Set -> Int
-  x -> __rt_count x
+| from-list is the quotient map from finite presentations to finite sets.
+| It intentionally does not deduplicate: quotient semantics, not constructor
+| normalization, establish uniqueness.
+define from-list :: [a] -> {a}
+  xs -> set xs
 
 
-method singleton? :: Set -> Bool
-  x -> __rt_set_singleton x
+;;; Membership
+
+| Membership is parameterized by a unary collection constructor so the member
+| type is tied to the collection's parameter.  Set's instance asks for Eq
+| exactly because membership is an extensional equality observation.
+class Membership s where
+  membership? :: Eq a => a -> s a -> Bool
+
+  ;; s :: Type -> Type
 
 
-method union :: Set -> Set -> Set
-  a b -> fold-list-left (lambda (acc x) (conj acc x)) a b
+define set-member? :: Eq a => a -> {a} -> Bool
+  x values -> set-list-member? x (set-presentation values)
 
 
-method difference :: Set -> Set -> Set
-  a b -> fold-list-left (lambda (acc x) (disj acc x)) a b
+define member? :: Eq a => a -> {a} -> Bool
+  x xs -> set-member? x xs
 
 
-method intersection :: Set -> Set -> Set
-  a b -> __rt_set_intersection a b
+instance Membership Set
+  membership? x xs -> set-member? x xs
 
 
-method symmetric-difference :: Set -> Set -> Set
-  a b -> difference (union a b) (intersection a b)
+define in-set? ∈ :: Eq a => a -> {a} -> Bool
+  x xs -> set-member? x xs
 
 
-method subset? :: Set -> Set -> Bool
-  a b -> (finite-cardinality (difference a b)) < 1
+define contains? ∋ :: Eq a => {a} -> a -> Bool
+  xs x -> set-member? x xs
 
 
-method proper-subset? :: Set -> Set -> Bool
-  a b -> and ((finite-cardinality (difference a b)) < 1)
-             ((finite-cardinality (difference b a)) > 0)
+define not-member? ∉ :: (Membership s, Eq a) => a -> s a -> Bool
+  x xs -> not? (membership? x xs)
 
 
-method superset? :: Set -> Set -> Bool
-  a b -> subset? b a
+;;; Extensional observations
 
 
-method proper-superset? :: Set -> Set -> Bool
-  a b -> proper-subset? b a
+define null? :: {a} -> Bool
+  values -> list-empty? (set-presentation values)
 
 
-method disjoint? :: Set -> Set -> Bool
-  a b -> (finite-cardinality (intersection a b)) < 1
+define non-empty? :: {a} -> Bool
+  xs -> not? (null? xs)
 
 
-instance Eq Set
-  (eq? x y) => and ((finite-cardinality (difference x y)) < 1)
-                   ((finite-cardinality (difference y x)) < 1)
-  (not-eq? x y) => or ((finite-cardinality (difference x y)) > 0)
-                      ((finite-cardinality (difference y x)) > 0)
+| Cardinality is the number of equivalence classes represented by the private
+| presentation, hence Eq is genuinely required by this reference model.
+define cardinality :: Eq a => {a} -> Int
+  values -> set-list-length (set-list-unique (set-presentation values))
 
+
+define singleton? :: Eq a => {a} -> Bool
+  xs -> cardinality xs = 1
+
+
+| This is deliberately the ONLY generic escape from Set to an ordered
+| sequence.  Unlike a presentation-revealing to-list, it is a genuine function
+| of the extensional set whenever Eq and Ord are coherent.
+define to-ascending-list :: (Eq a, Ord a) => {a} -> [a]
+  :alias elements
+  values -> set-list-canonical (set-presentation values)
+
+
+;;; Elementary updates
+
+| insert needs no Eq: adding another representative of an existing element
+| does not change the extensional set.
+define insert :: a -> {a} -> {a}
+  x values -> from-list (prepend x (set-presentation values))
+
+
+| delete removes every equal representative so the result is independent of
+| presentation multiplicity.
+define delete :: Eq a => a -> {a} -> {a}
+  x values -> from-list (set-list-delete x (set-presentation values))
+
+
+define remove :: Eq a => a -> {a} -> {a}
+  x xs -> delete x xs
+
+
+;;; Join-semilattice structure
+
+| Union is literally concatenation at the presentation level.  Associativity,
+| commutativity, idempotence, and the empty identity arise extensionally.
+define union ∪ :: {a} -> {a} -> {a}
+  left right ->
+    from-list (set-list-append
+      (set-presentation left)
+      (set-presentation right))
+
+
+| mu of the finite-powerset monad: flatten a finite family by union.
+define unions ⋃ :: {{a}} -> {a}
+  family -> set-list-foldl union empty-set (set-presentation family)
+
+
+;;; Meet, relative complement, and generalized Boolean algebra
+
+
+define intersection ∩ :: Eq a => {a} -> {a} -> {a}
+  xs ys -> __rt_set_intersection xs ys
+
+
+| The intersection of an empty family has no universe-independent finite
+| value when the element type may be infinite.  Therefore the mathematically
+| honest result is Maybe.
+define intersections ⋂ :: Eq a => {{a}} -> Maybe {a}
+  family -> intersections-list (set-presentation family)
+
+
+define intersections-list :: Eq a => [{a}] -> Maybe {a}
+  [] -> Nothing
+  [first|rest] -> Just (set-list-foldl intersection first rest)
+
+
+| Relative to an explicit ambient universe U, the empty-family meet is U.
+| This computes U intersect every member of the family.
+define intersections-in :: Eq a => {a} -> {{a}} -> {a}
+  universe family ->
+    set-list-foldl intersection universe (set-presentation family)
+
+
+define difference ∖ :: Eq a => {a} -> {a} -> {a}
+  xs ys ->
+    from-list (set-list-filter
+      (lambda (x) (not? (set-member? x ys)))
+      (set-presentation xs))
+
+
+define relative-complement :: Eq a => {a} -> {a} -> {a}
+  universe subset -> difference universe subset
+
+
+define complement-in :: Eq a => {a} -> {a} -> {a}
+  universe subset -> difference universe subset
+
+
+define symmetric-difference △ :: Eq a => {a} -> {a} -> {a}
+  xs ys -> union (difference xs ys) (difference ys xs)
+
+
+;;; Inclusion order
+
+| Inclusion is the natural partial order induced by union:
+|
+|   A subset B   =iff=   A union B = B
+|
+| The implementation below uses membership directly to avoid constructing an
+| intermediate set.  No Ord instance is provided: subset is a partial order,
+| while core Ord currently denotes a total ordering vocabulary.
+
+define subset? ⊆ :: Eq a => {a} -> {a} -> Bool
+  xs ys ->
+    set-list-all? (set-presentation xs)
+      (lambda (x) (set-member? x ys))
+
+
+define proper-subset? ⊂ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> and? (subset? xs ys) (not? (eq? xs ys))
+
+
+define superset? ⊇ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> subset? ys xs
+
+
+define proper-superset? ⊃ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> proper-subset? ys xs
+
+
+define not-subset? ⊈ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> not? (subset? xs ys)
+
+
+define not-proper-subset? ⊄ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> not? (proper-subset? xs ys)
+
+
+define not-superset? ⊉ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> not? (superset? xs ys)
+
+
+define not-proper-superset? ⊅ :: Eq a => {a} -> {a} -> Bool
+  xs ys -> not? (proper-superset? xs ys)
+
+
+define disjoint? :: Eq a => {a} -> {a} -> Bool
+  xs ys ->
+    not? (set-list-any? (set-presentation xs)
+      (lambda (x) (set-member? x ys)))
+
+
+define overlaps? :: Eq a => {a} -> {a} -> Bool
+  xs ys -> not? (disjoint? xs ys)
+
+
+;;; Selection and bounded quantification
+
+| Pure predicates cannot observe duplicate visitation, so these operations are
+| well-defined on the quotient without Eq.
+define filter-set :: (a -> Bool) -> {a} -> {a}
+  p values -> from-list (set-list-filter p (set-presentation values))
+
+
+define partition-set :: (a -> Bool) -> {a} -> ({a}, {a})
+  p xs ->
+    (filter-set p xs,
+     filter-set (lambda (x) (not? (p x))) xs)
+
+
+define exists? :: {a} -> (a -> Bool) -> Bool
+  values p -> set-list-any? (set-presentation values) p
+
+
+define forall? :: {a} -> (a -> Bool) -> Bool
+  values p -> set-list-all? (set-presentation values) p
+
+
+;;; Functorial image and finite-domain preimage
+
+| image is covariant direct image.  It needs no Eq on b because repeated
+| outputs merely produce repeated private representatives of one extensional
+| element.
+define image :: (a -> b) -> {a} -> {b}
+  f values -> from-list (set-list-map f (set-presentation values))
+
+
+| A true preimage may be infinite, so value-level Set requires an explicit
+| finite domain to search.
+define preimage-on :: (Eq b) => {a} -> (a -> b) -> {b} -> {a}
+  domain f target ->
+    filter-set (lambda (x) (set-member? (f x) target)) domain
+
+;;; Products and coproducts
+
+| Cartesian product is the applicative product of finite nondeterminism.
+| Writing it through bind/image makes the mathematics visible and avoids a
+| second implementation of traversal.
+define cartesian-product × :: {a} -> {b} -> {(a, b)}
+  xs ys ->
+    bind-set xs (lambda (x) (image (lambda (y) (x, y)) ys))
+
+
+| Tagged disjoint union is the categorical coproduct.  Ordinary union cannot
+| preserve origin when the summands share values.
+define disjoint-union ⊎ :: {a} -> {b} -> {Either a b}
+  xs ys ->
+    union
+      (image (lambda (x) (Left x)) xs)
+      (image (lambda (y) (Right y)) ys)
+
+
+;;; Finite powerset
+
+| P(A) = P(rest) union { {x} union S | S in P(rest) }.
+|
+| Notice the absence of Eq.  Even if the private presentation contains x more
+| than once, the resulting family merely contains duplicate presentations of
+| the same subsets, which disappear extensionally.  This is one of the main
+| payoffs of taking the quotient seriously.
+define power-set :: {a} -> {{a}}
+  values -> power-set-list (set-presentation values)
+
+
+define power-set-list :: [a] -> {{a}}
+  [] -> singleton empty-set
+  [x|xs] ->
+    def rest (power-set (from-list xs))
+    union rest (image (lambda (subset) (insert x subset)) rest)
+
+
+define ℘ :: {a} -> {{a}}
+  xs -> power-set xs
+
+
+;;; Finite universes and full Boolean algebras
+
+| Finite is stronger than "values of Set are finite".  It says the element
+| type itself has a finite, complete universe representable as a Set.
+|
+
+| This capability turns the generalized Boolean algebra of finite subsets into
+| the bounded Boolean algebra P(a).
+class Eq a => Finite a where
+  universe :: Set a
+
+  law universe-complete :: a -> Bool
+    x -> set-member? x universe
+
+
+define complement :: Finite a => {a} -> {a}
+  xs -> difference (universe) xs
+
+
+| With a genuine finite universe, the meet of the empty family is top.
+define intersections-all :: Finite a => {{a}} -> {a}
+  family -> intersections-in (universe) family
+
+
+;;; Ordered observations
+
+| Unlike arbitrary choose, minimum and maximum are true functions of a set
+| once a coherent ordering selects canonical extrema.
+define minimum :: (Eq a, Ord a) => {a} -> Maybe a
+  xs ->
+    def canonical (to-ascending-list xs)
+    minimum-canonical canonical
+
+
+define minimum-canonical :: [a] -> Maybe a
+  []     -> Nothing
+  [x|xs] -> Just x
+
+
+define maximum :: (Eq a, Ord a) => {a} -> Maybe a
+  xs ->
+    def canonical (to-ascending-list xs)
+    maximum-canonical canonical
+
+
+define maximum-canonical :: [a] -> Maybe a
+  []       -> Nothing
+  [x]      -> Just x
+  [x|xs]   -> maximum-canonical xs
+
+
+;;; Equality and ordinary algebraic instances
+
+| Extensionality: sets are equal exactly when they have the same members.
+instance Eq a => Eq {a}
+  eq? xs ys -> and? (subset? xs ys) (subset? ys xs)
+
+
+| The ambient Semigroup/Monoid vocabulary sees union as append and empty as
+| identity.  Set satisfies stronger laws than those classes can currently
+| express: append is also commutative and idempotent.
+instance Semigroup {a}
+  append xs ys -> union xs ys
+
+
+instance Monoid {a}
+  mempty -> empty-set
+
+
+;;; Finite-powerset Functor / Applicative / Monad
+
+| P_f is a covariant functor by direct image.
+instance Functor Set
+  map f xs -> image f xs
+
+
+| Cartesian nondeterministic application.
+instance Applicative Set
+  pure x -> singleton x
+  applyA fs xs ->
+    bind-set fs
+      (lambda (f) (image f xs))
+
+
+| Kleisli extension is literally image followed by monad multiplication:
+|
+|   bind xs f = mu (P_f f xs) = union (image f xs)
+|
+| Keeping this definition in that form makes the finite-powerset monad visible
+| in executable code rather than merely in commentary.
+define bind-set :: {a} -> (a -> {b}) -> {b}
+  xs f -> unions (image f xs)
+
+
+| Pattern-match failure in a nondeterministic computation denotes no possible
+| result.
+instance Monad Set
+  bind xs f -> bind-set xs f
+  fail message -> empty-set
+
+
+instance MonadPlus Set
+  mzero -> empty-set
+  mplus xs ys -> union xs ys
+
+
+;;; QuickCheck evidence
+
+| shrink returns an ordered list, so unlike ordinary Set operations it can
+| accidentally reveal presentation order.  We therefore require Ord and start
+| from the canonical ascending presentation.  This keeps the testing
+| observation extensional too.
+define arbitrary-set-build :: Arbitrary a => Int -> Int -> Int -> {a}
+  _    _    0 -> empty-set
+  seed size count ->
+    insert (arbitrary seed size)
+      (arbitrary-set-build (quickcheck-next-seed seed) size (count - 1))
+
+
+define set-list-deletions :: [a] -> [[a]]
+  [] -> []
+  [x|xs] ->
+    prepend xs (set-list-map (lambda (rest) (prepend x rest)) (set-list-deletions xs))
+
+
+define set-list-element-shrinks :: Arbitrary a => [a] -> [[a]]
+  [] -> []
+  [x|xs] ->
+    set-list-append
+      (set-list-map
+        (lambda (smaller) (prepend smaller xs))
+        (shrink x))
+      (set-list-map
+        (lambda (rest) (prepend x rest))
+        (set-list-element-shrinks xs))
+
+
+define set-shrink-canonical :: Arbitrary a => [a] -> [{a}]
+  [] -> []
+  xs -> prepend empty-set (set-list-map from-list (set-list-append (set-list-deletions xs) (set-list-element-shrinks xs)))
+
+
+instance (Arbitrary a, Eq a, Ord a) => Arbitrary {a}
+  arbitrary seed size ->
+    arbitrary-set-build
+      (quickcheck-next-seed seed)
+      size
+      (quickcheck-bounded seed (size + 1))
+
+  shrink xs ->
+    set-shrink-canonical (to-ascending-list xs)
+
+
+instance Arbitrary1 Set
+  arbitrary1 seed size -> arbitrary seed size
+  shrink1 xs           -> from-list (shrink xs)
+
+
+;;; Executable theory
+
+| SetLaws describes the structure available for finite subsets of any element
+| type: extensionality, generalized Boolean algebra, inclusion order,
+| powersets, cardinality, and the visible fragment of the powerset monad.
+class SetLaws a where
+
+  :quotient/extensionality:
+  law union-commutative :: Eq a => {a} -> {a} -> Bool
+    xs ys -> eq? (xs ∪ ys) (ys ∪ xs)
+
+  law union-associative :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs -> eq? ((xs ∪ ys) ∪ zs) (xs ∪ (ys ∪ zs))
+
+  law union-idempotent :: Eq a => {a} -> Bool
+    xs -> eq? (xs ∪ xs) xs
+
+  law union-empty :: Eq a => {a} -> Bool
+    xs -> and? (eq? (xs ∪ ∅) xs) (eq? (∅ ∪ xs) xs)
+  :quotient/extensionality:
+
+  :distributive-lattice:
+  law intersection-commutative :: Eq a => {a} -> {a} -> Bool
+    xs ys -> eq? (xs ∩ ys) (ys ∩ xs)
+
+  law intersection-associative :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs -> eq? ((xs ∩ ys) ∩ zs) (xs ∩ (ys ∩ zs))
+
+  law intersection-idempotent :: Eq a => {a} -> Bool
+    xs -> eq? (xs ∩ xs) xs
+
+  law intersection-empty :: Eq a => {a} -> Bool
+    xs -> and? (eq? (xs ∩ ∅) ∅) (eq? (∅ ∩ xs) ∅)
+
+  law absorption-union :: Eq a => {a} -> {a} -> Bool
+    xs ys -> eq? (xs ∪ (xs ∩ ys)) xs
+
+  law absorption-intersection :: Eq a => {a} -> {a} -> Bool
+    xs ys -> eq? (xs ∩ (xs ∪ ys)) xs
+
+  law distributive-intersection :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs ->
+      eq?
+        (xs ∩ (ys ∪ zs))
+        ((xs ∩ ys) ∪ (xs ∩ zs))
+
+  law distributive-union :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs ->
+      eq?
+        (xs ∪ (ys ∩ zs))
+        ((xs ∪ ys) ∩ (xs ∪ zs))
+  :distributive-lattice:
+
+  :relative-difference/generalized-Boolean-algebra:
+
+  law difference-self :: Eq a => {a} -> Bool
+    xs -> eq? (xs ∖ xs) ∅
+
+  law difference-empty :: Eq a => {a} -> Bool
+    xs -> and? (eq? (xs ∖ ∅) xs) (eq? (∅ ∖ xs) ∅)
+
+  law difference-partition :: Eq a => {a} -> {a} -> Bool
+    xs ys ->
+      and?
+        (eq? ((xs ∩ ys) ∪ (xs ∖ ys)) xs)
+        (disjoint? (xs ∩ ys) (xs ∖ ys))
+
+  :relative-difference/generalized-Boolean-algebra:
+
+  :symmetric-difference-as-Boolean-ring-addition:
+
+  law symmetric-difference-commutative :: Eq a => {a} -> {a} -> Bool
+    xs ys -> eq? (xs △ ys) (ys △ xs)
+
+  law symmetric-difference-associative :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs -> eq? ((xs △ ys) △ zs) (xs △ (ys △ zs))
+
+  law symmetric-difference-empty :: Eq a => {a} -> Bool
+    xs -> and? (eq? (xs △ ∅) xs) (eq? (∅ △ xs) xs)
+
+  law symmetric-difference-self :: Eq a => {a} -> Bool
+    xs -> eq? (xs △ xs) ∅
+
+  law intersection-distributes-over-symmetric-difference :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs ->
+      eq?
+        (xs ∩ (ys △ zs))
+        ((xs ∩ ys) △ (xs ∩ zs))
+
+  :symmetric-difference-as-Boolean-ring-addition:
+
+
+  :inclusion-as-the-lattice-order:
+
+  law subset-reflexive :: Eq a => {a} -> Bool
+    xs -> xs ⊆ xs
+
+  law subset-antisymmetric :: Eq a => {a} -> {a} -> Bool
+    xs ys -> implies? (and? (xs ⊆ ys) (ys ⊆ xs)) (eq? xs ys)
+
+  law subset-transitive :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys zs -> implies? (and? (xs ⊆ ys) (ys ⊆ zs)) (xs ⊆ zs)
+
+  law subset-via-union :: Eq a => {a} -> {a} -> Bool
+    xs ys -> iff? (xs ⊆ ys) (eq? (xs ∪ ys) ys)
+
+  law subset-via-intersection :: Eq a => {a} -> {a} -> Bool
+    xs ys -> iff? (xs ⊆ ys) (eq? (xs ∩ ys) xs)
+
+  law union-is-least-upper-bound :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys upper ->
+      and?
+        (and? (xs ⊆ (xs ∪ ys)) (ys ⊆ (xs ∪ ys)))
+        (implies?
+          (and? (xs ⊆ upper) (ys ⊆ upper))
+          ((xs ∪ ys) ⊆ upper))
+
+  law intersection-is-greatest-lower-bound :: Eq a => {a} -> {a} -> {a} -> Bool
+    xs ys lower ->
+      and?
+        (and? ((xs ∩ ys) ⊆ xs) ((xs ∩ ys) ⊆ ys))
+        (implies?
+          (and? (lower ⊆ xs) (lower ⊆ ys))
+          (lower ⊆ (xs ∩ ys)))
+
+  :inclusion-as-the-lattice-order:
+
+  :membership-semantics:
+
+  law membership-union :: Eq a => a -> {a} -> {a} -> Bool
+    x xs ys ->
+      iff?
+        (x ∈ (xs ∪ ys))
+        (or? (x ∈ xs) (x ∈ ys))
+
+  law membership-intersection :: Eq a => a -> {a} -> {a} -> Bool
+    x xs ys ->
+      iff?
+        (x ∈ (xs ∩ ys))
+        (and? (x ∈ xs) (x ∈ ys))
+
+  law membership-difference :: Eq a => a -> {a} -> {a} -> Bool
+    x xs ys ->
+      iff?
+        (x ∈ (xs ∖ ys))
+        (and? (x ∈ xs) (x ∉ ys))
+
+  law membership-image-singleton :: Eq a => a -> Bool
+    x -> x ∈ (singleton x)
+
+  :membership-semantics:
+
+  :finite-powerset:
+
+  law powerset-empty :: Eq a => {a} -> Bool
+    _ -> eq? (power-set empty-set) (singleton empty-set)
+
+  law powerset-membership :: Eq a => {a} -> {a} -> Bool
+    xs ys -> iff? (xs ∈ (℘ ys)) (xs ⊆ ys)
+
+  law powerset-contains-empty :: Eq a => {a} -> Bool
+    xs -> empty-set ∈ (℘ xs)
+
+  law powerset-contains-self :: Eq a => {a} -> Bool
+    xs -> xs ∈ (℘ xs)
+
+  :finite-powerset:
+
+  :finite-cardinality:
+
+  law cardinality-empty :: Eq a => {a} -> Bool
+    _ -> cardinality (empty-set :: {a}) = 0
+
+  law cardinality-singleton :: Eq a => a -> Bool
+    x -> cardinality (singleton x) = 1
+
+  law cardinality-inclusion-exclusion :: Eq a => {a} -> {a} -> Bool
+    xs ys ->
+      (cardinality (xs ∪ ys) + cardinality (xs ∩ ys))
+        =
+      (cardinality xs + cardinality ys)
+
+  :finite-cardinality:
+
+  :powerset-monad:
+
+  law bind-right-identity :: Eq a => {a} -> Bool
+    xs -> eq? (bind-set xs singleton) xs
+
+  law join-is-union :: Eq a => {{a}} -> Bool
+    family -> eq? (join family) (unions family)
+
+  :powerset-monad:
+
+
+
+instance SetLaws a
+
+
+| FiniteSetLaws captures exactly what becomes available when the carrier type
+| itself has a complete finite universe: top and absolute complement.
+class Finite a => FiniteSetLaws a where
+
+  law universe-top :: {a} -> Bool
+    xs -> subset? xs universe
+
+  law complement-disjoint :: {a} -> Bool
+    xs -> disjoint? xs (complement xs)
+
+  law complement-exhaustive :: {a} -> Bool
+    xs -> eq? (xs ∪ complement xs) universe
+
+  law complement-involution :: {a} -> Bool
+    xs -> eq? (complement (complement xs)) xs
+
+  law de-morgan-union :: {a} -> {a} -> Bool
+    xs ys ->
+      eq?
+        (complement (xs ∪ ys))
+        ((complement xs) ∩ (complement ys))
+
+  law de-morgan-intersection :: {a} -> {a} -> Bool
+    xs ys ->
+      eq?
+        (complement (xs ∩ ys))
+        ((complement xs) ∪ (complement ys))
+
+  law empty-family-intersection-is-top :: {a} -> Bool
+    _ -> eq? (intersections-all empty-set) universe
+
+
+;;; Concrete finite universe used by the specification suite
+
+| Bool is already a closed finite type in core, so its universe witnesses the
+| Finite capability here.  If the language later derives Finite automatically
+| for closed finite type declarations, this explicit instance can disappear.
+instance Finite Bool
+  universe -> from-list [False True]
+
+
+instance FiniteSetLaws Bool
+
+
+;;; Specification examples and executable laws
 
 tests
-  assert-eq (member? 2 {1, 2, 3})                     True          "Data.Set membership is core-owned"
-  assert-eq (member? 4 {1, 2, 3})                     False         "Data.Set membership rejects absent values"
-  assert-eq (member? 4 {x in Int | x > 0})            True          "Data.Set predicate set accepts a member"
-  assert-eq (member? -1 {x in Int | x > 0})           False         "Data.Set predicate set rejects a non-member"
-  assert-eq (eq? {1 2} {2 1})                         True          "Data.Set Eq ignores insertion order"
-  assert-eq (not-eq? {1 2} {1 3})                     True          "Data.Set Eq distinguishes members"
-  assert-eq (singleton 1)                              {1}           "Data.Set singleton"
-  assert-eq (singleton 1.5)                            {1.5}         "Data.Set singleton Float"
-  assert-eq (singleton? {})                            False         "Data.Set empty is not singleton"
-  assert-eq (singleton? {1})                           True          "Data.Set singleton?"
-  assert-eq (singleton? {1 2})                         False         "Data.Set pair is not singleton"
-  assert-eq (union {1 2} {2 3})                        {1 2 3}       "Data.Set union"
-  assert-eq ({1 2}.union {2 3})                        {1 2 3}       "Data.Set union method syntax"
-  assert-eq (union {1.5 2.5} {2.5 3.5})                {1.5 2.5 3.5} "Data.Set union Float"
-  assert-eq (intersection {1 2 3} {2 3 4})             {2 3}         "Data.Set intersection"
-  assert-eq (difference {1 2 3} {2 3})                 {1}           "Data.Set difference"
-  assert-eq (difference {1.5 2.5 3.5} {2.5 3.5})       {1.5}         "Data.Set difference Float"
-  assert-eq (symmetric-difference {1 2} {2 3})          {1 3}         "Data.Set symmetric difference"
-  assert-eq (subset? {1 2} {1 2 3})                    True          "Data.Set subset"
-  assert-eq (proper-subset? {1 2} {1 2 3})             True          "Data.Set proper subset"
-  assert-eq (superset? {1 2 3} {1 2})                  True          "Data.Set superset"
-  assert-eq (proper-superset? {1 2 3} {1 2})           True          "Data.Set proper superset"
-  assert-eq (disjoint? {1 2} {3 4})                    True          "Data.Set disjoint"
+  :laws:
+  laws SetLaws Bool
+    seeded SetLaws Int 1000 42
+
+  laws FiniteSetLaws Bool
+
+  laws Eq {Bool}
+    seeded Eq {Int} 500 2026
+
+  laws Semigroup {Bool}
+    seeded Semigroup {Int} 500 2026
+
+  laws Monoid {Bool}
+    seeded Monoid {Int} 500 2026
+  :laws:
+
+  :quotient:
+  assert-eq
+    (from-list (list 1 1 2 2 1))
+    (from-list (list 2 1))
+    "Data.Set quotient erases multiplicity and order extensionally"
+
+  assert-eq
+    (to-ascending-list (from-list (list 3 1 2 1 3)))
+    (list 1 2 3)
+    "Data.Set canonical observation requires ordering"
+  :quotient:
+
+  :construction:
+  assert-eq (cardinality empty-set)                       0    "Data.Set empty cardinality"
+  assert-eq (cardinality (from-list (list 1 2 2 3 1)))   3    "Data.Set cardinality counts extensional members"
+  assert-eq (singleton? (singleton 42))                   True "Data.Set singleton"
+  :construction:
+
+  :membership:
+  assert-eq (member? 2 {1 2 3}) True "Data.Set member?"
+  assert-eq (2 ∈ {1 2 3})       True "Data.Set mathematical membership"
+  assert-eq ({1 2 3} ∋ 2)       True "Data.Set reversed membership"
+  assert-eq (4 ∉ {1 2 3})       True "Data.Set mathematical non-membership"
+  :membership:
+
+  :algebra:
+  assert-eq ({1 2}   ∪ {2 3})   {1 2 3} "Data.Set union notation"
+  assert-eq ({1 2 3} ∩ {2 3 4}) {2 3}   "Data.Set intersection notation"
+  assert-eq ({1 2 3} ∖ {2 3})   {1}     "Data.Set difference notation"
+  assert-eq ({1 2}   △ {2 3})   {1 3}   "Data.Set symmetric difference notation"
+  assert-eq ({1 2}   ⊆ {1 2 3}) True    "Data.Set subset notation"
+  assert-eq ({1 2}   ⊂ {1 2 3}) True    "Data.Set proper subset notation"
+  assert-eq ({1 2 3} ⊇ {1 2})   True    "Data.Set superset notation"
+  assert-eq ({1 2 3} ⊃ {1 2})   True    "Data.Set proper superset notation"
+  assert-eq ({1 4}   ⊈ {1 2 3}) True    "Data.Set non-subset notation"
+  :algebra:
+
+  :powerset:
+  assert-eq |{1 2 3 4}|           4                                     "Data.Set cardinality notation"
+  assert-eq |(℘ {1 2 3})|         8                                     "Data.Set powerset cardinality"
+  assert-eq ({1 2} × {'a' 'b'})   {(1, 'a') (1, 'b') (2, 'a') (2, 'b')} "Data.Set cartesian product"
+  assert-eq (⋃ {{1 2} {2 3} {5}}) {1 2 3 5}                             "Data.Set big union"
+  assert-eq ({1 2} ∈ (℘ {1 2 3})) True                                  "Data.Set powerset is subset space"
+  :powerset:
+
+  :family-intersection:
+  assert-eq
+    (intersections {{1 2 3} {2 3 4} {2 5}})
+    (Just {2})
+    "Data.Set nonempty family intersection"
+
+  assert-eq
+    (intersections (empty-set :: {{Int}}))
+    Nothing
+    "Data.Set empty family has no universe-independent meet"
+
+  assert-eq
+    (intersections-all (empty-set :: {{Bool}}))
+    {False True}
+    "Data.Set finite universe supplies empty-family meet"
+  :family-intersection:
+
+  :finite-boolean-algebra:
+  assert-eq (universe :: {Bool})   {False True}         "Data.Set Bool universe"
+  assert-eq (complement {True})    {False}              "Data.Set absolute complement on finite carrier"
+  assert-eq (complement empty-set) (universe :: {Bool}) "Data.Set complement bottom is top"
+  :finite-boolean-algebra:
+
+  :nondeterminism:
+  assert-eq
+    (bind {1 2 3} (lambda (x) {x (x + 10)}))
+    {1 2 3 11 12 13}
+    "Data.Set Monad bind is finite nondeterministic choice"
+
+  assert-eq
+    (join {{1 2} {2 3} {3 4}})
+    {1 2 3 4}
+    "Data.Set Monad multiplication is union"
+  :nondeterminism:

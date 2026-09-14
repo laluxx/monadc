@@ -1,22 +1,27 @@
 ;;; Pipe.mon --- effect-typed anonymous byte channels
 
-:author "Laluxx"
-:version "0.1.0"
-:keywords "io pipe ipc descriptors ownership effects"
+:author   Laluxx
+:version  0.3.0
+:keywords io pipe ipc descriptors ownership effects
 
 ;;; Commentary:
 
  Pipe is an opaque pair of connected descriptor capabilities. This module
  owns channel creation and endpoint identity; IO.File turns either endpoint
  into its higher-level FileHandle capability when requested by the caller.
+ Closing a whole pipe always attempts both descriptors; if both closes fail,
+ IOCombinedFailure preserves both statuses instead of dropping the second.
 
 ;;; Code:
 
 import System.Posix.FileDescriptor
+import IO
+import Data.Either
 
 module IO.Pipe
   [Pipe PipeEnds PipeOpenResult
-   create-pipe pipe-reader-descriptor pipe-writer-descriptor]
+   create-pipe open-pipe close-pipe close-pipe-reader close-pipe-writer
+   pipe-reader-descriptor pipe-writer-descriptor]
 
 
 data Pipe
@@ -46,3 +51,54 @@ define decode-pipe-result :: Int -> PipeOpenResult
 
 define create-pipe :: () -io-> PipeOpenResult
   _ -> decode-pipe-result (sys-pipe 0)
+
+
+;;; Structured ownership facade
+
+define pipe-open-result :: PipeOpenResult -> Either IOError Pipe
+  result | (< result.status 0) -> Left (IOStatus result.status)
+         | otherwise -> Right (PipeEnds result.reader-descriptor result.writer-descriptor)
+
+
+define open-pipe :: () -io-> Either IOError Pipe
+  _ -> pipe-open-result (create-pipe ())
+
+
+define close-pipe-reader :: Pipe -io-> Either IOError Int
+  pipe -> def status (sys-close (pipe-reader-descriptor pipe))
+          if status < 0 then Left (IOStatus status) else Right status
+
+
+define close-pipe-writer :: Pipe -io-> Either IOError Int
+  pipe -> def status (sys-close (pipe-writer-descriptor pipe))
+          if status < 0 then Left (IOStatus status) else Right status
+
+
+define finish-pipe-close :: Int -> Int -> Either IOError Int
+  reader writer
+    | (< reader 0) and (< writer 0) -> Left (IOCombinedFailure (IOStatus reader) (IOStatus writer))
+    | (< reader 0)                  -> Left (IOStatus reader)
+    | (< writer 0)                  -> Left (IOStatus writer)
+    | otherwise                     -> Right (reader + writer)
+
+
+define pipe-combined-close-error? :: Either IOError Int -> Bool
+  [Left (IOCombinedFailure _ _)] -> True
+  _ -> False
+
+
+define close-pipe :: Pipe -io-> Either IOError Int
+  pipe ->
+    ;; Both endpoints are attempted even when the first close fails.
+    def reader (sys-close (pipe-reader-descriptor pipe))
+    def writer (sys-close (pipe-writer-descriptor pipe))
+    finish-pipe-close reader writer
+
+
+tests
+  :decode:
+  assert-eq (decode-pipe-result -9).status -9 "Pipe preserves creation failure"
+  assert-eq (decode-pipe-result ((7 * 4294967296) + 5)).reader-descriptor 5 "Pipe decodes reader descriptor"
+  assert-eq (decode-pipe-result ((7 * 4294967296) + 5)).writer-descriptor 7 "Pipe decodes writer descriptor"
+  assert-eq (pipe-combined-close-error? (finish-pipe-close -5 -9)) True "Pipe close preserves failures from both endpoints"
+  :decode:

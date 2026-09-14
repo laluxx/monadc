@@ -1202,6 +1202,8 @@
   Added =core/prelude/Function.mon= with always-available Haskell/Clojure-style
   function combinators: =id=, =const=, =flip=, =compose=, =pipe=, =apply=, and
   =twice=. Later expanded the same single module with =applyTo= and =until=.
+  =applyTo= owns the =|>= alias and its law is =x |> f = f x=; Wisp may lower
+  that surface form directly without changing the Core-level meaning.
   There is intentionally no separate =core/Data/Function.mon= facade: the user
   called out the duplicate as undesirable, so =core/prelude/Function.mon= is the
   sole owner of function combinators. =core/PreludeProbe.mon= proves
@@ -1645,6 +1647,19 @@
   ownership contract rejects reintroduced hardcoded lists. This manifest is a
   bootstrap index only: all public operations and laws remain ordinary Monad
   definitions in the referenced modules.
+
+[FIX id:fix.core-libs.primitive-bootstrap-module-metadata-2026-09-06 date:2026-09-06 by:codex src:main.c,core/prelude/Data/Int.mon,core/prelude/Data/Float.mon,core/prelude/Data/Bool.mon,core/prelude/Data/String.mon,core/prelude/Data/Map.mon,core/prelude/Data/Char.mon,core/prelude/Data/Semigroup.mon,core/prelude/Sequence.mon,tests/test_core_abstraction_ownership.py conf:high]
+  Primitive bootstrap discovery no longer depends on the parallel
+  =Data/Primitive.modules= manifest.  A core module opts into the bootstrap
+  surface with =:bootstrap primitive= in its own header; the compiler scans
+  the root prelude and =prelude/Data= directories and sorts discovered stems
+  for deterministic cross-platform loading.  Public methods and laws remain
+  ordinary Core definitions, while an empty =MONAD_CORE= directory is valid
+  and produces no missing-manifest diagnostic.  Make and CMake now install
+  only Monad source files.  Regression coverage is the 40-test
+  =tests/test_core_abstraction_ownership.py= suite, including actual
+  fresh-home empty-Core compilation and metadata-discovered execution of the
+  Core-owned =Int.positive?= method.
 
 [FIX id:fix.core-libs.typed-map-ownership-2026-07-23 date:2026-07-23 by:codex src:core/prelude/Data/Map.mon,types.c,infer.c,codegen.c,tests/test_core_abstraction_ownership.py conf:high]
   Map's public semantic surface is core-owned. The compiler retains only the
@@ -2899,3 +2914,11 @@ filesystem objects.
   count, constructs =VkShaderModuleCreateInfo= inside Core, and returns an
   explicit success/failure value carrying the native =I32 VkResult=.  Matching
   destruction is also Core-owned; tutorials must not duplicate this lifecycle.
+[FIX id:fix.core-libs.concrete-string-return-normalization-2026-09-11 date:2026-09-11 by:codex src:codegen.c,runtime.c,tests/test_how_to_examples.py conf:high]
+  A function declared to return =String= or =Path= must publish the native text
+  pointer even when a recursive or polymorphic body produces an =RT_STRING=
+  value.  Code generation now normalizes that return boundary, and
+  =rt_unbox_string= preserves an already-native pointer rather than replacing
+  it with empty text.  The Scheme regression evaluates
+  =(+ (+ 2 2) (+ 2 2))= to =8=, proving that parser-produced symbol names
+  survive storage in a client ADT and nested evaluation.

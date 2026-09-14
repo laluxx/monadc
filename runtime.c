@@ -10,6 +10,11 @@
 #include "arena.h"
 #include "runtime.h"
 
+typedef struct RuntimeProof {
+    uint64_t seal;
+    char *conclusion;
+} RuntimeProof;
+
 static inline ConsCell     *heap_cons_cell(void)    { return malloc(sizeof(ConsCell));     }
 static inline RuntimeList  *heap_list_wrapper(void) { return malloc(sizeof(RuntimeList));  }
 static inline RuntimeValue *heap_value(void)        { return malloc(sizeof(RuntimeValue)); }
@@ -795,6 +800,14 @@ char *rt_string_concat(const char *a, const char *b) {
     return result;
 }
 
+RuntimeList *rt_string_to_list(const char *s) {
+    RuntimeList *result = rt_list_new();
+    if (!s) return result;
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++)
+        rt_list_append(result, rt_value_char((char)*p));
+    return result;
+}
+
 void *rt_arr_concat(void *d1, int64_t l1, void *d2, int64_t l2, int64_t elem_size) {
     if (l1 <= 0 && l2 <= 0) return NULL;
     void *result = calloc(l1 + l2, elem_size);
@@ -1452,8 +1465,24 @@ static RuntimeSet *set_alloc(size_t cap) {
     s->capacity     = cap;
     s->count        = 0;
     s->tombstones   = 0;
+    s->is_integer_range = false;
+    s->range_has_end = false;
+    s->range_start = 0;
+    s->range_step = 1;
+    s->range_end = 0;
     s->membership_predicate = NULL;
     return s;
+}
+
+RuntimeSet *rt_set_range(int64_t start, int64_t step,
+                         int64_t end, int has_end) {
+    RuntimeSet *set = rt_set_new();
+    set->is_integer_range = true;
+    set->range_has_end = has_end != 0;
+    set->range_start = start;
+    set->range_step = step == 0 ? 1 : step;
+    set->range_end = end;
+    return set;
 }
 
 static void set_insert_noresize(RuntimeSet *s, RuntimeValue *val) {
@@ -1519,6 +1548,16 @@ RuntimeSet *rt_set_from_predicate(RuntimeValue *predicate) {
 
 int rt_set_contains(RuntimeSet *s, RuntimeValue *val) {
     if (!s || !val) return 0;
+    if (s->is_integer_range) {
+        if (val->type != RT_INT) return 0;
+        int64_t n = val->data.int_val;
+        if ((s->range_step > 0 && n < s->range_start) ||
+            (s->range_step < 0 && n > s->range_start)) return 0;
+        if (s->range_has_end &&
+            ((s->range_step > 0 && n > s->range_end) ||
+             (s->range_step < 0 && n < s->range_end))) return 0;
+        return (n - s->range_start) % s->range_step == 0;
+    }
     if (s->membership_predicate) {
         RuntimeValue *args[] = {val};
         RuntimeValue *result = rt_closure_calln(s->membership_predicate, 1, args);
@@ -1591,6 +1630,11 @@ static RuntimeSet *set_remove(RuntimeSet *s, RuntimeValue *val) {
 static RuntimeSet *set_copy(RuntimeSet *s) {
     RuntimeSet *copy = set_alloc(s->capacity);
     copy->membership_predicate = s->membership_predicate;
+    copy->is_integer_range = s->is_integer_range;
+    copy->range_has_end = s->range_has_end;
+    copy->range_start = s->range_start;
+    copy->range_step = s->range_step;
+    copy->range_end = s->range_end;
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
         if (v && v != TOMBSTONE)
@@ -1618,6 +1662,12 @@ RuntimeSet *rt_set_disj_mut(RuntimeSet *s, RuntimeValue *val)
 
 int64_t rt_set_count(RuntimeSet *s) {
     if (!s) return 0;
+    if (s->is_integer_range) {
+        if (!s->range_has_end) return -1;
+        if ((s->range_step > 0 && s->range_start > s->range_end) ||
+            (s->range_step < 0 && s->range_start < s->range_end)) return 0;
+        return (s->range_end - s->range_start) / s->range_step + 1;
+    }
     if (s->membership_predicate) return -1;
     return (int64_t)s->count;
 }
@@ -1626,6 +1676,17 @@ RuntimeList *rt_set_seq(RuntimeSet *s) {
     RuntimeList *out = heap_list_wrapper();
     out->cell = NULL;
     if (!s) return out;
+    if (s->is_integer_range) {
+        if (!s->range_has_end)
+            return s->range_step == 1
+                ? rt_list_from(s->range_start)
+                : rt_list_from_step(s->range_start, s->range_step);
+        RuntimeList *range = s->range_step == 1
+            ? rt_list_range(s->range_start, s->range_end)
+            : rt_list_take(rt_list_from_step(s->range_start, s->range_step),
+                           rt_set_count(s));
+        return range;
+    }
     for (size_t i = 0; i < s->capacity; i++) {
         RuntimeValue *v = s->buckets[i];
         if (v && v != TOMBSTONE)
@@ -1761,12 +1822,12 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
     // Normalize: if a pointer has an out-of-range type tag, treat as raw RuntimeList*
     {
         int ta = (int)a->type;
-        if (ta < 0 || ta > RT_CLOSURE) {
+        if (ta < 0 || ta > RT_PROOF) {
             RuntimeValue tmp_a = {.type = RT_LIST, .data = {.list_val = (RuntimeList*)a}};
             return rt_equal_p(&tmp_a, b);
         }
         int tb = (int)b->type;
-        if (tb < 0 || tb > RT_CLOSURE) {
+        if (tb < 0 || tb > RT_PROOF) {
             RuntimeValue tmp_b = {.type = RT_LIST, .data = {.list_val = (RuntimeList*)b}};
             return rt_equal_p(a, &tmp_b);
         }
@@ -1801,6 +1862,10 @@ int rt_equal_p(RuntimeValue *a, RuntimeValue *b) {
             return rt_map_equal(a->data.map_val, b->data.map_val);
         case RT_OPAQUE:
             return a->data.opaque_val == b->data.opaque_val;
+        case RT_PROOF:
+            return a->data.proof_val && b->data.proof_val &&
+                   strcmp(a->data.proof_val->conclusion,
+                          b->data.proof_val->conclusion) == 0;
         case RT_ARRAY: {
             if (b->type != RT_ARRAY) return 0;
             if (a->data.array_val.length != b->data.array_val.length) return 0;
@@ -1856,10 +1921,14 @@ char rt_unbox_char(RuntimeValue *v) {
 }
 
 char *rt_unbox_string(RuntimeValue *v) {
-    if (!v || v->type == RT_NIL) return "";
+    if (!v || (uintptr_t)v < 0x10000) return "";
     if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
     if (v->type == RT_STRING) return v->data.string_val;
-    return "";
+    /* Concrete String functions use a native byte pointer, while erased
+     * generic paths use RT_STRING.  At a declared String boundary accept the
+     * already-native representation instead of silently replacing it with
+     * empty text. */
+    return (char *)v;
 }
 
 RuntimeList *rt_unbox_list(RuntimeValue *v) {
@@ -1924,6 +1993,16 @@ RuntimeValue *rt_value_opaque(void *p) {
     return v;
 }
 
+RuntimeValue *rt_value_proof(const char *conclusion) {
+    RuntimeProof *proof = malloc(sizeof(*proof));
+    proof->seal = UINT64_C(0x4d4f4e4144505246);
+    proof->conclusion = strdup(conclusion ? conclusion : "?");
+    RuntimeValue *value = alloc_value();
+    value->type = RT_PROOF;
+    value->data.proof_val = proof;
+    return value;
+}
+
 void *rt_unbox_opaque(RuntimeValue *v) {
     if (!v || (uintptr_t)v < 0x10000) return NULL;
     if (v->type == RT_THUNK) v = rt_force(v->data.thunk_val);
@@ -1970,6 +2049,44 @@ RuntimeValue *rt_value_keyword(const char *val) {
 // Forward declarations
 static void rt_print_value_indent(RuntimeValue *val, int indent);
 static void rt_print_list_indent(RuntimeList *list, int indent);
+
+static void rt_print_i64_grouped(int64_t value) {
+    char raw[64];
+    snprintf(raw, sizeof(raw), "%" PRId64, value);
+    const char *digits = raw;
+    if (*digits == '-') { putchar('-'); digits++; }
+    size_t length = strlen(digits);
+    if (length <= 7) { fputs(digits, stdout); return; }
+    size_t first = length % 3;
+    if (first == 0) first = 3;
+    fwrite(digits, 1, first, stdout);
+    for (size_t i = first; i < length; i += 3) {
+        putchar('_');
+        fwrite(digits + i, 1, 3, stdout);
+    }
+}
+
+void rt_print_int_grouped(int64_t value, int newline) {
+    rt_print_i64_grouped(value);
+    if (newline) putchar('\n');
+}
+
+void rt_print_uint_grouped(uint64_t value, int newline) {
+    char raw[64];
+    snprintf(raw, sizeof(raw), "%" PRIu64, value);
+    size_t length = strlen(raw);
+    if (length <= 7) fputs(raw, stdout);
+    else {
+        size_t first = length % 3;
+        if (first == 0) first = 3;
+        fwrite(raw, 1, first, stdout);
+        for (size_t i = first; i < length; i += 3) {
+            putchar('_');
+            fwrite(raw + i, 1, 3, stdout);
+        }
+    }
+    if (newline) putchar('\n');
+}
 
 // Estimate if a value prints short enough to stay inline
 static bool rt_value_is_short(RuntimeValue *val, int budget) {
@@ -2063,7 +2180,7 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
         if (!val) { printf("nil"); return; }
     }
     switch (val->type) {
-        case RT_INT:     printf("%ld",  val->data.int_val);   break;
+        case RT_INT:     rt_print_i64_grouped(val->data.int_val); break;
         case RT_FLOAT:   printf("%g",   val->data.float_val); break;
         case RT_CHAR:    printf("'%c'", val->data.char_val);  break;
         case RT_STRING:  printf("\"%s\"", val->data.string_val); break;
@@ -2079,6 +2196,10 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
             break;
         case RT_OPAQUE:
             printf("#<opaque:%p>", val->data.opaque_val);
+            break;
+        case RT_PROOF:
+            printf("proof : %s", val->data.proof_val
+                ? val->data.proof_val->conclusion : "?");
             break;
         case RT_RATIO:
             if (val->data.ratio_val.denominator == 1)
@@ -2100,6 +2221,39 @@ static void rt_print_value_indent(RuntimeValue *val, int indent) {
         case RT_SET: {
             RuntimeSet *s = val->data.set_val;
             printf("{");
+            if (s && s->is_integer_range) {
+                int64_t count = rt_set_count(s);
+                if (s->range_has_end && count > 255) {
+                    rt_print_i64_grouped(s->range_start);
+                    if (s->range_step != 1) {
+                        putchar(',');
+                        rt_print_i64_grouped(s->range_start + s->range_step);
+                    }
+                    printf("..");
+                    rt_print_i64_grouped(s->range_end);
+                } else {
+                    int first = 1;
+                    int64_t current = s->range_start;
+                    while (!rt_interrupted &&
+                           (!s->range_has_end ||
+                            (s->range_step > 0
+                                ? current <= s->range_end
+                                : current >= s->range_end))) {
+                        if (!first) putchar(' ');
+                        rt_print_i64_grouped(current);
+                        first = 0;
+                        if ((current - s->range_start) %
+                            (s->range_step * 64) == 0) fflush(stdout);
+                        if ((s->range_step > 0 &&
+                             current > INT64_MAX - s->range_step) ||
+                            (s->range_step < 0 &&
+                             current < INT64_MIN - s->range_step)) break;
+                        current += s->range_step;
+                    }
+                }
+                printf("}");
+                break;
+            }
             int first = 1;
             for (size_t i = 0; i < s->capacity; i++) {
                 RuntimeValue *elem = s->buckets[i];
@@ -2233,6 +2387,13 @@ void rt_value_free(RuntimeValue *val) {
             mpz_clear(val->data.bignum_val);
             free(val);  // bignum is always heap-allocated
             break;
+        case RT_PROOF:
+            if (val->data.proof_val) {
+                free(val->data.proof_val->conclusion);
+                free(val->data.proof_val);
+                val->data.proof_val = NULL;
+            }
+            break;
         default: break;
     }
     // Do NOT free(val) — arena owns the struct
@@ -2310,6 +2471,28 @@ RuntimeList *rt_list_map(RuntimeList *list, void *env, RT_UnaryFn fn) {
     RuntimeList *lst = heap_list_wrapper();
     lst->cell = c;
     return lst;
+}
+
+static RuntimeValue *rt_apply_unary_closure(void *closure, int n,
+                                             RuntimeValue **args) {
+    return rt_closure_calln((RuntimeValue *)closure, n, args);
+}
+
+RuntimeValue *__rt_coll_map_closure(RuntimeValue *closure,
+                                    RuntimeValue *collection) {
+    if (!collection) return rt_value_nil();
+    if (collection->type == RT_ARRAY) {
+        RuntimeValue *out = rt_value_array(collection->data.array_val.length);
+        for (size_t i = 0; i < collection->data.array_val.length; i++) {
+            RuntimeValue *args[] = {collection->data.array_val.elements[i]};
+            rt_array_set(out, i, rt_closure_calln(closure, 1, args));
+        }
+        return out;
+    }
+    if (collection->type == RT_LIST)
+        return rt_value_list(rt_list_map(collection->data.list_val, closure,
+                                         rt_apply_unary_closure));
+    return rt_value_nil();
 }
 
 static RuntimeValue *_rt_lazy_map_tail_fn(void *e) {
@@ -2819,6 +3002,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- Higher-order list ops ---
     DECL("rt_list_map",     ptr, ptr, ptr, ptr);        /* list, env, fn */
+    DECL("__rt_coll_map_closure", ptr, ptr, ptr);       /* closure, collection */
     DECL("rt_list_foldl",   ptr, ptr, ptr, ptr, ptr);   /* list, init, env, fn */
     DECL("rt_list_foldr",   ptr, ptr, ptr, ptr, ptr);   /* list, init, env, fn */
     DECL("rt_list_filter",  ptr, ptr, ptr, ptr);        /* list, env, pred */
@@ -2851,6 +3035,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_value_list",    ptr, ptr);
     DECL0("rt_value_nil",    ptr);
     DECL("rt_value_thunk",   ptr, ptr);
+    DECL("rt_value_proof",   ptr, ptr);
 
     // --- Ratio ---
     DECL("rt_value_ratio",    ptr, i64, i64);
@@ -2883,6 +3068,7 @@ void declare_runtime_functions(CodegenContext *ctx) {
     DECL("rt_set_get",         ptr, ptr, ptr);
     DECL("rt_set_count",       i64, ptr);
     DECL("rt_set_seq",         ptr, ptr);
+    DECL("rt_set_range",       ptr, i64, i64, i64, i32);
     DECL("rt_value_set",       ptr, ptr);
     DECL("rt_unbox_set",       ptr, ptr);
     DECL("rt_set_foldl",  ptr, ptr, ptr, ptr, ptr);   /* set, init, env, fn */
@@ -2907,6 +3093,8 @@ void declare_runtime_functions(CodegenContext *ctx) {
 
     // --- Print ---
     DECL("rt_print_value",         void_t, ptr);
+    DECL("rt_print_int_grouped",   void_t, i64, i32);
+    DECL("rt_print_uint_grouped",  void_t, i64, i32);
     DECL("rt_print_list",          void_t, ptr);
 
     // --- String & Array Helpers ---
@@ -3049,8 +3237,11 @@ GET_RUNTIME_FUNCTION(rt_value_keyword)
 GET_RUNTIME_FUNCTION(rt_value_list)
 GET_RUNTIME_FUNCTION(rt_value_nil)
 GET_RUNTIME_FUNCTION(rt_value_thunk)
+GET_RUNTIME_FUNCTION(rt_value_proof)
 
 GET_RUNTIME_FUNCTION(rt_print_value)
+GET_RUNTIME_FUNCTION(rt_print_int_grouped)
+GET_RUNTIME_FUNCTION(rt_print_uint_grouped)
 GET_RUNTIME_FUNCTION(rt_print_list)
 
 GET_RUNTIME_FUNCTION(rt_value_ratio)
@@ -3070,6 +3261,7 @@ GET_RUNTIME_FUNCTION(rt_array_get)
 GET_RUNTIME_FUNCTION(rt_array_length)
 
 GET_RUNTIME_FUNCTION(rt_list_map)
+GET_RUNTIME_FUNCTION(__rt_coll_map_closure)
 GET_RUNTIME_FUNCTION(rt_list_foldl)
 GET_RUNTIME_FUNCTION(rt_list_foldr)
 GET_RUNTIME_FUNCTION(rt_list_filter)
@@ -3089,12 +3281,12 @@ GET_RUNTIME_FUNCTION(rt_set_disj_mut)
 GET_RUNTIME_FUNCTION(rt_set_get)
 GET_RUNTIME_FUNCTION(rt_set_count)
 GET_RUNTIME_FUNCTION(rt_set_seq)
+GET_RUNTIME_FUNCTION(rt_set_range)
 GET_RUNTIME_FUNCTION(rt_value_set)
 GET_RUNTIME_FUNCTION(rt_unbox_set)
 GET_RUNTIME_FUNCTION(rt_set_foldl)
 GET_RUNTIME_FUNCTION(rt_set_map)
 GET_RUNTIME_FUNCTION(rt_set_filter)
-
 GET_RUNTIME_FUNCTION(rt_map_new)
 GET_RUNTIME_FUNCTION(rt_map_assoc)
 GET_RUNTIME_FUNCTION(rt_map_assoc_mut)

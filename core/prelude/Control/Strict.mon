@@ -1,0 +1,114 @@
+;;; Strict.mon --- Immediate evaluation strategy
+
+:author   Laluxx
+:version  0.3.0
+:keywords strict eager identity evaluation strategy
+
+;;; Commentary:
+
+ Strict is the immediate evaluation strategy. It is the operational identity
+ strategy: a Strict value contains an already evaluated value, and deferring a
+ callback under Strict executes that callback immediately.
+
+ Strict exists as a first-class type constructor even though the compiler may
+ erase it completely. The type-level constructor is what lets structural Core
+ abstractions be parameterized uniformly by evaluation strategy:
+
+   Spine Strict a
+   Tree  Strict a
+
+ can share the same structural definitions as their Lazy counterparts without
+ duplicating algorithms or laws.
+
+ ;;; Mathematical Model
+
+ Extensionally, Strict is naturally isomorphic to Identity:
+
+                      Strict A  ≅  A
+
+ with
+
+                      defer k   = StrictValue (k ())
+                      demand    = inverse of StrictValue
+
+ Thus Strict contributes no delayed computational structure. Its purpose is to
+ make immediate evaluation explicit in types whenever a shape is parameterized
+ by evaluation strategy.
+
+ Strict is shallow and local to the wrapped computation. It does not recursively
+ force arbitrary payload fields and it is not a global "deep strictness" marker.
+ In a structure such as =Tree Strict a=, only recursive positions explicitly
+ wrapped by Strict are governed by this strategy.
+
+ The compiler may erase Strict wrappers after type checking, provided doing so
+ preserves quantities and all observable behavior.
+
+ Every inhabited Strict value is already evaluated, so its demand is trivially
+ total. =total-strict= exposes that fact as Control.Evaluation.TotalDemand
+ evidence without traversing or copying the payload.
+
+ =Strict= is an explicit evaluation strategy, not the result of strictness
+ analysis. A future optimizer may prove that a computation stored under Lazy is
+ necessarily demanded and evaluate it earlier, but that theorem is separate from
+ the source-level fact that a recursive position was declared Strict. Keeping the
+ two notions distinct avoids confusing programmer-visible evaluation structure
+ with a compiler analysis of variable usage.
+
+ ;;; Research Basis
+
+ Paul Blain Levy, "Call-by-Push-Value: A Subsuming Paradigm", TLCA 1999.
+   https://doi.org/10.1007/3-540-48959-2_17
+
+ Daniel Sainati, Joseph W. Cutler, Benjamin C. Pierce, and Stephanie Weirich,
+ "Typing Strictness", POPL 2026.
+   https://doi.org/10.1145/3776657
+
+ Levy motivates making the value/computation boundary explicit. The more recent
+ strictness work is relevant to future optimization because it distinguishes
+ intensional variable usage from the older extensional notion of strictness.
+ Monad's explicit Strict wrapper is neither analysis: it is source-level timing
+ structure against which such optimizations must be justified.
+
+;;; Code:
+
+import Control.Evaluation
+import Control.Applicative
+
+module Control.Strict
+  [Strict StrictValue strict run-strict total-strict]
+
+
+data Strict a
+  = StrictValue a
+
+
+define strict :: a -> Strict a
+  value -> StrictValue value
+
+
+define run-strict :: Strict a -> a
+  [StrictValue value] -> value
+
+╭─ A Strict value is already evaluated, so every demand is definitionally total.
+define total-strict :: Strict a -> TotalDemand Strict a
+  [StrictValue value] -> total-pure value
+
+
+instance Functor Strict
+  map f [StrictValue value] -> StrictValue (f value)
+
+
+instance Applicative Strict
+  pure value -> StrictValue value
+  applyA [StrictValue f] [StrictValue value] -> StrictValue (f value)
+
+
+instance Evaluation Strict
+  defer thunk -> StrictValue (thunk ())
+  demand value -> run-strict value
+
+
+tests
+  :values:
+  assert-eq (run-strict (strict 7)) 7 "Strict unwraps its value"
+  :values:

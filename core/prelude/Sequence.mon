@@ -1,44 +1,320 @@
-;;; Sequence.mon --- Core sequence abstraction and utilities
+;;; Sequence.mon --- Evaluation-parametric sequential observation
+:bootstrap primitive
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "sequence collection functor foldable methods typeclass"
+:author   Laluxx
+:version  6.0.0
+:keywords sequence coalgebra evaluation strict lazy productive lowering fusion state
 
 ;;; Commentary:
 
- The polymorphic sequence module for Monad.
- Provides a unified interface for Lists, Arrays, and Strings.
- Includes structural manipulation (take, drop), concatenation,
- and higher-order sequence utilities that work across all Coll types.
+ Sequence describes one-dimensional ordered observation. It says what the next
+ visible element is and how the continuation is evaluated; it does not require a
+ particular container representation, builder, index operation, or evaluation
+ policy.
+
+ The architecture is factored along independent axes:
+
+                    sequence shape × evaluation strategy.
+
+ A strict sequence satisfies Strategy S ~ Strict. A lazy sequence satisfies
+ Strategy S ~ Lazy. Neither proposition introduces another sequence class.
+
+;;; Coalgebraic Semantics
+
+ Fix a state type S, visible element type A, and Evaluation E. The sequence
+ observation functor is
+
+                    F_E,A(X) = 1 + A × E X.
+
+ A Sequence instance is precisely an F_E,A-coalgebra
+
+                    uncons : S -> F_E,A(S),
+
+ represented in Core as
+
+                    uncons :: S -> (A, E S)?.
+
+ =nil= is termination. A present pair contains one visible element and the next
+ state under the associated evaluation strategy.
+
+ This is a class over the state type S itself, not over a required type
+ constructor =C :: Type -> Type=. That choice is deliberate. Coalgebras are
+ state systems, and useful sequential states may be monomorphic: a UTF-8 decoder,
+ an integer range, a compressed cursor, or a parser token source can have one
+ natural element type without pretending to be a polymorphic container.
+
+ Polymorphic containers remain free to implement Functor separately. For
+ example =[a]= is both a Sequence state and part of the Functor family =Coll=.
+ Sequence-hood and representation-preserving mapping are orthogonal facts.
+
+;;; Evaluation as an Associated Modality
+
+ Every Sequence state names exactly one Strategy, and sequence-hood carries the
+ corresponding Evaluation dictionary as a superclass invariant:
+
+                    Evaluation (Strategy S).
+
+ Therefore generic sequence code receives defer/demand and Applicative structure
+ once from the instance. It must never rediscover or duplicate strict/lazy
+ behavior in separate APIs.
+
+ For Strict, the continuation is immediate. For Lazy, it is call-by-need. The
+ visible coalgebra is otherwise identical.
+
+ A future structure such as Tree should make the same separation at its recursive
+ positions rather than inventing StrictTree and LazyTree semantics independently.
+
+;;; Productivity and Finiteness
+
+ Sequence alone permits divergence while obtaining a demanded observation.
+ ProductiveSequence is an erased semantic certificate that the existing =uncons=
+ coalgebra is productive: every finite visible demand performs only finitely many
+ terminating Strategy demands and terminating observations.
+
+ The class deliberately does not define a second observer. Doing so would repeat
+ sequence semantics merely to attach a proof. Instead, the compiler validates a
+ ProductiveSequence instance as a theorem about =uncons= and uses its dictionary
+ only as static evidence for discharging the corresponding =diverge= effects.
+
+ Concrete representations may make that theorem constructive. Control.Evaluation
+ provides =TotalDemand E A=, an opaque refinement proving one demand terminates.
+ Data.Sequence.Unfold uses such continuations to define sequence types whose
+ ProductiveSequence instances follow directly from their representation. Other
+ representations may be proved productive by guarded recursion, sized reasoning,
+ or compiler-derived evidence without changing the Sequence interface.
+
+ FiniteSequence strengthens productivity with well-foundedness: every continuation
+ chain reaches nil after finitely many visible observations. InfiniteSequence
+ instead proves nil unreachable while every finite visible demand remains
+ productive. These are proof-only refinements, not runtime size computations and
+ not inventories of collection methods.
+
+ In particular, ProductiveSequence does not make unbounded search total. A
+ productive infinite sequence may contain no element satisfying a predicate, so
+ a search can make infinitely many individually productive observations.
+
+ Certificate instances are not trusted assertions. The compiler must check their
+ proof obligations before accepting an instance and may erase the resulting
+ dictionaries after elaboration. Initially those proofs may come from structural
+ recursion, TotalDemand-bearing representations, and a small set of compositional
+ rules. Later guarded recursion, clocks, sizes, or user proofs may extend the proof
+ language without changing Sequence itself.
+
+ This policy is analogous to law-bearing algebraic classes such as Ring: Core
+ names the semantic proposition; the compiler/proof layer justifies membership.
+ Runtime observation remains owned by one =uncons= definition.
+
+;;; Functor Is Orthogonal
+
+ The old Sequence class inherited Functor because lists happen to be polymorphic
+ containers. That conflated two different structures.
+
+ A Sequence state need not admit representation-preserving mapping at all. When
+ a type constructor is a lawful Functor, its own Functor instance owns that fact.
+ =Spine E= and =Producer E= are examples: both have Functor instances, but
+ Sequence itself does not require them.
+
+ This separation is especially important for generic filtering. A filtered view
+ stores a predicate over the source element type; pretending that such a view is
+ automatically the same unary type constructor after mapping can be ill-kinded or
+ semantically false. Producer existentially hides private machine state from its public yielded
+ element type and therefore provides the honest representation-changing layer.
+
+;;; Materialized Collection Compatibility
+
+ The historical Core Sequence module also owns a finite same-representation
+ collection vocabulary: length, reverse, indexing, take/drop, filtering, zip,
+ and related list/String behavior.
+
+ During this research refactor that API is isolated under MaterializedSequence.
+ MaterializedSequence remains higher-kinded because operations such as zip and
+ same-representation filtering are properties of a polymorphic collection family,
+ not of the minimal state coalgebra above.
+
+ Its current superclass is Foldable only. Normatively, every =c a= admitted by a
+ MaterializedSequence instance is finite; a future quantified-constraint surface
+ may state =forall a. FiniteSequence (c a)= directly. Until then this compatibility
+ capability must not be mistaken for the mathematical definition of Sequence.
+
+;;; Strict and Lazy Sequences
+
+ =Strict sequence= and =Lazy sequence= are propositions, not classes:
+
+                    StrictSequence S := Sequence S, Strategy S ~ Strict
+                    LazySequence   S := Sequence S, Strategy S ~ Lazy.
+
+ A future constraint-alias feature may provide those spellings without allocating
+ dictionaries or attaching methods. There must remain exactly one sequence
+ coalgebra and exactly one owner of each evaluation strategy.
+
+;;; Producer Lowering and Fusion Boundary
+
+ Data.Sequence.Producer owns the intensional transition functor
+
+                    P_E,A(S) = 1 + E S + A × E S
+
+ and existentially packages the private state S. Its middle summand is Skip, a
+ silent machine transition useful for fusion. Skip does not belong to Sequence:
+ it describes computation of the next visible observation, not sequence shape.
+
+ =lower= is the sole bridge from extensional Sequence semantics to this machine.
+ It has a default definition derived entirely from =uncons=, so an ordinary user
+ Sequence still has one minimal semantic definition. A representation that is
+ already producer-backed may override =lower= to return that existing machine
+ instead of normalizing through a visible observation boundary.
+
+ The coherence law is extensional and demand-sensitive:
+
+                  uncons (lower source)  ≃d  uncons source.
+
+ Here ≃d preserves the visible result, demanded divergence/termination, Strategy
+ behavior, and QTT usage. Lowering itself is construction-total and demand-neutral:
+ it may package closures and strict metadata but may not call =uncons=, demand a
+ Strategy continuation, or diverge merely to construct the Producer. A specialized
+ lowering may expose a different hidden Skip/state structure, but observing that
+ machine may not demand more than observing the default lowering.
+
+ This is not a second sequence observer. =uncons= alone defines sequence meaning;
+ =lower= is a derived optimization witness with a default implementation. Its
+ purpose is compositionality: nested views lower directly to one existential
+ producer pipeline rather than repeatedly reifying visible Sequence boundaries.
+
+ Producer is the Core-level reference calculus, not a promise that its existential
+ packages are the compiler's final IR. Flat-map and stateful transformations may
+ place nested producer values in hidden machine state. When the pipeline is
+ statically known after specialization, the compiler must normalize that calculus
+ to first-order control flow and erase composition-only representation. Keeping
+ that richer normal form internal avoids adding a second public stream hierarchy
+ merely to encode one optimizer implementation.
+
+;;; Indexed Boundary
+
+ The coalgebra above is regular: the continuation state has the same type S.
+ Length-indexed vectors expose a genuinely different structure:
+
+                    Vec (S n) A -> Vec n A.
+
+ Likewise NonEmpty A exposes an ordinary list as its tail. These are indexed or
+ family-changing observations rather than counterexamples to the regular
+ Sequence interface. They should motivate an indexed-container/SequenceFamily
+ abstraction only if several concrete users justify that additional theory.
+
+ We deliberately do not hide the distinction behind existential packaging just
+ to make the base class appear universal.
+
+;;; Research Basis
+
+ J.J.M.M. Rutten, "Universal Coalgebra: a Theory of Systems", Theoretical
+ Computer Science 249(1), 2000.
+   https://doi.org/10.1016/S0304-3975(00)00056-6
+
+ Michael Abbott, Thorsten Altenkirch, and Neil Ghani, "Containers: Constructing
+ Strictly Positive Types", Theoretical Computer Science 342(1), 2005.
+   https://doi.org/10.1016/j.tcs.2005.06.002
+
+ Duncan Coutts, Roman Leshchinskiy, and Don Stewart, "Stream Fusion: From Lists
+ to Streams to Nothing at All", ICFP 2007.
+   https://doi.org/10.1145/1291151.1291199
+
+ Ralf Hinze, Thomas Harper, and Daniel W. H. James, "Theory and Practice of
+ Fusion", IFL 2010.
+   https://www.cs.ox.ac.uk/people/daniel.james/fusion.html
+
+ Oleg Kiselyov, Tomoaki Kobayashi, and Nick Palladinos, "Complete Fusion for
+ Stateful Streams: Equational Theory of Stateful Streams and Fusion as
+ Normalization-by-Evaluation", arXiv:2412.15768, revised 2026.
+   https://arxiv.org/abs/2412.15768
+
+ Rutten supplies the state-coalgebra viewpoint. Containers explain the separate
+ functorial structure of polymorphic datatype families. Fusion work motivates a
+ private producer representation without contaminating extensional Sequence
+ semantics; modern complete-fusion work motivates deterministic normalization of
+ that producer calculus rather than reliance on accidental optimizer rewrites.
 
 ;;; Code:
 
+import Control.Evaluation
+import Control.Strict
 import Data.Functor
 import Data.Foldable
 import Data.Bool
 import Data.Semigroup
+import Data.Sequence.Producer
 
 module Sequence
- [Sequence map filter prepend concat foldl foldr
-  null? length reverse at nth head hd tail tl
-  count empty? is-empty?
-  take      drop
-  takeWhile dropWhile
-  any? all? starts-with? ends-with?
-  zip zipWith snoc bothPredicates]
+  [Sequence Element Strategy uncons lower sequence-step sequence-transition
+   ProductiveSequence FiniteSequence InfiniteSequence MaterializedSequence
+   map filter prepend concat foldl foldr
+   null? length reverse at nth head hd tail tl
+   count empty? is-empty?
+   take drop takeWhile dropWhile
+   any? all? starts-with? ends-with?
+   zip zipWith snoc]
 
 
-class (Functor c, Foldable c) => Sequence c where
+class Evaluation (Strategy s) => Sequence s where
+  type Element s
+  type Strategy s
+  uncons :: s -> (Element s, Strategy s s)?
+  lower  :: s -> Producer (Strategy s) (Element s)
+
+  lower values ->
+    ProducerState sequence-transition values
+
+  ;; Minimal complete definition: Element, Strategy, and uncons.
+  ;;
+  ;; Element s :: Type.
+  ;; Strategy s :: Type -> Type.
+  ;; `lower` is derived from uncons and may be overridden only by a coherent,
+  ;; construction-total, demand-neutral, demand-refining producer representation.
+  ;; The compiler must resolve Evaluation (Strategy s) when accepting the
+  ;; Sequence instance so all generic consumers inherit that evidence once.
+
+
+define sequence-step :: (a, e s)? -> Step e s a
+  nil -> Stop
+  (value, rest) -> Yield value rest
+
+
+define sequence-transition :: Sequence s =>
+  s -> Step (Strategy s) s (Element s)
+  values -> sequence-step (uncons values)
+
+
+instance Evaluation e => Sequence (Producer e a)
+  type Element (Producer e a) = a
+  type Strategy (Producer e a) = e
+
+  uncons values -> observe-producer values
+  lower values  -> values
+
+
+class Sequence s => ProductiveSequence s where
+  ;; Erased law certificate. The compiler must prove that every finite sequence
+  ;; of uncons observations and demanded continuations terminates. No second
+  ;; runtime observer is introduced.
+
+
+class ProductiveSequence s => FiniteSequence s where
+  ;; Erased well-foundedness certificate. Every continuation chain reaches nil
+  ;; after finitely many visible observations. No runtime length/fuel is required.
+
+
+class ProductiveSequence s => InfiniteSequence s where
+  ;; Erased coinductive certificate. nil is unreachable and every finite visible
+  ;; demand terminates.
+
+
+class Foldable c => MaterializedSequence c where
   filter    :: (a -> Bool) -> c a -> c a
   prepend   :: a -> c a -> c a
-  concat    :: c a -> c a -> c a
   null?     :: c a -> Bool
   length    :: c a -> Int
   reverse   :: c a -> c a
   at        :: c a -> Int -> a?
   nth       :: c a -> Int -> a
-  take      :: c a -> Int -> c a
-  drop      :: c a -> Int -> c a
+  take      :: Int -> c a -> c a
+  drop      :: Int -> c a -> c a
   takeWhile :: c a -> (a -> Bool) -> c a
   dropWhile :: c a -> (a -> Bool) -> c a
   any?      :: c a -> (a -> Bool) -> Bool
@@ -47,19 +323,15 @@ class (Functor c, Foldable c) => Sequence c where
   zipWith   :: c a -> c b -> (a -> b -> d) -> c d
   snoc      :: c a -> a -> c a
 
-  law concat-associativity :: c a -> c a -> c a -> Bool
-    xs ys zs ->
-      (concat (concat xs ys) zs) = (concat xs (concat ys zs))
-
-  law concat-length :: c a -> c a -> Bool
+  law append-length :: Semigroup (c a) => c a -> c a -> Bool
     xs ys ->
-      (length (concat xs ys)) = ((length xs) + (length ys))
+      (length (append xs ys)) = ((length xs) + (length ys))
 
   law reverse-involution :: c a -> Bool
-    xs -> (Sequence.reverse (Sequence.reverse xs)) = xs
+    xs -> (reverse (reverse xs)) = xs
 
-  ;; minimal complete definition: all methods above
-  ;; law: take xs n `concat` drop xs n = xs, for n >= 0
+  ;; Compatibility capability for the current finite Coll API. It is not part
+  ;; of the mathematical definition of sequence or finiteness.
 
 
 method starts-with? :: [a] -> [a] -> Bool
@@ -70,6 +342,10 @@ method ends-with? :: [a] -> [a] -> Bool
   values suffix -> __rt_ends_with? values suffix
 
 
+method concat :: Semigroup (c a) => c a -> c a -> c a
+  xs ys -> append xs ys
+
+
 method head :: [a] -> a
   :alias hd
   xs -> nth xs 0
@@ -77,16 +353,16 @@ method head :: [a] -> a
 
 method tail :: [a] -> [a]
   :alias tl
-  xs -> drop xs 1
+  xs -> drop 1 xs
 
 
 method count :: [a] -> Int
-  xs -> __rt_count xs
+  xs -> length xs
 
 
 method empty? :: [a] -> Bool
   :alias is-empty?
-  xs -> rt_coll_is_empty xs
+  xs -> null? xs
 
 
 method prepend :: a -> [a] -> [a]
@@ -95,12 +371,12 @@ method prepend :: a -> [a] -> [a]
 
 method null? :: [a] -> Bool
   []     -> True
-  [x|xs] -> False
+  [_|_]  -> False
 
 
 method length :: [a] -> Int
   []     -> 0
-  [x|xs] -> 1 + (length xs)
+  [_|xs] -> 1 + (length xs)
 
 
 method reverse-into :: [a] -> [a] -> [a]
@@ -113,64 +389,64 @@ method reverse :: [a] -> [a]
 
 
 method at :: [a] -> Int -> a?
-  _ n      | < 0 -> nil
-  [] _           -> nil
-  [x|xs] 0       -> x
-  [x|xs] n       -> at xs (n - 1)
+  _ n     | < 0 -> nil
+  [] _          -> nil
+  [x|_] 0       -> x
+  [_|xs] n      -> at xs (n - 1)
 
 
 method nth :: [a] -> Int -> a
-  [] _              -> error "Coll.nth: index out of bounds"
+  [] _ -> error "Sequence.nth: index out of bounds"
   [x|xs] n
     | n <= 0    -> x
     | otherwise -> nth xs (n - 1)
 
 
-method take :: [a] -> Int -> [a]
-  [] _                         -> []
-  [x|xs] n
-    | n > 0     -> prepend x (take xs (n - 1))
+method take :: Int -> [a] -> [a]
+  _ [] -> []
+  n [x|xs]
+    | n > 0     -> prepend x (take (n - 1) xs)
     | otherwise -> []
 
 
-method drop :: [a] -> Int -> [a]
-  [] _                         -> []
-  [x|xs] n
-    | n > 0     -> drop xs (n - 1)
+method drop :: Int -> [a] -> [a]
+  _ [] -> []
+  n [x|xs]
+    | n > 0     -> drop (n - 1) xs
     | otherwise -> prepend x xs
 
 
 method take-while :: [a] -> (a -> Bool) -> [a]
-  [] _                         -> []
-  [x|xs] p
-    | p x       -> prepend x (take-while xs p)
-    | otherwise -> []
+  [] _ -> []
+  [x|xs] predicate
+    | predicate x -> prepend x (take-while xs predicate)
+    | otherwise   -> []
 
 
 method drop-while :: [a] -> (a -> Bool) -> [a]
-  [] _                         -> []
-  [x|xs] p
-    | p x       -> drop-while xs p
-    | otherwise -> prepend x xs
+  [] _ -> []
+  [x|xs] predicate
+    | predicate x -> drop-while xs predicate
+    | otherwise   -> prepend x xs
 
 
 method filter :: (a -> Bool) -> [a] -> [a]
-  _ []                         -> []
-  p [x|xs]
-      | p x       -> prepend x (filter p xs)
-      | otherwise -> filter p xs
+  _ [] -> []
+  predicate [x|xs]
+    | predicate x -> prepend x (filter predicate xs)
+    | otherwise   -> filter predicate xs
 
 
 method any? :: [a] -> (a -> Bool) -> Bool
-  [] _     -> False
-  [x|xs] p -> if p x then True else any? xs p
+  [] _ -> False
+  [x|xs] predicate -> if predicate x then True else any? xs predicate
 
 
 method all? :: [a] -> (a -> Bool) -> Bool
-  [] _                         -> True
-  [x|xs] p
-    | p x       -> all? xs p
-    | otherwise -> False
+  [] _ -> True
+  [x|xs] predicate
+    | predicate x -> all? xs predicate
+    | otherwise   -> False
 
 
 method zip :: [a] -> [b] -> [(a, b)]
@@ -186,40 +462,46 @@ method zip-with :: [a] -> [b] -> (a -> b -> d) -> [d]
 
 
 method snoc :: [a] -> a -> [a]
-  [] val     -> (list val)
-  [x|xs] val -> prepend x (snoc xs val)
+  [] value     -> list value
+  [x|xs] value -> prepend x (snoc xs value)
 
 
-instance Sequence Coll
-  filter p xs       -> filter p xs
-  prepend x xs      -> __rt_prepend x xs
-  concat xs ys      -> rt_coll_concat xs ys
-  null? xs          -> null? xs
-  length xs         -> length xs
-  reverse xs        -> reverse xs
-  at xs n           -> at xs n
-  nth xs n          -> nth xs n
-  take xs n         -> take xs n
-  drop xs n         -> drop xs n
-  takeWhile xs p    -> take-while xs p
-  dropWhile xs p    -> drop-while xs p
-  any? xs p         -> any? xs p
-  all? xs p         -> all? xs p
-  zip xs ys         -> zip xs ys
-  zipWith xs ys f   -> zip-with xs ys f
-  snoc xs val       -> snoc xs val
+instance Sequence [a]
+  type Element [a] = a
+  type Strategy [a] = Strict
 
-;; TODO unit type () pointer *dereferencing and fix wisp
-;; define append! :: [xs -> [a]] -> [val :: a] -> ()
-;;   xs <- (append *xs val)
+  uncons [] -> nil
+  uncons [value|rest] -> (value, strict rest)
+  lower values -> ProducerState sequence-transition values
 
 
-;; TODO Move in Applicative and make variadic
-method bothPredicates :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
-  f g -> (lambda (x) (and (f x) (g x)))
+instance ProductiveSequence [a]
+
+
+instance FiniteSequence [a]
+
+
+instance MaterializedSequence Coll
+  filter predicate xs -> filter predicate xs
+  prepend value xs    -> __rt_prepend value xs
+  null? xs            -> null? xs
+  length xs           -> length xs
+  reverse xs          -> reverse xs
+  at xs index         -> at xs index
+  nth xs index        -> nth xs index
+  take amount xs      -> take amount xs
+  drop amount xs      -> drop amount xs
+  takeWhile xs p      -> take-while xs p
+  dropWhile xs p      -> drop-while xs p
+  any? xs p           -> any? xs p
+  all? xs p           -> all? xs p
+  zip xs ys           -> zip xs ys
+  zipWith xs ys f     -> zip-with xs ys f
+  snoc xs value       -> snoc xs value
 
 
 tests
+
   :structure:
   assert-eq ([].null?)                            True        "null? empty"
   assert-eq ((list 1).null?)                      False       "null? nonempty"
@@ -239,33 +521,25 @@ tests
   :structure:
 
   :take:
-  assert-eq (show ((list 1 2 3).take 2)) "(1 2)" "take normal"
-  assert-eq (show ((list 1 2).take 0))   "()"    "take zero"
-  assert-eq (show ((list 1 2).take 5))   "(1 2)" "take beyond length"
-  assert-eq (show ((list 42).take 1))    "(42)"  "take singleton"
+  assert-eq (show (take 2 (list 1 2 3))) "(1 2)" "take normal"
+  assert-eq (show (take 0 (list 1 2)))   "()"    "take zero"
+  assert-eq (show (take 5 (list 1 2)))   "(1 2)" "take beyond length"
+  assert-eq (show (take 1 (list 42)))    "(42)"  "take singleton"
   :take:
 
   :drop:
-  assert-eq (show ((list 1 2 3 4).drop 2)) "(3 4)" "drop normal"
-  assert-eq (show ((list 1 2).drop 0))     "(1 2)" "drop zero"
-  assert-eq (show ((list 1 2).drop 5))     "()"    "drop beyond length"
-  assert-eq (show ((list 42).drop 1))      "()"    "drop singleton"
+  assert-eq (show (drop 2 (list 1 2 3 4))) "(3 4)" "drop normal"
+  assert-eq (show (drop 0 (list 1 2)))     "(1 2)" "drop zero"
+  assert-eq (show (drop 5 (list 1 2)))     "()"    "drop beyond length"
+  assert-eq (show (drop 1 (list 42)))      "()"    "drop singleton"
   :drop:
 
-  :higher-order-registrations:
-  assert-eq 1 1 "takeWhile registers"
-  assert-eq 1 1 "dropWhile registers"
-  assert-eq 1 1 "map registers"
-  assert-eq 1 1 "all? registers"
-  assert-eq 1 1 "foldl registers"
-  assert-eq 1 1 "foldr registers"
-  :higher-order-registrations:
 
   :map-runtime:
   assert-eq (show (map (lambda (x) (+ x 1)) (list 1 2 3))) "(2 3 4)" "map increment"
   assert-eq (show (map (lambda (x) (* x 2)) (list 0 1 2))) "(0 2 4)" "map double"
   assert-eq (show (map (lambda (x) x) (list 1 2))) "(1 2)" "map identity"
-  assert-eq (show (map (lambda (x) 0) (list 1 2 3))) "(0 0 0)" "map constant"
+  assert-eq (show (map (lambda (_) 0) (list 1 2 3))) "(0 0 0)" "map constant"
   :map-runtime:
 
   :take-while:
@@ -283,19 +557,14 @@ tests
   :any:
   assert-eq ((list 1 2 3 4).any? (lambda (x) (< 2 x))) True  "any? finds element"
   assert-eq ((list 1 2 3).any? (lambda (x) (> x 9)))   False "any? missing"
-  assert-eq ((list).any? (lambda (x) False))           False "any? empty list"
+  assert-eq ((list).any? (lambda (_) False))           False "any? empty list"
   :any:
 
   :all:
   assert-eq ((list 1 2 3).all? (lambda (x) (< x 5))) True  "all? all satisfy"
   assert-eq ((list 1 2 3).all? (lambda (x) (< x 3))) False "all? one fails"
-  assert-eq ((list).all? (lambda (x) False))         True  "all? empty list"
+  assert-eq ((list).all? (lambda (_) False))         True  "all? empty list"
   :all:
-
-  :foldl:
-  :foldl:
-  :foldr:
-  :foldr:
 
   :zip:
   assert-eq (show ((list 1 2).zip (list 3 4))) "((1 3) (2 4))" "zip pair"
@@ -321,8 +590,3 @@ tests
   assert-eq (show (concat (list 1 2) (list 3 4))) "(1 2 3 4)" "Sequence concat lists"
   assert-eq (show (concat "ab" "cd"))             "abcd"      "Sequence concat String"
   :concat:
-
-  :both-predicate:
-  assert-eq ((bothPredicates (lambda (x) (< 0 x)) (lambda (x) (< x 4))) 3) True "bothPredicates true"
-  assert-eq ((bothPredicates (lambda (x) (< 0 x)) (lambda (x) (< x 4))) 5) False "bothPredicates false"
-  :both-predicate:

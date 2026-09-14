@@ -22,10 +22,53 @@ define stages :: [2 VkPipelineShaderStageCreateInfo]
 [vertex-stage fragment-stage]
 
 
+define assigned-stages :: [1 VkPipelineShaderStageCreateInfo]
+  [fragment-stage]
+
+
+set! (assigned-stages 0) vertex-stage
+
+
+define assigned-stage :: VkPipelineShaderStageCreateInfo
+  (assigned-stages 0)
+
+
+define selected-stage :: VkPipelineShaderStageCreateInfo
+  (stages 0)
+
+
+define selected-command :: VkCommandBuffer
+  nil
+
+
+define reset-selected-command -> I32
+  vkResetCommandBuffer selected-command 0
+
+
+define forward-stage :: VkPipelineShaderStageCreateInfo -> U32
+  value -> read-stage value
+
+
+define read-stage :: VkPipelineShaderStageCreateInfo -> U32
+  value -> value.stage
+
+
 define blend-state :: VkPipelineColorBlendStateCreateInfo
   VkPipelineColorBlendStateCreateInfo
     VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO
     nil 0 False VK_LOGIC_OP_COPY 0 nil [0.0 0.0 0.0 0.0]
 
 
+define viewport-rect :: VkRect2D
+  VkRect2D (VkOffset2D 0 0) (VkExtent2D 640 480)
+
+
+define selected-extent :: VkExtent2D
+  viewport-rect.extent
+
+
 show (count stages)
+show selected-stage.stage
+show (forward-stage selected-stage)
+show selected-extent.width
+show assigned-stage.stage

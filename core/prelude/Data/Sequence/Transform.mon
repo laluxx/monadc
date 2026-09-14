@@ -1,0 +1,465 @@
+;;; Transform.mon --- Generic sequence transformations with static evidence
+
+:author   Laluxx
+:version  0.6.0
+:keywords sequence transform producer fusion evidence flat-map scan rate
+
+;;; Commentary:
+
+ Transform owns representation-changing sequence operations. Every operation is
+ written once over Sequence and preserves the source Evaluation strategy unless
+ its signature explicitly proves a strategy relation.
+
+ The runtime representation is still one existential Producer. Transform does
+ not define MapView, FilterView, FlatMapView, or strict/lazy variants. A single
+ View wrapper stores the Producer while erased phantom indices retain only the
+ semantic provenance needed by the proof layer.
+
+;;; Evidence Profiles, Not Operation Tags
+
+ Earlier cycles used one phantom tag per operation. That was safe but too close
+ to recording implementation history. Several transformations have exactly the
+ same productivity/finiteness behavior and therefore deserve one proof profile.
+
+ The promoted Transform values in this cycle classify preservation behavior:
+
+   PreservingTransform
+     productive -> productive, finite -> finite, infinite -> infinite.
+     map, finite drop, stateful map, scan, enumerate, and intersperse belong here.
+
+   BoundedTransform
+     productive -> finite. Used by take with a finite Int bound.
+
+   PrefixTransform
+     productive -> productive and finite -> finite, but an infinite source may
+     terminate early. Used by take-while.
+
+   StarvingTransform
+     only a finite source generically proves productivity/finiteness. Filter and
+     drop-while may inspect infinitely many productive source values before their
+     next visible output.
+
+ Append, Zip, and FlatMap retain separate profiles because their theorems depend
+ on more than one source.
+
+ This is deliberately an evidence algebra rather than an operation enumeration.
+ Adding another one-to-one stateful transform should reuse PreservingTransform,
+ not add another constructor merely to name the function.
+
+;;; Strategy-Locked Binary Composition
+
+ Core does not yet expose a source-level equality constraint spelling such as
+ =Strategy l ~ Strategy r=. Binary and nested Producer combinators nevertheless
+ require exactly one Evaluation parameter. This cycle therefore exposes lowered
+ forms whose right/nested inputs are explicitly =Producer (Strategy left) ...=.
+ The producer type itself is the witness that evaluation strategies agree; for
+ append it also fixes the visible element type.
+
+ These lowered forms are the semantically complete boundary when callers combine
+ different Sequence state types. The higher-level convenience functions remain
+ for cases where elaboration can infer the same equalities from =lower right=,
+ and now delegate through the strategy-locked implementation rather than owning
+ a second composition path. No proof certificate is synthesized merely from a
+ Producer value: productivity/finiteness evidence remains a separate theorem.
+
+;;; Rates, Nesting, and Stateful Mapping
+
+ Producer Step has three raw rates: Stop, Skip, and Yield. Flat-map composes those
+ steps so one outer Yield may lead to zero, one, or arbitrarily many visible
+ outputs over time. The outer continuation remains suspended while an inner
+ producer is live.
+
+ Stateful mapping is represented by map-accumulate. Its state is private producer
+ state, not externally observable mutation. Scan and enumerate are ordinary
+ specializations. Intersperse is a small buffered machine that exercises a rate
+ greater than one without inventing a second sequence representation.
+
+ These operators are intentionally implemented in Producer rather than as new
+ Sequence classes. They stress the same calculus that filter/zip already use and
+ provide the reference semantics against which compiler normalization is proved.
+
+;;; Complete-Fusion Boundary
+
+ Core guarantees semantic fusion: a nested transform pipeline contains no
+ materialized intermediate Sequence and lowers to one Producer calculus.
+
+ Zero-overhead representation fusion is stronger. In particular flat-map stores
+ an existential inner Producer chosen by a callback. The compiler must normalize
+ such statically known producer compositions by closure conversion,
+ defunctionalization, state-product simplification, and constructor elimination.
+ It must not rely on accidental inlining.
+
+ This distinction follows complete-fusion work, which shows that nesting, zip,
+ and differing rates require an explicit normalization theory. A first-class
+ Producer or callback that escapes dynamically remains a legitimate runtime
+ value; complete representation erasure is promised only after the relevant
+ pipeline structure becomes static through specialization.
+
+;;; Research Basis
+
+ Duncan Coutts, Roman Leshchinskiy, and Don Stewart, "Stream Fusion: From Lists
+ to Streams to Nothing at All", ICFP 2007.
+   https://doi.org/10.1145/1291151.1291199
+
+ Oleg Kiselyov, Aggelos Biboudis, Nick Palladinos, and Yannis Smaragdakis,
+ "Stream Fusion, to Completeness", POPL 2017.
+   https://doi.org/10.1145/3009837.3009880
+
+ Oleg Kiselyov, Tomoaki Kobayashi, and Nick Palladinos, "Complete Fusion for
+ Stateful Streams: Equational Theory of Stateful Streams and Fusion as
+ Normalization-by-Evaluation", arXiv:2412.15768, revised 2026.
+   https://arxiv.org/abs/2412.15768
+
+ Tomoaki Kobayashi and Oleg Kiselyov, "Complete Stream Fusion for
+ Software-Defined Radio", PEPM 2024.
+   https://doi.org/10.1145/3635800.3636962
+
+ The 2017 work isolates nesting and rate differences as central obstacles to
+ complete fusion. The 2026 revision develops a unique-normal-form/NBE account for
+ stateful streams, while the SDR case study demonstrates that map-accumulate and
+ window-like processing can be expressed without multiplying stream shapes.
+
+;;; Code:
+
+import Control.Evaluation
+import Data.Bool
+import Data.Functor
+import Data.Sequence.Producer
+import Sequence
+
+module Data.Sequence.Transform
+  [Transform PreservingTransform BoundedTransform PrefixTransform
+   StarvingTransform AppendTransform ZipTransform FlatMapTransform
+   View sequence-map sequence-filter sequence-take sequence-drop
+   sequence-take-while sequence-drop-while
+   sequence-map-accumulate sequence-map-filter-accumulate
+   sequence-scan sequence-enumerate sequence-intersperse
+   sequence-append-lowered sequence-zip-lowered sequence-zip-with-lowered sequence-flat-map-lowered
+   sequence-append sequence-zip sequence-zip-with sequence-flat-map]
+
+
+;;; Static Evidence Profiles
+
+
+data Transform :: Type
+  PreservingTransform : Transform
+  BoundedTransform    : Transform
+  PrefixTransform     : Transform
+  StarvingTransform   : Transform
+  AppendTransform     : Transform
+  ZipTransform        : Transform
+  FlatMapTransform    : Transform
+
+
+;;; Generic View
+
+
+data View :: Transform -> Type -> (Type -> Type) -> Type -> Type
+  ViewValue : Producer e a -> View proof source e a
+
+
+instance Functor e => Functor (View proof source e)
+  map f [ViewValue source] -> ViewValue (map f source)
+
+
+instance Evaluation e => Sequence (View proof source e a)
+  type Element (View proof source e a) = a
+  type Strategy (View proof source e a) = e
+
+  uncons [ViewValue source] -> uncons source
+  lower [ViewValue source]  -> source
+
+
+;;; Preservation Theorems
+
+
+instance ProductiveSequence s =>
+  ProductiveSequence (View PreservingTransform s (Strategy s) b)
+
+
+instance FiniteSequence s =>
+  FiniteSequence (View PreservingTransform s (Strategy s) b)
+
+
+instance InfiniteSequence s =>
+  InfiniteSequence (View PreservingTransform s (Strategy s) b)
+
+
+instance ProductiveSequence s =>
+  ProductiveSequence (View BoundedTransform s (Strategy s) b)
+
+
+instance ProductiveSequence s =>
+  FiniteSequence (View BoundedTransform s (Strategy s) b)
+
+
+instance ProductiveSequence s =>
+  ProductiveSequence (View PrefixTransform s (Strategy s) b)
+
+
+instance FiniteSequence s =>
+  FiniteSequence (View PrefixTransform s (Strategy s) b)
+
+
+instance FiniteSequence s =>
+  ProductiveSequence (View StarvingTransform s (Strategy s) b)
+
+
+instance FiniteSequence s =>
+  FiniteSequence (View StarvingTransform s (Strategy s) b)
+
+
+;; Multi-source profiles state only propositions justified by all sources they
+;; may need to observe. These instances are intentionally conservative: absence
+;; of a certificate is preferable to a certificate with an insufficient premise.
+
+instance (ProductiveSequence l, ProductiveSequence r) =>
+  ProductiveSequence (View AppendTransform (l, r) (Strategy l) b)
+
+
+instance (FiniteSequence l, FiniteSequence r) =>
+  FiniteSequence (View AppendTransform (l, r) (Strategy l) b)
+
+
+;; An infinite left append never reaches the right source.
+instance InfiniteSequence l =>
+  InfiniteSequence (View AppendTransform (l, r) (Strategy l) b)
+
+
+instance (ProductiveSequence l, ProductiveSequence r) =>
+  ProductiveSequence (View ZipTransform (l, r) (Strategy l) c)
+
+
+;; Zip is left-to-right. A finite left source bounds the number of right
+;; observations, while productivity of the right source makes those demands
+;; terminate. The symmetric theorem can be added once overlapping evidence
+;; resolution has an explicit coherence rule.
+instance (FiniteSequence l, ProductiveSequence r) =>
+  FiniteSequence (View ZipTransform (l, r) (Strategy l) c)
+
+
+instance (InfiniteSequence l, InfiniteSequence r) =>
+  InfiniteSequence (View ZipTransform (l, r) (Strategy l) c)
+
+
+;; Flat-map may starve on infinitely many empty inner sequences. A finite outer
+;; source plus productive inners is enough for productivity; finiteness needs
+;; both levels finite. Infinitude is certified only by the strong case where an
+;; infinite outer yields an infinite inner type at its first visible element.
+instance (FiniteSequence outer, ProductiveSequence inner) =>
+  ProductiveSequence (View FlatMapTransform (outer, inner) (Strategy outer) b)
+
+
+instance (FiniteSequence outer, FiniteSequence inner) =>
+  FiniteSequence (View FlatMapTransform (outer, inner) (Strategy outer) b)
+
+
+instance (InfiniteSequence outer, InfiniteSequence inner) =>
+  InfiniteSequence (View FlatMapTransform (outer, inner) (Strategy outer) b)
+
+
+;;; Transformations
+
+
+;; One-to-one and finite-rate preserving transforms share one evidence profile.
+define sequence-map :: Sequence s =>
+  (Element s -> b) -> s -> View PreservingTransform s (Strategy s) b
+  f values -> ViewValue (map f (lower values))
+
+
+define sequence-drop :: Sequence s =>
+  Int -> s -> View PreservingTransform s (Strategy s) (Element s)
+  amount values -> ViewValue (drop-producer amount (lower values))
+
+
+define sequence-map-accumulate :: Sequence s =>
+  (state -> Element s -> (state, b)) -> state -> s
+  -> View PreservingTransform s (Strategy s) b
+  combine initial values ->
+    ViewValue (map-accumulate-producer combine initial (lower values))
+
+
+define sequence-map-filter-accumulate :: Sequence s =>
+  (state -> Element s -> MapFilterResult state b) -> state -> s
+  -> View StarvingTransform s (Strategy s) b
+  combine initial values ->
+    ViewValue (map-filter-accumulate-producer combine initial (lower values))
+
+
+define sequence-scan :: Sequence s =>
+  (state -> Element s -> state) -> state -> s
+  -> View PreservingTransform s (Strategy s) state
+  combine initial values ->
+    ViewValue (scan-producer combine initial (lower values))
+
+
+define sequence-enumerate :: Sequence s =>
+  s -> View PreservingTransform s (Strategy s) (Int, Element s)
+  values -> ViewValue (enumerate-producer (lower values))
+
+
+define sequence-intersperse :: Sequence s =>
+  Element s -> s -> View PreservingTransform s (Strategy s) (Element s)
+  separator values ->
+    ViewValue (intersperse-producer separator (lower values))
+
+
+;; Bounded and potentially starving transforms have distinct proof profiles.
+define sequence-take :: Sequence s =>
+  Int -> s -> View BoundedTransform s (Strategy s) (Element s)
+  amount values -> ViewValue (take-producer amount (lower values))
+
+
+define sequence-take-while :: Sequence s =>
+  (Element s -> Bool) -> s
+  -> View PrefixTransform s (Strategy s) (Element s)
+  predicate values ->
+    ViewValue (take-while-producer predicate (lower values))
+
+
+define sequence-filter :: Sequence s =>
+  (Element s -> Bool) -> s
+  -> View StarvingTransform s (Strategy s) (Element s)
+  predicate values ->
+    ViewValue (filter-producer predicate (lower values))
+
+
+define sequence-drop-while :: Sequence s =>
+  (Element s -> Bool) -> s
+  -> View StarvingTransform s (Strategy s) (Element s)
+  predicate values ->
+    ViewValue (drop-while-producer predicate (lower values))
+
+
+;; Strategy-locked lowered composition. These signatures state the common
+;; Evaluation parameter directly even before the language has a type-equality
+;; constraint syntax for associated Strategy families.
+define sequence-append-lowered :: Sequence l =>
+  l -> Producer (Strategy l) (Element l) -> Producer (Strategy l) (Element l)
+  left right -> append-producer (lower left) right
+
+
+define sequence-zip-lowered :: Sequence l =>
+  l -> Producer (Strategy l) b -> Producer (Strategy l) (Element l, b)
+  left right -> zip-producer (lower left) right
+
+
+define sequence-zip-with-lowered :: Sequence l =>
+  (Element l -> b -> c) -> l -> Producer (Strategy l) b
+  -> Producer (Strategy l) c
+  combine left right -> zip-with-producer combine (lower left) right
+
+
+define sequence-flat-map-lowered :: Sequence outer =>
+  (Element outer -> Producer (Strategy outer) b) -> outer
+  -> Producer (Strategy outer) b
+  expand values -> flat-map-producer expand (lower values)
+
+
+;; Binary and nested convenience transforms use the same strategy-locked path.
+define sequence-append ::
+  (Sequence l, Sequence r) =>
+  l -> r -> View AppendTransform (l, r) (Strategy l) (Element l)
+  left right ->
+    ViewValue (sequence-append-lowered left (lower right))
+
+
+define sequence-zip ::
+  (Sequence l, Sequence r) =>
+  l -> r -> View ZipTransform (l, r) (Strategy l) (Element l, Element r)
+  left right ->
+    ViewValue (sequence-zip-lowered left (lower right))
+
+
+define sequence-zip-with ::
+  (Sequence l, Sequence r) =>
+  (Element l -> Element r -> c) -> l -> r
+  -> View ZipTransform (l, r) (Strategy l) c
+  combine left right ->
+    ViewValue (sequence-zip-with-lowered combine left (lower right))
+
+
+define sequence-flat-map ::
+  (Sequence outer, Sequence inner) =>
+  (Element outer -> inner) -> outer
+  -> View FlatMapTransform (outer, inner) (Strategy outer) (Element inner)
+  expand values ->
+    ViewValue
+      (sequence-flat-map-lowered
+        (lambda (value) (lower (expand value)))
+        values)
+
+
+;;; Small Observational Tests
+
+
+define transform-first-or :: a -> (a, e s)? -> a
+  fallback nil -> fallback
+  _ (value, _) -> value
+
+
+define transform-empty? :: (a, e s)? -> Bool
+  nil -> True
+  (_, _) -> False
+
+
+define duplicate-value :: Int -> [Int]
+  value -> list value value
+
+
+define running-sum :: Int -> Int -> Int
+  total value -> total + value
+
+
+define alternate-output :: Bool -> Int -> MapFilterResult Bool Int
+  False _     -> Filtered True
+  True value  -> Emitted False value
+
+
+tests
+  :generic:
+  assert-eq
+    (transform-first-or 0
+      (uncons (sequence-map (lambda (x) (+ x 1)) (list 1 2 3))))
+    2
+    "map transforms arbitrary Sequence states"
+  assert-eq
+    (transform-first-or 0
+      (uncons (sequence-filter (lambda (x) (> x 1)) (list 1 2 3))))
+    2
+    "filter transforms through one producer machine"
+  assert-eq
+    (transform-empty? (uncons (sequence-take 0 (list 1 2 3))))
+    True
+    "take zero terminates without a visible element"
+  assert-eq
+    (transform-first-or 0
+      (uncons
+        (sequence-map (lambda (x) (+ x 10))
+          (sequence-filter (lambda (x) (> x 2))
+            (sequence-drop 1 (list 1 2 3))))))
+    13
+    "nested transformations remain one lowered producer pipeline"
+  assert-eq
+    (transform-first-or 0
+      (uncons (sequence-flat-map duplicate-value (list 3 4))))
+    3
+    "flat-map enters the first inner producer without materializing a sequence"
+  assert-eq
+    (transform-first-or (0, 0)
+      (uncons (sequence-zip-lowered (list 1 2) (lower (list 9 8)))))
+    (1, 9)
+    "lowered zip carries common Evaluation strategy in its Producer type"
+  assert-eq
+    (transform-first-or 99
+      (uncons (sequence-scan running-sum 0 (list 1 2 3))))
+    0
+    "scan emits its seed before observing the source"
+  assert-eq
+    (transform-first-or 0
+      (uncons
+        (sequence-map-filter-accumulate
+          alternate-output False (list 1 2 3 4))))
+    2
+    "stateful zero-or-one transforms skip without materialization"
+  :generic:

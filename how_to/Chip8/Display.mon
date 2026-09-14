@@ -1,0 +1,125 @@
+;;; Display.mon --- a small Raylib window for the CHIP-8 framebuffer
+
+:author "Laluxx"
+:version "0.2.0"
+:keywords "how-to chip8 graphics raylib display"
+
+;;; Commentary:
+
+ The emulated display is only 64x32 pixels.  Raylib gives those pixels enough
+ room to breathe without becoming part of the emulator itself: each CHIP-8
+ pixel is drawn as a crisp square, with one restrained status strip above it.
+
+ The CPU sees only Machine.display through `pixel`.  This module is therefore
+ replaceable by a terminal renderer, SDL, Vulkan, or anything else without
+ changing an opcode.
+
+;;; Code:
+
+import Machine
+
+module Display
+  [open-display close-display window-should-close?
+   render-frame display-pixel-value]
+
+include <raylib.h>
+
+
+;;; Window geometry
+
+define pixel-scale :: Int 12
+define header-height :: Int 48
+
+define framebuffer-width  :: Int (screen-width * pixel-scale)
+define framebuffer-height :: Int (screen-height * pixel-scale)
+define window-width       :: Int framebuffer-width
+define window-height      :: Int (framebuffer-height + header-height)
+
+
+;;; Palette
+
+define background :: Color
+  Color 12 14 18 255
+
+
+define panel :: Color
+  Color 22 25 31 255
+
+
+define foreground :: Color
+  Color 232 238 224 255
+
+
+define dim-text :: Color
+  Color 137 146 158 255
+
+
+define active-sound :: Color
+  Color 246 193 119 255
+
+;;; Window lifecycle
+
+define open-display :: Int -io-> Int
+  _ ->
+    InitWindow window-width window-height "CHIP-8 / Monad"
+    SetTargetFPS 60
+    0
+
+
+define close-display :: Int -io-> Int
+  _ ->
+    CloseWindow
+    0
+
+
+define window-should-close? :: Int -io-> Bool
+  _ -> WindowShouldClose
+
+
+;;; Framebuffer drawing
+
+define display-pixel-value :: Int -> Int -> Int
+  x y -> pixel x y
+
+
+define draw-pixel-value :: Int -> Int -> Int -> Int -io-> Int
+  _ _ _ value | value = 0 -> 0
+  left top scale _ ->
+    DrawRectangle left top scale scale foreground
+    0
+
+
+define draw-pixel :: Int -io-> Int
+  index ->
+    def x (index % screen-width)
+    def y (index / screen-width)
+    def left (x * pixel-scale)
+    def top (header-height + (y * pixel-scale))
+    draw-pixel-value left top pixel-scale (pixel x y)
+
+
+define draw-pixels-from :: Int -io-> Int
+  index | >= screen-size -> 0
+  index ->
+    draw-pixel index
+    draw-pixels-from (index + 1)
+
+
+define draw-sound-status :: Int -io-> Int
+  timer | > 0 ->
+    DrawText "BEEP" (window-width - 74) 16 16 active-sound
+    0
+  _ -> 0
+
+
+define render-frame :: String -> Int -io-> Int
+  label sound-timer ->
+    BeginDrawing
+    ClearBackground background
+    DrawRectangle 0 0 window-width header-height panel
+    DrawText "CHIP-8" 16 13 22 foreground
+    DrawText label 112 16 16 dim-text
+    draw-pixels-from 0
+    draw-sound-status sound-timer
+    EndDrawing
+    0

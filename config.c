@@ -176,6 +176,11 @@ static void config_apply_flag_token(CompilerFlags *flags, const char *token)
         flags->emit_typst = true;
         return;
     }
+    if (strcmp(token, "--allow-implicit-effects") == 0 ||
+        strcmp(token, "allow-implicit-effects") == 0) {
+        flags->allow_implicit_effects = true;
+        return;
+    }
     if (strcmp(token, "--emit-bytecode") == 0 || strcmp(token, "emit-bytecode") == 0 ||
         strcmp(token, "--bytecode") == 0 || strcmp(token, "bytecode") == 0) {
         flags->emit_bytecode = true;

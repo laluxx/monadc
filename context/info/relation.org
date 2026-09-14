@@ -1,0 +1,63 @@
+#+TITLE: Finite Binary Relations
+#+STARTUP: showeverything
+#+OPTIONS: toc:2 num:t
+#+FILETAGS: :monad:language:relation:info:
+
+:PROPERTIES:
+:ID:       monadc.info.relation
+:CONTEXT:  monadc.context.language, monadc.context.types, monadc.info.map
+:END:
+
+[[file:index.org][<- Back to Index]] · [[file:set.org][Sets]] · [[file:map.org][Maps]]
+
+* Semantics
+
+=Relation a b= is a finite extensional subset of =a x b=. Unlike a map, a
+left endpoint may relate to several right endpoints. A map is the refinement
+of a relation satisfying left uniqueness:
+
+#+BEGIN_SRC text
+functional r iff
+  forall x y z. r(x,y) and r(x,z) implies y = z
+#+END_SRC
+
+The current optimized =Map k v= representation remains distinct at runtime,
+but =functional?= states the semantic refinement boundary in Core.
+
+* Surface
+
+#+BEGIN_SRC monad
+import Data.Relation
+
+define likes :: {Symbol -> Symbol}
+{ 'alice -> 'pizza
+  'bob   -> 'sushi
+  'alice -> 'sushi }
+
+likes 'alice 'pizza     ;; True
+likes who 'pizza        ;; ['alice]
+#+END_SRC
+
+={a -> b}= elaborates to =Relation a b=. In relation endpoint position,
+='a= is role notation whose currently erased kind is =Symbol=, so
+={'a -> 'b}= elaborates to =Relation Symbol Symbol=. This leaves room for a
+future role-indexed =Sym a= without changing source notation.
+
+A call with two ground endpoints is a Boolean membership observation. Exactly
+one otherwise-unbound identifier is scoped as a directional query variable
+and produces the finite strict solution list. Outside a typed relation call,
+unbound identifiers remain errors. Recursive and open-ended relations should
+later expose lazy =Producer= search rather than changing this finite literal
+contract.
+
+* Core Ownership
+
+The reader preserves brace-arrow pairs and lowers construction to
+=relation-from-lists=. Membership, directional queries, extensional size,
+converse, and =functional?= are defined by
+[[file:../../core/prelude/Data/Relation.mon][Data.Relation]]. The compiler owns
+only notation and callable-value dispatch.
+
+Regression coverage: [[file:../../tests/relation_literal.mon][relation_literal.mon]]
+and [[file:../../tests/test_arrow_map_literal.py][test_arrow_map_literal.py]].
+The executable introduction is [[file:../../how_to/Relations.mon][Relations.mon]].

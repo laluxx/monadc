@@ -7,6 +7,7 @@ LIBDIR  = $(PREFIX)/lib
 INCDIR  = $(PREFIX)/include/monad
 COREDIR = $(PREFIX)/lib/monad/core
 CORE_CACHE_DIR ?= $(HOME)/.cache/monad/core
+PREWARM_REPL_CACHE ?= 1
 
 UNAME_S      := $(shell uname -s 2>/dev/null || echo unknown)
 WINDOWS_HOST := $(if $(filter MINGW% MSYS% CYGWIN%,$(UNAME_S)),1,)
@@ -95,7 +96,7 @@ embed/compiler_native.o: embed/compiler_native.c embed/compiler_internal.h embed
 embed/frontend_transaction.o: embed/frontend_transaction.c embed/frontend_transaction.h reader.h reader_diagnostic.h wisp.h
 	$(CC) -Wall -Wextra -std=c99 -fPIC -fvisibility=hidden -c $< -o $@
 
-embed/native_compile.o: embed/native_compile.c embed/native_compile.h embed/frontend_transaction.h qtt/core.h
+embed/native_compile.o: embed/native_compile.c embed/native_compile.h embed/frontend_transaction.h qtt/core.h codegen.h runtime.h
 	$(CC) $(CFLAGS) -fPIC -fvisibility=hidden -c $< -o $@
 
 embed/compiler_qtt_foreign_type.o: qtt/foreign_type.c qtt/foreign_type.h
@@ -224,7 +225,7 @@ install: $(RUNTIME_LIB) $(EMBED_STATIC_LIB) $(EMBED_SHARED_LIB) $(COMPILER_STATI
 	install -m 644 embed/include/monad/compiler.h $(INCDIR)/compiler.h
 # Install core modules
 	rm -rf $(COREDIR)
-	find core \( -name "*.mon" -o -name "*.modules" \) | while read f; do \
+	find core -name "*.mon" ! -name ".#*" | while read f; do \
 		rel=$${f#core/}; \
 		dir=$$(dirname "$$rel"); \
 		install -d $(COREDIR)/$$dir; \
@@ -232,6 +233,13 @@ install: $(RUNTIME_LIB) $(EMBED_STATIC_LIB) $(EMBED_SHARED_LIB) $(COMPILER_STATI
 	done
 # Installed core interfaces and objects form one ABI set.
 	rm -rf "$(CORE_CACHE_DIR)"
+	install -d "$(CORE_CACHE_DIR)"
+# Pay the unavoidable cold core-compilation cost at install time, not while a
+# user is waiting for the first interactive prompt. Set PREWARM_REPL_CACHE=0
+# for packaging/chroot installs that must not populate a user cache.
+	@if [ "$(PREWARM_REPL_CACHE)" = "1" ]; then \
+		"$(BINDIR)/$(TARGET)" </dev/null >/dev/null; \
+	fi
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)
@@ -243,23 +251,25 @@ uninstall:
 	rm -rf $(INCDIR)
 	rm -rf $(PREFIX)/lib/monad/core
 
-ifneq ($(filter core bytecode,$(MAKECMDGOALS)),)
-test: all test-embedding
-else
-test: all test-embedding
+test: all
 	$(PYTHON) tests/run.py
-endif
 
 test-embedding: $(EMBED_STATIC_LIB) $(EMBED_SHARED_LIB) $(COMPILER_STATIC_LIB) $(COMPILER_SHARED_LIB)
 	$(PYTHON) -m unittest tests.test_embedding tests.test_qtt_foreign_call tests.test_qtt_foreign_lowering tests.test_qtt_foreign_llvm tests.test_embedding_foreign_execution tests.test_embedding_source_unit tests.test_embedding_diagnostics tests.test_embedding_parser_context tests.test_embedding_parser_unwind tests.test_embedding_frontend_capsule tests.test_embedding_ast_transaction tests.test_embedding_frontend_transaction tests.test_embedding_public_parse_diagnostics tests.test_embedding_frontend_parallel tests.test_embedding_frontend_session_state tests.test_embedding_frontend_registry_state tests.test_embedding_frontend_type_state tests.test_embedding_compilation_unit tests.test_embedding_type_diagnostics tests.test_embedding_inference_transaction tests.test_embedding_environment_snapshot tests.test_embedding_environment_queries tests.test_embedding_surface_source tests.test_embedding_source_hooks tests.test_embedding_native_string tests.test_embedding_atomic_redefinition tests.test_embedding_read_generation tests.test_embedding_orc_reclamation tests.test_embedding_releasable_function tests.test_embedding_qtt_report tests.test_embedding_qtt_quantities tests.test_embedding_resource_certificate tests.test_embedding_how_to tests.test_embedding_codegen_convergence
 
-core: test
+# Exercise the shipped REPL through pipes, a real pseudo-terminal, cache
+# lifecycle, long-lived state, and one live import session over every core
+# module.  Keep this focused so `make repl` is useful during REPL development.
+repl: all
+	PYTHONPATH=tests $(PYTHON) -m unittest tests.test_repl tests.test_repl_pty tests.test_repl_cache
+
+core: all
 	$(PYTHON) tests/run_core.py
 
 test-core: all
 	$(PYTHON) tests/run_core.py
 
-bytecode: test
+bytecode: all
 	BYTECODE_VISUAL=1 $(PYTHON) tests/test_bytecode.py
 
 test-bytecode: all
@@ -318,4 +328,4 @@ verify-push:
 	$(MAKE) test
 	$(MAKE) test-core
 
-.PHONY: all clean release install uninstall asan test test-embedding core test-core bytecode test-bytecode generate-asm-tests generate-asm-tests-extra test-runner test-how-to test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer install-git-hooks verify-push
+.PHONY: all clean release install uninstall asan test test-embedding repl core test-core bytecode test-bytecode generate-asm-tests generate-asm-tests-extra test-runner test-how-to test-context-visualizer test-context-lint test-context-refs test-context-graph verify-context verify-context-strict test-fuzzing fuzzing context-visualizer install-git-hooks verify-push

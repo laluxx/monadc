@@ -1,8 +1,8 @@
 ;;; Applicative.mon --- Applicative and Alternative abstractions
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "applicative alternative selective typeclass effects"
+:author   Laluxx
+:version  1.1.0
+:keywords applicative alternative selective typeclass effects
 
 ;;; Commentary:
 
@@ -58,11 +58,3 @@ class Applicative f => Selective f where
   branch :: f (Either a b) -> f (a -> c) -> f (b -> c) -> f c
 
   ;; Selective sits between Applicative and Monad for statically visible choice.
-
-
-tests
-  :registration:
-  assert-eq 1 1 "Applicative registers Applicative"
-  assert-eq 1 1 "Applicative registers Alternative"
-  assert-eq 1 1 "Applicative registers Selective"
-  :registration:

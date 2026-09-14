@@ -59,6 +59,7 @@ typedef struct CodegenContext {
     LLVMValueRef fmt_oct;
     bool test_mode;
     const char *current_function_name;  // NULL at top level, set when inside a define
+    bool current_function_polymorphic;
     int in_coalesce_depth;
     bool tail_position;
     bool current_closure_abi;
@@ -78,7 +79,7 @@ typedef struct CodegenContext {
     jmp_buf  error_jmp;
     bool     error_jmp_set;   // true while a recovery point is active
     struct FFIContext *ffi;   /* NULL until first (include ...) */
-    char     error_msg[512];  // last error message, for display
+    char     error_msg[2048]; // last error message, including focused derivations
 } CodegenContext;
 
 typedef struct {

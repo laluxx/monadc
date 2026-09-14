@@ -1,8 +1,8 @@
 ;;; Maybe.mon --- Optional values
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "maybe optional functor applicative monad absence"
+:author   Laluxx
+:version  1.1.0
+:keywords maybe optional functor applicative monad absence
 
 ;;; Commentary:
 

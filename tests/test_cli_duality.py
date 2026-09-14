@@ -49,6 +49,7 @@ class CliFlagDualityTests(unittest.TestCase):
             "--quiet": "quiet",
             "--trace=": "trace",
             "--test": "test",
+            "--allow-implicit-effects": "allow-implicit-effects",
             "-i": "repl",
             "-e": "eval",
         }
@@ -90,6 +91,7 @@ class CliFlagDualityTests(unittest.TestCase):
         self.assertIn("-S, asm", completion_c)
         self.assertIn("-c, obj", completion_c)
         self.assertIn("-O, optimize", completion_c)
+        self.assertIn("--allow-implicit-effects, allow-implicit-effects", completion_c)
 
 
 if __name__ == "__main__":

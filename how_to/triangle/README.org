@@ -1,0 +1,15 @@
+* Vulkan Triangle
+
+Build and run:
+
+#+begin_src sh
+monad Triangle.mon && ./Triangle
+#+end_src
+
+For development, enable the standard Khronos validation layer through the
+Vulkan loader.  This keeps the executable portable when the optional SDK layer
+is not installed:
+
+#+begin_src sh
+monad Triangle.mon && VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./Triangle
+#+end_src

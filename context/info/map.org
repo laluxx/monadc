@@ -19,6 +19,11 @@ Maps (hash maps / dictionaries) store key-value pairs in an
 open-addressing hash table. O(1) average lookup/insert/delete. Keys are
 hashed for distribution; values are boxed and stored alongside their keys.
 
+A Map is semantically the left-functional subset of a binary Relation: one
+key cannot be associated with two distinct values. Bare brace-arrow syntax is
+therefore relational and preserves one-to-many facts; maps use the distinct
+=#{...}= syntax. See [[file:relation.org][Relations]].
+
 See [[file:collections.org][Collections]] for an overview of all collection
 types and [[file:../context/codegen-ops.org][context/codegen-ops.org]] for
 operation dispatch.

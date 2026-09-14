@@ -1,24 +1,33 @@
 ;;; NonEmpty.mon --- Lists with a statically present first element
 
-:author "Laluxx"
-:version "1.0.0"
-:keywords "nonempty list total head invariant"
+:author   Laluxx
+:version  1.3.0
+:keywords nonempty list total head invariant functor foldable semigroup
 
 ;;; Commentary:
 
  NonEmpty makes an important list invariant structural: construction always
  supplies a first element. Total head and tail projections therefore need no
- sentinel, optional result, or partial failure. Ordinary list algorithms remain
- in Data.List and Sequence.
+ sentinel, optional result, or partial failure. Mapping and folding preserve the
+ structural head, so NonEmpty participates in Functor/Foldable without being
+ weakened to an ordinary list. Concatenation is a Semigroup operation because
+ combining two non-empty structures stays non-empty; there is deliberately no
+ Monoid instance because no empty identity inhabits NonEmpty. =sconcat-non-empty=
+ consumes the invariant directly through Semigroup's total =sconcat1=, so a
+ caller never has to erase NonEmpty to =[a]= and re-enter a partial API.
+ Ordinary list algorithms remain in Data.List and Sequence.
 
 ;;; Code:
 
 import Sequence
+import Data.Functor
+import Data.Foldable
+import Data.Semigroup
 
 module Data.NonEmpty
   [NonEmpty NonEmptyValue
    non-empty singleton-non-empty
-   non-empty-head non-empty-tail to-list
+   non-empty-head non-empty-tail to-list sconcat-non-empty
    prepend-non-empty append-list-non-empty]
 
 
@@ -48,6 +57,10 @@ define to-list :: NonEmpty a -> [a]
   [NonEmptyValue head tail] -> prepend head tail
 
 
+define sconcat-non-empty :: Semigroup a => NonEmpty a -> a
+  [NonEmptyValue head tail] -> sconcat1 head tail
+
+
 ;;; Structure-preserving updates
 
 define prepend-non-empty :: a -> NonEmpty a -> NonEmpty a
@@ -58,9 +71,36 @@ define append-list-non-empty :: NonEmpty a -> [a] -> NonEmpty a
   [NonEmptyValue head tail] suffix -> NonEmptyValue head (append tail suffix)
 
 
+;;; Generic container structure
+
+define map-non-empty :: (a -> b) -> NonEmpty a -> NonEmpty b
+  f [NonEmptyValue head tail] -> NonEmptyValue (f head) (map f tail)
+
+
+instance Functor NonEmpty
+  map f values -> map-non-empty f values
+
+
+instance Foldable NonEmpty
+  foldl f acc [NonEmptyValue head tail] -> foldl f (f acc head) tail
+  foldr f acc [NonEmptyValue head tail] -> f head (foldr f acc tail)
+
+
+instance Semigroup (NonEmpty a)
+  append [NonEmptyValue head tail] right ->
+    NonEmptyValue head (append tail (to-list right))
+
+
 tests
   assert-eq (non-empty-head (non-empty 1 (list 2 3))) 1 "NonEmpty head is total"
   assert-eq (show (non-empty-tail (non-empty 1 (list 2 3)))) "(2 3)" "NonEmpty tail may be empty"
   assert-eq (show (to-list (singleton-non-empty 7))) "(7)" "NonEmpty singleton converts to one value"
   assert-eq (show (to-list (prepend-non-empty 0 (non-empty 1 (list 2))))) "(0 1 2)" "NonEmpty prepend preserves all values"
   assert-eq (show (to-list (append-list-non-empty (non-empty 1 (list 2)) (list 3 4)))) "(1 2 3 4)" "NonEmpty append preserves its head"
+
+  :abstractions:
+  assert-eq (show (to-list (map (lambda (x) (x + 1)) (non-empty 1 (list 2 3))))) "(2 3 4)" "NonEmpty Functor preserves non-emptiness"
+  assert-eq (foldl (lambda (sum value) (sum + value)) 0 (non-empty 1 (list 2 3))) 6 "NonEmpty Foldable includes its structural head"
+  assert-eq (show (to-list (append (non-empty 1 (list 2)) (non-empty 3 (list 4))))) "(1 2 3 4)" "NonEmpty Semigroup concatenation preserves the invariant"
+  assert-eq (sconcat-non-empty (non-empty 2 (list 3 4))) 9 "NonEmpty drives total Semigroup concatenation"
+  :abstractions:

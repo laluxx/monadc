@@ -1,8 +1,8 @@
 ;;; Unicode.mon --- Core-owned Unicode text algorithms
 
-:author "Laluxx"
-:version "1.1.0"
-:keywords "unicode utf-8 scalar value grapheme terminal width text"
+:author   Laluxx
+:version  1.2.0
+:keywords unicode utf-8 scalar value grapheme terminal width text
 :reference-well-formed-utf8 "https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/"
 :reference-rfc3629 "https://www.rfc-editor.org/rfc/rfc3629.html"
 
@@ -21,12 +21,19 @@
    grapheme-count  user-perceived extended grapheme clusters
    display-width   terminal columns occupied by those clusters
 
- String is a sequence of Unicode Char values and therefore cannot contain an
- ill-formed UTF-8 byte sequence.  `byte-count` computes the size of its
- canonical UTF-8 encoding; `decode-utf8` exposes its scalar values.  Strict
- validation and maximal-subpart replacement for arbitrary octets belong to a
- byte-sequence decoder rather than pretending malformed bytes inhabit String.
- Surrogates and values above U+10FFFF are never Unicode scalar values.
+ String is the byte-addressed representation described by Data.String; it is
+ not itself proof that the bytes are well-formed UTF-8. =byte-count= therefore
+ reports representation code units, =valid-utf8?=  validates canonical UTF-8,
+ and =decode-utf8= accepts only text that passes that validation. Surrogates,
+ overlong encodings, stray continuation bytes, truncated sequences, and values
+ above U+10FFFF are rejected rather than smuggled into Unicode semantics.
+
+ UnicodeScalar is the proof-carrying value-level boundary introduced in this
+ cycle. Arbitrary integers can be checked once with =unicode-scalar=; successful
+ construction yields an opaque scalar that =encode-unicode-scalar= cannot reject.
+ Result-returning encode/decode functions preserve malformed-input information,
+ while the historical Int APIs remain compatibility surfaces with explicitly
+ documented partial or replacement behavior.
 
  =utf8-prefix-width= recognizes exactly one canonical sequence from Unicode
  Table 3-7. Returning zero distinguishes malformed, truncated, overlong,
@@ -34,30 +41,59 @@
  text. Protocol decoders such as Data.Json can therefore reject invalid input
  before it enters String.
 
- Unicode behavior is pinned to Unicode 17.0.0.  Grapheme rules below name the
- corresponding UAX #29 rules directly: CR × LF (GB3), conjoining Hangul jamo
- (GB6–GB8), Extend/ZWJ handling, and regional-indicator parity (GB12/GB13).
- See context/unicode.org for the larger generated-property roadmap.
+ UTF-8 scalar validity is pinned to Unicode 17.0.0. The current grapheme and
+ terminal-width layer is an explicitly tested algorithmic subset, not yet a
+ full UAX #29 / East_Asian_Width conformance claim: it covers CR/LF, algorithmic
+ Hangul joining, the combining/variation ranges listed below, regional-indicator
+ pairing, and the currently modelled emoji-ZWJ behavior.
+
+ Full Unicode segmentation requires generated Grapheme_Cluster_Break,
+ Extended_Pictographic, and width-property tables. Until those tables are part
+ of Core, callers that require exhaustive Unicode 17 segmentation must not
+ treat grapheme-count/display-width as conformance oracles. This limitation is
+ stated here rather than hidden behind an over-broad version claim.
 
 ;;; Code:
 
 import Sequence
 import Data.Bool
 import Data.Char
+import Data.Either
 import Function
 import Text.Format
 
 module Text.Unicode
-  [unicode-version replacement-character
+  [UnicodeScalar UnicodeError MalformedUTF8 InvalidScalar
+   unicode-version replacement-character replacement-scalar
+   unicode-scalar unicode-scalar-value
    byte-count valid-scalar? ascii-byte? continuation-byte? utf8-prefix-width bytes-prefix->text
-   valid-utf8? decode-utf8 encode-scalar scalars->text scalar-count
+   valid-utf8? decode-utf8 decode-utf8-scalars-result
+   encode-scalar encode-scalar-result encode-unicode-scalar
+   scalars->text scalars->text-result scalar-count
    grapheme-count display-width text-width]
 
 
 define unicode-version :: String "17.0.0"
 
 
+data UnicodeError
+  = MalformedUTF8
+  | InvalidScalar Int
+
+
+| UnicodeScalar is opaque outside this module. Construction validates the
+| Unicode scalar-value invariant once, after which encoders and algorithms do
+| not need to repeatedly accept arbitrary Int values as if they were proved
+| Unicode data.
+data UnicodeScalar
+  = UnicodeScalarValue Int
+
+
 define replacement-character :: Int 0xfffd
+
+
+define replacement-scalar :: UnicodeScalar
+  UnicodeScalarValue replacement-character
 
 
 define valid-scalar? :: Int -> Bool
@@ -66,6 +102,15 @@ define valid-scalar? :: Int -> Bool
          | < 0xd800   -> True
          | > 0xdfff   -> True
          | otherwise  -> False
+
+
+define unicode-scalar :: Int -> Either UnicodeError UnicodeScalar
+  value | valid-scalar? value -> Right (UnicodeScalarValue value)
+        | otherwise           -> Left (InvalidScalar value)
+
+
+define unicode-scalar-value :: UnicodeScalar -> Int
+  [UnicodeScalarValue value] -> value
 
 
 define byte-count :: String -> Int
@@ -107,26 +152,117 @@ define bytes-prefix->text :: Int -> [Int] -> String
     | otherwise  -> ((char->text (chr byte)) ++ (bytes-prefix->text (width - 1) rest))
 
 
+define byte-between? :: Int -> Int -> Int -> Bool
+  value low high -> (and? (>= value low) (<= value high))
+
+
+define continuation-in? :: Int -> Int -> Int -> Bool
+  value low high | byte-between? value low high -> continuation-byte? value
+  _ _ _ -> False
+
+define two-continuations? :: Int -> Int -> Bool
+  first second -> (and? (continuation-byte? first) (continuation-byte? second))
+
+
+define valid-two-at? :: String -> Int -> Int -> Bool
+  _ index size | (index + 1) >= size -> False
+  text index size ->
+    def first (byte-at text index)
+    def second (byte-at text (index + 1))
+    if byte-between? first 0xc2 0xdf then continuation-byte? second else False
+
+
+define valid-three-at? :: String -> Int -> Int -> Bool
+  _ index size | (>= (index + 2) size) -> False
+  text index _ | (= (byte-at text index) 0xe0) ->
+    (and? (continuation-in? (byte-at text (index + 1)) 0xa0 0xbf) (continuation-byte? (byte-at text (index + 2))))
+  text index _ | byte-between? (byte-at text index) 0xe1 0xec ->
+    (and? (continuation-byte? (byte-at text (index + 1))) (continuation-byte? (byte-at text (index + 2))))
+  text index _ | (= (byte-at text index) 0xed) ->
+    (and? (continuation-in? (byte-at text (index + 1)) 0x80 0x9f) (continuation-byte? (byte-at text (index + 2))))
+  text index _ | byte-between? (byte-at text index) 0xee 0xef ->
+    (and? (continuation-byte? (byte-at text (index + 1))) (continuation-byte? (byte-at text (index + 2))))
+  _ _ _ -> False
+
+
+define valid-four-at? :: String -> Int -> Int -> Bool
+  _ index size | (>= (index + 3) size) -> False
+  text index _ | (= (byte-at text index) 0xf0) ->
+    (and? (continuation-in? (byte-at text (index + 1)) 0x90 0xbf) (two-continuations? (byte-at text (index + 2)) (byte-at text (index + 3))))
+  text index _ | byte-between? (byte-at text index) 0xf1 0xf3 ->
+    (and? (continuation-byte? (byte-at text (index + 1))) (two-continuations? (byte-at text (index + 2)) (byte-at text (index + 3))))
+  text index _ | (= (byte-at text index) 0xf4) ->
+    (and? (continuation-in? (byte-at text (index + 1)) 0x80 0x8f) (two-continuations? (byte-at text (index + 2)) (byte-at text (index + 3))))
+  _ _ _ -> False
+
+
+define utf8-width-at :: String -> Int -> Int -> Int
+  _ index size | (>= index size) -> 0
+  text index _ | ascii-byte? (byte-at text index) -> 1
+  text index size | valid-two-at? text index size -> 2
+  text index size | valid-three-at? text index size -> 3
+  text index size | valid-four-at? text index size -> 4
+  _ _ _ -> 0
+
+
+define valid-utf8-from? :: String -> Int -> Int -> Bool
+  _ index size | (>= index size) -> True
+  text index size ->
+    def width (utf8-width-at text index size)
+    if width = 0 then False else valid-utf8-from? text (index + width) size
+
+
 define valid-utf8? :: String -> Bool
-  _ -> True
+  text -> valid-utf8-from? text 0 (byte-count text)
 
 
 define byte-text :: Int -> String
   byte -> (char->text (chr byte))
 
 
-define encode-scalar :: Int -> String
+define encode-valid-scalar :: Int -> String
   scalar
-    | not (valid-scalar? scalar) -> ((byte-text 0xef) ++ (byte-text 0xbf) ++ (byte-text 0xbd))
-    | scalar <= 0x7f            -> byte-text scalar
-    | scalar <= 0x7ff           -> ((byte-text (0xc0 + (scalar / 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
-    | scalar <= 0xffff          -> ((byte-text (0xe0 + (scalar / 0x1000))) ++ (byte-text (0x80 + ((scalar / 0x40) % 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
-    | otherwise                 -> ((byte-text (0xf0 + (scalar / 0x40000))) ++ (byte-text (0x80 + ((scalar / 0x1000) % 0x40))) ++ (byte-text (0x80 + ((scalar / 0x40) % 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+    | scalar <= 0x7f   -> byte-text scalar
+    | scalar <= 0x7ff  -> ((byte-text (0xc0 + (scalar / 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+    | scalar <= 0xffff -> ((byte-text (0xe0 + (scalar / 0x1000))) ++ (byte-text (0x80 + ((scalar / 0x40) % 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+    | otherwise        -> ((byte-text (0xf0 + (scalar / 0x40000))) ++ (byte-text (0x80 + ((scalar / 0x1000) % 0x40))) ++ (byte-text (0x80 + ((scalar / 0x40) % 0x40))) ++ (byte-text (0x80 + (scalar % 0x40))))
+
+
+define encode-unicode-scalar :: UnicodeScalar -> String
+  [UnicodeScalarValue scalar] -> encode-valid-scalar scalar
+
+
+define encode-scalar-result :: Int -> Either UnicodeError String
+  scalar ->
+    (match (unicode-scalar scalar) with
+     | (Left error) -> (Left error)
+     | (Right value) -> (Right (encode-unicode-scalar value)))
+
+
+| Compatibility encoder: malformed scalar integers become U+FFFD. New code
+| that must distinguish invalid input should use encode-scalar-result or the
+| opaque UnicodeScalar API instead of relying on replacement semantics.
+define encode-scalar :: Int -> String
+  scalar ->
+    (match (encode-scalar-result scalar) with
+     | (Left _) -> (encode-unicode-scalar replacement-scalar)
+     | (Right text) -> text)
 
 
 define scalars->text :: [Int] -> String
   []            -> ""
   [scalar|rest] -> (encode-scalar scalar) ++ (scalars->text rest)
+
+
+define scalars->text-result :: [Int] -> Either UnicodeError String
+  [] -> Right ""
+  [scalar|rest] ->
+    (match (encode-scalar-result scalar) with
+     | (Left error) -> (Left error)
+     | (Right head) ->
+         (match (scalars->text-result rest) with
+          | (Left error) -> (Left error)
+          | (Right tail) -> (Right (head ++ tail))))
 
 
 define prepend-scalar :: Int -> [Int] -> [Int]
@@ -137,7 +273,7 @@ define empty-scalars :: Int -> [Int]
   _ -> (list)
 
 
-define scalar-at :: String -> Int -> Int
+define byte-at :: String -> Int -> Int
   text index -> ord (text index)
 
 
@@ -156,23 +292,34 @@ define decode-four :: Int -> Int -> Int -> Int -> Int
 define decode-utf8-from :: String -> Int -> Int -> [Int]
   text index size
     | index >= size -> empty-scalars 0
-    | scalar-at text index <= 0x7f -> prepend-scalar (scalar-at text index) (decode-utf8-from text (index + 1) size)
-    | scalar-at text index <= 0xdf -> prepend-scalar (decode-two (scalar-at text index) (scalar-at text (index + 1))) (decode-utf8-from text (index + 2) size)
-    | scalar-at text index <= 0xef -> prepend-scalar (decode-three (scalar-at text index) (scalar-at text (index + 1)) (scalar-at text (index + 2))) (decode-utf8-from text (index + 3) size)
-    | otherwise -> prepend-scalar (decode-four (scalar-at text index) (scalar-at text (index + 1)) (scalar-at text (index + 2)) (scalar-at text (index + 3))) (decode-utf8-from text (index + 4) size)
+    | (byte-at text index) <= 0x7f -> prepend-scalar (byte-at text index) (decode-utf8-from text (index + 1) size)
+    | (byte-at text index) <= 0xdf -> prepend-scalar (decode-two (byte-at text index) (byte-at text (index + 1))) (decode-utf8-from text (index + 2) size)
+    | (byte-at text index) <= 0xef -> prepend-scalar (decode-three (byte-at text index) (byte-at text (index + 1)) (byte-at text (index + 2))) (decode-utf8-from text (index + 3) size)
+    | otherwise -> prepend-scalar (decode-four (byte-at text index) (byte-at text (index + 1)) (byte-at text (index + 2)) (byte-at text (index + 3))) (decode-utf8-from text (index + 4) size)
 
 
 define decode-utf8 :: String -> [Int]
-  text -> decode-utf8-from text 0 (byte-count text)
+  text | valid-utf8? text -> decode-utf8-from text 0 (byte-count text)
+  _ -> error "Text.Unicode.decode-utf8: malformed UTF-8"
+
+
+define wrap-unicode-scalars :: [Int] -> [UnicodeScalar]
+  [] -> []
+  [value|rest] -> prepend (UnicodeScalarValue value) (wrap-unicode-scalars rest)
+
+
+define decode-utf8-scalars-result :: String -> Either UnicodeError [UnicodeScalar]
+  text | valid-utf8? text -> Right (wrap-unicode-scalars (decode-utf8-from text 0 (byte-count text)))
+  _ -> Left MalformedUTF8
 
 
 define scalar-count :: String -> Int
   text -> length (decode-utf8 text)
 
 
-;; These predicates are the algorithmic layer used by the segmentation and
-;; width engines.  Generated Unicode 17 property tables extend these ranges;
-;; algorithmic Hangul, variation-selector, and control ranges stay in source.
+| These predicates are the algorithmic layer used by the segmentation and
+| width engines.  Generated Unicode 17 property tables extend these ranges;
+| algorithmic Hangul, variation-selector, and control ranges stay in source.
 
 define combining-scalar? :: Int -> Bool
   scalar | >= 0x0300 and <= 0x036f -> True
@@ -315,9 +462,9 @@ define joiner-code :: Int -> Int
 define grapheme-count-scalars :: [Int] -> Int -> Int -> Int -> Int -> Int
   scalars count previous regional-run previous-joiner
     | null? scalars -> id count
-    | previous < 0 -> grapheme-count-scalars (drop scalars 1) 1 (nth scalars 0) (next-regional-run (nth scalars 0) 0) 0
-    | grapheme-no-break? previous (nth scalars 0) regional-run previous-joiner -> grapheme-count-scalars (drop scalars 1) count (nth scalars 0) (next-regional-run (nth scalars 0) regional-run) (joiner-code (nth scalars 0))
-    | otherwise -> grapheme-count-scalars (drop scalars 1) (count + 1) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
+    | previous < 0 -> grapheme-count-scalars (drop 1 scalars) 1 (nth scalars 0) (next-regional-run (nth scalars 0) 0) 0
+    | grapheme-no-break? previous (nth scalars 0) regional-run previous-joiner -> grapheme-count-scalars (drop 1 scalars) count (nth scalars 0) (next-regional-run (nth scalars 0) regional-run) (joiner-code (nth scalars 0))
+    | otherwise -> grapheme-count-scalars (drop 1 scalars) (count + 1) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
 
 
 define grapheme-count :: String -> Int
@@ -365,9 +512,9 @@ define maximum :: Int -> Int -> Int
 define display-width-scalars :: [Int] -> Int -> Int -> Int -> Int -> Int -> Int
   scalars committed cluster previous regional-run previous-joiner
     | null? scalars -> committed + cluster
-    | previous < 0 -> display-width-scalars (drop scalars 1) committed (scalar-width (nth scalars 0)) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
-    | grapheme-no-break? previous (nth scalars 0) regional-run previous-joiner -> display-width-scalars (drop scalars 1) committed (maximum cluster (scalar-width (nth scalars 0))) (nth scalars 0) (next-regional-run (nth scalars 0) regional-run) (joiner-code (nth scalars 0))
-    | otherwise -> display-width-scalars (drop scalars 1) (committed + cluster) (scalar-width (nth scalars 0)) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
+    | previous < 0 -> display-width-scalars (drop 1 scalars) committed (scalar-width (nth scalars 0)) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
+    | grapheme-no-break? previous (nth scalars 0) regional-run previous-joiner -> display-width-scalars (drop 1 scalars) committed (maximum cluster (scalar-width (nth scalars 0))) (nth scalars 0) (next-regional-run (nth scalars 0) regional-run) (joiner-code (nth scalars 0))
+    | otherwise -> display-width-scalars (drop 1 scalars) (committed + cluster) (scalar-width (nth scalars 0)) (nth scalars 0) (next-regional-run (nth scalars 0) 0) (joiner-code (nth scalars 0))
 
 
 define display-width :: String -> Int
@@ -401,6 +548,18 @@ tests
   assert-eq (encode-scalar 0x03bb) "λ" "UTF-8 encodes a two-byte scalar"
   assert-eq (encode-scalar 0x1f642) "🙂" "UTF-8 encodes a supplementary scalar"
   assert-eq (scalars->text ⌜0x41 0x03bb 0x1f642⌝) "Aλ🙂" "scalar sequences encode as text"
+  assert-eq (valid-utf8? (bytes-prefix->text 2 (list 0xc0 0x80))) False "overlong UTF-8 is rejected"
+  assert-eq (valid-utf8? (bytes-prefix->text 2 (list 0xe2 0x82))) False "truncated UTF-8 is rejected"
+  assert-eq (valid-utf8? (bytes-prefix->text 1 (list 0x80))) False "stray continuation byte is rejected"
+  assert-eq (unicode-scalar-value replacement-scalar) 0xfffd "replacement scalar is validated once"
+  assert-eq (right? (unicode-scalar 0x1f642)) True "valid integers construct opaque UnicodeScalar values"
+  assert-eq (left? (unicode-scalar 0xd800)) True "surrogates cannot construct UnicodeScalar values"
+  assert-eq (right? (encode-scalar-result 0x03bb)) True "result encoder preserves successful validation"
+  assert-eq (left? (encode-scalar-result 0x110000)) True "result encoder reports invalid scalars instead of replacing them"
+  assert-eq (right? (decode-utf8-scalars-result "Aλ🙂")) True "typed UTF-8 decoding returns validated scalar values"
+  assert-eq (left? (decode-utf8-scalars-result (bytes-prefix->text 1 (list 0x80)))) True "typed UTF-8 decoding reports malformed input"
+  assert-eq (right? (scalars->text-result ⌜0x41 0x03bb 0x1f642⌝)) True "result text encoding validates every scalar"
+  assert-eq (left? (scalars->text-result ⌜0x41 0xd800⌝)) True "result text encoding stops at an invalid scalar"
   :utf8:
 
   :segmentation:
