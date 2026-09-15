@@ -519,3 +519,9 @@
   exact checked-in JSON AST goldens while continuing to reject arbitrary test
   files. Generated interfaces remain excluded from the source archive, so
   =./make tar= works safely before or after =./make clean=.
+
+[FIX id:fix.buildsystem.windows-format-portability-2026-09-15 date:2026-09-15 by:codex src:src/compat.h,src/tooling/format.c,src/testing/contracts/test_windows_portability.py conf:high]
+  The formatter no longer calls POSIX-only =fchmod= on Windows, and the
+  compatibility header supplies a conservative =S_ISLNK= fallback where the
+  UCRT lacks the macro. This keeps the Windows CMake build portable while
+  preserving mode-copying behavior on POSIX hosts.

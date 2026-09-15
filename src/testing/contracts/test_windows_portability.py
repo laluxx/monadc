@@ -153,6 +153,8 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("#define lstat stat", compat_h)
         self.assertIn('#include "compat.h"', cli_c)
         self.assertIn('#include "compat.h"', format_c)
+        self.assertIn("#if !defined(_WIN32)", format_c)
+        self.assertIn("#define S_ISLNK(mode) 0", compat_h)
         self.assertIn('#include "compat.h"', lint_c)
         self.assertIn("#if !defined(_WIN32)", cli_c)
         self.assertIn("host_system_success", cli_c)

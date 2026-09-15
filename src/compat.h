@@ -65,6 +65,9 @@ static inline int monad_asprintf(char **out, const char *format, ...)
 #ifndef lstat
 #define lstat stat
 #endif
+#ifndef S_ISLNK
+#define S_ISLNK(mode) 0
+#endif
 #endif
 
 static inline int monad_mkdir(const char *path)

@@ -352,8 +352,12 @@ static int format_file(const char *path, FormatControlStyle style, FormatDocStyl
         sprintf(temporary, "%s.format.XXXXXX", path);
         int fd = mkstemp(temporary);
         struct stat original;
+#if !defined(_WIN32)
         if (fd >= 0 && stat(path, &original) == 0)
             fchmod(fd, original.st_mode & 07777);
+#else
+        (void)original;
+#endif
         FILE *f = fd >= 0 ? fdopen(fd, "wb") : NULL;
         bool failed = !f;
         if (f) {
