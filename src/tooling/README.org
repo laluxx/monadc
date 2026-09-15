@@ -293,9 +293,17 @@ The compiler CLI owns the first formatter slice through =tooling/format.[ch]=:
 #+begin_example
 monad format --control-flow=glyph path
 monad format --control-flow=ascii path
+monad format --control-flow=ascii --docstrings=inline path
+monad format --control-flow=ascii --docstrings=glyph path
 monad format --control-flow=glyph --check core
 monad format --control-flow=glyph --write core
 #+end_example
+
+Docstrings default to =inline=. The =glyph= style presents each summary as a
+=╭─= heading before its declaration; terminal periods are presentation-only in
+that form. The =inline= style keeps =:doc= metadata after the declaration body,
+indented four spaces relative to a top-level declaration, and restores sentence
+punctuation when needed.
 
 Single-file formatting writes to stdout by default. =--check= never changes
 source and exits nonzero when canonical output differs; =--write= publishes

@@ -29,7 +29,7 @@ class Show a where
   showsPrec  :: Int -> a -> String -> String
   renderList :: [a] -> String
 
-  showsPrec precedence x suffix -> concat (render x) suffix
+  showsPrec precedence x suffix -> __rt_concat (render x) suffix
 
   law show-via-showsPrec :: a -> Bool
     x -> (render x) = (showsPrec 0 x "")
@@ -38,6 +38,7 @@ type ShowSample {ShowRed ShowGreen}
 
 instance Show ShowSample
   render x -> if x = ShowRed then "ShowRed" else "ShowGreen"
+  showsPrec precedence x suffix -> __rt_concat (render x) suffix
   renderList xs -> "<ShowSample list>"
 
 

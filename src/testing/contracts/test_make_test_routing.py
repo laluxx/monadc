@@ -55,6 +55,18 @@ class MakeTestRoutingTests(unittest.TestCase):
         ):
             self.assertIn(module, frontend)
 
+    def test_hooks_are_integrated_and_generated_hook_state_is_cleanable(self):
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        pre_push = (ROOT / ".githooks" / "pre-push").read_text(encoding="utf-8")
+        self.assertIn('".hooks"', frontend)
+        self.assertIn('name.startswith(".monadc-test-bin-")', frontend)
+        self.assertIn('".witnesses"', frontend)
+        self.assertIn('"Show"', frontend)
+        self.assertIn('"verify-push"', frontend)
+        self.assertIn("--allow-failures", frontend)
+        self.assertIn("MONAD_VERIFY_PUSH_ALLOW_FAILURES", pre_push)
+        self.assertIn("exec ./make verify-push", pre_push)
+
 
 if __name__ == "__main__":
     unittest.main()

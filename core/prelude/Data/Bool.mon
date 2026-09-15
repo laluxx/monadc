@@ -22,7 +22,7 @@ module Data.Bool
   [Bool True False bool not? and? or? xor? implies? iff?]
 
 
-type Bool {True False}
+type Bool = {True False}
 
 
 method bool :: a -> a -> Bool -> a

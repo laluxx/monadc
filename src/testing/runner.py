@@ -9,6 +9,8 @@ Highlights:
   * recursive menu targets: `codegen errors reader`, `codegen types hm`, ...;
   * stable failure artifacts: tests/.last-failures/<test-id>/ survives cleanup;
   * duplicate TEST-ID/case-name detection before execution;
+  * bounded parallel fixture execution with deterministic result rendering;
+  * persistent compiler batch clients for ordinary compile/run fixtures;
   * fail-fast, max-failures, only-failed, rerun-first-failure workflows;
   * richer JSON result records for dashboards and triage;
   * substring and regex diagnostic expectations.
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import difflib
 import json
 import os
@@ -26,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -43,9 +47,20 @@ TEST_STATE_ROOT = ROOT / "build" / "test"
 RESULTS_FILE = TEST_STATE_ROOT / "results.json"
 FIRST_FAILURE_FILE = TEST_STATE_ROOT / "first-failure.org"
 FAILURE_DIR = TEST_STATE_ROOT / "failures"
+PROFILE_FILE = TEST_STATE_ROOT / "profile.json"
 TRACKED_FILES: set[Path] | None = None
 JSON_GOLDEN_TABLES: dict[Path, dict[str, object]] = {}
 MONAD_TEST_ENV: dict[str, str] | None = None
+PROFILE_ENABLED = False
+PROFILE_SAMPLES: list[dict[str, object]] = []
+PROFILE_CONTEXT = threading.local()
+CASE_CONTEXT = threading.local()
+BATCH_CONTEXT = threading.local()
+PROFILE_LOCK = threading.Lock()
+BATCH_CLIENTS: list["BatchClient"] = []
+BATCH_CLIENTS_LOCK = threading.Lock()
+BATCH_MAX_JOBS = 4
+BATCH_MAX_RSS_BYTES = 512 * 1024 * 1024
 
 # Presentation is shared with ./make: restrained magenta/cyan identity and
 # traffic-light status colors, with ordinary prose left neutral.
@@ -136,6 +151,106 @@ class CommandResult:
     elapsed_ns: int
 
 
+class BatchClient:
+    """Persistent compiler subprocess used for ordinary compile/run fixtures."""
+
+    def __init__(self, env: dict[str, str]) -> None:
+        self.jobs_completed = 0
+        self.process = subprocess.Popen(
+            [str(MONAD), "batch", "-q"],
+            cwd=ROOT,
+            env=dict(env),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+    def compile(self, args: list[str], home: str | None) -> CommandResult:
+        started = time.perf_counter_ns()
+        output_index = args.index("-o") if "-o" in args else args.index("--output")
+        source = args[0]
+        output = args[output_index + 1]
+        job_home = home or ""
+        line = f"{source}\t{output}\t{job_home}\n"
+        captured: list[str] = []
+        status: int | None = None
+        try:
+            assert self.process.stdin is not None
+            assert self.process.stdout is not None
+            self.process.stdin.write(line)
+            self.process.stdin.flush()
+            expected_ok = f"BATCH OK {output}"
+            expected_fail = f"BATCH FAIL {output}"
+            while True:
+                reply = self.process.stdout.readline()
+                if reply == "":
+                    break
+                marker = reply.rstrip("\r\n")
+                if marker == expected_ok:
+                    status = 0
+                    break
+                if marker == expected_fail:
+                    status = 1
+                    break
+                captured.append(reply)
+        except (BrokenPipeError, OSError) as exc:
+            captured.append(f"batch compiler transport failed: {exc}\n")
+            status = 1
+        if status is None:
+            status = self.process.poll()
+            if status is None:
+                status = 1
+        self.jobs_completed += 1
+        elapsed_ns = time.perf_counter_ns() - started
+        profile_case = getattr(PROFILE_CONTEXT, "case", None)
+        if PROFILE_ENABLED and profile_case is not None:
+            with PROFILE_LOCK:
+                PROFILE_SAMPLES.append({
+                    "case": profile_case,
+                    "kind": "compiler",
+                    "elapsed_ns": elapsed_ns,
+                    "returncode": status,
+                })
+        return CommandResult(args=args, returncode=status,
+                             stdout="".join(captured), elapsed_ns=elapsed_ns)
+
+    def rss_bytes(self) -> int | None:
+        """Read child RSS without adding a mandatory psutil dependency."""
+        try:
+            status = Path(f"/proc/{self.process.pid}/status").read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except OSError:
+            return None
+        for line in status.splitlines():
+            if line.startswith("VmRSS:"):
+                fields = line.split()
+                if len(fields) >= 2 and fields[1].isdigit():
+                    return int(fields[1]) * 1024
+        return None
+
+    def should_recycle(self) -> bool:
+        return batch_recycle_required(self.jobs_completed, self.rss_bytes())
+
+    def close(self) -> None:
+        if self.process.poll() is None:
+            try:
+                if self.process.stdin is not None:
+                    self.process.stdin.close()
+                self.process.wait(timeout=5)
+            except (BrokenPipeError, OSError, subprocess.TimeoutExpired):
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+        if self.process.stdout is not None:
+            self.process.stdout.close()
+
+
 @dataclass(slots=True)
 class TestResult:
     name: str
@@ -179,6 +294,7 @@ class RunnerOptions:
     keep_passing_artifacts: bool
     preserve_failures: bool
     no_color: bool
+    jobs: int = 1
 
 
 class Runner:
@@ -206,9 +322,10 @@ class Runner:
             return True
         return False
 
-    def run(self, case: TestCase, suite_tmpdir: Path) -> None:
+    def run(self, case: TestCase, suite_tmpdir: Path, *, suite_env: dict[str, str] | None = None,
+            emit: bool = True) -> TestResult:
         section = section_key(case)
-        if section != self.current_section:
+        if emit and section != self.current_section:
             if self.current_section is not None:
                 self.print_section_footer(self.current_section)
             self.current_section = section
@@ -225,8 +342,36 @@ class Runner:
         artifact_dir: str | None = None
         failure_kind: str | None = None
 
+        previous_profile_case = getattr(PROFILE_CONTEXT, "case", None)
+        previous_case_env = getattr(CASE_CONTEXT, "env", None)
+        previous_batch_enabled = getattr(BATCH_CONTEXT, "enabled", False)
+        PROFILE_CONTEXT.case = case.name
+        if suite_env is not None:
+            CASE_CONTEXT.env = case_environment(suite_env, test_tmpdir)
+            if case.metadata.get("TEST-EXPECT") == "test":
+                # ``monad test`` emits test-mode core object names. Keep those
+                # per fixture because law modules may compile them concurrently.
+                CASE_CONTEXT.env["MONAD_CORE_CACHE"] = str(test_tmpdir / "core-cache")
+        BATCH_CONTEXT.enabled = bool(suite_env is not None and batch_case_eligible(case))
         try:
-            passed, message, output = run_case(case, test_tmpdir)
+            try:
+                passed, message, output = run_case(case, test_tmpdir)
+            finally:
+                if previous_profile_case is None:
+                    try:
+                        del PROFILE_CONTEXT.case
+                    except AttributeError:
+                        pass
+                else:
+                    PROFILE_CONTEXT.case = previous_profile_case
+                if previous_case_env is None:
+                    try:
+                        del CASE_CONTEXT.env
+                    except AttributeError:
+                        pass
+                else:
+                    CASE_CONTEXT.env = previous_case_env
+                BATCH_CONTEXT.enabled = previous_batch_enabled
             if case.fixture:
                 cleanup_fixture_artifacts(case.fixture, side_effects_before)
             leftovers = [] if not test_tmpdir.exists() else list(test_tmpdir.iterdir())
@@ -271,18 +416,23 @@ class Runner:
             failure_kind=failure_kind,
             artifact_dir=artifact_dir,
         )
+        if emit:
+            self.record_result(case, result)
+        return result
+
+    def record_result(self, case: TestCase, result: TestResult) -> None:
         self.results.append(result)
         if not result.passed and self.first_failure is None:
             self.first_failure = (case, result)
 
-        stats = self.section_stats.setdefault(section, SectionStats())
+        stats = self.section_stats.setdefault(result.section, SectionStats())
         if result.passed:
             stats.passed += 1
         else:
             stats.failed += 1
-        stats.elapsed_ns += elapsed_ns
+        stats.elapsed_ns += result.elapsed_ns
 
-        widths = self.section_widths.get(section, SectionWidths())
+        widths = self.section_widths.get(result.section, SectionWidths())
         print_result(
             result,
             len(self.results),
@@ -300,6 +450,128 @@ class Runner:
             f"{title}: {stats.passed}/{stats.total} passed · "
             f"{stats.failed} failed · {elapsed}"
         )
+
+
+def case_environment(suite_env: dict[str, str], test_tmpdir: Path) -> dict[str, str]:
+    """Give a fixture private mutable state while sharing immutable core objects."""
+    case_env = dict(suite_env)
+    case_home = test_tmpdir / "home"
+    case_home.mkdir(parents=True, exist_ok=True)
+    case_env["HOME"] = str(case_home)
+    return case_env
+
+
+def prewarm_core_cache(suite_tmpdir: Path, suite_env: dict[str, str]) -> None:
+    """Populate the suite cache once before workers start compiling fixtures.
+
+    Core object/interface files are immutable after this point; fixture homes
+    remain private so FFI and user caches cannot race or escape the temporary
+    test directory.
+    """
+    cache = Path(suite_env["MONAD_CORE_CACHE"])
+    cache.mkdir(parents=True, exist_ok=True)
+    source = suite_tmpdir / "core-warmup.mon"
+    output = suite_tmpdir / "core-warmup"
+    source.write_text("(module Main)\n(show 0)\n", encoding="utf-8")
+    result = run_command(
+        [str(MONAD), str(source), "-q", "-o", str(output)],
+        cwd=ROOT,
+        env=case_environment(suite_env, suite_tmpdir / "core-warmup-home"),
+    )
+    try:
+        if result.returncode != 0:
+            raise RuntimeError(f"core cache warmup failed: {result.stdout.strip()}")
+    finally:
+        for artifact in (source, output, output.with_suffix(".o"), output.with_suffix(".mqti")):
+            try:
+                artifact.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def batch_case_eligible(case: TestCase) -> bool:
+    """Return whether a fixture can use the ordinary compile batch path.
+
+    Reader goldens, diagnostics, test blocks, and per-fixture compile flags
+    need their existing subprocess semantics. Plain compile/run fixtures have
+    no observable compiler chatter and can safely share a persistent batch
+    process while retaining their private HOME via the third protocol field.
+    """
+    expect = case.metadata.get("TEST-EXPECT", "parse-json")
+    if expect == "test" or expect.startswith("fail:") or expect == "parse-json":
+        return False
+    if case.metadata.get("TEST-COMPILE-FLAGS", "").strip():
+        return False
+    if any(key in case.metadata for key in (
+        "TEST-EXPECT-JSON-B64", "TEST-EXPECT-DESUGAR-B64",
+        "TEST-EXPECT-IR-CONTAINS", "TEST-EXPECT-JSON-TABLE",
+    )):
+        return False
+    if case.fixture:
+        if case.fixture.with_suffix(".json").exists() or case.fixture.with_suffix(".desugar").exists():
+            return False
+        if case.fixture.with_suffix(".stdout").exists():
+            return "compile" in expect or "run" in expect
+    return "compile" in expect or "run" in expect
+
+
+def batch_recycle_required(jobs_completed: int, rss_bytes: int | None) -> bool:
+    """Bound persistent compiler lifetime so frontend leaks cannot exhaust RAM."""
+    return (jobs_completed >= BATCH_MAX_JOBS or
+            (rss_bytes is not None and rss_bytes >= BATCH_MAX_RSS_BYTES))
+
+
+def batch_client() -> BatchClient | None:
+    if not getattr(BATCH_CONTEXT, "enabled", False):
+        return None
+    env = getattr(CASE_CONTEXT, "env", None) or MONAD_TEST_ENV
+    if env is None:
+        return None
+    client = getattr(BATCH_CONTEXT, "client", None)
+    if client is not None and (client.process.poll() is not None or client.should_recycle()):
+        client.close()
+        client = None
+        BATCH_CONTEXT.client = None
+    if client is None:
+        client = BatchClient(env)
+        BATCH_CONTEXT.client = client
+        with BATCH_CLIENTS_LOCK:
+            BATCH_CLIENTS.append(client)
+    return client
+
+
+def close_batch_clients() -> None:
+    with BATCH_CLIENTS_LOCK:
+        clients = list(BATCH_CLIENTS)
+        BATCH_CLIENTS.clear()
+    for client in clients:
+        client.close()
+
+def execute_cases(runner: Runner, cases: list[TestCase], suite_tmpdir: Path,
+                  suite_env: dict[str, str], jobs: int) -> None:
+    """Execute independent fixtures concurrently while rendering in case order."""
+    # Early-stop modes are intentionally serial: submitting the whole queue
+    # would violate their promise once workers have already started.
+    if jobs <= 1 or runner.options.fail_fast or runner.options.max_failures is not None:
+        for case in cases:
+            runner.run(case, suite_tmpdir, suite_env=suite_env)
+            if runner.should_stop:
+                UI.warn("stopping early after reaching the configured failure limit")
+                break
+        return
+
+    pending: dict[object, int] = {}
+    completed: dict[int, TestResult] = {}
+    next_index = 0
+    with ThreadPoolExecutor(max_workers=jobs, thread_name_prefix="monad-test") as pool:
+        for index, case in enumerate(cases):
+            future = pool.submit(runner.run, case, suite_tmpdir, suite_env=suite_env, emit=False)
+            pending[future] = index
+        for future in as_completed(pending):
+            completed[pending[future]] = future.result()
+            while next_index in completed:
+                runner.record_result(cases[next_index], completed.pop(next_index))
+                next_index += 1
 
 
 # ---------------------------------------------------------------------------
@@ -729,11 +1001,19 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
     expected_stdout = metadata_text(case, "TEST-EXPECT-STDOUT-B64")
     expected_json_text = metadata_text(case, "TEST-EXPECT-JSON-B64")
     expected_desugar_embedded = metadata_text(case, "TEST-EXPECT-DESUGAR-B64")
+    expected_ir = case.metadata.get("TEST-EXPECT-IR-CONTAINS")
     wants_json_or_desugar_golden = bool(
         expected_json_text is not None
         or expected_desugar_embedded is not None
         or (json_golden_path and json_golden_path.exists())
         or (desugar_golden_path and desugar_golden_path.exists())
+    )
+    needs_reader_emit = bool(
+        expect == "parse-json"
+        or wants_json_or_desugar_golden
+        or expected_ir
+        or case.metadata.get("TEST-EXPECT-JSON-TABLE")
+        or case.metadata.get("TEST-ID") == "tests.reader.heap-literals"
     )
 
     if expect.startswith("fail:"):
@@ -755,14 +1035,17 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
             return False, diag_problem, result.stdout
         return True, "", result.stdout
 
-    emitted_result, emitted, emit_stdout = emit_and_check_reader_goldens(
-        case, fixture, output_base, json_golden_path, desugar_golden_path
-    )
-    if emitted_result:
-        return emitted_result
-    assert emitted is not None
+    emitted = None
+    emit_stdout = ""
+    if needs_reader_emit:
+        emitted_result, emitted, emit_stdout = emit_and_check_reader_goldens(
+            case, fixture, output_base, json_golden_path, desugar_golden_path
+        )
+        if emitted_result:
+            return emitted_result
+        assert emitted is not None
 
-    if expected_json_text is not None:
+    if needs_reader_emit and expected_json_text is not None:
         try:
             expected_json = json.loads(expected_json_text)
         except json.JSONDecodeError as exc:
@@ -771,13 +1054,15 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
         if mismatch:
             return False, mismatch, emit_stdout
 
-    special = run_special_assertions(case, emitted)
-    if special:
-        return special
+    if needs_reader_emit:
+        special = run_special_assertions(case, emitted)
+        if special:
+            return special
 
-    expected_ir = case.metadata.get("TEST-EXPECT-IR-CONTAINS")
     if expected_ir:
         compile_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
+        if "--allow-implicit-effects" not in compile_flags:
+            compile_flags.append("--allow-implicit-effects")
         ir_result = run_monad([str(fixture), *compile_flags, "--emit-ir", "--emit-obj", "-o", str(output_base)])
         if ir_result.returncode != 0:
             return False, "--emit-ir failed", ir_result.stdout
@@ -801,14 +1086,18 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
     expected_desugar = expected_desugar_embedded
     if expected_desugar is None:
         expected_desugar = case.metadata.get("TEST-EXPECT-DESUGAR")
-    if expected_desugar is not None:
+    if needs_reader_emit and expected_desugar is not None:
+        # Embedded base64 goldens commonly preserve the fixture's terminal
+        # newline; AST extraction intentionally returns a trimmed block.
+        expected_desugar = expected_desugar.strip()
         actual = extract_desugared_ast(emit_stdout)
         if actual != expected_desugar:
             return False, f"desugared AST mismatch: expected {expected_desugar!r}, got {actual!r}", emit_stdout
 
-    json_table_mismatch = compare_corpus_json_golden(case, emitted)
-    if json_table_mismatch:
-        return False, json_table_mismatch, emit_stdout
+    if needs_reader_emit:
+        json_table_mismatch = compare_corpus_json_golden(case, emitted)
+        if json_table_mismatch:
+            return False, json_table_mismatch, emit_stdout
 
     should_compile = (
         "compile" in expect or "run" in expect
@@ -820,6 +1109,12 @@ def run_case(case: TestCase, tmpdir: Path) -> tuple[bool, str, str]:
 
     exe = tmpdir / stem
     compile_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
+    # Most historical compile/run fixtures predate the opt-in strict effect
+    # checker.  Keep those executable regressions focused on their runtime
+    # behavior; dedicated effect-arrow contract tests invoke the compiler
+    # directly and continue to exercise the strict default.
+    if "--allow-implicit-effects" not in compile_flags:
+        compile_flags.append("--allow-implicit-effects")
     result = run_monad([str(fixture), *compile_flags, "-o", str(exe)])
     if result.returncode != 0:
         return False, "compile failed", result.stdout
@@ -855,22 +1150,115 @@ def materialize_fixture(case: TestCase, tmpdir: Path) -> Path:
 
 
 def run_monad(args: list[str]) -> CommandResult:
-    return run_command([str(MONAD), *args], cwd=ROOT, env=MONAD_TEST_ENV)
+    if batch_request_supported(args):
+        client = batch_client()
+        if client is not None:
+            env = getattr(CASE_CONTEXT, "env", None) or MONAD_TEST_ENV
+            home = env.get("HOME") if env else None
+            return client.compile(args, home)
+    return run_command([str(MONAD), *args], cwd=ROOT,
+                       env=getattr(CASE_CONTEXT, "env", MONAD_TEST_ENV))
+
+
+def batch_request_supported(args: list[str]) -> bool:
+    """Recognize the compile shape accepted by the persistent batch client."""
+    if not args or not args[0].endswith((".mon", ".monad")):
+        return False
+    if "-o" not in args and "--output" not in args:
+        return False
+    unsupported = {
+        # The persistent protocol intentionally carries only source/output
+        # paths.  Per-job compiler policy flags must use the regular process
+        # path so they are not silently ignored.
+        "--allow-implicit-effects", "allow-implicit-effects",
+        "--emit-json", "emit-json", "--emit-ir", "--emit-llvm", "emit-ir",
+        "--emit-bc", "--bitcode", "emit-bc", "--emit-asm", "-S", "asm",
+        "--emit-obj", "-c", "obj", "--emit-typst", "emit-typst",
+        "--test", "test", "--test-run", "--jit", "jit",
+    }
+    return not any(flag in unsupported for flag in args[1:])
 
 
 def run_command(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> CommandResult:
     start = time.perf_counter_ns()
+    effective_env = env if env is not None else getattr(CASE_CONTEXT, "env", None)
     proc = subprocess.run(
         args,
         cwd=cwd,
-        env=env,
+        env=effective_env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
     )
     elapsed_ns = time.perf_counter_ns() - start
     stdout = proc.stdout.decode("utf-8", errors="replace")
+    profile_case = getattr(PROFILE_CONTEXT, "case", None)
+    if PROFILE_ENABLED and profile_case is not None:
+        compiler = False
+        try:
+            compiler = Path(args[0]).resolve() == MONAD.resolve()
+        except (IndexError, OSError):
+            pass
+        with PROFILE_LOCK:
+            PROFILE_SAMPLES.append({
+                "case": profile_case,
+                "kind": "compiler" if compiler else "fixture",
+                "elapsed_ns": elapsed_ns,
+                "returncode": proc.returncode,
+            })
     return CommandResult(args=args, returncode=proc.returncode, stdout=stdout, elapsed_ns=elapsed_ns)
+
+
+def build_profile_report(samples: list[dict[str, object]], *, suite_elapsed_ns: int) -> dict[str, object]:
+    """Aggregate opt-in subprocess timings into a stable, tool-friendly report."""
+    totals: dict[str, dict[str, int]] = {
+        "compiler": {"count": 0, "elapsed_ns": 0},
+        "fixture": {"count": 0, "elapsed_ns": 0},
+    }
+    cases: dict[str, dict[str, int | str]] = {}
+    for sample in samples:
+        kind = str(sample.get("kind", "fixture"))
+        if kind not in totals:
+            continue
+        elapsed_ns = int(sample.get("elapsed_ns", 0))
+        totals[kind]["count"] += 1
+        totals[kind]["elapsed_ns"] += elapsed_ns
+        name = str(sample.get("case", "<unknown>"))
+        row = cases.setdefault(name, {"name": name, "compiler_ns": 0, "fixture_ns": 0, "subprocesses": 0})
+        row[f"{kind}_ns"] += elapsed_ns
+        row["subprocesses"] += 1
+    ordered_cases = sorted(
+        cases.values(),
+        key=lambda row: (-(int(row["compiler_ns"]) + int(row["fixture_ns"])), str(row["name"])),
+    )
+    return {
+        "version": 1,
+        "suite_elapsed_ns": suite_elapsed_ns,
+        "totals": totals,
+        "cases": ordered_cases,
+    }
+
+
+def write_profile_report(path: Path, report: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def print_profile_report(report: dict[str, object], path: Path) -> None:
+    totals = report["totals"]
+    assert isinstance(totals, dict)
+    UI.section("Profile")
+    for kind in ("compiler", "fixture"):
+        row = totals[kind]
+        assert isinstance(row, dict)
+        UI.row(kind, f"{row['count']} subprocesses · {format_duration(int(row['elapsed_ns']))}")
+    cases = report["cases"]
+    assert isinstance(cases, list)
+    for row in cases[:10]:
+        assert isinstance(row, dict)
+        total = int(row["compiler_ns"]) + int(row["fixture_ns"])
+        UI.row(str(row["name"]), f"{format_duration(total)} · compiler {format_duration(int(row['compiler_ns']))}")
+    UI.hint(f"wrote profile report: {display_path(path)}")
 
 
 def check_expected_diagnostics(
@@ -917,6 +1305,7 @@ def emit_and_check_reader_goldens(
     emit_flags = case.metadata.get("TEST-COMPILE-FLAGS", "").split()
     wants_desugar_output = (
         bool(case.metadata.get("TEST-EXPECT-DESUGAR"))
+        or bool(case.metadata.get("TEST-EXPECT-DESUGAR-B64"))
         or bool(desugar_golden_path and desugar_golden_path.exists())
     )
     if wants_desugar_output and not any(
@@ -1667,6 +2056,16 @@ def disable_color() -> None:
     UI.color = False
 
 
+def resolve_test_jobs(requested: int) -> int:
+    """Choose bounded fixture parallelism without overwhelming the host."""
+    if requested > 0:
+        return requested
+    for raw in (os.environ.get("MAKE_TEST_JOBS"), os.environ.get("MAKE_JOBS")):
+        if raw and raw.strip().isdigit() and int(raw) > 0:
+            return int(raw)
+    return max(1, min(os.cpu_count() or 1, 8))
+
+
 # ---------------------------------------------------------------------------
 # CLI
 
@@ -1693,6 +2092,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--no-preserve-failures", action="store_true", help="do not preserve failing artifacts under build/test/failures")
     parser.add_argument("--no-cleanup", action="store_true", help="skip final suite artifact cleanup")
     parser.add_argument("--no-color", action="store_true", help="disable terminal color")
+    parser.add_argument("-j", "--jobs", type=int, default=0,
+                        help="run independent fixtures concurrently (default: bounded auto)")
+    parser.add_argument("--glyphs", choices=("unicode", "ascii"), default=None,
+                        help="UI glyph policy (default: unicode, including redirected output)")
+    parser.add_argument("--profile", action="store_true",
+                        help="record compiler/fixture subprocess timings")
+    parser.add_argument("--profile-output", default=None, metavar="PATH",
+                        help=f"write the timing report to PATH (default: {PROFILE_FILE})")
     parser.add_argument("-v", "--verbose", action="store_true", help="show fixture locations and additional execution detail")
     return parser.parse_args(argv)
 
@@ -1701,6 +2108,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if args.no_color:
         disable_color()
+    if args.glyphs is not None:
+        UI.glyph_style = args.glyphs
+    global PROFILE_ENABLED, PROFILE_SAMPLES
+    PROFILE_ENABLED = bool(args.profile)
+    PROFILE_SAMPLES = []
     previous = load_previous_results(RESULTS_FILE)
     all_tests = discover_tests()
 
@@ -1745,6 +2157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     UI.row("selected", str(len(tests)))
     UI.row("tiers", active_tiers)
     UI.row("menu", active_filter)
+    UI.row("jobs", str(resolve_test_jobs(args.jobs)))
     print()
 
     if not tests:
@@ -1767,6 +2180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             keep_passing_artifacts=args.keep_passing_artifacts,
             preserve_failures=not args.no_preserve_failures,
             no_color=args.no_color,
+            jobs=resolve_test_jobs(args.jobs),
         ),
     )
     suite_start = time.perf_counter_ns()
@@ -1778,18 +2192,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         suite_home.mkdir(parents=True, exist_ok=True)
         env["HOME"] = str(suite_home)
         env["MONAD_CORE"] = str(ROOT / "core")
+        env["MONAD_CORE_CACHE"] = str(suite_tmpdir / "core-cache")
         MONAD_TEST_ENV = env
         try:
-            for case in tests:
-                runner.run(case, suite_tmpdir)
-                if runner.should_stop:
-                    UI.warn("stopping early after reaching the configured failure limit")
-                    break
+            # A one-fixture probe and early-stop run are faster without paying
+            # warmup startup; normal multi-fixture runs warm first to make the
+            # shared cache immutable before workers can observe it.
+            if ((len(tests) > 1 or runner.options.jobs > 1) and
+                    not runner.options.fail_fast and
+                    runner.options.max_failures is None):
+                prewarm_core_cache(suite_tmpdir, env)
+            execute_cases(runner, tests, suite_tmpdir, env, runner.options.jobs)
         finally:
+            close_batch_clients()
             MONAD_TEST_ENV = None
     if runner.current_section is not None:
         runner.print_section_footer(runner.current_section)
     suite_elapsed_ns = time.perf_counter_ns() - suite_start
+
+    if args.profile:
+        profile_path = Path(args.profile_output).expanduser() if args.profile_output else PROFILE_FILE
+        report = build_profile_report(PROFILE_SAMPLES, suite_elapsed_ns=suite_elapsed_ns)
+        write_profile_report(profile_path, report)
+        print_profile_report(report, profile_path)
 
     save_results(RESULTS_FILE, runner.results, runner.first_failure)
     save_first_failure(FIRST_FAILURE_FILE, runner.first_failure)

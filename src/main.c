@@ -6,6 +6,9 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <dirent.h>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #if defined(_WIN32)
 #include <stdlib.h>
 #endif
@@ -70,6 +73,7 @@ typedef struct CompiledModule {
     char           *obj_path;
     bool            was_skipped;    // compiled from .o timestamp, no LLVMValueRef
     bool            object_reused;  // linked object predates this compiler run
+    bool            persistent_core;/* immutable Core metadata kept by batch */
     bool            compiling;      // reserved during recursive dependency scan
     CompiledExport *exports;
     size_t          export_count;
@@ -83,6 +87,96 @@ typedef struct CompiledModule {
 } CompiledModule;
 
 static CompiledModule *g_compiled = NULL;
+/* ``monad batch`` is the one mode whose process lifetime spans independent
+ * compilation transactions.  Keep this separate from CompilerFlags so the
+ * ordinary CLI and REPL retain their strict per-transaction ownership. */
+static bool g_batch_mode = false;
+
+/* Return the number of fields exposed by an FFI layout name.  Clang records
+ * typedef'd record names as alias entries with zero fields, while the named
+ * record appears separately in the same context.  Wisp needs the effective
+ * constructor arity before layout injection, so follow record aliases here.
+ */
+static int ffi_wisp_layout_arity(const FFIContext *ffi, const FFIStruct *layout) {
+    if (!ffi || !layout) return 0;
+    if (layout->field_count > 0) return layout->field_count;
+    const char *target = layout->alias_of;
+    for (int depth = 0; target && depth < ffi->struct_count; depth++) {
+        const FFIStruct *next = NULL;
+        for (int i = 0; i < ffi->struct_count; i++) {
+            const FFIStruct *candidate = &ffi->structs[i];
+            if (candidate->name && strcmp(candidate->name, target) == 0) {
+                next = candidate;
+                break;
+            }
+        }
+        if (!next) return 0;
+        if (next->field_count > 0) return next->field_count;
+        target = next->alias_of;
+    }
+    return 0;
+}
+
+/* Populate Wisp's frontend arity registry from include directives in one
+ * source unit.  Dependency compilation intentionally clears that registry
+ * when it finishes, so callers may replay this small pre-pass immediately
+ * before parsing the unit that owns the source. */
+static void register_source_ffi_arities(const char *source) {
+    if (!source) return;
+    FFIContext *ffi = ffi_context_create();
+    if (!ffi) return;
+    const char *p = source;
+    while (*p) {
+        while (*p == ' ' || *p == '\t') p++;
+        const char *q = p;
+        bool system_inc = false;
+        const char *hstart = NULL;
+        const char *hend = NULL;
+        if (strncmp(q, "include", 7) == 0 &&
+            (q[7] == ' ' || q[7] == '\t' || q[7] == '<')) {
+            q += 7;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '<') {
+                system_inc = true;
+                hstart = q + 1;
+                hend = strchr(hstart, '>');
+            } else if (*q == '"') {
+                hstart = q + 1;
+                hend = strchr(hstart, '"');
+            }
+        } else if (*q == '(' && strncmp(q + 1, "include", 7) == 0) {
+            q += 8;
+            while (*q == ' ' || *q == '\t') q++;
+            if (*q == '<') {
+                system_inc = true;
+                hstart = q + 1;
+                hend = strchr(hstart, '>');
+            } else if (*q == '"') {
+                hstart = q + 1;
+                hend = strchr(hstart, '"');
+            }
+        }
+        if (hstart && hend) {
+            char header[256];
+            size_t length = (size_t)(hend - hstart);
+            if (length < sizeof(header)) {
+                memcpy(header, hstart, length);
+                header[length] = '\0';
+                ffi_parse_header(ffi, header, system_inc);
+            }
+        }
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+    }
+    for (int fi = 0; fi < ffi->function_count; fi++)
+        wisp_register_arity(ffi->functions[fi].name, ffi->functions[fi].param_count);
+    for (int si = 0; si < ffi->struct_count; si++) {
+        int arity = ffi_wisp_layout_arity(ffi, &ffi->structs[si]);
+        if (arity > 0)
+            wisp_register_arity(ffi->structs[si].name, arity);
+    }
+    ffi_context_free(ffi);
+}
 
 /* The dependent checker is currently a shadow pass; typeclass applications
  * are checked by HM inference and resolved by the typeclass registry.  Do not
@@ -456,40 +550,69 @@ static void register_compiled_module_wisp_arities(CompiledModule *m) {
     }
 }
 
-static void registry_free_all(void) {
+static void registry_free_module(CompiledModule *m) {
+    if (!m) return;
+    free(m->module_name);
+    free(m->obj_path);
+    for (size_t i = 0; i < m->export_count; i++) {
+        CompiledExport *e = &m->exports[i];
+        free(e->local_name);
+        free(e->mangled_name);
+        type_free(e->type);
+        type_free(e->return_type);
+        ast_free(e->source_ast);
+        free(e->hm_scheme);
+        if (e->params) {
+            for (int j = 0; j < e->param_count; j++) {
+                free(e->params[j].name);
+                type_free(e->params[j].type);
+            }
+            free(e->params);
+        }
+    }
+    free(m->exports);
+    for (size_t i = 0; i < m->layout_count; i++) {
+        free(m->layouts[i].name);
+        type_free(m->layouts[i].type);
+    }
+    free(m->layouts);
+    tc_registry_free(m->tc_registry);
+    qtt_interface_free(m->qtt_interface);
+    free(m);
+}
+
+static void registry_free_all(bool retain_core) {
     CompiledModule *m = g_compiled;
+    CompiledModule *retained = NULL;
     while (m) {
         CompiledModule *next = m->next;
-        free(m->module_name);
-        free(m->obj_path);
-        for (size_t i = 0; i < m->export_count; i++) {
-            CompiledExport *e = &m->exports[i];
-            free(e->local_name);
-            free(e->mangled_name);
-            type_free(e->type);
-            type_free(e->return_type);
-            ast_free(e->source_ast);
-            free(e->hm_scheme);
-            if (e->params) {
-                for (int j = 0; j < e->param_count; j++) {
-                    free(e->params[j].name);
-                    type_free(e->params[j].type);
+        if (retain_core && m->persistent_core) {
+            /* LLVMValueRef handles belong to the just-disposed module and are
+             * never valid in the next transaction.  Imported code is linked
+             * from the persistent object path; only the portable export
+             * metadata survives here. */
+            for (size_t i = 0; i < m->export_count; i++)
+                m->exports[i].func_ref = NULL;
+            if (m->tc_registry) {
+                for (int i = 0; i < m->tc_registry->instance_count; i++) {
+                    TCInstance *instance = &m->tc_registry->instances[i];
+                    /* These handles belong to the disposed LLVM context;
+                     * method_symbols remain the stable cross-module ABI. */
+                    instance->dict_global = NULL;
+                    for (int j = 0; j < instance->method_count; j++)
+                        instance->method_funcs[j] = NULL;
                 }
-                free(e->params);
             }
+            m->object_reused = true;
+            m->compiling = false;
+            m->next = retained;
+            retained = m;
+        } else {
+            registry_free_module(m);
         }
-        free(m->exports);
-        for (size_t i = 0; i < m->layout_count; i++) {
-            free(m->layouts[i].name);
-            type_free(m->layouts[i].type);
-        }
-        free(m->layouts);
-        tc_registry_free(m->tc_registry);
-        qtt_interface_free(m->qtt_interface);
-        free(m);
         m = next;
     }
-    g_compiled = NULL;
+    g_compiled = retained;
 }
 
 const char **repl_get_compiled_obj_paths(void) {
@@ -554,6 +677,68 @@ static const char *host_no_pie_flag(void) {
 
 static bool file_exists(const char *path) {
     return access(path, F_OK) == 0;
+}
+
+/* Return whether NAME can be resolved through the host PATH.  This is kept
+ * deliberately small and side-effect free because it runs for every native
+ * fixture link.  The linker itself still validates that the selected tool can
+ * consume the target objects. */
+static bool host_command_exists(const char *name) {
+    if (!name || !*name)
+        return false;
+    const char *path = getenv("PATH");
+    if (!path || !*path)
+        return false;
+
+    const char *cursor = path;
+    while (*cursor) {
+        const char *sep = strchr(cursor, ':');
+        size_t dir_len = sep ? (size_t)(sep - cursor) : strlen(cursor);
+        if (dir_len == 0)
+            dir_len = 1; /* an empty PATH component means the current dir */
+
+        char candidate[1024];
+        if (dir_len + 1 + strlen(name) + 1 <= sizeof(candidate)) {
+            if (dir_len == 1 && cursor[0] == ':')
+                snprintf(candidate, sizeof(candidate), "./%s", name);
+            else
+                snprintf(candidate, sizeof(candidate), "%.*s/%s",
+                         (int)dir_len, cursor, name);
+            if (access(candidate,
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+                       F_OK
+#else
+                       X_OK
+#endif
+                       ) == 0)
+                return true;
+        }
+        if (!sep)
+            break;
+        cursor = sep + 1;
+    }
+    return false;
+}
+
+/* lld is substantially faster for Monad's many-object fixture links, but it
+ * is not available on every supported host.  Prefer it when installed and
+ * retain an explicit MONAD_LINKER=bfd escape hatch for toolchain debugging.
+ * MONAD_LINKER=lld makes the choice explicit and lets clang report a useful
+ * error if that linker is unavailable. */
+static const char *host_linker_flag(void) {
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+    const char *requested = getenv("MONAD_LINKER");
+    return (requested && strcmp(requested, "lld") == 0)
+        ? " -fuse-ld=lld" : "";
+#else
+    const char *requested = getenv("MONAD_LINKER");
+    if (requested && strcmp(requested, "bfd") == 0)
+        return "";
+    if ((requested && strcmp(requested, "lld") == 0) ||
+        (!requested && host_command_exists("ld.lld")))
+        return " -fuse-ld=lld";
+    return "";
+#endif
 }
 
 static bool dir_exists(const char *path) {
@@ -1036,7 +1221,7 @@ static bool declare_externals(CodegenContext *ctx,
             }
             if (ent) { ent->module_name = strdup(dep->module_name);
                        ent->llvm_name   = strdup(e->mangled_name);
-                       ent->source_ast  = ast_clone(e->source_ast); }
+                       env_entry_set_source_ast(ent, ast_clone(e->source_ast), true); }
             if (e->hm_scheme)
                 (void)env_set_portable_scheme(ctx->env, qn, e->hm_scheme);
             const QttInterfaceContract *qtt_contract =
@@ -1100,7 +1285,7 @@ static bool declare_externals(CodegenContext *ctx,
                 }
                 if (ent2) { ent2->module_name = strdup(dep->module_name);
                             ent2->llvm_name   = strdup(e->mangled_name);
-                            ent2->source_ast  = ast_clone(e->source_ast); }
+                            env_entry_set_source_ast(ent2, ast_clone(e->source_ast), true); }
                 if (e->hm_scheme)
                     (void)env_set_portable_scheme(
                         ctx->env, e->local_name, e->hm_scheme);
@@ -1167,7 +1352,11 @@ static char *get_obj_path(const char *source_path, bool is_main_module,
     char *core_prefix = monad_core_dir();
     bool is_core_path = dir_prefix_matches(source_path, core_prefix);
 
-    if (is_core_path && home) {
+    const char *core_cache_override = getenv("MONAD_CORE_CACHE");
+    bool share_prelude_cache = core_cache_override && *core_cache_override &&
+        (strstr(source_path, "/prelude/") != NULL ||
+         strstr(source_path, "\\prelude\\") != NULL);
+    if (is_core_path && (home || share_prelude_cache)) {
         const char *rel = source_path;
         char source_real[1024];
         char core_real[1024];
@@ -1183,8 +1372,13 @@ static char *get_obj_path(const char *source_path, bool is_main_module,
         for (char *p = base; *p; p++) if (*p == '/' || *p == '\\') *p = '_';
 
         char cache_dir[1024];
-        snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/monad/core", home);
-        ensure_cache_dir(home);
+        if (share_prelude_cache) {
+            snprintf(cache_dir, sizeof(cache_dir), "%s", core_cache_override);
+            monad_mkdir(cache_dir);
+        } else {
+            snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/monad/core", home);
+            ensure_cache_dir(home);
+        }
 
         char obj[1024];
         if (is_main_module) {
@@ -1219,10 +1413,16 @@ static char *get_obj_path(const char *source_path, bool is_main_module,
  */
 static bool is_persistent_core_object(const char *path) {
     const char *home = getenv("HOME");
-    if (!path || !home || !home[0]) return false;
+    const char *override = getenv("MONAD_CORE_CACHE");
+    const char *cache = (override && override[0]) ? override : NULL;
+    if (!cache && home && home[0]) {
+        static char home_cache[1024];
+        snprintf(home_cache, sizeof(home_cache), "%s/.cache/monad/core", home);
+        cache = home_cache;
+    }
+    if (!path || !cache || !cache[0]) return false;
     char prefix[1024];
-    int length = snprintf(
-        prefix, sizeof(prefix), "%s/.cache/monad/core/", home);
+    int length = snprintf(prefix, sizeof(prefix), "%s/", cache);
     return length > 0 && (size_t)length < sizeof(prefix) &&
            strncmp(path, prefix, (size_t)length) == 0;
 }
@@ -1376,6 +1576,29 @@ static bool source_is_prelude_file(const char *path)
     return false;
 }
 
+/* Core/prelude modules are immutable ABI metadata in a batch worker.  Their
+ * reader declarations are retained by the scoped reader registry below; the
+ * one known opaque ABI exception (Data.Map) stays transactional.  This keeps
+ * the cache conservative while retaining the whole prelude dependency closure. */
+static bool source_is_reusable_core_module(const char *path, const char *source)
+{
+    if (!source_is_prelude_file(path) || !source) return false;
+    /* Map helpers expose an intentionally opaque, representation-polymorphic
+     * ABI.  Until that ABI is fully serialized in .mqti, rebuild this one
+     * primitive per transaction instead of retaining an unsafe signature. */
+    const char *tail = strrchr(path, '/');
+    if (!tail) tail = strrchr(path, '\\');
+    if (tail && (strcmp(tail + 1, "Map.mon") == 0 ||
+                 strcmp(tail + 1, "Eq.mon") == 0 ||
+                 strcmp(tail + 1, "Ord.mon") == 0 ||
+                 strcmp(tail + 1, "Set.mon") == 0 ||
+                 strcmp(tail + 1, "Vec.mon") == 0)) return false;
+    (void)source;
+    /* Reader declarations are retained separately by
+     * reader_syntax_clear_noncore(), so even Data.Set can be reused safely. */
+    return true;
+}
+
 static bool path_is_current_source(const char *path, const char *current)
 {
     if (!path || !current) return false;
@@ -1508,6 +1731,9 @@ static void compile_prelude_dir(const char *dir, const char *current_source,
             continue;
         CompiledModule *cached_prelude = registry_find(module_name);
         if (cached_prelude) {
+            if (g_batch_mode && cached_prelude->persistent_core &&
+                getenv("MONAD_BATCH_TRACE_REUSE"))
+                printf("[batch-reuse] %s\n", cached_prelude->module_name);
             register_compiled_module_wisp_arities(cached_prelude);
             continue;
         }
@@ -1691,84 +1917,9 @@ static CompiledModule *compile_one(const char *source_path,
 
     PHASE_START();
 
-    /* Pre-pass: parse FFI includes to populate wisp arity table before
-     * the full wisp expansion runs. We create a temporary FFI context,
-     * scan for (include ...) lines, parse those headers, then register
-     * all function and layout arities with wisp. */
-    {
-        FFIContext *pre_ffi = ffi_context_create();
-        /* Scan source for include directives using a simple line scan */
-        const char *p = source;
-        while (*p) {
-            /* Skip whitespace */
-            while (*p == ' ' || *p == '\t') p++;
-            /* Match: include <header> or (include <header> system) */
-            if (strncmp(p, "include", 7) == 0 && (p[7] == ' ' || p[7] == '\t' || p[7] == '<')) {
-                const char *q = p + 7;
-                while (*q == ' ' || *q == '\t') q++;
-                bool system_inc = false;
-                const char *hstart = NULL;
-                const char *hend   = NULL;
-                if (*q == '<') {
-                    system_inc = true;
-                    hstart = q + 1;
-                    hend   = strchr(hstart, '>');
-                } else if (*q == '"') {
-                    system_inc = false;
-                    hstart = q + 1;
-                    hend   = strchr(hstart, '"');
-                }
-                if (hstart && hend) {
-                    char header[256];
-                    size_t hlen = hend - hstart;
-                    if (hlen < sizeof(header)) {
-                        memcpy(header, hstart, hlen);
-                        header[hlen] = '\0';
-                        ffi_parse_header(pre_ffi, header, system_inc);
-                    }
-                }
-            }
-            /* Also match s-expression form: (include "header" system) */
-            if (*p == '(' && strncmp(p+1, "include", 7) == 0) {
-                const char *q = p + 8;
-                while (*q == ' ' || *q == '\t') q++;
-                bool system_inc = false;
-                const char *hstart = NULL;
-                const char *hend   = NULL;
-                if (*q == '<') {
-                    system_inc = true;
-                    hstart = q + 1;
-                    hend   = strchr(hstart, '>');
-                } else if (*q == '"') {
-                    system_inc = false;
-                    hstart = q + 1;
-                    hend   = strchr(hstart, '"');
-                }
-                if (hstart && hend) {
-                    char header[256];
-                    size_t hlen = hend - hstart;
-                    if (hlen < sizeof(header)) {
-                        memcpy(header, hstart, hlen);
-                        header[hlen] = '\0';
-                        ffi_parse_header(pre_ffi, header, system_inc);
-                    }
-                }
-            }
-            /* Advance to next line */
-            while (*p && *p != '\n') p++;
-            if (*p == '\n') p++;
-        }
-        /* Register all FFI function arities with wisp */
-        for (int fi = 0; fi < pre_ffi->function_count; fi++)
-            wisp_register_arity(pre_ffi->functions[fi].name,
-                                pre_ffi->functions[fi].param_count);
-        /* Register all layout constructors with their field counts */
-        for (int si = 0; si < pre_ffi->struct_count; si++)
-            if (!pre_ffi->structs[si].alias_of)
-                wisp_register_arity(pre_ffi->structs[si].name,
-                                    pre_ffi->structs[si].field_count);
-        ffi_context_free(pre_ffi);
-    }
+    /* Pre-pass: parse FFI includes to populate Wisp constructor/function
+     * arities before the full Wisp expansion runs. */
+    register_source_ffi_arities(source);
     PHASE_END("ffi pre-pass");
 
     /* Register builtin arities before wisp parse so forms like
@@ -2006,10 +2157,13 @@ skip_primitive_type_autoload:
                             for (int fi = 0; fi < dep_ffi->function_count; fi++)
                                 wisp_register_arity(dep_ffi->functions[fi].name,
                                                     dep_ffi->functions[fi].param_count);
-                            for (int si = 0; si < dep_ffi->struct_count; si++)
-                                if (!dep_ffi->structs[si].alias_of)
+                            for (int si = 0; si < dep_ffi->struct_count; si++) {
+                                int arity = ffi_wisp_layout_arity(dep_ffi,
+                                                                  &dep_ffi->structs[si]);
+                                if (arity > 0)
                                     wisp_register_arity(dep_ffi->structs[si].name,
-                                                        dep_ffi->structs[si].field_count);
+                                                        arity);
+                            }
                             ffi_context_free(dep_ffi);
                             free(dep_source);
                         } else if (dep_src) {
@@ -2024,6 +2178,10 @@ skip_primitive_type_autoload:
         }
     }
 
+    /* Nested dependency compilation may clear the process-local FFI arity
+     * table. Replay this module's includes after the dependency scan so its
+     * constructors are available to the Wisp parser below. */
+    register_source_ffi_arities(source);
     parser_set_context(my_source_path, source);
     AST *_feat_early = detect_features();
     ast_free(_feat_early);
@@ -2031,6 +2189,19 @@ skip_primitive_type_autoload:
     ASTList exprs = wisp_parse_all(source, my_source_path);
     reader_syntax_scope_pop();
     macro_scope_pop();
+
+    /* Reader recovery may deliberately leave a null slot after emitting a
+     * structured diagnostic (notably rejected infinite arrays).  Do not send
+     * that slot into LLVM, where it would mask the useful reader error with an
+     * internal "null AST" failure. */
+    for (size_t i = 0; i < exprs.count; i++) {
+        if (exprs.exprs[i]) continue;
+        for (size_t j = 0; j < exprs.count; j++) ast_free(exprs.exprs[j]);
+        free(exprs.exprs);
+        free(my_source_path);
+        free(source);
+        return NULL;
+    }
 
     if (flags->optimization_level > 0) {
         OptimizationOptions opt_options = optimization_options_default();
@@ -2674,10 +2845,16 @@ skip_primitive_type_autoload:
         cm->module_name = strdup(mod_name);
         cm->was_skipped = false;
         cm->object_reused = skip_emit;
+        cm->persistent_core = g_batch_mode &&
+            source_is_reusable_core_module(my_source_path, source);
         cm->compiling = false;
     } else {
         cm = registry_new(mod_name, obj_path, false);
+        cm->persistent_core = g_batch_mode &&
+            source_is_reusable_core_module(my_source_path, source);
     }
+    if (cm->persistent_core)
+        cm->object_reused = true;
     tc_registry_free(cm->tc_registry);
     cm->tc_registry = tc_registry_clone(ctx.tc_registry);
     for (size_t bi = 0; bi < ctx.env->size; bi++) {
@@ -3022,6 +3199,13 @@ skip_primitive_type_autoload:
     dep_ctx_free(dep_ctx);
     ffi_libs_add(g_ffi);
     ctx.ffi = NULL;  /* don't free the global */
+    if (cm->persistent_core) {
+        /* LLVM destroys these handles with this module context.  The retained
+         * registry is metadata-only and will be imported through its object
+         * path by the next batch transaction. */
+        for (size_t i = 0; i < cm->export_count; i++)
+            cm->exports[i].func_ref = NULL;
+    }
     codegen_dispose(&ctx);
     module_context_free(mod_ctx);
     for (size_t i = 0; i < exprs.count; i++) ast_free(exprs.exprs[i]);
@@ -3042,7 +3226,32 @@ static bool compile(CompilerFlags *flags) {
     qtt_compiler_set_trace(flags->verbose_level, flags->trace_qtt);
 
     CompiledModule *main_mod = compile_one(flags->input_file, flags, true);
-    if (!main_mod) return true;  /* emit-json/JIT mode, no linking needed */
+    if (!main_mod) {
+        /* Emit-only and empty units can still compile/register dependency
+         * modules before returning NULL.  They need the same registry teardown
+         * as a linked main module, especially in a persistent batch worker. */
+        registry_free_all(g_batch_mode);
+        qtt_compiler_reset();
+        /* A batch worker may compile hundreds of independent modules.  Macro
+         * definitions and non-Core reader declarations are transaction-local;
+         * retain only the Core reader rules needed by cached prelude modules. */
+        macro_clear();
+        if (g_batch_mode) {
+            char *core_dir = monad_core_dir();
+            reader_syntax_clear_noncore(core_dir);
+            free(core_dir);
+        } else {
+            reader_syntax_clear();
+        }
+        wisp_clear_arities();
+        if (g_ffi) { ffi_context_free(g_ffi); g_ffi = NULL; }
+#if defined(__GLIBC__)
+        /* Return completely free arenas to the OS in persistent batch mode;
+         * otherwise glibc keeps peak compilation pages mapped indefinitely. */
+        malloc_trim(0);
+#endif
+        return true;  /* emit-json/JIT mode, no linking needed */
+    }
 
     // Collect .o files: registry is prepend (newest first), reverse to get
     // deps first so linker resolves symbols correctly. Deduplicate by realpath
@@ -3119,10 +3328,10 @@ static bool compile(CompilerFlags *flags) {
         }
     }
 
-    /* Use Clang's target-default linker.  Selecting an optional linker merely
-     * because it is installed is not semantics-preserving: linker support and
-     * accepted object metadata vary by target and toolchain version. */
-    const char *ld_flag = "";
+    /* Prefer lld for the generated executable link when available.  The
+     * fallback remains Clang's target-default linker, preserving portability
+     * on hosts without lld and allowing MONAD_LINKER=bfd for diagnostics. */
+    const char *ld_flag = host_linker_flag();
 
     char cmd[4096];
     int w = snprintf(cmd, sizeof(cmd), "clang%s", ld_flag);
@@ -3177,10 +3386,101 @@ static bool compile(CompilerFlags *flags) {
     free(objs);
     free(exec_name);
     free(runtime_archive);
-    registry_free_all();
+    registry_free_all(g_batch_mode);
+    qtt_compiler_reset();
     wisp_clear_arities();
+    macro_clear();
+    if (g_batch_mode) {
+        char *core_dir = monad_core_dir();
+        reader_syntax_clear_noncore(core_dir);
+        free(core_dir);
+    } else {
+        reader_syntax_clear();
+    }
     if (g_ffi) { ffi_context_free(g_ffi); g_ffi = NULL; }
+#if defined(__GLIBC__)
+    malloc_trim(0);
+#endif
     return rc == 0;
+}
+
+/* Compile independent jobs from stdin without starting a new compiler
+ * process for each source file. Each non-empty, non-comment line contains
+ * <input.mon><TAB><output-path>[<TAB><HOME>]. Common compiler flags are supplied on
+ * the command line; the optional HOME keeps test-worker caches isolated.
+ * invocation; this protocol is the foundation for persistent frontend state
+ * and gives the test harness a stable linear batch path today. */
+void cmd_batch(const CompilerFlags *template_flags)
+{
+    if (!template_flags) return;
+
+    /* Keep immutable Core metadata at each transaction boundary.  This flag
+     * is process-local and cannot affect normal
+     * one-shot compilation or REPL ownership rules. */
+    g_batch_mode = true;
+
+    char line[16384];
+    size_t line_no = 0;
+    size_t jobs = 0;
+    bool all_ok = true;
+    char *batch_home = getenv("HOME") ? strdup(getenv("HOME")) : NULL;
+
+    while (fgets(line, sizeof(line), stdin)) {
+        line_no++;
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+        if (len == 0 || line[0] == '#') continue;
+
+        char *tab = strchr(line, '\t');
+        if (!tab || tab == line || tab[1] == '\0') {
+            fprintf(stderr, "batch: line %zu must be <input.mon> TAB <output-path>\n",
+                    line_no);
+            all_ok = false;
+            continue;
+        }
+        *tab = '\0';
+        char *input = line;
+        char *output = tab + 1;
+        char *job_home = strchr(output, '\t');
+        if (job_home) {
+            *job_home++ = '\0';
+            if (*job_home == '\0') job_home = NULL;
+        }
+
+        if (job_home)
+            monad_setenv("HOME", job_home);
+
+        CompilerFlags flags = *template_flags;
+        flags.input_file = input;
+        flags.output_name = output;
+        flags.run_after_compile = false;
+
+        bool ok = compile(&flags);
+        if (batch_home)
+            monad_setenv("HOME", batch_home);
+        else
+            monad_setenv("HOME", "");
+        jobs++;
+        if (ok) {
+            printf("BATCH OK %s\n", output);
+        } else {
+            printf("BATCH FAIL %s\n", output);
+            all_ok = false;
+        }
+        fflush(stdout);
+    }
+
+    if (ferror(stdin)) {
+        fprintf(stderr, "batch: failed while reading stdin\n");
+        all_ok = false;
+    }
+    if (jobs == 0 && all_ok)
+        fprintf(stderr, "batch: no jobs received\n");
+    if (jobs == 0)
+        all_ok = false;
+    free(batch_home);
+    exit(all_ok ? 0 : 1);
 }
 
 bool repl_compile_module(CodegenContext *ctx, ImportDecl *imp) {
@@ -3274,11 +3574,13 @@ int main(int argc, char **argv) {
     case CMD_CLEAN:   cmd_clean();                       return 0;
     case CMD_INSTALL: cmd_install();                     return 0;
     case CMD_TEST:    cmd_test(&flags);                  return 0;
+    case CMD_BATCH:   cmd_batch(&flags);                 return 0;
     case CMD_CHECK:   cmd_check(flags.input_file);       return 0;
     case CMD_LINT:    return cmd_lint(flags.input_file, flags.lint_json,
                                      flags.lint_fix);
     case CMD_FORMAT:  return cmd_format(flags.input_file,
                               flags.format_ascii ? FORMAT_CONTROL_ASCII : FORMAT_CONTROL_GLYPH,
+                              flags.format_doc_glyph ? FORMAT_DOC_GLYPH : FORMAT_DOC_INLINE,
                               flags.format_write, flags.format_check);
     case CMD_LSP:     cmd_lsp();                         return 0;
     case CMD_EVAL:    cmd_eval(flags.eval_code);         return 0;

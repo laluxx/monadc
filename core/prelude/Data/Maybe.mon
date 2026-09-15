@@ -157,15 +157,15 @@ method safeTail :: [a] -> Maybe [a]
 
 
 method maybe-test-inc :: Int -> Int
-  x -> x + 1
+  x -> (+ x 1)
 
 
 method maybe-test-add :: Int -> Int -> Int
-  x y -> x + y
+  x y -> (+ x y)
 
 
 method maybe-test-add3 :: Int -> Int -> Int -> Int
-  x y z -> x + y + z
+  x y z -> (+ (+ x y) z)
 
 
 tests

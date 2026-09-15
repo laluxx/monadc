@@ -8,7 +8,13 @@ typedef enum {
     FORMAT_CONTROL_ASCII
 } FormatControlStyle;
 
+typedef enum {
+    FORMAT_DOC_INLINE,
+    FORMAT_DOC_GLYPH
+} FormatDocStyle;
+
 int cmd_format(const char *path, FormatControlStyle style,
-               bool write_changes, bool check_only);
+               FormatDocStyle doc_style, bool write_changes,
+               bool check_only);
 
 #endif

@@ -474,3 +474,17 @@
   connects-to -> `monadc.context.main.pipeline` (=compile_module_to_object=
   declared extern in buildsystem.c:272, defined in main.c, is the actual
   compilation entry point called by =compile_module_recursive=)
+
+[FIX id:fix.buildsystem.hook-gate-and-clean-2026-09-15 date:2026-09-15 by:codex src:make,.githooks/pre-push,README.md,tests/test_make_test_routing.py conf:high]
+  Repository-managed hooks are part of the Python build frontend's quality
+  lifecycle. The pre-push hook delegates to =./make verify-push=, keeping the
+  clean-tree check and full quality gate in one implementation. The optional
+  checkout-local =.hooks/= state directory is treated as generated output by
+  =./make clean=; tracked =.githooks/= scripts remain source and are never
+  removed. The routing contract test verifies both integration points.
+
+[DEC id:dec.buildsystem.verify-push-override-2026-09-15 date:2026-09-15 by:codex src:make,.githooks/pre-push,src/testing/contracts/test_install.py conf:high]
+  The push gate remains fail-closed by default. An explicit
+  =--allow-failures= override (or =MONAD_VERIFY_PUSH_ALLOW_FAILURES=1= for a
+  Git push) reports the complete quality result but permits publishing an
+  intentionally incomplete branch. Generated-state hygiene is never bypassed.

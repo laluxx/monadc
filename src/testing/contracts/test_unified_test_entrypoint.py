@@ -49,12 +49,21 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
         self.assertIn("runner", result.stdout)
         self.assertIn("windows", result.stdout)
 
-    def test_makefile_routes_tests_through_canonical_entrypoints(self):
-        makefile = read("Makefile")
-        self.assertIn("-m src.testing.runner", makefile)
-        self.assertIn("$(TARGET_PATH) test runner", makefile)
-        self.assertIn("-m src.testing.contracts.test_how_to_examples", makefile)
-        self.assertNotIn("tests/test_", makefile)
+    def test_python_build_driver_routes_tests_through_canonical_entrypoints(self):
+        make_driver = read("make")
+        self.assertIn('"-m", "src.testing.runner"', make_driver)
+        self.assertIn('"-m", "src.testing.suites", "runner"', make_driver)
+        self.assertIn("src/testing/runner.py", make_driver)
+        self.assertIn('"--no-contracts" not in args', make_driver)
+        self.assertIn('parser.add_argument("--glyphs", default=None)', make_driver)
+        self.assertIn('("--profile", "Record compiler and fixture subprocess timings.")', make_driver)
+        self.assertNotIn("tests/test_", make_driver)
+
+    def test_contracts_have_a_distinct_terminal_mark(self):
+        console = read("src/tooling/console.py")
+        suites = read("src/testing/suites.py")
+        self.assertIn('"contract": ("◇", "C")', console)
+        self.assertIn("UI.mark('contract')", suites)
 
     def test_runner_suite_is_declared_in_one_host_registry(self):
         suites = read("src/testing/suites.py")
@@ -68,7 +77,9 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
     def test_tests_tree_is_authored_monad_only(self):
         files = [p for p in (ROOT / "tests").rglob("*") if p.is_file()]
         self.assertTrue(files)
-        non_monad = [p.relative_to(ROOT) for p in files if p.suffix != ".mon"]
+        # ``.mqti`` is the runner's ignored, generated metadata cache; it is
+        # not an authored test sidecar and may exist after ``./make test``.
+        non_monad = [p.relative_to(ROOT) for p in files if p.suffix not in {".mon", ".mqti"}]
         self.assertEqual(non_monad, [])
 
     def test_readme_advertises_public_test_front_doors_not_python_scripts(self):

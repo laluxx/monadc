@@ -6,7 +6,7 @@
 :TEST-MENU-PATH reader/sugar
 :TEST-CLI-TARGET reader sugar
 :TEST-TIER regression
-:TEST-EXPECT-DESUGAR (define all? (lambda ([p :: (( a -> Bool ))] [xs :: ([ a ])] -> Bool) True))\n(define null? (lambda ([xs :: ([ a ])] -> Bool) True))\n(define ok (lambda ([rows :: ([ [ Int ] ])] -> Bool) (all? null? rows)))
+:TEST-EXPECT-DESUGAR (define all? (lambda ([p :: ( a -> Bool )] [xs :: ([ a ])] -> Bool) True))\n(define null? (lambda ([xs :: ([ a ])] -> Bool) True))\n(define ok (lambda ([rows :: ([ [ Int ] ])] -> Bool) (all? null? rows)))
 :TEST-STATUS wisp-function-arg-regression-2026-06-20
 
 define all? :: (a -> Bool) -> [a] -> Bool

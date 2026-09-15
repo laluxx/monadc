@@ -357,7 +357,7 @@ method tail :: [a] -> [a]
 
 
 method count :: [a] -> Int
-  xs -> length xs
+  xs -> __rt_count xs
 
 
 method empty? :: [a] -> Bool
@@ -472,13 +472,28 @@ instance Sequence [a]
 
   uncons [] -> nil
   uncons [value|rest] -> (value, strict rest)
-  lower values -> ProducerState sequence-transition values
+  lower values -> (ProducerState sequence-transition values)
 
 
 instance ProductiveSequence [a]
 
 
 instance FiniteSequence [a]
+
+
+instance Sequence Coll
+  type Element Coll = a
+  type Strategy Coll = Strict
+  uncons values -> (if (rt_coll_is_empty values)
+                     nil
+                     (rt_coll_head values, strict (rt_coll_drop values 1)))
+  lower values -> ProducerState sequence-transition values
+
+
+instance ProductiveSequence Coll
+
+
+instance FiniteSequence Coll
 
 
 instance MaterializedSequence Coll

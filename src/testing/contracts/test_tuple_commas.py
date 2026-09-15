@@ -24,7 +24,7 @@ class TupleCommaTests(unittest.TestCase):
             env["MONAD_CORE"] = str(core)
 
             proc = subprocess.run(
-                [str(MONAD), "--trace=ast", str(source)],
+                [str(MONAD), "--trace=ast", "-o", str(tmpdir / "tuple-out"), str(source)],
                 cwd=ROOT,
                 env=env,
                 text=True,

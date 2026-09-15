@@ -23,6 +23,8 @@ class FormatCliTests(unittest.TestCase):
         self.assertIn("monad format", formatter.stderr)
         self.assertIn("--control-flow=glyph", formatter.stderr)
         self.assertIn("--control-flow=ascii", formatter.stderr)
+        self.assertIn("--docstrings=glyph", formatter.stderr)
+        self.assertIn("--docstrings=inline", formatter.stderr)
         build = self.invoke("build", "help")
         self.assertEqual(build.returncode, 0, build.stderr)
         self.assertIn("monad build", build.stderr)
@@ -68,6 +70,31 @@ class FormatCliTests(unittest.TestCase):
             self.assertEqual(ascii2.stdout, ascii_result.stdout)
             glyph3 = self.invoke("format", "--control-flow=glyph", str(path))
             self.assertEqual(glyph3.stdout, glyph.stdout)
+
+    def test_docstring_styles_round_trip_with_presentation_punctuation(self):
+        inline_source = '''method not? :: Bool -> Bool
+  x | x       -> False
+    | otherwise -> True
+    :doc "Boolean negation."
+'''
+        with tempfile.TemporaryDirectory(prefix="monadc-format-doc-") as td:
+            path = Path(td) / "Bool.mon"
+            path.write_text(inline_source, encoding="utf-8")
+            glyph = self.invoke("format", "--control-flow=ascii", "--docstrings=glyph", str(path))
+            self.assertEqual(glyph.returncode, 0, glyph.stderr)
+            self.assertIn("╭─ Boolean negation\nmethod not?", glyph.stdout)
+            self.assertNotIn("╭─ Boolean negation.\n", glyph.stdout)
+            self.assertNotIn(":doc", glyph.stdout)
+
+            path.write_text(glyph.stdout, encoding="utf-8")
+            inline = self.invoke("format", "--control-flow=ascii", "--docstrings=inline", str(path))
+            self.assertEqual(inline.returncode, 0, inline.stderr)
+            self.assertIn('    :doc "Boolean negation."', inline.stdout)
+            self.assertNotIn("╭─", inline.stdout)
+
+            path.write_text(inline.stdout, encoding="utf-8")
+            inline2 = self.invoke("format", "--control-flow=ascii", "--docstrings=inline", str(path))
+            self.assertEqual(inline2.stdout, inline.stdout)
 
 
 if __name__ == "__main__":

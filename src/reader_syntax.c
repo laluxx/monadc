@@ -1271,3 +1271,147 @@ void reader_syntax_clear(void) {
     g_block_reader_error = 0;
     while (g_scope) reader_syntax_scope_pop();
 }
+
+static int reader_owner_is_core(const char *owner, const char *core_prefix)
+{
+    if (!owner || !core_prefix) return 0;
+    size_t n = strlen(core_prefix);
+    while (n > 0 && (core_prefix[n - 1] == '/' ||
+                     core_prefix[n - 1] == '\\')) n--;
+    if (n == 0 || strncmp(owner, core_prefix, n) != 0) return 0;
+    return owner[n] == '\0' || owner[n] == '/' || owner[n] == '\\';
+}
+
+void reader_syntax_clear_noncore(const char *core_dir)
+{
+    char *absolute = core_dir ? reader_syntax_absolute_path(core_dir) : NULL;
+    const char *prefix = absolute ? absolute : core_dir;
+    if (!prefix || !*prefix) {
+        reader_syntax_clear();
+        free(absolute);
+        return;
+    }
+
+    size_t reader_kept = 0;
+    for (size_t i = 0, out = 0; i < g_reader_count; i++) {
+        RSReader *reader = &g_readers[i];
+        if (reader_owner_is_core(reader->owner_file, prefix)) {
+            if (out != i) g_readers[out] = g_readers[i];
+            out++;
+            reader_kept++;
+            continue;
+        }
+        for (size_t j = 0; j < reader->rule_count; j++) {
+            free(reader->rules[j].token);
+            free(reader->rules[j].target);
+            free(reader->rules[j].delimiter);
+            free(reader->rules[j].source_file);
+        }
+        free(reader->rules);
+        free(reader->type);
+        free(reader->owner_file);
+    }
+    /* Compacting structs with owned pointers is safe after the pass above;
+     * retained entries were copied byte-for-byte and now occupy the prefix. */
+    g_reader_count = reader_kept;
+    if (g_reader_count == 0) {
+        free(g_readers); g_readers = NULL; g_reader_capacity = 0;
+    } else if (g_reader_capacity > g_reader_count * 2) {
+        RSReader *shrunk = realloc(g_readers,
+                                   g_reader_count * sizeof(*g_readers));
+        if (shrunk) {
+            g_readers = shrunk;
+            g_reader_capacity = g_reader_count;
+        }
+    }
+
+    for (size_t i = 0, out = 0; i < g_type_rule_count; i++) {
+        RSTypeRule *rule = &g_type_rules[i];
+        if (reader_owner_is_core(rule->owner_file, prefix)) {
+            if (out != i) g_type_rules[out] = g_type_rules[i];
+            out++;
+            continue;
+        }
+        free(rule->open); free(rule->close); free(rule->target);
+        free(rule->owner_file);
+    }
+    /* The loop's output index is intentionally recomputed to avoid exposing
+     * the private temporary variable outside its scope. */
+    {
+        size_t kept = 0;
+        while (kept < g_type_rule_count &&
+               reader_owner_is_core(g_type_rules[kept].owner_file, prefix))
+            kept++;
+        g_type_rule_count = kept;
+        if (g_type_rule_count == 0) {
+            free(g_type_rules); g_type_rules = NULL; g_type_rule_capacity = 0;
+        } else if (g_type_rule_capacity > g_type_rule_count * 2) {
+            RSTypeRule *shrunk = realloc(g_type_rules,
+                                         g_type_rule_count * sizeof(*g_type_rules));
+            if (shrunk) {
+                g_type_rules = shrunk;
+                g_type_rule_capacity = g_type_rule_count;
+            }
+        }
+    }
+
+    for (size_t i = 0, out = 0; i < g_term_rule_count; i++) {
+        RSTermRule *rule = &g_term_rules[i];
+        if (reader_owner_is_core(rule->owner_file, prefix)) {
+            if (out != i) g_term_rules[out] = g_term_rules[i];
+            out++;
+            continue;
+        }
+        free(rule->open); free(rule->close); free(rule->empty_target);
+        free(rule->elements_target); free(rule->filter_target);
+        free(rule->owner_file);
+    }
+    {
+        size_t kept = 0;
+        while (kept < g_term_rule_count &&
+               reader_owner_is_core(g_term_rules[kept].owner_file, prefix))
+            kept++;
+        g_term_rule_count = kept;
+        if (g_term_rule_count == 0) {
+            free(g_term_rules); g_term_rules = NULL; g_term_rule_capacity = 0;
+        } else if (g_term_rule_capacity > g_term_rule_count * 2) {
+            RSTermRule *shrunk = realloc(g_term_rules,
+                                         g_term_rule_count * sizeof(*g_term_rules));
+            if (shrunk) {
+                g_term_rules = shrunk;
+                g_term_rule_capacity = g_term_rule_count;
+            }
+        }
+    }
+
+    for (size_t i = 0, out = 0; i < g_block_reader_count; i++) {
+        RSBlockReader *reader = &g_block_readers[i];
+        if (reader_owner_is_core(reader->owner_file, prefix)) {
+            if (out != i) g_block_readers[out] = g_block_readers[i];
+            out++;
+            continue;
+        }
+        free(reader->keyword); free(reader->target); free(reader->owner_file);
+    }
+    {
+        size_t kept = 0;
+        while (kept < g_block_reader_count &&
+               reader_owner_is_core(g_block_readers[kept].owner_file, prefix))
+            kept++;
+        g_block_reader_count = kept;
+        if (g_block_reader_count == 0) {
+            free(g_block_readers); g_block_readers = NULL;
+            g_block_reader_capacity = 0;
+        } else if (g_block_reader_capacity > g_block_reader_count * 2) {
+            RSBlockReader *shrunk = realloc(
+                g_block_readers, g_block_reader_count * sizeof(*g_block_readers));
+            if (shrunk) {
+                g_block_readers = shrunk;
+                g_block_reader_capacity = g_block_reader_count;
+            }
+        }
+    }
+    g_block_reader_error = 0;
+    while (g_scope) reader_syntax_scope_pop();
+    free(absolute);
+}

@@ -953,7 +953,7 @@ static bool repl_try_record_literal_define(REPLContext *ctx, AST *ast, const cha
     EnvEntry *e = env_lookup(ctx->cg.env, name_expr->symbol);
     if (e) {
         if (e->source_ast) ast_free(e->source_ast);
-        e->source_ast = ast_clone(value_expr);
+        env_entry_set_source_ast(e, ast_clone(value_expr), true);
         free(e->source_text);
         e->source_text = line ? strdup(line) : NULL;
         free(e->llvm_name);

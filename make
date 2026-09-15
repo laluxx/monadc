@@ -65,12 +65,10 @@ class Renderer:
     color: bool = True
     verbose: bool = False
     theme: Theme = field(default_factory=Theme)
+    glyph_style: str = "unicode"
 
-    @staticmethod
-    def supports_glyph(glyph: str) -> bool:
-        if os.environ.get("MAKE_ASCII", "").strip().lower() in {"1", "true", "yes", "on"}:
-            return False
-        if os.environ.get("TERM") == "dumb":
+    def supports_glyph(self, glyph: str) -> bool:
+        if self.glyph_style == "ascii":
             return False
         enc = sys.stdout.encoding or "utf-8"
         try:
@@ -126,6 +124,7 @@ class Renderer:
             "warn": ("▲", "!"),
             "step": ("›", ">"),
             "bullet": ("◆", "*"),
+            "contract": ("◇", "C"),
             "note": ("•", "*"),
             "hint": ("↳", "->"),
         }
@@ -325,6 +324,17 @@ def parse_color_mode(raw: str | None) -> str:
     if value in ("auto", "tty", "default", ""):
         return "auto"
     raise CliError(f"invalid color mode '{raw}' (expected auto|always|never)")
+
+
+def parse_glyph_style(raw: str | None) -> str:
+    value = (raw or os.environ.get("MONAD_GLYPHS") or "").strip().lower()
+    if os.environ.get("MAKE_ASCII", "").strip().lower() in {"1", "true", "yes", "on"} and raw is None:
+        value = "ascii"
+    if value in {"", "unicode", "utf8", "utf-8", "rich", "pretty"}:
+        return "unicode"
+    if value in {"ascii", "plain", "fallback"}:
+        return "ascii"
+    raise CliError(f"invalid glyph style '{raw}' (expected unicode|ascii)")
 
 
 def color_enabled(mode: str) -> bool:
@@ -2140,19 +2150,21 @@ GENERATED_DIR_NAMES = frozenset({
 })
 GENERATED_SUFFIXES = frozenset({
     ".mqti", ".ll", ".bc", ".o", ".obj", ".pyc", ".pyo",
-    ".gcda", ".gcno", ".profraw", ".profdata", ".tmp",
+    ".gcda", ".gcno", ".profraw", ".profdata", ".tmp", ".witnesses",
 })
 GENERATED_EXACT_PATHS = frozenset({
     "MANIFEST.json",
     "compile_commands.json",
     "CMakeCache.txt",
+    "Show",
+    "show-sample",
     "tests/.test-results.json",
     "tests/.last-first-failure.org",
     "tests/.fuzz-results.json",
     "tests/.fuzz-history.json",
 })
 GENERATED_TREE_PATHS = frozenset({
-    "build",
+    "build", ".hooks",
     "dist",
     ".dryc",
     "tests/.last-failures",
@@ -2201,7 +2213,8 @@ def generated_artifacts() -> list[Path]:
         for name in list(dirs):
             path = base / name
             rel = path.relative_to(ROOT).as_posix()
-            if rel in GENERATED_TREE_PATHS or name in GENERATED_DIR_NAMES:
+            if (rel in GENERATED_TREE_PATHS or name in GENERATED_DIR_NAMES or
+                    name.startswith(".monadc-test-bin-")):
                 found.add(path)
             else:
                 pruned.append(name)
@@ -2310,7 +2323,26 @@ def command_test(args: list[str], ctx: AppContext) -> int:
     """
     jobs = ctx.jobs
     no_build = "--no-build" in args
-    forwarded = [arg for arg in args if arg != "--no-build"]
+    with_contracts = "--no-contracts" not in args
+    # Accept the presentation option in the command position as well as the
+    # global position, so ``./make test --glyphs ascii`` styles contracts and
+    # the authored runner consistently.
+    for index, arg in enumerate(args):
+        if arg == "--glyphs" and index + 1 < len(args):
+            UI.glyph_style = parse_glyph_style(args[index + 1])
+            os.environ["MONAD_GLYPHS"] = UI.glyph_style
+            break
+        if arg.startswith("--glyphs="):
+            UI.glyph_style = parse_glyph_style(arg.split("=", 1)[1])
+            os.environ["MONAD_GLYPHS"] = UI.glyph_style
+            break
+    forwarded = [arg for arg in args if arg not in {"--no-build", "--no-contracts"}]
+    if "--jobs" not in forwarded and not any(arg.startswith("--jobs=") for arg in forwarded):
+        # Build parallelism can legitimately be very high on a large host;
+        # fixture processes are heavier, so inherited global -j stays bounded.
+        # Use ``./make test --jobs N`` when intentionally overriding it.
+        test_jobs = min(jobs, 8)
+        forwarded.extend(["--jobs", str(test_jobs)])
     runner = ROOT / "src" / "testing" / "runner.py"
     started = time.perf_counter()
 
@@ -2323,18 +2355,66 @@ def command_test(args: list[str], ctx: AppContext) -> int:
         if not no_build and not metadata_only:
             build_project("debug", jobs=jobs)
         env = os.environ.copy()
-        if not metadata_only:
-            binary = find_binary(build_if_missing=not no_build, jobs=jobs)
-            env["MONAD_BINARY"] = str(binary)
-        proc = subprocess.run(
-            [sys.executable, "-B", "-m", "src.testing.runner", *forwarded],
-            cwd=str(ROOT), env=env, check=False,
-        )
-        if proc.returncode == 0:
+        if metadata_only:
+            proc = subprocess.run(
+                [sys.executable, "-B", "-m", "src.testing.runner", *forwarded],
+                cwd=str(ROOT), env=env, check=False,
+            )
+            return proc.returncode
+
+        binary = find_binary(build_if_missing=not no_build, jobs=jobs)
+        if not binary.is_file():
+            die(f"test: compiler binary is missing after build: {binary}")
+
+        # Keep test subprocesses independent of a concurrent clean/rebuild of
+        # build/.  The staged executable retains checkout-relative discovery
+        # by carrying sibling core and runtime paths.
+        with tempfile.TemporaryDirectory(prefix=".monadc-test-bin-", dir=str(ROOT)) as stage_name:
+            stage = Path(stage_name)
+            staged_binary = stage / binary.name
+            try:
+                os.link(binary, staged_binary)
+            except OSError:
+                shutil.copy2(binary, staged_binary)
+            chmod_executable(staged_binary)
+            core_link = stage / "core"
+            try:
+                core_link.symlink_to(ROOT / "core", target_is_directory=True)
+            except OSError:
+                shutil.copytree(ROOT / "core", core_link)
+            runtime = BUILD_ROOT / "lib" / "libmonad.a"
+            staged_runtime = stage / "libmonad.a"
+            if runtime.is_file():
+                try:
+                    os.link(runtime, staged_runtime)
+                except OSError:
+                    shutil.copy2(runtime, staged_runtime)
+            env["MONAD_BINARY"] = str(staged_binary)
+            env["MONAD_CORE"] = str(ROOT / "core")
+            if staged_runtime.is_file():
+                env["MONAD_RUNTIME_LIB"] = str(staged_runtime)
+            proc = subprocess.run(
+                [sys.executable, "-B", "-m", "src.testing.runner", *forwarded],
+                cwd=str(ROOT), env=env, check=False,
+            )
+
+            contracts_code = run_contract_suite(env) if with_contracts else 0
+        code = proc.returncode or contracts_code
+        if code == 0:
             UI.ok(f"tests completed in {format_elapsed(time.perf_counter() - started)}")
-        return proc.returncode
+        return code
 
     die("canonical src/testing runner is missing")
+
+
+def run_contract_suite(env: dict[str, str]) -> int:
+    """Run host-level Python contracts after the authored Monad fixtures."""
+    UI.section("Contracts")
+    UI.emit_wrapped(f"{UI.paint(UI.theme.warning, UI.mark('contract'))} ", "host contract suite")
+    return subprocess.run(
+        [sys.executable, "-B", "-m", "src.testing.suites", "runner"],
+        cwd=str(ROOT), env=env, check=False,
+    ).returncode
 
 
 def run_python_module(module: str, args: list[str] | None = None, *, env: dict[str, str] | None = None) -> int:
@@ -2441,11 +2521,19 @@ def command_generate_asm(which: str) -> CommandFunc:
 
 
 def command_verify_push(args: list[str], ctx: AppContext) -> int:
-    if args:
-        die("verify-push: no arguments are supported")
+    allow_failures = "--allow-failures" in args or os.environ.get(
+        "MONAD_VERIFY_PUSH_ALLOW_FAILURES", ""
+    ).strip() == "1"
+    unknown = [arg for arg in args if arg != "--allow-failures"]
+    if unknown:
+        die("verify-push: unknown option(s): " + " ".join(unknown))
     if command_clean(["--check"], ctx) != 0:
         return 1
-    return command_check([], ctx)
+    result = command_check([], ctx)
+    if result != 0 and allow_failures:
+        UI.warn("quality gate failed; continuing because --allow-failures was requested")
+        return 0
+    return result
 
 
 def command_check(args: list[str], ctx: AppContext) -> int:
@@ -2762,6 +2850,7 @@ GLOBAL_OPTIONS: tuple[tuple[str, str], ...] = (
     ("-v, --verbose", "Show executed subprocesses and fine-grained timing information."),
     ("--color MODE", "Color policy: always (default), auto, or never."),
     ("--no-color", "Disable ANSI color while preserving the same textual hierarchy."),
+    ("--glyphs MODE", "UI glyph policy: unicode (default, including redirected output) or ascii."),
     ("-h, --help", "Show top-level help, or focused help when used with a command."),
 )
 
@@ -2770,7 +2859,9 @@ ENVIRONMENT_HELP: tuple[tuple[str, str], ...] = (
     ("MAKE_PROJECT_NAME=name", "Override the package/project display name."),
     ("MAKE_JOBS=N", "Override automatic parallelism when -j is absent."),
     ("MAKE_JOB_MEMORY_MB=1536", "Estimated memory budget per automatic build job."),
-    ("MAKE_ASCII=1", "Force ASCII-only UI glyphs for constrained terminals and logs."),
+    ("MONAD_LINKER=lld|bfd", "Select or override the native fixture linker; default auto-detects lld."),
+    ("MONAD_GLYPHS=unicode|ascii", "Select rich Unicode (default) or ASCII-only UI glyphs."),
+    ("MAKE_ASCII=1", "Compatibility alias for MONAD_GLYPHS=ascii."),
     ("MAKE_CHECK_TARGETS=a,b", "Ordered ./make commands used by the composed quality gate."),
     ("MAKE_HYGIENE_EXTENSIONS=c,h,...", "Override text-source extensions scanned by source hygiene."),
     ("MAKE_COMPDB=0", "Disable automatic compilation-database refresh after successful builds."),
@@ -2894,19 +2985,73 @@ def command_build_mode(mode: str) -> CommandFunc:
     return handler
 
 
-def command_install(args: list[str], ctx: AppContext) -> int:
-    if args:
-        die("install: use environment variables PREFIX, BINDIR, LIBDIR, or INCDIR")
-    started = time.perf_counter()
-    target = build_project("debug", jobs=ctx.jobs)
+@dataclass(frozen=True)
+class InstallPaths:
+    prefix: Path
+    bindir: Path
+    libdir: Path
+    incdir: Path
+    core_dir: Path
+
+
+def install_paths(mode: str = "system") -> InstallPaths:
+    """Resolve the install tree without touching the filesystem.
+
+    ``local`` is deliberately checkout-relative so it is always usable by a
+    normal developer account.  The system form retains the PREFIX-family
+    overrides used by packaging and embedding contracts.
+    """
+    if mode == "local":
+        prefix = ROOT / "local"
+        return InstallPaths(prefix, prefix / "bin", prefix / "lib",
+                            prefix / "include" / "monad", prefix / "lib" / "monad" / "core")
+    if mode != "system":
+        raise ValueError(f"unknown install mode: {mode}")
     prefix = Path(os.environ.get("PREFIX", "/usr/local")).expanduser()
-    bindir = Path(os.environ.get("BINDIR", str(prefix / "bin")))
-    libdir = Path(os.environ.get("LIBDIR", str(prefix / "lib")))
-    incdir = Path(os.environ.get("INCDIR", str(prefix / "include" / "monad")))
-    core_dir = Path(os.environ.get("COREDIR", str(prefix / "lib" / "monad" / "core")))
-    for directory in (bindir, libdir, incdir):
+    return InstallPaths(
+        prefix,
+        Path(os.environ.get("BINDIR", str(prefix / "bin"))),
+        Path(os.environ.get("LIBDIR", str(prefix / "lib"))),
+        Path(os.environ.get("INCDIR", str(prefix / "include" / "monad"))),
+        Path(os.environ.get("COREDIR", str(prefix / "lib" / "monad" / "core"))),
+    )
+
+
+def _path_writable(path: Path) -> bool:
+    candidate = path
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return os.access(candidate, os.W_OK | os.X_OK)
+
+
+def install_needs_elevation(paths: InstallPaths) -> bool:
+    """Return whether creating the destination tree needs administrator rights."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return False
+    return not all(_path_writable(path) for path in
+                   (paths.bindir, paths.libdir, paths.incdir, paths.core_dir))
+
+
+def sudo_install_command(sudo: str = "sudo", paths: InstallPaths | None = None) -> list[str]:
+    """Build the internal, non-recursing privileged installer invocation."""
+    command = [sudo, sys.executable, "-B", str(ROOT / "make"), "install", "--_privileged"]
+    if paths is not None:
+        # sudo commonly sanitizes arbitrary environment variables.  Carry the
+        # resolved destinations as hidden CLI arguments so PREFIX-family
+        # overrides cannot silently turn into /usr/local in the child.
+        command.extend([
+            f"--_prefix={paths.prefix}", f"--_bindir={paths.bindir}",
+            f"--_libdir={paths.libdir}", f"--_incdir={paths.incdir}",
+            f"--_core-dir={paths.core_dir}",
+        ])
+    return command
+
+
+def _install_artifacts(target: Path, paths: InstallPaths, started: float) -> int:
+    for directory in (paths.bindir, paths.libdir, paths.incdir):
         directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(target, bindir / target.name)
+    shutil.copy2(target, paths.bindir / target.name)
+    chmod_executable(paths.bindir / target.name)
     libraries = [
         "libmonad.a", "libmonad-embed.a", "libmonad-embed.so",
         "libmonad-compiler.a", "libmonad-compiler.so",
@@ -2914,15 +3059,15 @@ def command_install(args: list[str], ctx: AppContext) -> int:
     for name in libraries:
         source = BUILD_ROOT / "lib" / name
         if source.exists():
-            shutil.copy2(source, libdir / name)
+            shutil.copy2(source, paths.libdir / name)
     for header in [ROOT / "src" / "runtime.h", *(ROOT / "src" / "embed" / "include" / "monad").glob("*.h")]:
-        shutil.copy2(header, incdir / ("runtime.h" if header.name == "runtime.h" else header.name))
-    if core_dir.exists():
-        shutil.rmtree(core_dir)
+        shutil.copy2(header, paths.incdir / ("runtime.h" if header.name == "runtime.h" else header.name))
+    if paths.core_dir.exists():
+        shutil.rmtree(paths.core_dir)
     for source in (ROOT / "core").rglob("*.mon"):
         if source.name.startswith(".#"):
             continue
-        destination = core_dir / source.relative_to(ROOT / "core")
+        destination = paths.core_dir / source.relative_to(ROOT / "core")
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
     if env_flag("PREWARM_REPL_CACHE", True):
@@ -2930,28 +3075,73 @@ def command_install(args: list[str], ctx: AppContext) -> int:
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        subprocess.run([str(bindir / target.name)], input=b"", stdout=subprocess.DEVNULL,
+        subprocess.run([str(paths.bindir / target.name)], input=b"", stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, check=False)
     UI.ok(f"install completed in {format_elapsed(time.perf_counter() - started)}")
     return 0
 
 
+def command_install(args: list[str], ctx: AppContext) -> int:
+    privileged = bool(args and args[0] == "--_privileged")
+    local = args == ["local"]
+    if privileged:
+        internal: dict[str, str] = {}
+        for item in args[1:]:
+            if not item.startswith("--_") or "=" not in item:
+                die("install: invalid internal privileged arguments")
+            key, value = item[3:].split("=", 1)
+            if key not in {"prefix", "bindir", "libdir", "incdir", "core-dir"}:
+                die("install: invalid internal privileged arguments")
+            internal[key] = value
+        if len(internal) != len(args) - 1:
+            die("install: invalid internal privileged arguments")
+    if args and not (privileged or local):
+        die("install: use './make install local' for a checkout-local install, or environment variables PREFIX, BINDIR, LIBDIR, INCDIR, and COREDIR")
+    started = time.perf_counter()
+    mode = "local" if local else "system"
+    paths = (InstallPaths(*(Path(internal[name]) for name in
+                            ("prefix", "bindir", "libdir", "incdir", "core-dir")))
+             if privileged and internal else install_paths(mode))
+    target = find_binary(build_if_missing=False) if privileged else build_project("debug", jobs=ctx.jobs)
+    if not local and not privileged and install_needs_elevation(paths):
+        sudo = shutil.which("sudo")
+        if not sudo:
+            die("system install needs administrator access, but sudo is unavailable",
+                hint="use './make install local' or set PREFIX to a writable directory")
+        UI.step("install: requesting administrator access through sudo")
+        result = subprocess.run(sudo_install_command(sudo, paths), cwd=ROOT, env=os.environ.copy(), check=False)
+        if result.returncode:
+            UI.fail(f"sudo install exited with status {result.returncode}")
+        return result.returncode
+    return _install_artifacts(target, paths, started)
+
+
 def command_uninstall(args: list[str], _ctx: AppContext) -> int:
-    if args:
-        die("uninstall: use environment variables PREFIX, BINDIR, LIBDIR, or INCDIR")
-    prefix = Path(os.environ.get("PREFIX", "/usr/local")).expanduser()
-    bindir = Path(os.environ.get("BINDIR", str(prefix / "bin")))
-    libdir = Path(os.environ.get("LIBDIR", str(prefix / "lib")))
-    incdir = Path(os.environ.get("INCDIR", str(prefix / "include" / "monad")))
-    core_dir = Path(os.environ.get("COREDIR", str(prefix / "lib" / "monad" / "core")))
-    for path in [bindir / "monad", *[libdir / name for name in (
+    local = args == ["local"]
+    if args and not local:
+        die("uninstall: use './make uninstall local' for the checkout-local tree, or environment variables PREFIX, BINDIR, LIBDIR, INCDIR, and COREDIR")
+    paths = install_paths("local" if local else "system")
+    for path in [paths.bindir / "monad", *[paths.libdir / name for name in (
         "libmonad.a", "libmonad-embed.a", "libmonad-embed.so",
         "libmonad-compiler.a", "libmonad-compiler.so",
     )]]:
         path.unlink(missing_ok=True)
-    for directory in (incdir, core_dir):
+    for directory in (paths.incdir, paths.core_dir):
         if directory.exists():
             shutil.rmtree(directory)
+    if local and paths.prefix.exists():
+        # Remove only empty directories created by the local installer; never
+        # delete user files that happen to share the checkout-local prefix.
+        for directory in sorted((p for p in paths.prefix.rglob("*") if p.is_dir()),
+                                key=lambda p: len(p.parts), reverse=True):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+        try:
+            paths.prefix.rmdir()
+        except OSError:
+            pass
     UI.ok("uninstall completed")
     return 0
 
@@ -3009,12 +3199,17 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         present=False,
     ),
     CommandSpec(
-        "install", "Build", "./make install",
+        "install", "Build", "./make install [local]",
         "Install the compiler, libraries, headers, and core library.", command_install,
+        (
+            ("local", "Install under ./local/bin and sibling checkout-local directories without sudo."),
+            ("PREFIX=PATH ./make install", "Override the system install tree; sudo is requested when needed."),
+        ),
     ),
     CommandSpec(
-        "uninstall", "Build", "./make uninstall",
+        "uninstall", "Build", "./make uninstall [local]",
         "Remove the installed compiler, libraries, headers, and core library.", command_uninstall,
+        (("local", "Remove the checkout-local installation under ./local."),),
     ),
     CommandSpec(
         "clean", "Build", "./make clean [--check]",
@@ -3051,6 +3246,10 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
             ("--validate-metadata", "Validate required TEST-* metadata and exit."),
             ("--validate-context-links", "Validate TEST-CONTEXT references and exit."),
             ("--no-build", "Use an existing compiler instead of building first."),
+            ("--jobs N", "Run independent fixtures concurrently with N workers."),
+            ("--no-contracts", "Skip host-level Python contract checks after the authored fixtures."),
+            ("--profile", "Record compiler and fixture subprocess timings."),
+            ("--profile-output PATH", "Write the opt-in timing report to PATH."),
         ),
         present=False,
     ),
@@ -3150,8 +3349,8 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
     ),
     CommandSpec(
         "verify-push", "Quality", "./make verify-push",
-        "Run the clean-tree and quality gates used before pushing.", command_verify_push,
-        no_args=True,
+        "Run the clean-tree and quality gates used before pushing. Add --allow-failures only for an explicit push override.", command_verify_push,
+        options=(("--allow-failures", "Return success after reporting quality failures; clean-tree violations still block the push."),),
     ),
     CommandSpec(
         "context-visualizer", "Quality", "./make context-visualizer",
@@ -3310,6 +3509,7 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--version", action="store_true")
     parser.add_argument("--color", nargs="?", const="always", default=None)
     parser.add_argument("--no-color", action="store_true")
+    parser.add_argument("--glyphs", default=None)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-j", "--jobs", type=int, default=0)
     global_args: list[str] = []
@@ -3333,6 +3533,12 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
                 global_args.append("--color=always")
                 i += 1
             continue
+        if arg == "--glyphs":
+            if i + 1 >= len(argv):
+                raise CliError("--glyphs requires unicode or ascii")
+            global_args.extend([arg, argv[i + 1]])
+            i += 2
+            continue
         if arg in ("-j", "--jobs"):
             if i + 1 >= len(argv):
                 raise CliError(f"{arg} requires a positive integer")
@@ -3351,6 +3557,10 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
             i += 1
             continue
         if arg.startswith("--color="):
+            global_args.append(arg)
+            i += 1
+            continue
+        if arg.startswith("--glyphs="):
             global_args.append(arg)
             i += 1
             continue
@@ -3400,7 +3610,10 @@ def _main(argv: list[str]) -> int:
     ns, rest = parse(argv)
     mode = "never" if ns.no_color else parse_color_mode(ns.color)
     UI.color = color_enabled(mode)
+    glyph_style = parse_glyph_style(ns.glyphs)
     UI.verbose = bool(ns.verbose)
+    UI.glyph_style = glyph_style
+    os.environ["MONAD_GLYPHS"] = glyph_style
 
     if ns.version:
         print(f"{PROJECT.name} build frontend")

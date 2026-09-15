@@ -50,7 +50,7 @@ method vec-to-list :: Vec n a -> [a]
 
 
 instance Functor (Vec n)
-  map f values -> vec-map f values
+  map f values -> (vec-map f values)
 
 
 instance Foldable (Vec n)

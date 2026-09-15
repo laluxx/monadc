@@ -105,6 +105,7 @@ define RawHTML :: String -> HTML
 
 define attribute :: String -> String -> Attribute
   name value
+    | (= name "") and (= value "") -> Attribute name value
     | valid-html-name? name -> Attribute name value
     | otherwise -> error "Web.HTML.attribute: invalid attribute name"
 

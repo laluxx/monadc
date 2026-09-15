@@ -1,0 +1,6 @@
+[
+  {"line":20,"col":14,"type":"symbol","name":"module"},
+  {"line":20,"col":14,"type":"symbol","name":"Main"},
+  {"line":22,"col":14,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"define"},{"line":22,"col":23,"type":"symbol","name":"same"},{"line":22,"col":23,"type":"lambda","params":[{"name":"x","type":"Int"}],"return_type":"Int","body":[{"line":0,"col":0,"type":"list","items":[{"line":22,"col":51,"type":"list","items":[{"line":22,"col":52,"type":"symbol","name":"go"},{"line":0,"col":0,"type":"symbol","name":"x"}]},{"line":22,"col":58,"type":"symbol","name":"where"},{"line":22,"col":64,"type":"symbol","name":"go"}]}]}]},
+  {"line":28,"col":14,"type":"list","items":[{"line":28,"col":15,"type":"symbol","name":"show"},{"line":28,"col":20,"type":"list","items":[{"line":28,"col":21,"type":"symbol","name":"same"},{"line":28,"col":26,"type":"number","value":"7"}]}]}
+]

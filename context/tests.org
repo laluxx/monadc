@@ -1406,3 +1406,99 @@ Test-driven observations and failure records for the corresponding subsystem.
   covering deterministic C aggregate arguments and returns without a display.
   The existing old-Core predicate-guard and variadic-signature fixtures cover
   the adjacent raw-array element and rest-parameter inference repairs.
+
+[FIX id:fix.tests.make-staged-binary-and-contract-ui-2026-09-15 date:2026-09-15 by:codex src:make,src/testing/suites.py conf:high]
+  =./make test= stages the built compiler and runtime archive before invoking
+  authored fixtures, so a concurrent clean or rebuild cannot invalidate
+  subprocesses with a missing =build/bin/monad=. It then runs host contracts by
+  default; contract modules use a distinct hollow-diamond marker (or =C= in
+  ASCII mode). Pass =--no-contracts= when only authored fixtures are intended.
+
+[FIX id:fix.tests.unicode-compilation-ui-2026-09-15 date:2026-09-15 by:codex src:make,src/tooling/console.py,src/testing/runner.py conf:high]
+  The build and authored-test front ends use Unicode UI glyphs by default even
+  when stdout is redirected, preserving the readable hierarchy in Emacs
+  =compilation-mode=. TTY detection is no longer an implicit downgrade. Use
+  =--glyphs ascii= or =MONAD_GLYPHS=ascii= for constrained logs; =MAKE_ASCII=1=
+  remains a compatibility alias.
+
+[FIX id:fix.tests.range-array-runtime-golden-2026-09-15 date:2026-09-15 by:codex src:tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.arrays/rt_range_arrays.mon conf:high]
+  The stepped and closed range codegen fixture must assert the values it
+  actually materializes: =[0 1 2 3]= and =[1 3 5 7]=.  Its previous embedded
+  stdout payload asserted two empty arrays, contradicting the fixture purpose
+  and the compiler's range semantics.
+
+[FIX id:fix.tests.stepped-range-comma-reader-2026-09-15 date:2026-09-15 by:codex src:reader.c,tests/codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.rt.range.enum.helpers/rt_range_enum_helpers.mon conf:high]
+  Parenthesized stepped ranges such as =(1,3..7)= must be recognized before
+  generic tuple handling.  The comma lookahead can parse =3..7= as the second
+  tuple element; fold that nested range into =AST_RANGE(start=1, step=3,
+  end=7)= so Data.Enum lowering and runtime output remain consistent.
+
+[FIX id:fix.tests.sequence-count-runtime-dispatch-2026-09-15 date:2026-09-15 by:codex src:core/prelude/Sequence.mon,src/runtime.c conf:high]
+  The polymorphic =Sequence.count= method delegates to =__rt_count= rather
+  than list-only =length=.  Representation-aware dispatch is required for
+  strings, arrays, lists, sets, and maps; map values previously reached the
+  list path and incorrectly reported zero.
+
+[FIX id:fix.tests.raw-list-sequence-predicates-2026-09-15 date:2026-09-15 by:codex src:runtime.c,tests/codegen/branches/collections/strings/atom.codegen.collection.string-boundary-index/collection-string-boundary-and-index.mon conf:high]
+  Sequence predicate methods pass raw list representations to the runtime.
+  =rt_coll_contains= and the starts/ends-with helpers must normalize those
+  pointers before reading a RuntimeValue tag; otherwise valid string-backed
+  list predicates are reported false.  Empty raw lists have a NULL first word,
+  so that sentinel is normalized as well instead of being mistaken for a
+  boxed integer-zero value.
+
+[FIX id:fix.tests.runner-skip-redundant-reader-emit-2026-09-15 date:2026-09-15 by:codex src/testing/runner.py,src/testing/contracts/test_run.py conf:high]
+  Compile/run fixtures without JSON, desugar, IR, corpus, or special reader
+  assertions skip the separate =--emit-json= pass.  Reader goldens still emit
+  and validate ASTs; ordinary codegen fixtures now compile and link once.
+
+[FIX id:fix.tests.profile-link-bottleneck-2026-09-15 date:2026-09-15 by:codex src:main.c,src/testing/contracts/test_run.py conf:high]
+  Linux =perf= measurements separate the test costs: front-end emission is
+  about 60ms for a representative fixture, while GNU =ld= consumed roughly
+  500ms of the native link.  LLVM =lld= links the same objects in about 70ms.
+  Native fixture links therefore select =lld= when =ld.lld= is available, and
+  the runner contract covers the explicit =MONAD_LINKER= selection.  Fixture
+  execution is now bounded-parallel via =--jobs=; =./make -jN= also supplies a
+  capped worker count when no test override is given.
+
+[FIX id:fix.tests.opt-in-compilation-profile-2026-09-15 date:2026-09-15 by:codex src:src/testing/runner.py,src/testing/contracts/test_run.py conf:high]
+  The authored runner now accepts =--profile= and records compiler versus
+  fixture subprocess durations per selected test. It writes a stable JSON
+  report (default =build/test/profile.json=, override with =--profile-output=)
+  and prints the ten slowest cases. Profiling is opt-in so the normal 1407-case
+  regression gate keeps its existing output and timing behavior.
+
+[FIX id:fix.tests.parallel-fixture-runner-2026-09-15 date:2026-09-15 by:codex src:src/testing/runner.py,src/testing/contracts/test_run.py conf:high]
+  Independent authored fixtures now run concurrently using a bounded worker
+  pool (auto-capped at eight, or overridden with =--jobs N=). Each worker gets
+  an isolated HOME for mutable user/FFI state, while all workers use one
+  suite-scoped prewarmed core-object cache. Completed results are rendered in
+  the original fixture order. =--fail-fast= and =--max-failures= stay serial
+  so early-stop semantics remain exact. A five-fixture sample dropped from
+  about 6.4s at one worker to 3.7s at four workers on the profiling host.
+
+[FIX id:fix.tests.shared-core-cache-2026-09-15 date:2026-09-15 by:codex src:main.c,src/testing/runner.py,src/testing/contracts/test_checkout_local_paths.py conf:high]
+  The test runner prewarms a temporary suite core cache once and passes it via
+  =MONAD_CORE_CACHE=. Core object/interface artifacts are then reused across
+  fixture subprocesses without exposing the user's cache; per-fixture =HOME=
+  directories still isolate FFI and mutable caches. A compiler contract covers
+  the override path and verifies that core artifacts stay outside fixture homes.
+
+[FIX id:fix.tests.linear-batch-compiler-2026-09-15 date:2026-09-15 by:codex src:src/main.c,src/cli.c,src/cli.h,src/completion.c,src/testing/runner.py,src/testing/contracts/test_run.py conf:high]
+  The compiler now has =monad batch=, a line-oriented stdin protocol where
+  each non-empty line is =<input.mon> TAB <output-path>=. Common flags are
+  supplied once; each job reports =BATCH OK= or =BATCH FAIL= and the process
+  exits non-zero if any job fails. This is intentionally semantically
+  equivalent to separate invocations today (per-job registries are cleaned),
+  but removes process startup overhead and establishes the test/profiling path
+  for a future persistent frontend session. The authored runner now uses one
+  persistent batch client per worker for ordinary compile/run fixtures, passing
+  each fixture's private HOME as an optional third field; reader goldens,
+  diagnostics, and test blocks retain their specialized direct subprocesses.
+
+[FIX id:fix.tests.batch-rss-recycling-2026-09-15 date:2026-09-15 by:codex src:src/testing/runner.py,src/testing/contracts/test_run.py conf:high]
+  Persistent batch compilation exposed a native frontend retention slope of
+  roughly 120 MiB per job. The runner therefore recycles a batch client after
+  four jobs or 512 MiB resident memory (when =/proc= exposes RSS), whichever
+  comes first. A real-process contract verifies that five jobs span multiple
+  compiler PIDs, and a guarded 8-worker smoke run stayed below 4 GiB peak RSS.

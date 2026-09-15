@@ -149,10 +149,19 @@ The public test front doors are:
 
 ```sh
 ./make test
+./make test --no-contracts
 build/bin/monad test list
 build/bin/monad test runner
 build/bin/monad test core
 ```
+
+`./make test` builds the compiler, runs the authored `tests/**/*.mon` fixtures,
+then runs the host-level contracts. The latter are shown with their own hollow
+diamond marker; pass `--no-contracts` when iterating on authored fixtures only.
+The UI keeps its Unicode glyphs when output is redirected, so Emacs
+`compilation-mode` receives the same readable hierarchy as an interactive
+terminal. Use `./make --glyphs ascii test` (or `MONAD_GLYPHS=ascii`) only for
+logs or environments that require a plain-ASCII stream.
 
 `tests/` is intentionally data, not test infrastructure. Every authored file in
 that tree is a `.mon` fixture. Expectations live in fixture metadata rather than
@@ -175,9 +184,43 @@ Useful selection commands include:
 ./make test --rerun-first-failure
 ./make test --fail-fast
 ./make test --validate-metadata
+./make test --jobs 8
+./make test --no-contracts --profile --profile-output build/test/profile.json
 ```
 
+For compiler throughput experiments, the native compiler also exposes a linear
+batch protocol. Supply common flags once and send one tab-delimited source and
+output path per line:
+
+```sh
+printf '%s\t%s\n' tests/a.mon /tmp/a tests/b.mon /tmp/b \
+  | build/bin/monad batch -q
+```
+
+Each successful job emits `BATCH OK <output>`; malformed or failed jobs make
+the command exit non-zero. `./make test` uses this protocol automatically for
+plain compile/run fixtures, while reader goldens, diagnostics, and test blocks
+keep their specialized subprocess paths. Per-fixture HOME directories remain
+isolated even inside the persistent compiler clients. Because the compiler's
+frontend currently retains native allocations across batch jobs, the runner
+recycles each client at four jobs or 512 MiB RSS, whichever comes first; this
+keeps parallel testing bounded on memory-constrained machines.
+
 All test frontends use the same restrained terminal presentation as `./make`.
+
+Native fixture links automatically use LLVM's `lld` when `ld.lld` is on `PATH`.
+Set `MONAD_LINKER=bfd` to reproduce the target-default linker when diagnosing a
+toolchain issue, or `MONAD_LINKER=lld` to require `lld` explicitly. `perf stat`
+and `perf record` are useful for separating front-end, link, and test-runner
+costs when tracking suite regressions.
+`--profile` is opt-in and records compiler versus fixture subprocess time for
+each selected test. It is intentionally separate from the normal gate so
+timing collection never changes the default test contract.
+Fixture execution is automatically parallelized with a bounded worker pool;
+`--jobs N` overrides the worker count. Early-stop modes such as `--fail-fast`
+remain serial so their stopping semantics stay exact.
+The runner prewarms one temporary core-object cache for the suite while keeping
+each fixture's HOME and mutable FFI cache isolated.
 
 ## Clean-Tree Policy
 
@@ -204,8 +247,20 @@ The hooks use:
 
 ```text
 pre-commit  ./make clean --check
-pre-push    ./make clean --check && ./make check
+pre-push    ./make verify-push
 ```
+
+`verify-push` is the single build-frontend entry point for the push gate: it
+checks generated-state hygiene and then runs the complete quality gate. The
+frontend also treats the optional checkout-local `.hooks/` state directory as
+generated output, so `./make clean` removes it without touching the tracked
+`.githooks/` scripts.
+
+When publishing an intentionally incomplete branch, pass
+`./make verify-push --allow-failures` (or set
+`MONAD_VERIFY_PUSH_ALLOW_FAILURES=1` for `git push`). The gate still reports
+all failures and never permits generated-state violations; only the final
+quality status is explicitly overridden.
 
 This makes a dirty source tree visible before garbage reaches Git history.
 
@@ -218,6 +273,28 @@ This makes a dirty source tree visible before garbage reaches Git history.
 The quality gate is fail-closed: source hygiene, build, and canonical tests.
 Additional checks belong in the Python frontend, which is the single source of
 truth for build, test, packaging, installation, and cleanup.
+
+## Installation
+
+Install into the checkout for a user-local toolchain:
+
+```sh
+./make install local
+```
+
+This writes the compiler to `./local/bin` (with libraries, headers, and core
+sources beside it) and never needs `sudo`. To install system-wide, use:
+
+```sh
+./make install
+```
+
+The Python frontend builds first as the current user, then asks `sudo` for
+administrator access only for the final copy/prewarm phase when `/usr/local`
+(or a `PREFIX` override) is not writable. The same Unicode progress UI remains
+visible while `sudo` prompts. `./make uninstall local` removes the checkout-local
+tree; `PREFIX`, `BINDIR`, `LIBDIR`, `INCDIR`, and `COREDIR` continue to override
+the system install locations.
 
 Sanitizer workflows are first-class:
 

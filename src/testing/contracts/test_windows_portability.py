@@ -35,17 +35,15 @@ class WindowsPortabilityTests(unittest.TestCase):
 
         self.assertTrue(any(path.endswith("monad.exe") for path in paths))
 
-    def test_makefile_has_windows_specific_link_and_target_contract(self):
-        makefile = read("Makefile")
+    def test_python_build_driver_has_windows_specific_target_contract(self):
+        make_driver = read("make")
 
-        self.assertIn("EXEEXT", makefile)
-        self.assertIn("WINDOWS_HOST", makefile)
-        self.assertIn("EXPORT_LDFLAG", makefile)
-        self.assertIn("$(TARGET_BASE)$(EXEEXT)", makefile)
-        self.assertIn("ROOT_COMPILER_SRC := $(filter-out $(SRC_DIR)/debugger.c", makefile)
-        self.assertIn("$(wildcard $(SRC_DIR)/tooling/*.c)", makefile)
-        self.assertIn("$(OBJ_DIR)/compiler/%.o: %.c $(HEADERS)", makefile)
-        self.assertIn("$(BIN_OUT_DIR)/$(TARGET)", makefile)
+        self.assertIn('if host_os() == "windows"', make_driver)
+        self.assertIn('target = bin_dir / ("monad.exe"', make_driver)
+        self.assertIn('if host_os() == "windows":', make_driver)
+        self.assertIn('path.name != "debugger.c"', make_driver)
+        self.assertIn('for directory in ("qtt", "concurrency", "effects", "tooling")', make_driver)
+        self.assertIn("ThreadPoolExecutor", make_driver)
 
     def test_cmake_gives_compiler_a_nontrivial_windows_stack(self):
         cmake = read("CMakeLists.txt")
@@ -242,12 +240,11 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("ADD(printf)", table_init)
 
     def test_all_build_paths_link_orc_jit_components(self):
-        makefile = read("Makefile")
+        make_driver = read("make")
         main_c = read("src/main.c")
         buildsystem_c = read("src/buildsystem.c")
 
-        self.assertIn("LLVM_COMPONENTS = core orcjit native passes", makefile)
-        self.assertIn("llvm-config --ldflags --libs $(LLVM_COMPONENTS)", makefile)
+        self.assertIn('"llvm-config", "--ldflags", "--libs", "core", "orcjit", "native", "passes"', make_driver)
         self.assertIn("llvm-config --ldflags --libs core orcjit native passes", main_c)
         self.assertIn("llvm-config --ldflags --libs core orcjit native passes", buildsystem_c)
 
@@ -255,8 +252,9 @@ class WindowsPortabilityTests(unittest.TestCase):
         debugger_h = read("src/debugger.h")
         cmake = read("CMakeLists.txt")
 
-        self.assertIn("#if !defined(_WIN32)", debugger_h)
-        self.assertIn("saved_termios", debugger_h)
+        self.assertIn("#ifndef MONAD_DEBUGGER_H", debugger_h)
+        self.assertIn("<stdint.h>", debugger_h)
+        self.assertNotIn("termios", debugger_h)
         self.assertIn("if(WIN32)", cmake)
         self.assertIn("list(REMOVE_ITEM MONADC_COMPILER_SOURCES", cmake)
         self.assertIn("src/debugger.c", cmake)

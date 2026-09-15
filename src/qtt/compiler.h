@@ -43,6 +43,9 @@ typedef enum {
 
 void qtt_compiler_set_trace(int verbosity, int explicit_level);
 void qtt_compiler_set_user_module(bool is_user_module);
+/* Release compiler-local module metadata after an independent compilation.
+ * REPL sessions intentionally keep this state until they are torn down. */
+void qtt_compiler_reset(void);
 bool qtt_compiler_trace_enabled(void);
 bool qtt_compiler_trace_detailed(void);
 bool qtt_compiler_trace_all(void);

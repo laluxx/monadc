@@ -11,6 +11,7 @@ typedef enum {
     CMD_CLEAN,
     CMD_INSTALL,
     CMD_TEST,
+    CMD_BATCH,
     CMD_CHECK,
     CMD_LINT,
     CMD_FORMAT,
@@ -48,6 +49,7 @@ typedef struct {
     bool format_write;
     bool format_check;
     bool format_ascii;
+    bool format_doc_glyph;
     bool allow_implicit_effects;
     bool debug_no_mouse;
     bool debug_truecolor;
@@ -76,6 +78,7 @@ int cmd_run_executable(const char *path);
 void cmd_clean(void);
 void cmd_install(void);
 void cmd_test(const CompilerFlags *flags);
+void cmd_batch(const CompilerFlags *flags);
 void cmd_check(const char *input_file);
 void cmd_lsp(void);
 void cmd_eval(const char *code);

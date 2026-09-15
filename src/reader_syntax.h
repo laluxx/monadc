@@ -18,5 +18,8 @@ void  reader_syntax_scope_push(const char *owner_file);
 void  reader_syntax_scope_allow(const char *owner_file);
 void  reader_syntax_scope_pop(void);
 void  reader_syntax_clear(void);
+/* Batch workers retain Core reader declarations while dropping registrations
+ * owned by ordinary test/user modules. */
+void  reader_syntax_clear_noncore(const char *core_dir);
 
 #endif

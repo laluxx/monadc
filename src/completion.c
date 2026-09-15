@@ -95,12 +95,14 @@ static const Entry ENTRIES[] = {
      "Install into ~/.local/bin", "Builds if needed, then installs the executable."},
     {ENTRY_COMMAND, "commands", 'c', "t", "test", "[suite|file.mon]", "monad test [list|runner|core|laws|windows|how-to|file.mon]",
      "Run tests", "Without a file or with list, prints the self-documenting test suite menu. With a suite, runs it. With a file, builds and runs that test binary."},
+    {ENTRY_COMMAND, "commands", 'c', "B", "batch", "[options]", "monad batch [options] < jobs.tsv",
+     "Compile stdin jobs in one process", "Reads one <input.mon> TAB <output-path> job per line and compiles them linearly. This is useful for profiling compiler throughput and avoids per-job process startup."},
     {ENTRY_COMMAND, "commands", 'c', "k", "check", "[file.mon]", "monad check file.mon",
      "Type-check only", "Useful for editors because the exit status is the diagnostic result."},
     {ENTRY_COMMAND, "commands", 'c', "L", "lint", "[--json|--fix] <path>", "monad lint core",
      "Lint Monad source", "Checks one file or recursively checks every .mon file in a directory."},
-    {ENTRY_COMMAND, "commands", 'c', "F", "format", "--control-flow=<glyph|ascii> [--write|--check] <path>", "monad format --control-flow=glyph core",
-     "Format Monad source", "Deterministically switches receiver-relative control flow between ASCII and canonical glyph notation."},
+    {ENTRY_COMMAND, "commands", 'c', "F", "format", "[--control-flow=<glyph|ascii>] [--docstrings=<inline|glyph>] [--write|--check] <path>", "monad format --control-flow=glyph --docstrings=inline core",
+     "Format Monad source", "Deterministically switches control-flow and docstring notation between their canonical styles."},
     {ENTRY_COMMAND, "commands", 'c', "e", "eval", "<code>", "monad eval \"3 + 3\"",
      "Evaluate one expression", "Runs the REPL evaluator once and exits."},
     {ENTRY_COMMAND, "commands", 'c', "R", "repl", "", "monad repl",
@@ -304,6 +306,9 @@ void print_subcommand_menu(const char *subcmd)
         section("control-flow styles");
         row(YELLOW, "--control-flow=glyph", "render guards as canonical ├─ / ╰─╮ / ▶ trees");
         row(YELLOW, "--control-flow=ascii", "render glyph trees as receiver-relative | guards");
+        section("docstring styles");
+        row(YELLOW, "--docstrings=inline", "place :doc metadata after the declaration body");
+        row(YELLOW, "--docstrings=glyph", "place a ╭─ presentation heading before the declaration");
         section("operation");
         row(YELLOW, "--write", "rewrite files atomically in place");
         row(YELLOW, "--check", "report drift without changing files; exit 1 when changes exist");

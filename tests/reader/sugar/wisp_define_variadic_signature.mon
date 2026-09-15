@@ -6,7 +6,7 @@
 :TEST-MENU-PATH reader/sugar
 :TEST-CLI-TARGET reader sugar
 :TEST-TIER regression
-:TEST-EXPECT-DESUGAR (define gcd (lambda ([__pm_args :: Int] -> (Int)) (if (rt_coll_is_empty __pm_args) 0 (undefined))))
+:TEST-EXPECT-DESUGAR (define gcd (lambda ([__pm_args :: Int] -> Int) (if (= __pm_args.__tag __adt_tag_[]) 0 (undefined))))
 :TEST-STATUS passing-baseline-2026-06-18
 
 define gcd :: . Int -> Int

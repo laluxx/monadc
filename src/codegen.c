@@ -1212,7 +1212,7 @@ static void codegen_preserve_callable_metadata(
     CodegenContext *ctx, EnvEntry *destination, AST *value) {
     if (!ctx || !destination || !value) return;
     if (value->type == AST_LAMBDA) {
-        destination->source_ast = ast_clone(value);
+        env_entry_set_source_ast(destination, ast_clone(value), true);
         if (value->lambda.return_type)
             destination->return_type = type_from_name(
                 value->lambda.return_type);
@@ -1224,7 +1224,7 @@ static void codegen_preserve_callable_metadata(
     if (source->return_type)
         destination->return_type = type_clone(source->return_type);
     if (source->source_ast)
-        destination->source_ast = ast_clone(source->source_ast);
+        env_entry_set_source_ast(destination, ast_clone(source->source_ast), true);
     destination->func_ref = source->func_ref;
     destination->is_closure_abi = source->is_closure_abi;
     destination->param_count = source->param_count;
@@ -1463,7 +1463,7 @@ static LLVMValueRef codegen_specialize(CodegenContext *ctx,
     if (shadow_entry) {
         shadow_entry->lifted_count   = 0;
         shadow_entry->is_closure_abi = false;
-        shadow_entry->source_ast     = entry->source_ast;
+        env_entry_set_source_ast(shadow_entry, entry->source_ast, false);
         shadow_entry->scheme         = NULL;
     }
 
@@ -5171,7 +5171,7 @@ static int jit_eval_refinement(CodegenContext *ctx,
             if (je) {
                 je->is_closure_abi = e->is_closure_abi;
                 je->lifted_count   = e->lifted_count;
-                je->source_ast     = e->source_ast;
+                env_entry_set_source_ast(je, e->source_ast, false);
             }
         }
     }
@@ -6174,7 +6174,7 @@ void codegen_predeclare_toplevel_functions(CodegenContext *ctx, AST **exprs,
             entry->llvm_name = strdup(LLVMGetValueName(fn));
             entry->lifted_count = 0;
             entry->is_closure_abi = false;
-            entry->source_ast = ast_clone(lambda);
+            env_entry_set_source_ast(entry, ast_clone(lambda), true);
         }
 
         free(param_types);
@@ -6720,7 +6720,7 @@ static CodegenResult codegen_forward_declared_call(CodegenContext *ctx, AST *ast
     if (entry) {
         if (entry->llvm_name) free(entry->llvm_name);
         entry->llvm_name = strdup(LLVMGetValueName(fn));
-        entry->source_ast = NULL;
+        env_entry_set_source_ast(entry, NULL, false);
         entry->lifted_count = 0;
         entry->is_closure_abi = false;
 
@@ -10324,7 +10324,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         // Store source_ast after body desugaring happens below.
                         // We set it to NULL here and update it after the body
                         // codegen loop where pmatch is expanded.
-                        e_fwd->source_ast     = ast_clone(lambda);
+                        env_entry_set_source_ast(e_fwd, ast_clone(lambda), true);
                     }
 
                     LLVMValueRef self_alloca = NULL;
@@ -10377,7 +10377,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (epoly) {
                             epoly->lifted_count   = 0;
                             epoly->is_closure_abi = false;
-                            epoly->source_ast     = ast_clone(lambda);
+                        env_entry_set_source_ast(epoly, ast_clone(lambda), true);
                             epoly->llvm_name      = strdup(LLVMGetValueName(func));
                         }
 
@@ -10867,7 +10867,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                     if (self_alloca) {
                         if (hm_scheme) env_set_scheme(ctx->env, var_name, hm_scheme);
                         EnvEntry *efinal = env_lookup(ctx->env, var_name);
-                        if (efinal) efinal->source_ast = ast_clone(lambda);
+                        if (efinal) env_entry_set_source_ast(efinal, ast_clone(lambda), true);
                     } else {
                         env_insert_func(ctx->env, var_name, env_params, total_params,
                                         ret_type, func, lambda->lambda.docstring, NULL);
@@ -10878,7 +10878,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             efinal->is_closure_abi = use_closure_abi;
                             // Clone the lambda AFTER body desugaring so source_ast
                             // contains the expanded if-chain, not the raw AST_PMATCH.
-                            efinal->source_ast     = ast_clone(lambda);
+                            env_entry_set_source_ast(efinal, ast_clone(lambda), true);
                         }
                     }
 
@@ -10891,7 +10891,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         if (self_alloca) {
                             if (hm_scheme) env_set_scheme(ctx->env, alias_sym, hm_scheme);
                             EnvEntry *alias_e = env_lookup(ctx->env, alias_sym);
-                            if (alias_e) alias_e->source_ast = ast_clone(lambda);
+                            if (alias_e) env_entry_set_source_ast(alias_e, ast_clone(lambda), true);
                         } else {
                             env_insert_func(ctx->env, alias_sym,
                                             clone_params(env_params, total_params),
@@ -10903,7 +10903,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                             if (alias_e) {
                                 alias_e->is_closure_abi = use_closure_abi;
                                 alias_e->lifted_count   = 0;
-                                alias_e->source_ast     = ast_clone(lambda);
+                                env_entry_set_source_ast(alias_e, ast_clone(lambda), true);
                                 alias_e->func_ref       = func;
                                 alias_e->llvm_name      = strdup(LLVMGetValueName(func));
                             }
@@ -11309,7 +11309,7 @@ CodegenResult codegen_expr(CodegenContext *ctx, AST *ast) {
                         ctx, evar, value_expr);
                     /* Preserve every user binding's source for lexical
                      * context reflection as well as refinement checks. */
-                    evar->source_ast = ast_clone(value_expr);
+                    env_entry_set_source_ast(evar, ast_clone(value_expr), true);
                 }
 
                 // Optional alias at items[4]
@@ -15768,6 +15768,16 @@ if (ast->list.count >= 5) {
                     CodegenResult lhs = codegen_expr(ctx, ast->list.items[1]);
                     CodegenResult rhs = codegen_expr(ctx, ast->list.items[2]);
 
+                    /* Equality on mixed Int/Float operands belongs to the
+                     * numeric comparison path.  Dispatching through Eq Int
+                     * or Eq Float first loses the required numeric coercion
+                     * and makes e.g. (= 3 3.0) false. */
+                    bool mixed_numeric = lhs.type && rhs.type &&
+                        ((type_is_integer(lhs.type) && type_is_float(rhs.type)) ||
+                         (type_is_float(lhs.type) && type_is_integer(rhs.type)));
+                    if (mixed_numeric)
+                        goto normal_comparison;
+
                     /* Kernel proof values have primitive, proof-irrelevant
                      * equality on their checked conclusion.  They are not a
                      * user-defined ADT and therefore must not require a
@@ -15847,6 +15857,12 @@ if (ast->list.count >= 5) {
                     /* We have a concrete type — check an instance exists */
                     TCInstance *inst = tc_find_instance(ctx->tc_registry, cls, type_name);
                     if (!inst) {
+                        /* Collections use the runtime structural equality
+                         * primitive; they intentionally do not require a
+                         * user-visible Eq Coll instance. */
+                        if (strcmp(type_name, "Coll") == 0 ||
+                            type_name[0] == '[')
+                            goto normal_comparison;
                         CODEGEN_ERROR(ctx,
                             "%s:%d:%d: error:\n"
                             "    • No instance for ‘%s %s’ arising from a use of ‘%s’\n"

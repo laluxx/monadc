@@ -2668,7 +2668,7 @@ Token lexer_next_token(Lexer *lex) {
 
         if (!is_symbol_start((unsigned char)peek(lex))) {
             READER_ERROR(lex->line, lex->column,
-                         "expected parameter name after lambda");
+                         "expected parameter name after λ");
         }
 
         // Collect up to 32 space-separated param names
@@ -6063,6 +6063,7 @@ static AST *parse_list(Parser *p) {
             // (define name value [:doc ""] [:alias sym])
           define_value_path:;
             AST *name_ast;
+            char *inline_alias = NULL;
 
             if (p->current.type == TOK_LBRACKET) {
                 int bracket_line = p->current.line;
@@ -6080,6 +6081,27 @@ static AST *parse_list(Parser *p) {
                 name_ast->column = p->current.column;
                 ast_list_append(bracket_list, name_ast);
                 p->current = lexer_next_token(p->lexer); // consume name
+                /* Value bindings may spell an exported alias directly in the
+                 * bracket form: [ascii-name unicode-alias :: Type].  Keep the
+                 * alias as define metadata while retaining the canonical
+                 * binding name in the type annotation list. */
+                if (p->current.type == TOK_SYMBOL && p->current.value &&
+                    strcmp(p->current.value, ":") != 0 &&
+                    strcmp(p->current.value, "::") != 0) {
+                    Lexer saved_lex = *p->lexer;
+                    Token peek_alias = lexer_next_token(p->lexer);
+                    bool followed_by_separator =
+                        peek_alias.type == TOK_COLON ||
+                        peek_alias.type == TOK_ARROW ||
+                        (peek_alias.type == TOK_SYMBOL && peek_alias.value &&
+                         strcmp(peek_alias.value, "::") == 0);
+                    free(peek_alias.value);
+                    *p->lexer = saved_lex;
+                    if (followed_by_separator) {
+                        inline_alias = my_strdup(p->current.value);
+                        p->current = lexer_next_token(p->lexer);
+                    }
+                }
                 if (p->current.type == TOK_COLON ||
                     (p->current.type == TOK_SYMBOL &&
                      (strcmp(p->current.value, "::") == 0 ||
@@ -6178,7 +6200,19 @@ static AST *parse_list(Parser *p) {
                             }
 
                             if (p->current.type == TOK_COLON) {
-                                ast_list_append(bracket_list, ast_new_symbol("::"));
+                                /* The lexer may expose the two characters of
+                                 * `::` as adjacent TOK_COLON tokens.  The
+                                 * first one was already consumed as the
+                                 * binding separator; do not manufacture a
+                                 * second `::` in the canonical AST. */
+                                bool previous_is_separator =
+                                    bracket_list->list.count > 0 &&
+                                    bracket_list->list.items[
+                                        bracket_list->list.count - 1]->type == AST_SYMBOL &&
+                                    strcmp(bracket_list->list.items[
+                                        bracket_list->list.count - 1]->symbol, "::") == 0;
+                                if (!previous_is_separator)
+                                    ast_list_append(bracket_list, ast_new_symbol("::"));
                                 p->current = lexer_next_token(p->lexer);
                                 continue;
                             }
@@ -6312,6 +6346,10 @@ static AST *parse_list(Parser *p) {
 
             // THEN parse metadata after the value
             DefineMetadata meta = parse_define_metadata(p);
+            if (!meta.alias_name && inline_alias)
+                meta.alias_name = inline_alias;
+            else
+                free(inline_alias);
 
             // Also accept a bare string as docstring (wisp style)
             if (!meta.docstring &&
@@ -7368,7 +7406,7 @@ static AST *parse_list(Parser *p) {
             type_name = parse_class_constraint_type(p);
         } else {
             compiler_error(p->current.line, p->current.column,
-                           "Expected type name or applied type after class name");
+                           "Expected type name after class name");
         }
 
         /* consume 'where' */
@@ -9338,6 +9376,29 @@ static AST *parse_list(Parser *p) {
 
             AST *second = reader_parse_tuple_element(p);
 
+            /* The tuple lookahead also sees the comma in stepped range
+             * syntax.  In `(start,step..end)`, parsing the second element
+             * naturally consumes `step..end` as a range; fold that range
+             * back into the stepped range whose start is `first`. */
+            if (second->type == AST_RANGE &&
+                second->range.start && second->range.end &&
+                !second->range.step &&
+                p->current.type == TOK_RPAREN) {
+                AST *step_range = second;
+                AST *node = ast_new_range(first, step_range->range.start,
+                                          step_range->range.end, false);
+                step_range->range.start = NULL;
+                step_range->range.end = NULL;
+                ast_free(step_range);
+                int end_col = p->current.column + 1;
+                p->current = lexer_next_token(p->lexer);
+                ast_free(list);
+                node->line = start_line;
+                node->column = start_column;
+                node->end_column = end_col;
+                return node;
+            }
+
             if (p->current.type == TOK_DOTDOT) {
                 p->current = lexer_next_token(p->lexer);
                 AST *end = NULL;
@@ -11180,6 +11241,23 @@ static AST *parse_explicit_judgment(Parser *p, AST *context) {
             }
         }
     }
+    /* Wisp's infix/judgment bridge can leave the delimiter as a standalone
+     * symbol anywhere in the preserved application list.  Recover the first
+     * `: Type` pair before reporting a missing delimiter. */
+    if (!embedded_claim && p->current.type != TOK_COLON && claim_source &&
+        claim_source->type == AST_LIST) {
+        for (size_t i = 1; i + 1 < claim_source->list.count; i++) {
+            AST *sep = claim_source->list.items[i];
+            if (!sep || sep->type != AST_SYMBOL || !sep->symbol ||
+                strcmp(sep->symbol, ":") != 0) continue;
+            embedded_claim = claim_source->list.items[i + 1];
+            ast_free(sep);
+            for (size_t j = i; j + 2 < claim_source->list.count; j++)
+                claim_source->list.items[j] = claim_source->list.items[j + 2];
+            claim_source->list.count -= 2;
+            break;
+        }
+    }
     if (p->current.type != TOK_COLON)
         if (!embedded_claim)
             compiler_error(p->current.line, p->current.column,
@@ -11238,6 +11316,8 @@ AST *parse_expr(Parser *p) {
         if (p->current.type != TOK_RBRACE &&
             p->current.type != TOK_RPAREN &&
             p->current.type != TOK_RBRACKET &&
+            p->current.type != TOK_QUASI_CLOSE &&
+            p->current.type != TOK_UNQUOTE_CLOSE &&
             p->current.type != TOK_EOF)
             end = parse_expr(p);
         AST *range = ast_new_range(expr_result, NULL, end, false);

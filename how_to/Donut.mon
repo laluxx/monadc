@@ -81,6 +81,10 @@ define [projection-scale :: Float]  30.0
 
 ;;; Types
 
+
+
+
+
 | The four sines/cosines that only change once per frame.
 layout Angles
   cos-a :: Float

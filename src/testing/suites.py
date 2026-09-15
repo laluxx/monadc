@@ -47,6 +47,7 @@ SUITES: dict[str, Suite] = {
             py("src.testing.contracts.test_windows_portability"),
             py("src.testing.contracts.test_cmake_build"),
             py("src.testing.contracts.test_readme_product"),
+            py("src.testing.contracts.test_install"),
             py("src.testing.contracts.test_unified_test_entrypoint"),
             py("src.testing.contracts.test_repl"),
             py("src.testing.contracts.test_tail_calls"),
@@ -124,7 +125,7 @@ def run_command(command: tuple[str, ...]) -> int:
     # otherwise inherits a legacy Windows code page in some CI shells.
     env["PYTHONUTF8"] = "1"
     module = command[command.index("-m") + 1] if "-m" in command else Path(command[0]).name
-    UI.step(module)
+    UI.emit(f"{UI.paint(UI.theme.warning, UI.mark('contract'))} ", module)
     result = subprocess.run(command, cwd=ROOT, env=env, check=False)
     if result.returncode:
         UI.fail(f"{module} exited with status {result.returncode}")

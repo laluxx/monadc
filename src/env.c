@@ -102,8 +102,21 @@ static void free_entry_fields(EnvEntry *e) {
         free(e->params);
         e->params = NULL;
     }
-    /* source_ast is owned by the define path and freed separately — do not free here */
+    if (e->source_ast_owned) ast_free(e->source_ast);
+    e->source_ast = NULL;
+    e->source_ast_owned = false;
     /* llvm_name already freed above */
+}
+
+void env_entry_set_source_ast(EnvEntry *entry, AST *source_ast, bool owned) {
+    if (!entry) {
+        if (owned) ast_free(source_ast);
+        return;
+    }
+    if (entry->source_ast_owned && entry->source_ast != source_ast)
+        ast_free(entry->source_ast);
+    entry->source_ast = source_ast;
+    entry->source_ast_owned = owned;
 }
 
 // TODO Free llvm_name
@@ -120,7 +133,11 @@ void env_free(Env *table) {
     }
     free(table->buckets);
     if (table->infer_env) {
-        infer_env_free(table->infer_env);
+        /* EnvEntry schemes are clones, while the HM environment owns the
+         * originals.  Release the originals (deduplicating aliases) at the
+         * same transaction boundary instead of leaking every inferred
+         * definition in a persistent batch worker. */
+        infer_env_free_owned_schemes(table->infer_env);
         table->infer_env = NULL;
     }
     free(table);
@@ -344,17 +361,20 @@ void env_insert_func(Env *table, const char *name,
         char *saved_source  = e->source_text;
         char *saved_llvm    = e->llvm_name;
         AST  *saved_ast     = e->source_ast;
+        bool saved_ast_owned = e->source_ast_owned;
         TypeScheme *saved_scheme = e->scheme;
         bool saved_is_ffi   = e->is_ffi;
         e->source_text = NULL;
         e->llvm_name   = NULL;
         e->source_ast  = NULL;
+        e->source_ast_owned = false;
         e->scheme      = NULL;
         free_entry_fields(e);
         e->name        = strdup(name);
         e->source_text = saved_source;
         e->llvm_name   = saved_llvm;
         e->source_ast  = saved_ast;
+        e->source_ast_owned = saved_ast_owned;
         e->scheme      = saved_scheme;
         e->is_ffi      = saved_is_ffi;
     } else {

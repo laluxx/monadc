@@ -1007,6 +1007,30 @@ int64_t rt_coll_count(RuntimeValue *coll) {
     return 0;
 }
 
+/* Sequence methods are compiled against the raw list representation, while
+ * the collection primitives normally receive a boxed RuntimeValue.  Normalize
+ * those raw pointers at the ABI boundary before inspecting their type tag. */
+static RuntimeValue *rt_coll_box_raw_list(RuntimeValue *value,
+                                           RuntimeValue *storage) {
+    if (!value) return value;
+    if ((uintptr_t)value >= 0x10000) {
+        int tag = (int)value->type;
+        /* An empty raw RuntimeList has a NULL first field, which reads as
+         * RT_NIL.  Sequence's raw-list ABI still needs that pointer boxed. */
+        /* Empty raw lists (and the empty C-string representation passed by
+         * generic String collection methods) begin with a NULL word.  A NULL
+         * first field is not a valid boxed RuntimeValue payload, so normalize
+         * it before treating the pointer as a value. */
+        if (*(void **)value == NULL || tag == RT_NIL ||
+            tag < 0 || tag > RT_CLOSURE) {
+            storage->type = RT_LIST;
+            storage->data.list_val = (RuntimeList *)value;
+            return storage;
+        }
+    }
+    return value;
+}
+
 /* Linkable form of Sequence's private cardinality primitive. Codegen may
  * specialize literal calls, while separately compiled core modules use this
  * stable representation-level ABI. */
@@ -1020,6 +1044,8 @@ bool __rt_set_singleton(RuntimeValue *set) {
 }
 
 int rt_coll_contains(RuntimeValue *coll, RuntimeValue *value) {
+    RuntimeValue coll_storage;
+    coll = rt_coll_box_raw_list(coll, &coll_storage);
     if (!coll) return 0;
     if (coll->type == RT_SET)
         return rt_set_contains(coll->data.set_val, value);
@@ -1032,6 +1058,25 @@ int rt_coll_contains(RuntimeValue *coll, RuntimeValue *value) {
     }
     if (coll->type == RT_LIST) {
         RuntimeList *xs = coll->data.list_val;
+        if (value && value->type == RT_STRING) {
+            size_t needle_len = strlen(value->data.string_val);
+            size_t hay_len = (size_t)rt_list_length(xs);
+            if (needle_len == 0) return 1;
+            if (needle_len > hay_len) return 0;
+            for (size_t i = 0; i + needle_len <= hay_len; i++) {
+                bool match = true;
+                for (size_t j = 0; j < needle_len; j++) {
+                    RuntimeValue *item = rt_list_nth(xs, (int64_t)(i + j));
+                    if (!item || item->type != RT_CHAR ||
+                        item->data.char_val != value->data.string_val[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return 1;
+            }
+            return 0;
+        }
         while (!rt_list_is_empty_list(xs)) {
             if (rt_equal_p(rt_list_car(xs), value)) return 1;
             xs = rt_list_cdr(xs);
@@ -1061,6 +1106,9 @@ static RuntimeValue *rt_coll_nth_value(RuntimeValue *coll, size_t index) {
 }
 
 static int rt_coll_affix(RuntimeValue *coll, RuntimeValue *affix, int at_end) {
+    RuntimeValue coll_storage, affix_storage;
+    coll = rt_coll_box_raw_list(coll, &coll_storage);
+    affix = rt_coll_box_raw_list(affix, &affix_storage);
     int64_t coll_count = rt_coll_count(coll);
     int64_t affix_count = rt_coll_count(affix);
     if (affix && affix_count == 0 &&

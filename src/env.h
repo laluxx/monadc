@@ -59,6 +59,7 @@ typedef struct EnvEntry {
     char *llvm_name;   // mangled LLVM symbol name, snapshot while module is alive
 
     AST *source_ast;   // original define AST, NULL if not available
+    bool source_ast_owned;
 
     char *source_text; // original define Source code, NULL if not available
     char *repl_ir;     // latest REPL-generated IR for this binding
@@ -80,6 +81,10 @@ typedef struct Env {
 Env *env_create(void);
 Env *env_create_child(Env *parent);
 void env_free(Env *table);
+/* Replace source metadata while preserving ownership.  Most entries receive
+ * an AST clone; a few short-lived child environments borrow an outer entry's
+ * pointer and must pass owned=false. */
+void env_entry_set_source_ast(EnvEntry *entry, AST *source_ast, bool owned);
 
 void env_insert(Env *table, const char *name, Type *type,
                      LLVMValueRef value);

@@ -270,6 +270,33 @@ class CheckoutLocalPathTests(unittest.TestCase):
             self.assertEqual(warm.returncode, 0, warm.stdout)
             self.assertTrue(output.exists(), warm.stdout)
 
+    def test_core_cache_override_keeps_shared_objects_outside_fixture_home(self):
+        with tempfile.TemporaryDirectory(prefix="monadc-core-cache-override-") as td:
+            temp = Path(td)
+            home = temp / "home"
+            cache = temp / "shared-core"
+            output = temp / "Bool"
+            source = temp / "main.mon"
+            home.mkdir()
+            source.write_text("(module Main)\n(import Data.Bool)\n(show (not? False))\n", encoding="utf-8")
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["MONAD_CORE"] = str(ROOT / "core")
+            env["MONAD_CORE_CACHE"] = str(cache)
+            result = subprocess.run(
+                [str(MONAD), str(source), "-o", str(output)],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertTrue(list(cache.glob("*.module.o")), result.stdout)
+            self.assertFalse((home / ".cache" / "monad" / "core").exists())
+
     def test_package_build_finds_checkout_core_from_project_directory(self):
         with tempfile.TemporaryDirectory(prefix="monadc-package-checkout-") as td:
             project = Path(td)

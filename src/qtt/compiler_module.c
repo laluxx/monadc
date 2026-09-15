@@ -50,6 +50,62 @@ typedef struct QttCompilerModule {
 
 static QttCompilerModule *compiler_modules;
 
+static void clear_effect_judgment(QttCompilerDefinition *definition);
+
+static void compiler_definition_free(QttCompilerDefinition *definition) {
+    if (!definition) return;
+    free(definition->name);
+    free(definition->provider_module);
+    free(definition->provider_name);
+    free(definition->callable_contract);
+    free(definition->hm_scheme);
+    clear_effect_judgment(definition);
+    qtt_core_free(definition->core);
+    free(definition);
+}
+
+static void compiler_module_free(QttCompilerModule *entry) {
+    if (!entry) return;
+    QttCompilerDefinition *definition = entry->definitions;
+    while (definition) {
+        QttCompilerDefinition *next = definition->next;
+        compiler_definition_free(definition);
+        definition = next;
+    }
+    for (size_t i = 0; i < entry->effect_declaration_count; i++) {
+        QttEffectDeclaration *declaration = &entry->effect_declarations[i];
+        free((char *)declaration->name);
+        free((char *)declaration->traits);
+        free((char *)declaration->operation);
+        free((char *)declaration->payload_type);
+        free((char *)declaration->result_type);
+        free((char *)declaration->operation_scheme);
+    }
+    free(entry->effect_declarations);
+    for (size_t i = 0; i < entry->handler_profile_count; i++) {
+        free((char *)entry->handler_profiles[i].name);
+        free((char *)entry->handler_profiles[i].effect_name);
+    }
+    free(entry->handler_profiles);
+    for (size_t i = 0; i < entry->trait_implication_count; i++) {
+        free(entry->trait_implications[i].premise);
+        free(entry->trait_implications[i].consequence);
+    }
+    free(entry->trait_implications);
+    qtt_module_free(entry->module);
+    free(entry);
+}
+
+void qtt_compiler_reset(void) {
+    QttCompilerModule *entry = compiler_modules;
+    compiler_modules = NULL;
+    while (entry) {
+        QttCompilerModule *next = entry->next;
+        compiler_module_free(entry);
+        entry = next;
+    }
+}
+
 static char *copy_text(const char *text) {
     size_t size = strlen(text) + 1;
     char *copy = malloc(size);

@@ -3,5 +3,7 @@ set -eu
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-./make clean --check
-exec ./make check
+if [ "${MONAD_VERIFY_PUSH_ALLOW_FAILURES:-}" = "1" ]; then
+    exec ./make verify-push --allow-failures
+fi
+exec ./make verify-push

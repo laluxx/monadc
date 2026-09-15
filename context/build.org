@@ -49,19 +49,49 @@ This file records build, verification, and installation context.
   User-facing build and CLI docs: [[file:info/build.org][info/build.org]] and
   [[file:info/cli.org][info/cli.org]].
 
+* Installation Modes (2026-09-15)
+:PROPERTIES:
+:ID: monadc.context.build.install-modes
+:CUSTOM_ID: install-modes
+:CONTEXT_KIND: decision
+:CONTEXT_DESCRIPTION: Checkout-local installation is user-writable; system installation delegates only the final copy phase to sudo.
+:CONTEXT_VERSION: 1
+:CONTEXT_SCOPE: repository-local
+:CONTEXT_OWNER: human
+:CONTEXT_MAINTAINER: codex
+:CONTEXT_AUDIENCE: human,llm
+:CONTEXT_CREATED: 2026-09-15
+:CONTEXT_UPDATED: 2026-09-15
+:CONTEXT_STABILITY: stable
+:CONTEXT_STATUS: active
+:SOURCE: user-request
+:CONFIDENCE: high
+:END:
+
+The canonical Python frontend supports two explicit installation modes:
+
+| Command | Destination | Privilege |
+|---------+-------------+-----------|
+| =./make install local= | =./local/bin= plus checkout-local lib/include/core trees | user only |
+| =./make install= | =/usr/local= (or =PREFIX=...) | Python builds as user, then invokes =sudo= only when the destination is not writable |
+
+The system installer keeps its Unicode UI while handing the final artifact
+copy and optional REPL-cache prewarm to a non-recursing privileged invocation.
+Use =./make uninstall local= to remove the checkout-local tree.
+
 #+CAPTION: Build Verification Ladder
 | Step    | Command           | Privilege | Required Before |
 |---------+-------------------+-----------+-----------------|
 | Clean   | =make clean=        | user      | compile         |
 | Compile | =make=              | user      | install         |
-| Install | =sudo make install= | root      | system use      |
+| Install | =./make install= | user, then internal sudo when needed | system use |
 
 * Build Command
 :PROPERTIES:
 :ID: monadc.context.build.command
 :CUSTOM_ID: build-command
 :CONTEXT_KIND: component
-:CONTEXT_DESCRIPTION: The full build/install command sequence (make clean && make && sudo make install), prerequisites, and the Makefile structure.
+:CONTEXT_DESCRIPTION: The full build/install command sequence (./make clean && ./make && ./make install), prerequisites, and the Python frontend structure.
 :CONTEXT_VERSION: 1
 :CONTEXT_SCOPE: repository-local
 :CONTEXT_OWNER: human
@@ -108,6 +138,18 @@ directory.
 [OBS id:obs.build.sudo-password-required src:command-output conf:high]
 In this environment, =sudo make install= can require an interactive password and
 may fail if no password is provided.
+
+[DEC id:dec.build.python-single-source-2026-09-15 date:2026-09-15 by:human+codex]
+  The executable root =make= script is the single build and test source of
+  truth. Test orchestration belongs there: it invokes the authored Monad runner
+  and the host contract registry, while any compatibility wrapper must remain
+  a thin convenience layer.
+
+[DEC id:dec.build.install-sudo-handoff-2026-09-15 date:2026-09-15 by:human+codex]
+  Supersedes the older shell-level =sudo make install= workflow. The supported
+  system command is =./make install=: it builds unprivileged, checks destination
+  writability, and re-executes the final installation phase through =sudo= with
+  resolved destination arguments. =./make install local= is always user-only.
 
 * Test Targets
 :PROPERTIES:
@@ -510,3 +552,19 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   CMD_INSTALL, CMD_TEST) ·
   `monadc.context.scripts` (test runner scripts invoked by make test) ·
   `monadc.context.tests-arch` (make test runs the full test suite)
+
+[FIX id:fix.build.auto-lld-fixture-links-2026-09-15 date:2026-09-15 by:codex]
+  Native fixture links now prefer =lld= when =ld.lld= is available, with the
+  target-default linker retained as a portable fallback and
+  =MONAD_LINKER=bfd= available for diagnostics. Perf measurements showed the
+  many-object fixture link, rather than front-end parsing, was the dominant
+  per-test cost; this change preserves a regression contract for the explicit
+  =MONAD_LINKER=lld= path.
+
+[FIX id:fix.build.opt-in-test-profiling-2026-09-15 date:2026-09-15 by:codex]
+  Compilation performance investigations use =./make test --profile= with a
+  focused selection before touching the full regression gate. The runner's
+  report separates compiler subprocess time from produced-fixture execution,
+  ranks the slowest cases, and writes =build/test/profile.json= (or the path
+  supplied by =--profile-output=). Profiling remains opt-in and must not alter
+  the default test output or pass/fail contract.

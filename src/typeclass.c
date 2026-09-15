@@ -486,14 +486,51 @@ void tc_register_class(TypeClassRegistry *reg, AST *ast, CodegenContext *ctx) {
         }
     }
 
+    /* A user module may intentionally redeclare a class name that Core
+     * preloaded.  Replace the declaration in place so deriving and method
+     * lookup use the user's method vocabulary (not the stale Core contract). */
+    TCClass *replacement = tc_find_class(reg, ast->class_decl.name);
+    if (replacement) {
+        free(replacement->name);
+        free(replacement->type_var);
+        for (int i = 0; i < replacement->superclass_count; i++) {
+            free(replacement->superclass_names[i]);
+            free(replacement->superclass_type_vars[i]);
+        }
+        free(replacement->superclass_names);
+        free(replacement->superclass_type_vars);
+        for (int i = 0; i < replacement->assoc_count; i++)
+            free(replacement->assoc_types[i]);
+        free(replacement->assoc_types);
+        for (int i = 0; i < replacement->method_count; i++) {
+            free(replacement->methods[i].name);
+            free(replacement->methods[i].type_str);
+        }
+        free(replacement->methods);
+        for (int i = 0; i < replacement->default_count; i++) {
+            free(replacement->default_names[i]);
+            ast_free(replacement->default_bodies[i]);
+        }
+        free(replacement->default_names);
+        free(replacement->default_bodies);
+        for (int i = 0; i < replacement->law_count; i++) {
+            free(replacement->law_names[i]);
+            free(replacement->law_types[i]);
+            ast_free(replacement->law_bodies[i]);
+        }
+        free(replacement->law_names);
+        free(replacement->law_types);
+        free(replacement->law_bodies);
+    }
+
     /* Grow registry if needed */
-    if (reg->class_count >= reg->class_cap) {
+    if (!replacement && reg->class_count >= reg->class_cap) {
         reg->class_cap *= 2;
         reg->classes = realloc(reg->classes,
                                sizeof(TCClass) * reg->class_cap);
     }
 
-    TCClass *c = &reg->classes[reg->class_count++];
+    TCClass *c = replacement ? replacement : &reg->classes[reg->class_count++];
     c->name       = strdup(ast->class_decl.name);
     c->type_var   = strdup(ast->class_decl.type_var);
 
@@ -724,6 +761,17 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
         return;
     }
 
+    /* A batch transaction may preload the same concrete instance from Core
+     * before compiling the user's module.  Re-emitting its ABI symbols would
+     * produce duplicate linker definitions (and cannot replace the already
+     * linked dictionary safely).  Keep the first coherent instance. */
+    if (tc_find_instance(reg, class_name, type_name)) {
+        if (getenv("MONAD_DEBUG_TYPECLASS"))
+            fprintf(stderr, "instance %s %s: already registered, reusing it\n",
+                    class_name, type_name);
+        return;
+    }
+
     /* Equations belong to this class, and each family has one definition.
      * Validate before superclass lookup or signature specialization so those
      * consumers cannot disagree about which duplicate equation to use. */
@@ -903,7 +951,18 @@ void tc_register_instance(TypeClassRegistry *reg, AST *ast,
             fprintf(stderr, "specialized %s %s.%s :: %s\n",
                     class_name, type_name, mname, sig_buf);
 
-        Type *method_sig = my_type_parse_fn_arrow(sig_buf);
+        /* `Fn ::` is metadata syntax, not part of the arrow grammar.  Strip
+         * it before specializing parameter annotations; otherwise the first
+         * parameter remains the instance head type even for methods such as
+         * showsPrec :: Int -> a -> String -> String. */
+        const char *arrow_sig = strstr(sig_buf, "::");
+        if (arrow_sig) {
+            arrow_sig += 2;
+            while (*arrow_sig == ' ' || *arrow_sig == '\t') arrow_sig++;
+        } else {
+            arrow_sig = sig_buf;
+        }
+        Type *method_sig = my_type_parse_fn_arrow(arrow_sig);
         Type *t_iter = method_sig;
 
         for (int pi = 0; pi < typed_lam->lambda.param_count; pi++) {

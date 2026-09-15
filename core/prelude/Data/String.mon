@@ -58,7 +58,7 @@ instance Sequence String
   uncons value
     | value = "" -> nil
     | otherwise  -> (nth value 0, strict (drop 1 value))
-  lower values -> ProducerState sequence-transition values
+  lower values -> (ProducerState sequence-transition values)
 
 
 instance ProductiveSequence String

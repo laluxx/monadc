@@ -592,6 +592,10 @@ struct DepCtx {
     int           depth;    // number of local binders = current level
     DepEnv       *globals;  // global definitions
     MetaCtx      *mctx;     // metavariable table (shared across ctx)
+    /* Root contexts own these semantic graphs. Child contexts borrow them. */
+    bool          owns_globals;
+    bool          owns_mctx;
+    void         *value_arena; /* private allocation registry for root cleanup */
     EvalEnv      *env;      // semantic environment for NbE
     DepAdtType   *adt_types;// ADT constructors available to coverage checking
     bool          owns_adt_types;

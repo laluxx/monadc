@@ -298,7 +298,7 @@ static int levenshtein(const char *a, const char *b)
 
 static const char *SUBCOMMANDS[] = {
     "new", "build", "run", "clean", "install",
-    "test", "check", "lint", "trace", "debug", "lsp", "eval",
+    "test", "batch", "check", "lint", "trace", "debug", "lsp", "eval",
     "repl", "jit", "spirv", "format", "help", NULL
 };
 
@@ -896,6 +896,10 @@ CompilerFlags parse_flags(int argc, char **argv) {
                 flags.format_ascii = false;
             else if (strcmp(argv[i], "--control-flow=ascii") == 0)
                 flags.format_ascii = true;
+            else if (strcmp(argv[i], "--docstrings=glyph") == 0)
+                flags.format_doc_glyph = true;
+            else if (strcmp(argv[i], "--docstrings=inline") == 0)
+                flags.format_doc_glyph = false;
             else if (strcmp(argv[i], "--write") == 0)
                 flags.format_write = true;
             else if (strcmp(argv[i], "--check") == 0)
@@ -942,6 +946,18 @@ CompilerFlags parse_flags(int argc, char **argv) {
         for (int i = option_start; i < argc; i++) {
             if (!parse_common_flag(argc, argv, &i, &flags)) {
                 fprintf(stderr, "Unknown test flag: %s\n", argv[i]);
+                print_usage(argv[0]); exit(1);
+            }
+        }
+        return flags;
+    }
+
+    /* monad batch [options] -> compile tab-delimited jobs from stdin. */
+    if (strcmp(argv[1], "batch") == 0) {
+        flags.mode = CMD_BATCH;
+        for (int i = 2; i < argc; i++) {
+            if (!parse_common_flag(argc, argv, &i, &flags)) {
+                fprintf(stderr, "Unknown batch flag: %s\n", argv[i]);
                 print_usage(argv[0]); exit(1);
             }
         }

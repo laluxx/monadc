@@ -22,33 +22,6 @@ Error: ORC could not add REPL module: In __repl_9, duplicate definition of symbo
 #+end_src
 
 
-* Navigation
-
-This file is the human-facing work queue and idea inbox. Detailed subsystem
-contracts live in =context/=; executable QTT design lives in =qtt/README.org=.
-Do not copy an authoritative roadmap back into several sections here.
-
-#+CAPTION: Authoritative roadmaps
-| Area                | Canonical document      | Current direction                          |
-|---------------------+-------------------------+--------------------------------------------|
-| Unified type theory | [[file:context/type-theory.org][context/type-theory.org]] | unified types, effects, and grades         |
-| Contextual proofs   | [[file:context/first-class-contextual-judgments.org][context/first-class-contextual-judgments.org]] | first-class judgments and derivation diagnostics |
-| Semanfftic IR       | [[file:context/ir.org][context/ir.org]]          | one checked compiler authority             |
-| QTT and reclamation | [[file:qtt/README.org][qtt/README.org]]          | graded arrows, effects, ownership lowering |
-| Memory safety       | [[file:context/memory.org][context/memory.org]]      | verified deterministic reclamation         |
-| Dependent types     | [[file:context/dep.org][context/dep.org]]         | kernel soundness and elaboration           |
-| Compiler inference  | [[file:context/infer.org][context/infer.org]]       | authoritative HM inference                 |
-| Test policy         | [[file:context/tests.org][context/tests.org]]       | focused regression then affected suite     |
-
-#+CAPTION: Queue organization
-| Section            | Purpose                                       |
-|--------------------+-----------------------------------------------|
-| =Inbox=              | untriaged ideas; no implementation commitment |
-| =Project workflow=   | lifecycle rules and definition of done        |
-| =Active queue=       | ordered actionable and research work          |
-| subsystem headings | accepted backlog grouped by domain            |
-| =Completed archive=  | append-only completed work                    |
-
 * Inbox
 
 Untriaged notes remain here until converted into a task with an observable
@@ -1761,19 +1734,3 @@ queue as a separate linked item.
 
   The strongest next cycle is fixing imported collection evidence, which unlocks sublime partial-progress bulk streams. After that: polling with deadlines, scatter/gather IO, subprocess
   pipe wiring, sockets, and Windows handles.
-
-
-
-* TODO Support this input parameter syntax
-
-#+begin_src monad
-define rule-101 :: [Int, Int, Int] -> Int
-  1 1 1 -> 0
-  1 1 0 -> 1
-  1 0 1 -> 1
-  1 0 0 -> 0
-  0 1 1 -> 0
-  0 1 0 -> 1
-  0 0 1 -> 1
-  0 0 0 -> 1
-#+end_src

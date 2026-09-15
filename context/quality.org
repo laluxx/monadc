@@ -190,7 +190,7 @@ python3 context/tools/context_graph.py context > /tmp/monadc-context-graph.json
 #+CAPTION: Header gaps
 | File | Missing |
 |------+---------|
-| none | none |
+| none | none    |
 
 * Round 3 Category Validation
 :PROPERTIES:
@@ -217,25 +217,25 @@ python3 context/tools/context_graph.py context > /tmp/monadc-context-graph.json
   and Org prose are all referentiable objects in the category model.
 
 #+CAPTION: Round 3 validation snapshot (garden proper, excl info/)
-| Check | Result |
-|-------+--------|
-| Org context files | 73 |
-| Org lines | 35211 |
-| Org headings | 975 |
-| Heading IDs | 930 |
-| Bracket records | 2671 |
-| Duplicate heading IDs | 0 |
-| Duplicate record IDs | 0 |
-| Header gaps | 0 |
-| Broken local file links | 0 |
-| Broken ID links | 0 |
-| Broken record refs | 0 |
-| Category objects | 3834 |
-| Category generating edges | 9509 |
-| Category unresolved edges (garden only) | 0 |
-| Category unresolved edges (with info/) | 2172 |
-| Category verifier status (garden only) | OK |
-| Category verifier status (with info/) | FAIL — expected (info/ files link to source files not in model) |
+| Check                                   |                                                          Result |
+|-----------------------------------------+-----------------------------------------------------------------|
+| Org context files                       |                                                              73 |
+| Org lines                               |                                                           35211 |
+| Org headings                            |                                                             975 |
+| Heading IDs                             |                                                             930 |
+| Bracket records                         |                                                            2671 |
+| Duplicate heading IDs                   |                                                               0 |
+| Duplicate record IDs                    |                                                               0 |
+| Header gaps                             |                                                               0 |
+| Broken local file links                 |                                                               0 |
+| Broken ID links                         |                                                               0 |
+| Broken record refs                      |                                                               0 |
+| Category objects                        |                                                            3834 |
+| Category generating edges               |                                                            9509 |
+| Category unresolved edges (garden only) |                                                               0 |
+| Category unresolved edges (with info/)  |                                                            2172 |
+| Category verifier status (garden only)  |                                                              OK |
+| Category verifier status (with info/)   | FAIL — expected (info/ files link to source files not in model) |
 
 #+BEGIN_SRC sh
 python3 context/tools/context_lint.py context --check-record-refs

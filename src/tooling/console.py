@@ -37,12 +37,10 @@ class Console:
     color: bool = True
     theme: Theme = field(default_factory=Theme)
     project: str = "monad"
+    glyph_style: str = field(default_factory=lambda: glyph_style_from_env())
 
-    @staticmethod
-    def supports_glyph(glyph: str) -> bool:
-        if os.environ.get("MAKE_ASCII", "").strip().lower() in {"1", "true", "yes", "on"}:
-            return False
-        if os.environ.get("TERM") == "dumb":
+    def supports_glyph(self, glyph: str) -> bool:
+        if self.glyph_style == "ascii":
             return False
         try:
             glyph.encode(sys.stdout.encoding or "utf-8")
@@ -88,6 +86,7 @@ class Console:
     def mark(self, kind: str) -> str:
         marks = {
             "bullet": ("◆", "*"),
+            "contract": ("◇", "C"),
             "ok": ("✓", "OK"),
             "fail": ("✗", "X"),
             "warn": ("▲", "!"),
@@ -168,3 +167,16 @@ def color_enabled(mode: str = "always") -> bool:
     if mode == "always":
         return True
     return (sys.stdout.isatty() or sys.stderr.isatty()) and os.environ.get("TERM", "") != "dumb"
+
+
+def glyph_style_from_env() -> str:
+    """Return the presentation glyph policy, independent of TTY detection.
+
+    Unicode is deliberately the default: redirected output is commonly read in
+    Emacs compilation buffers, which support the same rich glyphs as a terminal.
+    MAKE_ASCII remains a compatibility override for narrow or legacy logs.
+    """
+    raw = os.environ.get("MONAD_GLYPHS", "").strip().lower()
+    if not raw and os.environ.get("MAKE_ASCII", "").strip().lower() in {"1", "true", "yes", "on"}:
+        raw = "ascii"
+    return "ascii" if raw in {"ascii", "plain", "fallback"} else "unicode"

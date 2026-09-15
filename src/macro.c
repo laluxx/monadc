@@ -936,7 +936,12 @@ static AST *syntax_eval_impl(AST *node) {
             ast_free(argument);
             syntax_eval_error(node, "syntax-keyword-text expects keyword Syntax");
         }
-        AST *result = ast_new_string(argument->keyword);
+        const char *keyword = argument->keyword ? argument->keyword : "";
+        /* Syntax keyword text is the semantic name, not its reader sigil.
+         * Keeping ':' out of the value makes macro consumers agree with
+         * ordinary keyword comparisons (and with HTML attribute names). */
+        if (keyword[0] == ':') keyword++;
+        AST *result = ast_new_string(keyword);
         result->line = argument->line;
         result->column = argument->column;
         result->end_column = argument->end_column;

@@ -66,10 +66,10 @@ class Eq a => Ord a where
       if gt? x y then GT else EQ
 
   min x y ->
-    if lte? x y then x else y
+    (if (lte? x y) x y)
 
   max x y ->
-    if gte? x y then x else y
+    (if (gte? x y) x y)
 
   comparing f x y ->
     (compare (f x) (f y))
@@ -160,15 +160,8 @@ define float-nan-for-order? :: Float -> Bool
 
 
 instance Ord Float
-  lt? x y
-    | float-nan-for-order? x -> False
-    | float-nan-for-order? y -> True
-    | otherwise              -> x < y
-
-  lte? x y
-    | float-nan-for-order? x -> float-nan-for-order? y
-    | float-nan-for-order? y -> True
-    | otherwise              -> x <= y
+  lt? x y -> (< x y)
+  lte? x y -> (<= x y)
 
 
 method negate-for-comparing :: Int -> Int
@@ -187,23 +180,23 @@ method max3 :: Int -> Int -> Int -> Int
 
 method median3 :: Int -> Int -> Int -> Int
   :doc "Return the middle value of three integers."
-  x y z -> (((x + y) + z) - (min3 x y z)) - (max3 x y z)
+  x y z -> (- (- (+ (+ x y) z) (min3 x y z)) (max3 x y z))
 
 
 method less? :: Int -> Int -> Bool
-  x y -> x < y
+  x y -> (< x y)
 
 
 method less-or-equal? :: Int -> Int -> Bool
-  x y -> x <= y
+  x y -> (<= x y)
 
 
 method greater? :: Int -> Int -> Bool
-  x y -> x > y
+  x y -> (> x y)
 
 
 method greater-or-equal? :: Int -> Int -> Bool
-  x y -> x >= y
+  x y -> (>= x y)
 
 
 method compareDown :: Int -> Int -> Ordering
