@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-09-15
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -643,6 +643,13 @@ Cross-reference links to related context nodes. See [[file:connections.org][conn
   From =core/prelude/Data=, compile =Bool.mon= twice against an initially empty
   temporary home. The cold link must leave nonempty cached module objects and
   the warm compile must link successfully from the same cache.
+
+[FIX id:fix.module.relative-core-object-cache-path-2026-09-15 date:2026-09-15 by:codex src:src/main.c,src/testing/contracts/test_checkout_local_paths.py conf:high]
+  =get_obj_path= canonicalizes a relative source filename before comparing it
+  with the resolved core directory. Compiling =Bool.mon= from
+  =core/prelude/Data= therefore emits the main core artifact into
+  =$HOME/.cache/monad/core= and preserves it across linking, just like an
+  absolute source invocation.
 
 * fix.module.transitive-runtime-initialization-2026-08-04
 :PROPERTIES:

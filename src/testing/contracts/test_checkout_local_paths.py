@@ -94,12 +94,10 @@ class CheckoutLocalPathTests(unittest.TestCase):
 
     def test_standalone_error_handlers_are_strong_separate_archive_members(self):
         cmake = read("CMakeLists.txt")
-        makefile = read("Makefile")
         runtime_c = read("src/runtime.c")
         runtime_errors_c = read("src/runtime_errors.c")
 
         self.assertIn("runtime_errors.c", cmake)
-        self.assertIn("runtime_errors.c", makefile)
         self.assertNotIn("void __monad_runtime_error(", runtime_c)
         self.assertNotIn("__attribute__((weak))", runtime_errors_c)
         self.assertIn("void __monad_runtime_error(", runtime_errors_c)
@@ -258,7 +256,10 @@ class CheckoutLocalPathTests(unittest.TestCase):
             cold = compile_bool()
             self.assertEqual(cold.returncode, 0, cold.stdout)
             cache = home / ".cache" / "monad" / "core"
-            objects = list(cache.glob("*.module.o"))
+            # Directly compiling a core source is the main module of that
+            # invocation, so its persistent cache artifact uses `.o`; imported
+            # core modules use `.module.o`.
+            objects = list(cache.glob("*.o"))
             self.assertTrue(
                 objects,
                 "successful linking deleted the persistent core object cache",

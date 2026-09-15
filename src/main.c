@@ -1349,21 +1349,28 @@ static char *get_obj_path(const char *source_path, bool is_main_module,
                           bool test_mode) {
     const char *home = getenv("HOME");
 
+    /* Core modules are often compiled from their source directory with a
+     * relative filename (for example `Bool.mon`).  Resolve that filename
+     * before checking the core prefix so the persistent cache is used for
+     * both relative and absolute invocations. */
+    char source_real[1024];
+    bool source_real_valid = host_realpath(source_path, source_real) != NULL;
+    const char *resolved_source = source_real_valid ? source_real : source_path;
+
     char *core_prefix = monad_core_dir();
-    bool is_core_path = dir_prefix_matches(source_path, core_prefix);
+    bool is_core_path = dir_prefix_matches(resolved_source, core_prefix);
 
     const char *core_cache_override = getenv("MONAD_CORE_CACHE");
     bool share_prelude_cache = core_cache_override && *core_cache_override &&
-        (strstr(source_path, "/prelude/") != NULL ||
-         strstr(source_path, "\\prelude\\") != NULL);
+        (strstr(resolved_source, "/prelude/") != NULL ||
+         strstr(resolved_source, "\\prelude\\") != NULL);
     if (is_core_path && (home || share_prelude_cache)) {
-        const char *rel = source_path;
-        char source_real[1024];
+        const char *rel = resolved_source;
         char core_real[1024];
-        if (host_realpath(source_path, source_real) && host_realpath(core_prefix, core_real)) {
+        if (source_real_valid && host_realpath(core_prefix, core_real)) {
             rel = source_real + strlen(core_real);
-        } else if (strncmp(source_path, core_prefix, strlen(core_prefix)) == 0) {
-            rel = source_path + strlen(core_prefix);
+        } else if (strncmp(resolved_source, core_prefix, strlen(core_prefix)) == 0) {
+            rel = resolved_source + strlen(core_prefix);
         }
         while (*rel == '/' || *rel == '\\') rel++;
         char *base = base_no_ext(rel);

@@ -3,7 +3,9 @@
 #include <string.h>
 #include <errno.h>
 #ifdef _WIN32
+#define TokenType WindowsTokenType
 #include <windows.h>
+#undef TokenType
 #else
 #include <dirent.h>
 #endif

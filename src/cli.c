@@ -3,6 +3,7 @@
 #include "completion.h"
 #include "lsp_repl.h"
 #include "debugger.h"
+#include "compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

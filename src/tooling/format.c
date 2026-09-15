@@ -1,4 +1,5 @@
 #include "format.h"
+#include "compat.h"
 
 #include <dirent.h>
 #include <errno.h>

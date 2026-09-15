@@ -1,6 +1,7 @@
 #include "lint.h"
 #include "cst.h"
 #include "rewrite.h"
+#include "compat.h"
 
 #include <ctype.h>
 #include <dirent.h>

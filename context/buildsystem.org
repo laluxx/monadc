@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
-#+LAST_MODIFIED: 2026-06-18
+#+LAST_MODIFIED: 2026-09-15
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -488,3 +488,28 @@
   =--allow-failures= override (or =MONAD_VERIFY_PUSH_ALLOW_FAILURES=1= for a
   Git push) reports the complete quality result but permits publishing an
   intentionally incomplete branch. Generated-state hygiene is never bypassed.
+
+[DOC id:doc.buildsystem.make-performance-skill-2026-09-15 date:2026-09-15 by:codex src:make,src/testing/runner.py conf:high]
+  The reusable =monadc-make-performance= Codex skill documents the optimized
+  checkout workflow. It selects the smallest useful =./make= target, preserves
+  the frontend's CPU/RAM-aware job cap, explains automatic persistent batch
+  routing and bounded worker recycling, and standardizes timing/profile
+  comparisons. It also records the Unicode UI policy, generated-state clean
+  check, managed hook gate, local/system install distinction, and explicit
+  =verify-push --allow-failures= override. The skill lives at
+  =/home/l/.codex/skills/monadc-make-performance/SKILL.md= and should evolve
+  with the command help and runner contracts rather than duplicating them.
+
+[FIX id:fix.buildsystem.cmake-runtime-source-partition-2026-09-15 date:2026-09-15 by:codex src:CMakeLists.txt,src/testing/contracts/test_windows_portability.py conf:high]
+  CMake's root-source glob now uses the absolute =MONADC_SOURCE_DIR=, matching
+  the absolute runtime-source list. This makes =list(REMOVE_ITEM ...)= remove
+  =arena.c=, =runtime.c=, and =runtime_errors.c= from the compiler target on
+  Linux and Windows alike, leaving them in the dedicated runtime archive and
+  preventing duplicate strong error-handler definitions at link time.
+
+[FIX id:fix.buildsystem.windows-portability-shims-2026-09-15 date:2026-09-15 by:codex src:src/compat.h,src/runtime.c,src/cli.c,src/tooling/format.c,src/tooling/lint.c,src/testing/contracts/test_windows_portability.py conf:high]
+  The Windows CMake path supplies portable =asprintf= and =lstat= mappings
+  through =compat.h= and scopes the Windows SDK's =TokenType= macro while
+  compiling =runtime.c=. CLI, formatter, and linter translation units include
+  the shim directly, so MinGW UCRT64 no longer fails on POSIX-only declarations
+  or corrupts the runtime enum declarations.

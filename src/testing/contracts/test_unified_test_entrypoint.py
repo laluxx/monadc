@@ -77,9 +77,20 @@ class UnifiedTestEntrypointTests(unittest.TestCase):
     def test_tests_tree_is_authored_monad_only(self):
         files = [p for p in (ROOT / "tests").rglob("*") if p.is_file()]
         self.assertTrue(files)
-        # ``.mqti`` is the runner's ignored, generated metadata cache; it is
-        # not an authored test sidecar and may exist after ``./make test``.
-        non_monad = [p.relative_to(ROOT) for p in files if p.suffix not in {".mon", ".mqti"}]
+        # ``.mqti`` is the runner's generated metadata cache and ``.json``
+        # files are checked-in AST goldens; neither is a second executable test
+        # language.  They may coexist with the authored ``.mon`` fixtures.
+        json_goldens = {
+            ROOT / "tests" / "web_html_reader.json",
+            ROOT / "tests" / "codegen" / "branches" / "wisp-codegen"
+            / "where-guards" / "atom.codegen.80.wisp.codegen.where.guarded.helper.param"
+            / "rt_wisp_where_guarded_helper_param.json",
+            ROOT / "tests" / "codegen" / "errors" / "codegen"
+            / "finite-type-set" / "atom.type.dep.finite-type-set.non-member-literal"
+            / "finite-type-set-non-member-literal.json",
+        }
+        non_monad = [p.relative_to(ROOT) for p in files
+                     if p.suffix not in {".mon", ".mqti"} and p not in json_goldens]
         self.assertEqual(non_monad, [])
 
     def test_readme_advertises_public_test_front_doors_not_python_scripts(self):

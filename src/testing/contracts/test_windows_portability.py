@@ -51,6 +51,12 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("if(WIN32)", cmake)
         self.assertIn('target_link_options(monad PRIVATE "-Wl,--stack,1073741824")', cmake)
 
+    def test_cmake_keeps_runtime_sources_out_of_the_compiler_target(self):
+        cmake = read("CMakeLists.txt")
+
+        self.assertIn('file(GLOB MONADC_ROOT_SOURCES CONFIGURE_DEPENDS "${MONADC_SOURCE_DIR}/*.c")', cmake)
+        self.assertIn("list(REMOVE_ITEM MONADC_COMPILER_SOURCES ${MONADC_RUNTIME_SOURCES})", cmake)
+
     def test_prelude_detection_accepts_windows_path_separators(self):
         module_c = read("src/module.c")
         main_c = read("src/main.c")
@@ -130,12 +136,20 @@ class WindowsPortabilityTests(unittest.TestCase):
         main_c = read("src/main.c")
         ffi_c = read("src/ffi.c")
         repl_c = read("src/tooling/repl.c")
+        format_c = read("src/tooling/format.c")
+        lint_c = read("src/tooling/lint.c")
         types_c = read("src/types.c")
 
         self.assertIn("monad_strndup", compat_h)
         self.assertIn("#define strndup monad_strndup", compat_h)
         self.assertIn("monad_mkdir", compat_h)
         self.assertIn("_mkdir", compat_h)
+        self.assertIn("monad_asprintf", compat_h)
+        self.assertIn("#define asprintf monad_asprintf", compat_h)
+        self.assertIn("#define lstat _stat", compat_h)
+        self.assertIn('#include "compat.h"', cli_c)
+        self.assertIn('#include "compat.h"', format_c)
+        self.assertIn('#include "compat.h"', lint_c)
         self.assertIn("#if !defined(_WIN32)", cli_c)
         self.assertIn("host_system_success", cli_c)
         self.assertIn("host_mkdir", cli_c)
@@ -177,6 +191,9 @@ class WindowsPortabilityTests(unittest.TestCase):
         self.assertIn("#if defined(_WIN32)", repl_c)
         self.assertIn("#define TokenType WindowsTokenType", repl_c)
         self.assertIn("#undef TokenType", repl_c)
+        runtime_c = read("src/runtime.c")
+        self.assertIn("#define TokenType WindowsTokenType", runtime_c)
+        self.assertIn("#undef TokenType", runtime_c)
         self.assertIn("GetTempPathA", repl_c)
         self.assertIn("LoadLibraryA", repl_c)
         self.assertIn("GetProcAddress", repl_c)

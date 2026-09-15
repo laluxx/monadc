@@ -2,7 +2,7 @@
 #+AUTHOR: Codex
 #+DATE: 2026-06-16
 #+CREATED: 2026-06-11
-#+LAST_MODIFIED: 2026-08-10
+#+LAST_MODIFIED: 2026-09-15
 #+LANGUAGE: en
 #+STARTUP: hideblocks
 #+OPTIONS: toc:2 num:t
@@ -1502,3 +1502,10 @@ Test-driven observations and failure records for the corresponding subsystem.
   four jobs or 512 MiB resident memory (when =/proc= exposes RSS), whichever
   comes first. A real-process contract verifies that five jobs span multiple
   compiler PIDs, and a guarded 8-worker smoke run stayed below 4 GiB peak RSS.
+
+[FIX id:fix.tests.cmake-windows-contracts-2026-09-15 date:2026-09-15 by:codex src:src/testing/contracts/test_windows_portability.py,src/testing/contracts/test_checkout_local_paths.py,src/testing/contracts/test_unified_test_entrypoint.py conf:high]
+  CMake portability contracts cover absolute runtime-source partitioning,
+  Windows compatibility shims, and relative core-cache warm reuse. The unified
+  entrypoint contract also recognizes checked-in =.json= AST goldens alongside
+  authored =.mon= fixtures and generated =.mqti= metadata, keeping the CMake
+  contract suite valid on a clean checkout.
