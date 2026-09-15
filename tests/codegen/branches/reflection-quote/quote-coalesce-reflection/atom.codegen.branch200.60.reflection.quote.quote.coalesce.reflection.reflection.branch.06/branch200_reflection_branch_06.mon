@@ -20,6 +20,7 @@
 :TEST-COVERAGE codegen.c:5934-6017 null coalescing branch
 :TEST-COVERAGE codegen.c:6566 code branch
 :TEST-COVERAGE codegen.c:6602 assert-eq branch
+:TEST-EXPECT-STDOUT-B64 KCJ4IiB5KQo=
 
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote
 :TEST-USES-ATOM atom.codegen.subset.60.reflection.quote.quote.coalesce.reflection

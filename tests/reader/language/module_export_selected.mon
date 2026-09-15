@@ -1,0 +1,13 @@
+:TEST-ID tests.language.module_export_selected
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Module with export list parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY module_export_selected
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main [run show])

@@ -20,6 +20,7 @@
 :TEST-TAG env
 :TEST-COVERAGE codegen.c:3865 AST_PATH literal branch
 :TEST-COVERAGE codegen.c:1221 TYPE_PATH show branch
+:TEST-EXPECT-STDOUT-B64 Li9jb250ZXh0Ci4vdGVzdHMvZnV6emluZwo=
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/paths/atom.codegen.value.path-literal-value

@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.let_rec_mutual
+:TEST-CONTEXT monadc.context.reader.sugar.let-desugar
+:TEST-PURPOSE Letrec with mutually recursive bindings.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER known-fail
+:TEST-STATUS quarantined-baseline-2026-06-15
+
+(letrec [even? (lambda (n) (if (= n 0) True (odd? (- n 1)))) odd? (lambda (n) (= n 0) False (even? (- n 1)))] (even? 10))

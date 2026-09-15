@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.map_ratio_percent
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Map literals combine ratio and percentage values.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET map-literal,ratio,percentage,periodic-decimal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define rates #{:half 1/2 :vat 22% :third 0.(3)})

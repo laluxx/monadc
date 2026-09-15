@@ -17,6 +17,7 @@
 :TEST-COVERAGE codegen.c:6332-6532 layout pretty print branch
 :TEST-COVERAGE codegen.c:7543 __adt_tag branch
 :TEST-COVERAGE codegen.c:12902-12952 dot special form
+:TEST-EXPECT-STDOUT-B64 NAo=
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-USES-ATOM atom.codegen.subset.50.data.layout.layouts.adts.dot

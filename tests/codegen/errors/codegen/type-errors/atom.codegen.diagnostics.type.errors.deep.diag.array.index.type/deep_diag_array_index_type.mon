@@ -12,6 +12,7 @@
 :TEST-ATOM Array index codegen should require numeric index type.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:array index type checking
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6Cg==
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/type-errors/atom.codegen.diagnostics.type.errors.deep.diag.array.index.type

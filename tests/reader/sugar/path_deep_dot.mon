@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.path_deep_dot
+:TEST-CONTEXT monadc.context.reader.sugar.path-literal
+:TEST-PURPOSE Deep dot-relative path literal.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR ./path/to/file
+:TEST-STATUS passing-baseline-2026-06-15
+
+./path/to/file

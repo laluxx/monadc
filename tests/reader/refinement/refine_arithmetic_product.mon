@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_arithmetic_product
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Product expression predicate refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type ProductBound { n ∈ Int | (< (* n 2) 100) })

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.rt.cmp.mixed.types
 :TEST-ATOM-LEAF atom.codegen.20.operators.comparison.rt.cmp.mixed.types
 :TEST-CLI-TARGET codegen branches operators comparison
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQo=
 (module Main)
 (show (= 3 3.0))
 (show (< 3 3.5))

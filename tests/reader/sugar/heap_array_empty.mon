@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.heap_array_empty
+:TEST-CONTEXT monadc.context.reader.sugar.heap-array
+:TEST-PURPOSE Empty heap array literal marked with is_heap flag.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR []
+:TEST-STATUS passing-baseline-2026-06-15
+
+~[]

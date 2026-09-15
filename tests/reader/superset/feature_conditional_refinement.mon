@@ -1,0 +1,16 @@
+:TEST-ID tests.superset.feature_conditional_refinement
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Feature conditional combines with refinement declaration.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET feature-conditional,refinement
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+#+LINUX
+(type LinuxOnly { n ∈ Int | (> n 0) })
+#---
+(show 1)

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Begin sequence with both side effects and final value.
 :TEST-ATOM (begin (show 1) (show 2) 42) prints 1, 2 and returns 42.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQoyCjQyCg==
 
 :TEST-COVERAGE codegen.c:30-control-flow/begin-do-sequence branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

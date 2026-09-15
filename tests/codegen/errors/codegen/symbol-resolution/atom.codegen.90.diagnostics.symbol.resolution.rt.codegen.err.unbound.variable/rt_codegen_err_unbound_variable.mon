@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen reports an unbound variable used as a value.
 :TEST-ATOM (show missing) must fail with an unbound variable diagnostic.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IHVuYm91bmQgdmFyaWFibGU6IG1pc3NpbmcK
 
 :TEST-COVERAGE codegen.c:90-diagnostics/symbol-resolution branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

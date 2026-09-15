@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.count.head.tail.index
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.array.count.head.tail.index
 :TEST-CLI-TARGET codegen branches collections arrays-ranges
+:TEST-EXPECT-STDOUT-B64 MwoxMAoxMgpbMjAgMTJdCg==
 
 (module Main)
 (define xs [10 20 12])

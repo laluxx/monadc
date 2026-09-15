@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces unless arity.
 :TEST-ATOM (unless True) must fail because unless requires at least one body expression.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICd1bmxlc3MnIHJlcXVpcmVzIGF0IGxlYXN0IGEgY29uZGl0aW9uIGFuZCBvbmUgYm9keSBleHByZXNzaW9uCg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.top.level.method.wrong.file
 :TEST-ATOM-LEAF atom.reader.error.reader.top.level.method.wrong.file
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 dG9wLWxldmVsICdtZXRob2QnIGlzIG9ubHkgYWxsb3dlZCBpbiB0eXBlIGZpbGVzIG5hbWVkIFR5cGUubW9uCg==
 
 (module Main)
 (method display :: Int -> String)

@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/bitwise/atom.codegen.stateful.operator.bit.complement.restore
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.bit.complement.restore
 :TEST-CLI-TARGET codegen branches operators bitwise
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (~ (~ 42)))

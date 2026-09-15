@@ -1,0 +1,13 @@
+:TEST-ID tests.language.symbol_minus_gt
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Arrow as symbol parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY symbol_minus_gt
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+->

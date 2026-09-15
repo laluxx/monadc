@@ -12,6 +12,7 @@
 :TEST-ATOM Map runtime helpers should find keys and preserve size.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:map literal/runtime helper lowering
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQoyMAoyCg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/maps/atom.codegen.collections.maps.deep.map.find.contains.count

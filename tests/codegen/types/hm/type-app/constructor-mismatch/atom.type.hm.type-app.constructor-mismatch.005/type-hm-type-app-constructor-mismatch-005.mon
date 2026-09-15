@@ -28,6 +28,7 @@
 :TEST-USES-ATOM atom.codegen.adt.constructor
 :TEST-DEPENDS-ON atom.codegen.data.adt
 :TEST-REFINES atom.type.hm.type-app-mismatch
+:TEST-EXPECT-STDOUT-B64 dHlwZSBlcnJvcjogY2Fubm90IHVuaWZ5Cg==
 
 (module Main)
 (data Maybe Nothing | Just Int)

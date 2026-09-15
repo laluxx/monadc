@@ -11,6 +11,7 @@
 :TEST-ATOM starts-with? should require exactly two arguments.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:8620 starts-with?/ends-with? arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IOKAmHN0YXJ0cy13aXRoP+KAmSByZXF1aXJlcyAyIGFyZ3VtZW50cwo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.starts.with.arity

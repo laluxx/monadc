@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:8490-8508 keys/vals/find/merge map branches
 :TEST-COVERAGE codegen.c:8541 Map? branch
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQozCjMKMwo=
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/maps/atom.codegen.collection.map.merge.keys.vals

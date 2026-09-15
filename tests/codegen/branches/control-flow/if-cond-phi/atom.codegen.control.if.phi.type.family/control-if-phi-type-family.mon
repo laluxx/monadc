@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:7810-7896 PHI type classification
 :TEST-COVERAGE codegen.c:7898-7965 branch coercion and PHI construction
+:TEST-EXPECT-STDOUT-B64 eWVzCkIKMQpGYWxzZQo=
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/if-cond-phi/atom.codegen.control.if.phi.type.family

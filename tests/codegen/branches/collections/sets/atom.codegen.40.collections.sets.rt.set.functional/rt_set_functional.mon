@@ -9,6 +9,7 @@
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE Functional set operations conj and disj (untyped).
 :TEST-ATOM (contains? (conj {1 2 3} 4) 4) = True,
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 ;;           (contains? (disj {1 2 3} 3) 3) = False
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:40-collections/sets branch family

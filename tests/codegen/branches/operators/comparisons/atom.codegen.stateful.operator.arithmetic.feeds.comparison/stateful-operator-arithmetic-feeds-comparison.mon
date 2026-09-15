@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparisons/atom.codegen.stateful.operator.arithmetic.feeds.comparison
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.arithmetic.feeds.comparison
 :TEST-CLI-TARGET codegen branches operators comparisons
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQo=
 
 (module Main)
 (show (= (+ 20 22) (* 6 7)))

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if
 :TEST-ATOM-LEAF atom.codegen.20.operators.comparison.deep.comparison.result.feeds.if
 :TEST-CLI-TARGET codegen branches operators comparison
+:TEST-EXPECT-STDOUT-B64 MTAwCjIwMAo=
 
 (module Main)
 (show (if (< 1 2) 100 0))

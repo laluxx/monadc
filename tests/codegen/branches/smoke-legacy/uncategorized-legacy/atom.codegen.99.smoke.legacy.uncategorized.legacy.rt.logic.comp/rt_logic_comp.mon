@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/smoke-legacy/uncategorized-legacy/atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.logic.comp
 :TEST-ATOM-LEAF atom.codegen.99.smoke.legacy.uncategorized.legacy.rt.logic.comp
 :TEST-CLI-TARGET codegen branches smoke-legacy uncategorized-legacy
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpUcnVlCkZhbHNlCkZhbHNlClRydWUK
 (module Main)
 (show (and True True))
 (show (and True False))

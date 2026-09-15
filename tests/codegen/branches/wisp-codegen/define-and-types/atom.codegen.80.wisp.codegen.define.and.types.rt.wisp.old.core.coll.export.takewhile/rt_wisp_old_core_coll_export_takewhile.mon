@@ -1,3 +1,4 @@
+:TEST-EXPECT-STDOUT-B64 WzcgOF0KW10K
 module Coll
   [take drop takeWhile]
 

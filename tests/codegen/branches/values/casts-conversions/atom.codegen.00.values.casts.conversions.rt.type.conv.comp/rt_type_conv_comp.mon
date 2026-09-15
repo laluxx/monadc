@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/values/casts-conversions/atom.codegen.00.values.casts.conversions.rt.type.conv.comp
 :TEST-ATOM-LEAF atom.codegen.00.values.casts.conversions.rt.type.conv.comp
 :TEST-CLI-TARGET codegen branches values casts-conversions
+:TEST-EXPECT-STDOUT-B64 NDIKMwo0MgoweEZGCgowbzM3NwoKMGIxMTEKCkEK
 (module Main)
 (show (Float 42))
 (show (Int 3.14))

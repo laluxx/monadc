@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.instance.method.clause.open
 :TEST-ATOM-LEAF atom.reader.error.reader.instance.method.clause.open
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJygnIHRvIHN0YXJ0IGluc3RhbmNlIG1ldGhvZCBjbGF1c2UK
 
 (module Main)
 (instance Show Int where method)

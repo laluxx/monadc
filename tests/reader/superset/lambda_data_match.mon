@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.lambda_data_match
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Typed lambda combines data constructor and match.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET lambda-typed,data,match
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(data MaybeInt | None | Some Int)
+((lambda ([x : Int] -> Int) (match (Some x) with (Some y) -> y _ -> 0)) 3)

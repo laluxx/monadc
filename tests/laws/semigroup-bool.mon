@@ -1,0 +1,14 @@
+:TEST-ID tests.laws.semigroup-bool
+:TEST-CONTEXT dec.core.laws
+:TEST-PURPOSE Semigroup Bool laws
+:TEST-EXPECT test
+:TEST-MENU laws
+:TEST-MENU-PATH laws
+:TEST-CLI-TARGET laws
+:TEST-TIER regression
+
+import Data.Eq
+import Data.Semigroup
+module CoreSemigroupLaws []
+tests
+  laws Semigroup Bool

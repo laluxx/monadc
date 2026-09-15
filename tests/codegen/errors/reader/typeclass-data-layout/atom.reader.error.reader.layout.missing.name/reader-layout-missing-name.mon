@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.missing.name
 :TEST-ATOM-LEAF atom.reader.error.reader.layout.missing.name
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgbGF5b3V0IG5hbWUgYWZ0ZXIgJ2xheW91dCcK
 
 (module Main)
 (layout)

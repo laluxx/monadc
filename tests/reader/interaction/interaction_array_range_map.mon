@@ -1,0 +1,12 @@
+:TEST-ID tests.interaction.interaction_array_range_map
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Array ranges inside map literals parse.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(define ranges #{:small [0..3] :step [1,3..9]})

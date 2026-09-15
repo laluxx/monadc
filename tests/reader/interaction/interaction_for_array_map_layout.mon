@@ -1,0 +1,13 @@
+:TEST-ID tests.interaction.interaction_for_array_map_layout
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE For loop over array of layout values with map accumulator shape parses.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(layout Item [id :: Int])
+(for [item [(Item 1) (Item 2)]] #{:id item.id})

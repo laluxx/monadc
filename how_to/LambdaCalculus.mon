@@ -932,10 +932,9 @@ define lambda-banner :: String
   "Untyped λ-calculus — normal-order β-reduction\ntype :help for commands; :quit to leave\n"
 
 
-define start-repl :: () -io-> Int
-  _ ->
-    def ignored (write-text stdout lambda-banner)
-    lambda-repl 0
+define start-repl :: -io-> Int
+  def ignored (write-text stdout lambda-banner)
+  lambda-repl 0
 
 
-start-repl ()
+start-repl

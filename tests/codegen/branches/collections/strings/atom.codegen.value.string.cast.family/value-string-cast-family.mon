@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:12164 String cast target
 :TEST-COVERAGE codegen.c:1221 string show branch
+:TEST-EXPECT-STDOUT-B64 NDIKMy41ClRydWUKQQprZXB0Cg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/strings/atom.codegen.value.string.cast.family

@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.cond_mixed_bodies
+:TEST-CONTEXT monadc.context.reader.sugar.cond-to-if
+:TEST-PURPOSE Cond with mixed single and multi-body clauses.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(cond [a 1] [b 2 3] [else 0])

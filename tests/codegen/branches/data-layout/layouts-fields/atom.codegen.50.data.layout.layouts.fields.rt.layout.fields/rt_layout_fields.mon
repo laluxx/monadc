@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime layout construction and field access work for positional fields.
 :TEST-ATOM (Point 3 4) constructs a layout value whose .x and .y fields print 3 and 4.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo0Cg==
 
 :TEST-COVERAGE codegen.c:50-data-layout/layouts-fields branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

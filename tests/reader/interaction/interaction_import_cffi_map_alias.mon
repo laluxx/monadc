@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_import_cffi_map_alias
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Import alias, C include, and map literal parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(import Lib [value :as lib-value])
+(include "stdint.h")
+(type UserId Int)
+(define cfg #{:id 1 :foreign lib-value})

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.infix_comparison
+:TEST-CONTEXT monadc.context.reader.sugar.infix
+:TEST-PURPOSE Infix comparison operators.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (>= x 0)
+:TEST-STATUS passing-baseline-2026-06-15
+
+x >= 0

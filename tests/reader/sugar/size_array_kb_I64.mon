@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.size_array_kb_I64
+:TEST-CONTEXT monadc.context.reader.sugar.size-array
+:TEST-PURPOSE [16kb I64] desugars to sized I64 array.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define (buf :: Arr :: 2048 :: I64) [])
+:TEST-STATUS passing-baseline-2026-06-15
+
+define buf :: [16kb I64]

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.percent_integer
+:TEST-CONTEXT monadc.context.reader.sugar.percent
+:TEST-PURPOSE Integer percentage becomes ratio over 100.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR 33/100
+:TEST-STATUS passing-baseline-2026-06-15
+
+33%

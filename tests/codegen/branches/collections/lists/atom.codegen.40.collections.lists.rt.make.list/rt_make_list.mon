@@ -10,6 +10,7 @@
 :TEST-PURPOSE make-list catches uncovered dispatch path codegen.c:7345.
 :TEST-ATOM (make-list 3 "x") produces ("x" "x" "x").
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 KCJ4IiAieCIgIngiKQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

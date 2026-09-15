@@ -1,0 +1,16 @@
+:TEST-ID tests.sugar.drawer_round_trips_ignored
+:TEST-CONTEXT monadc.context.reader.drawers
+:TEST-PURPOSE Org-like :Name: drawers are accepted and skipped by the reader.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR 42
+:TEST-STATUS regression-2026-06-26
+
+:Round trips:
+assert-eq (int->digit (digit->int 0x30)) 0x30 "decimal roundtrip 0"
+assert-eq (int->hex-digit (hex-digit->int 0x66)) 0x66 "hex roundtrip f"
+:Round trips:
+42

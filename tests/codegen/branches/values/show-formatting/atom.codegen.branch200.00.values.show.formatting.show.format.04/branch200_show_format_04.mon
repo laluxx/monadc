@@ -15,6 +15,7 @@
 :TEST-TAG show
 :TEST-TAG format
 :TEST-COVERAGE codegen.c:6054-6104 variadic show formatter placeholder path
+:TEST-EXPECT-STDOUT-B64 bGVmdCBtaWQgcmlnaHQK
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-USES-ATOM atom.codegen.subset.00.values.show.formatting

@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.show.multiple.scalar.sequence
 :TEST-ATOM-LEAF atom.codegen.stateful.value.show.multiple.scalar.sequence
 :TEST-CLI-TARGET codegen branches values show-casts-predicates
+:TEST-EXPECT-STDOUT-B64 MXR3bzM6Zm91cgo=
 
 (module Main)
 (show 1 "two" (Char 51) :four)

@@ -1,0 +1,13 @@
+:TEST-ID tests.language.keyword_long
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Long keyword with path separators parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY keyword_long
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+:very/long/qualified/name

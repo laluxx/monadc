@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_size_array_refinement_map
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Size-array sugar, refinement declaration, and map literal parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+module Main
+
+type NonEmptyBytes { b ∈ Arr | (> (count b) 0) }
+define buf :: [2kb U16]
+define cfg #{:buf buf :bytes 2048}

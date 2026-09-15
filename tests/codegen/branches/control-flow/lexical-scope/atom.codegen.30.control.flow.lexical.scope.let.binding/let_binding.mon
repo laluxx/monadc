@@ -10,6 +10,7 @@
 :TEST-PURPOSE Let binding desugars to immediately-invoked lambda and evaluates at runtime.
 :TEST-ATOM (let [x 5] (+ x 3)) evaluates to 8.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 OAo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/lexical-scope branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

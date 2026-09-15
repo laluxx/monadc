@@ -12,6 +12,7 @@
 :TEST-ATOM Code reflection should preserve lambda source shape.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:code reflection/function predicate branches
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQoobGFtYmRhICh4KSAoKyB4IDEpKQo=
 
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote
 :TEST-MENU branches/reflection-quote/code-reflection/atom.codegen.reflection.quote.code.reflection.deep.code.reflection.lambda.and.call

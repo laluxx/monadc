@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.class_instance_define
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Class and instance declarations combine with value definition.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET class,instance,define
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(class Eq a where (=) :: a -> a -> Bool)
+(instance Eq Int)
+(define n 1)

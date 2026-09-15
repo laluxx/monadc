@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.string.cast.literals
 :TEST-ATOM-LEAF atom.codegen.stateful.value.string.cast.literals
 :TEST-CLI-TARGET codegen branches values show-casts-predicates
+:TEST-EXPECT-STDOUT-B64 MTIzClRydWUKWgo=
 
 (module Main)
 (show (String 123))

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.range_array_step
+:TEST-CONTEXT monadc.context.reader.sugar.range-sugar
+:TEST-PURPOSE Stepped array range.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR [1,3..9]
+:TEST-STATUS passing-baseline-2026-06-15
+
+[1,3..9]

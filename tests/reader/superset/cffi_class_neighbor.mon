@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.cffi_class_neighbor
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE C include combines with class declaration.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET include,class
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(include "stdint.h")
+(class Show a where show :: a -> String)

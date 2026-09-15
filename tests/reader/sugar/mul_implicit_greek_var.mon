@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.mul_implicit_greek_var
+:TEST-CONTEXT monadc.context.reader.sugar.implicit-mul
+:TEST-PURPOSE Greek letter prefix parses.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+αx

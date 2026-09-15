@@ -6,6 +6,7 @@
 :TEST-WORKFLOW core-prelude
 :TEST-ATOM old-core style higher-order collection signatures lower to executable pattern clauses.
 :TEST-CONTEXT monadc.context.wisp.old-core-prelude-compat
+:TEST-EXPECT-STDOUT-B64 WzcgOF0KW10K
 
 module Main
 

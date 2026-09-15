@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime type aliases can annotate values that reach codegen.
 :TEST-ATOM Str aliases String for a typed define.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 bW9uYWQK
 
 :TEST-COVERAGE codegen.c:05-symbol-env/aliases branch family
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env

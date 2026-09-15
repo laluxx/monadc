@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.data_map_payload
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Data constructor combines with map payload.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET data-constructor,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(data Packet | Packet Map | Empty)
+(define p (Packet #{:id 1 :ok True}))

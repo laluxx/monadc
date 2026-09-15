@@ -1,0 +1,13 @@
+:TEST-ID tests.language.for_typed_binding
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE For with typed binding parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY for_typed_binding
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(for [x :: Int [1 2 3]] x)

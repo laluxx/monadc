@@ -21,6 +21,7 @@
 :TEST-COVERAGE codegen.c:790-873 arr.fat helpers
 :TEST-COVERAGE codegen.c:3935-4020 AST_ARRAY heap branch
 :TEST-COVERAGE codegen.c:9927 array-as-function branch
+:TEST-EXPECT-STDOUT-B64 WzEgMiAzIDRdCjQKMgo0ClsyIDMgNF0K
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/arrays-ranges/atom.codegen.collection.heap-array-fat-pointer-survival

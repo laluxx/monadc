@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.set.arity
 :TEST-ATOM-LEAF atom.codegen.stateful.diagnostic.set.arity
 :TEST-CLI-TARGET codegen errors codegen branch-errors
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6
 
 (module Main)
 (set 1)

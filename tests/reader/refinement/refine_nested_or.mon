@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_nested_or
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Or predicate refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type ZeroOrOne { n ∈ Int | (or (= n 0) (= n 1)) })

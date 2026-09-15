@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern codegen coverage for fixed element list patterns.
 :TEST-ATOM (match [1 2] with | [1 2] -> 12 | _ -> 0) should select the fixed-list clause.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTIK
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

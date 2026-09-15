@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime multi-argument subtraction and division.
 :TEST-ATOM (- 10 3 2) = 5; (/ 24 3 2) = 4.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NQo0Cg==
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

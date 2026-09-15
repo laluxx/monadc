@@ -1,0 +1,14 @@
+:TEST-ID tests.laws.enum-int
+:TEST-CONTEXT dec.core.laws
+:TEST-PURPOSE Enum Int seeded law
+:TEST-EXPECT test
+:TEST-MENU laws
+:TEST-MENU-PATH laws
+:TEST-CLI-TARGET laws
+:TEST-TIER regression
+
+import Data.Enum
+import Test.QuickCheck
+module CoreEnumLaws []
+tests
+  seeded law Enum Int

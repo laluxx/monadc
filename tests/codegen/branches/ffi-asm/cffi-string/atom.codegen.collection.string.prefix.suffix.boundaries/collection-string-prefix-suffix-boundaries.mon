@@ -11,6 +11,7 @@
 :TEST-ATOM String boundary predicates should use strncmp with correct offsets and lengths.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:8620-8682 starts-with?/ends-with? branches
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpUcnVlCkZhbHNlClRydWUKVHJ1ZQo=
 
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm
 :TEST-MENU branches/ffi-asm/cffi-string/atom.codegen.collection.string.prefix.suffix.boundaries

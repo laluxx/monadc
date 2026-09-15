@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quasiquote.unquote.arithmetic
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.quasiquote.unquote.arithmetic
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 KGFuc3dlciA0MikK
 
 (module Main)
 (show (quasiquote (answer (unquote (+ 40 2)))))

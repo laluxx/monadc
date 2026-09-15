@@ -1,0 +1,13 @@
+:TEST-ID tests.laws.show-sample
+:TEST-CONTEXT dec.core.laws
+:TEST-PURPOSE Show laws
+:TEST-EXPECT test
+:TEST-MENU laws
+:TEST-MENU-PATH laws
+:TEST-CLI-TARGET laws
+:TEST-TIER regression
+
+import Text.Show
+module CoreShowLaws []
+tests
+  laws Show ShowSample

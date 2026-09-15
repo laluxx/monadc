@@ -1,0 +1,13 @@
+:TEST-ID tests.interaction.interaction_refinement_list_annotation
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Refinement type and list value annotation parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(type NonEmptyList { xs ∈ List | (> (count xs) 0) })
+(define [xs :: NonEmptyList] '(1 2 3))

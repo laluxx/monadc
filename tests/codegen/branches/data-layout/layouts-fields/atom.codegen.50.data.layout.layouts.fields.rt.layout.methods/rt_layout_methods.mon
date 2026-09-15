@@ -10,6 +10,7 @@
 :TEST-PURPOSE Layout methods with where syntax dispatch correctly.
 :TEST-ATOM Vec3 layout with ->array method returns [x y z].
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 :TEST-COVERAGE codegen.c:50-data-layout/layouts-fields branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

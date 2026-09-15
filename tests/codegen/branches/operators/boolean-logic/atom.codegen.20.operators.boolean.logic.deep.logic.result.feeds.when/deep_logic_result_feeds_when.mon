@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/boolean-logic/atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when
 :TEST-ATOM-LEAF atom.codegen.20.operators.boolean.logic.deep.logic.result.feeds.when
 :TEST-CLI-TARGET codegen branches operators boolean-logic
+:TEST-EXPECT-STDOUT-B64 Nwo=
 
 (module Main)
 (define x 0)

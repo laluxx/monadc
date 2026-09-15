@@ -1,0 +1,13 @@
+:TEST-ID tests.language.data_bounded_only
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Data with only Bounded deriving parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY data_bounded_only
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(data Color Red | Green | Blue deriving [Bounded])

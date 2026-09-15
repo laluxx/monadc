@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.data.lowercase.type.name
 :TEST-ATOM-LEAF atom.reader.error.reader.data.lowercase.type.name
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 ZGF0YSB0eXBlIG5hbWUgJ21heWJlJyBtdXN0IHN0YXJ0IHdpdGggYW4gdXBwZXJjYXNlIGxldHRlcgo=
 
 (module Main)
 (data maybe Nothing)

@@ -24,6 +24,7 @@
 :TEST-USES-ATOM atom.type.hm.generalise
 :TEST-DEPENDS-ON atom.codegen.function.call
 :TEST-REFINES atom.type.hm.identity
+:TEST-EXPECT-STDOUT-B64 Nwo3Cg==
 
 (module Main)
 (define (hm_id_06 [x : Int] -> Int) x)

@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_string_identifier_shape
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Identifier-shaped string predicate parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type IdentifierText { s ∈ String | (and (> (count s) 0) (not (contains? s " "))) })

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.infix_subtract
+:TEST-CONTEXT monadc.context.reader.sugar.infix
+:TEST-PURPOSE Infix a - b rewrites to (- a b).
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (- 3 1)
+:TEST-STATUS passing-baseline-2026-06-15
+
+3 - 1

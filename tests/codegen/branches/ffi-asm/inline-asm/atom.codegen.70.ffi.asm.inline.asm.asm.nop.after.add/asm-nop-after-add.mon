@@ -10,6 +10,7 @@
 :TEST-PURPOSE A no-op instruction can follow a real mutation.
 :TEST-ATOM add a b nop returns a + b.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

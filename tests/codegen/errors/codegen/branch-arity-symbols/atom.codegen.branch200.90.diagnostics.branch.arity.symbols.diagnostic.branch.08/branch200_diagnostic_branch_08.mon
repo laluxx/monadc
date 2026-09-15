@@ -17,6 +17,7 @@
 :TEST-COVERAGE codegen.c:CODEGEN_ERROR arity diagnostics
 :TEST-COVERAGE codegen.c:12954 unknown function branch
 :TEST-COVERAGE codegen.c:array-as-function arity branch
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IHVua25vd24gZnVuY3Rpb24K
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-USES-ATOM atom.codegen.subset.90.diagnostics.branch.arity.symbols

@@ -1,0 +1,13 @@
+:TEST-ID tests.interaction.interaction_layout_array_value
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Layout constructor inside array literal parses.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define points [(Point 0 0) (Point 1 1)])

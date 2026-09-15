@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_nested_if_shape
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE If-shaped predicate refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type GuardedInt { n ∈ Int | (if (> n 0) True False) })

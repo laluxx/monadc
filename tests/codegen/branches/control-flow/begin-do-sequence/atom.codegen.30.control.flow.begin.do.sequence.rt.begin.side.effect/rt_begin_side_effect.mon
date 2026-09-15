@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime begin with mutation and return value works.
 :TEST-ATOM (begin (set! x (+ x 1)) x) with x=1 returns 2.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/begin-do-sequence branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Simple show of integer literal compiles and runs.
 :TEST-ATOM (show 42) must print 42.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:00-values/show-dispatch branch family
 :TEST-USES-ATOM atom.codegen.category.00.values

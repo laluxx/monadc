@@ -10,6 +10,7 @@
 :TEST-PURPOSE Arithmetic right shift (>>) catches uncovered dispatch path codegen.c:7407.
 :TEST-ATOM (>> 16 2) produces 4, (>> -16 2) produces -4 (sign-preserving).
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NAotNAo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/if-cond-phi branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

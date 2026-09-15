@@ -13,6 +13,7 @@
 :TEST-COVERAGE codegen.c:8001 do sequence branch
 :TEST-COVERAGE codegen.c:8012 with binding environment branch
 :TEST-COVERAGE codegen.c:7642 set! lvalue branch
+:TEST-EXPECT-STDOUT-B64 MTUKMQo3Cg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/sets/atom.codegen.control.do.with.set.shadow

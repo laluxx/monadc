@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.array.field.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.layout.array.field.missing.close
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ10nIHRvIGNsb3NlIGFycmF5IGZpZWxkIHR5cGUK
 
 (module Main)
 (layout Buffer [data :: [U8 4])

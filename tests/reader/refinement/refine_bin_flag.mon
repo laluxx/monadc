@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_bin_flag
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Binary flag refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type BitFlag { x ∈ Bin | (or (= x 0b0) (= x 0b1)) })

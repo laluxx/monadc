@@ -10,6 +10,7 @@
 :TEST-PURPOSE Begin block returns the value of the last expression.
 :TEST-ATOM (begin 1 2 3) evaluates to 3.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/begin-do-sequence branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

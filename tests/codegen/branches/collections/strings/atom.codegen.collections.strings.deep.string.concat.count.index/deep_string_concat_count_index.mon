@@ -12,6 +12,7 @@
 :TEST-ATOM String runtime operations should compose through codegen.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:string literal/runtime helper lowering
+:TEST-EXPECT-STDOUT-B64 YWJjZGVmCjYKYwpUcnVlCg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/strings/atom.codegen.collections.strings.deep.string.concat.count.index

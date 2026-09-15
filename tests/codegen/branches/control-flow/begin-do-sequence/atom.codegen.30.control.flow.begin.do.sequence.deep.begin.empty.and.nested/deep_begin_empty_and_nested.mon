@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/begin-do-sequence/atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.begin.do.sequence.deep.begin.empty.and.nested
 :TEST-CLI-TARGET codegen branches control-flow begin-do-sequence
+:TEST-EXPECT-STDOUT-B64 MAo2Cg==
 
 (module Main)
 (show (begin))

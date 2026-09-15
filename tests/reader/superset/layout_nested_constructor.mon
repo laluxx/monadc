@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.layout_nested_constructor
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Nested layout constructor values combine in one declaration group.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET layout,nested-constructor
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(layout Box [min :: Point] [max :: Point])
+(define b (Box (Point 0 0) (Point 10 10)))

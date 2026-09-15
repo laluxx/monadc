@@ -32,6 +32,7 @@
 :TEST-MENU-PATH codegen/errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.03
 :TEST-ATOM-LEAF atom.env.error.env.nil.optional.return.03
 :TEST-CLI-TARGET codegen errors env nil-optional-return
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IEZ1bmN0aW9uIOKAmGVudl9uaWxfcmV0dXJuXzAz4oCZIGNhbiByZXR1cm4gbmlsIGJ1dCByZXR1cm4gdHlwZSAnRmxvYXQnIGRvZXMgbm90IGVuZCB3aXRoIOKAmD/igJkK
 
 (module Main)
 (define (env_nil_return_03 [flag : Bool] -> Float) (if flag 1.0 nil))

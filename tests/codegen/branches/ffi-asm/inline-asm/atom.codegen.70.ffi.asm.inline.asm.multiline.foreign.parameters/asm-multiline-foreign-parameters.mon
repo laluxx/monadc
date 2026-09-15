@@ -5,6 +5,7 @@
 :TEST-EXPECT compile, run, stdout
 :TEST-SECTION codegen
 :TEST-CATEGORY 70-ffi-asm
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 module Main []
 

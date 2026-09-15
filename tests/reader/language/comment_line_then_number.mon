@@ -1,0 +1,14 @@
+:TEST-ID tests.language.comment_line_then_number
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Line comments before expressions parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY comment_line_then_number
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+;; comment
+42

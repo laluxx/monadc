@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:AST_CHAR/AST_KEYWORD/AST_SYMBOL
 :TEST-COVERAGE codegen.c:codegen_print_ast symbol path
+:TEST-EXPECT-STDOUT-B64 Wgo6a2V5CnN5bQo=
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/char-keyword-symbol/atom.codegen.values.char.keyword.symbol.deep.char.keyword.symbol.display

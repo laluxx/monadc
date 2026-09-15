@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.quasiquote_corner_infinite_range
+:TEST-CONTEXT monadc.context.reader.sugar.quasiquote-corner, monadc.context.reader.sugar.range-sugar
+:TEST-PURPOSE Corner-bracket quote accepts infinite list range sugar.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (quote (0..))
+:TEST-STATUS passing-baseline-2026-06-18
+
+⌜0..  ⌝

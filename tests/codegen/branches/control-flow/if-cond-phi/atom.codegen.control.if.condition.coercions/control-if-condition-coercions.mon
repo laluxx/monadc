@@ -12,6 +12,7 @@
 :TEST-ATOM Zero numeric conditions select else; non-zero numeric conditions select then.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:7743-7805 if arity and condition coercion branches
+:TEST-EXPECT-STDOUT-B64 MgoxCjIKMQo=
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/if-cond-phi/atom.codegen.control.if.condition.coercions

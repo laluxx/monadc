@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_int_port_range
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE TCP port integer refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type Port { n ∈ Int | (and (> n 0) (< n 65536)) })

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime bitwise xor, not, and logical right shift work.
 :TEST-ATOM (bit-xor 5 3) = 6, (~ 42) = -43, (>>> 16 2) = 4.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NgotNDMKNAo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/if-cond-phi branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

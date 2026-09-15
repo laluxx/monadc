@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime char constructor aliases are codegen-backed coverage points.
 :TEST-ATOM (Char 65) produces 'A', (Char 66) produces 'B'.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 QQpCCg==
 
 :TEST-COVERAGE codegen.c:50-data-layout/adt-constructors branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

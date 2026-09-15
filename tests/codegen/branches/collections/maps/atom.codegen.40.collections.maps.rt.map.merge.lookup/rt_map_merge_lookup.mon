@@ -10,6 +10,7 @@
 :TEST-PURPOSE Map query syntax supports keyword, string, and integer key families in one literal.
 :TEST-ATOM find observes keys from different token families through current runtime display semantics.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQozCjEwCjIwCiJzZXZlbiIK
 
 :TEST-COVERAGE codegen.c:40-collections/maps branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

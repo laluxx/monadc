@@ -1,0 +1,17 @@
+# Catface cache and indexed-search probes.
+# Use `zig build cache-report` for cache JSONL and paste it back for tuning.
+
+@roots
+@leaves
+@orphans
+@hot
+@notes
+@info
+@info advanced-types
+=reader
+=advanced-types
+title:reader
+path:context/info
+@tests -> reader
+reader <- @tests
+%verifies @tests -> codegen

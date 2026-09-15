@@ -10,6 +10,7 @@
 :TEST-PURPOSE Set! swap pattern exchanges two mutable variables.
 :TEST-ATOM (let [tmp a] (set! a b) (set! b tmp)) exchanges a and b.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 OTkKMQo=
 
 :TEST-COVERAGE codegen.c:40-collections/sets branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime comparison edge operators compile and return booleans.
 :TEST-ATOM !=, <=, and > produce expected runtime booleans.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUK
 
 :TEST-COVERAGE codegen.c:20-operators/comparison branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

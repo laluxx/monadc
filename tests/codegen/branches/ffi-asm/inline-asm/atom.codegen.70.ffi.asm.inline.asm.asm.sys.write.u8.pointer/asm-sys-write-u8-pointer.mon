@@ -10,6 +10,7 @@
 :TEST-PURPOSE Inline asm functions accept pointer-sugar parameter types.
 :TEST-ATOM A function body using the user-facing sys-write shape with *U8 must compile.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

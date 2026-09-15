@@ -10,6 +10,7 @@
 :TEST-PURPOSE Nested if-else evaluates the correct branch at runtime.
 :TEST-ATOM (if True (if False 1 2) 3) evaluates to 2.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mgo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/if-cond-phi branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

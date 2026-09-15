@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime refinement type declarations can annotate values that reach codegen.
 :TEST-ATOM Positive refinement annotation accepts and prints a positive integer.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo=
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

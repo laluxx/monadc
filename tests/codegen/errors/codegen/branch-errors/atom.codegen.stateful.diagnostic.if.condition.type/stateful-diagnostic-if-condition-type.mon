@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.if.condition.type
 :TEST-ATOM-LEAF atom.codegen.stateful.diagnostic.if.condition.type
 :TEST-CLI-TARGET codegen errors codegen branch-errors
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6
 
 (module Main)
 (show (if 1 2 3))

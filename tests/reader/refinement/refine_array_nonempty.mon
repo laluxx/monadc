@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_array_nonempty
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Array count refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type NonEmptyArr { xs ∈ Arr | (> (count xs) 0) })

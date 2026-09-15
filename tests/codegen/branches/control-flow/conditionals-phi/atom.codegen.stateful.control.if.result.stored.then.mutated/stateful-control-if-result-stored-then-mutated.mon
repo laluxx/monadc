@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/conditionals-phi/atom.codegen.stateful.control.if.result.stored.then.mutated
 :TEST-ATOM-LEAF atom.codegen.stateful.control.if.result.stored.then.mutated
 :TEST-CLI-TARGET codegen branches control-flow conditionals-phi
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (define x (if True 40 1))

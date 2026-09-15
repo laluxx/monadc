@@ -26,6 +26,7 @@
 :TEST-USES-ATOM atom.codegen.cast.numeric
 :TEST-DEPENDS-ON atom.type.hm.unification.numeric-widening
 :TEST-REFINES atom.type.hm.int-float
+:TEST-EXPECT-STDOUT-B64 MjYuNQo=
 
 (module Main)
 (define (hm_num_12 [x : Float] [y : Int] -> Float) (+ x y))

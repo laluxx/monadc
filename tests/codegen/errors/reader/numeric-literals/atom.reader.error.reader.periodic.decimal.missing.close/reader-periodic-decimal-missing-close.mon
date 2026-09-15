@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.periodic.decimal.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.periodic.decimal.missing.close
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJyknIHRvIGNsb3NlIHBlcmlvZGljIGRlY2ltYWwgcmVwZWF0aW5nIGJsb2NrCg==
 
 (module Main)
 (show 0.(3)

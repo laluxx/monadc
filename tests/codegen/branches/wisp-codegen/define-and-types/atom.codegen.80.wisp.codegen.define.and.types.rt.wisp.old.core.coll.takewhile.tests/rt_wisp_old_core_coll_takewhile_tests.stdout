@@ -1,2 +1,0 @@
-PASS takeWhile Array stops at 3
-PASS takeWhile empty

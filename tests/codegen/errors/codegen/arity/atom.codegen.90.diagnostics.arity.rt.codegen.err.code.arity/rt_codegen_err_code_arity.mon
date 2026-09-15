@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces code reflection arity.
 :TEST-ATOM (code) must fail because code requires a symbol name.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdjb2RlJyByZXF1aXJlcyBhIHN5bWJvbCBuYW1lCg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

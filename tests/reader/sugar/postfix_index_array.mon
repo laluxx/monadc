@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.postfix_index_array
+:TEST-CONTEXT monadc.context.reader.sugar.postfix-index
+:TEST-PURPOSE Postfix brackets become collection calls.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (arr 0)
+:TEST-STATUS passing-baseline-2026-06-15
+
+arr[0]

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Modulo operation evaluates at runtime.
 :TEST-ATOM (mod 10 3) evaluates to 1.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 :TEST-COVERAGE codegen.c:20-operators/arithmetic branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

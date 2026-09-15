@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime C FFI calls strncmp with a size argument.
 :TEST-ATOM (strncmp "abcdef" "abcxyz" 3) prints 0.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MAo=
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/cffi-string branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

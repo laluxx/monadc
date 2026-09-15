@@ -9,6 +9,7 @@
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE String indexing with integer index (codegen handle_atom pattern).
 :TEST-ATOM ("hello" 0) = #\h, ("hello" 1) = #\e, ("hello" 4) = #\o,
+:TEST-EXPECT-STDOUT-B64 aApvCmMK
 ;;           (define s "abc") then (s 2) = #\c
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:40-collections/strings branch family

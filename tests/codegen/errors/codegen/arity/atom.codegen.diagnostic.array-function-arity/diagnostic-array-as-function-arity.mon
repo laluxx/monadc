@@ -16,6 +16,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG array
 :TEST-COVERAGE codegen.c:9927 array used as function arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGFycmF5IHVzZWQgYXMgZnVuY3Rpb24gcmVxdWlyZXMgZXhhY3RseSAxIGFyZ3VtZW50Cg==
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.array-function-arity

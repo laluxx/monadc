@@ -11,6 +11,7 @@
 :TEST-ATOM for range loops should update mutable accumulators deterministically.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:for range loop lowering
+:TEST-EXPECT-STDOUT-B64 NgozCg==
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/loops/atom.codegen.control.flow.loops.deep.for.range.accumulate.nested

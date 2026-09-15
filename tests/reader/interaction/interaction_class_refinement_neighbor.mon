@@ -1,0 +1,13 @@
+:TEST-ID tests.interaction.interaction_class_refinement_neighbor
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Class declaration and refinement declaration parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(class Eq a where (=) :: a -> a -> Bool)
+(type Positive { n ∈ Int | (> n 0) })

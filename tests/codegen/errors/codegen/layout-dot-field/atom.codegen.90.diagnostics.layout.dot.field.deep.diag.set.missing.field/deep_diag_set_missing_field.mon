@@ -17,6 +17,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/layout-dot-field/atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field
 :TEST-ATOM-LEAF atom.codegen.90.diagnostics.layout.dot.field.deep.diag.set.missing.field
 :TEST-CLI-TARGET codegen errors codegen layout-dot-field
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6Cg==
 
 (module Main)
 (layout Cell [x :: Int])

@@ -1,0 +1,14 @@
+:TEST-ID tests.interaction.interaction_module_exports_refinement_cffi
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Module export list, C include, and refinement value parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main [run])
+(include "stdlib.h")
+(type Positive { n ∈ Int | (> n 0) })
+(define [run :: Positive] (atoi "7"))

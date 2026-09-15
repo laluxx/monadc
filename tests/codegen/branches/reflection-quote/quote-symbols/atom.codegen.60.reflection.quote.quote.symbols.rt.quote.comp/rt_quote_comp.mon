@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-symbols/atom.codegen.60.reflection.quote.quote.symbols.rt.quote.comp
 :TEST-ATOM-LEAF atom.codegen.60.reflection.quote.quote.symbols.rt.quote.comp
 :TEST-CLI-TARGET codegen branches reflection-quote quote-symbols
+:TEST-EXPECT-STDOUT-B64 Zm9vCmJhcgoxMAo=
 (module Main)
 (show (quote foo))
 (show (quote bar))

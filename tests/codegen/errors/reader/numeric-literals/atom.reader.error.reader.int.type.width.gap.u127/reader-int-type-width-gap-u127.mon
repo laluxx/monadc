@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.gap.u127
 :TEST-ATOM-LEAF atom.reader.error.reader.int.type.width.gap.u127
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 aW52YWxpZCBpbnRlZ2VyIHR5cGUgJ1UxMjcnOiBiaXQtd2lkdGhzIDY14oCTMTI3IGFyZSBub3Qgc3VwcG9ydGVkOyB2YWxpZCB3aWR0aHMgYXJlIDHigJM2NCBhbmQgMTI4Cg==
 
 (module Main)
 (define [x : U127] 1)

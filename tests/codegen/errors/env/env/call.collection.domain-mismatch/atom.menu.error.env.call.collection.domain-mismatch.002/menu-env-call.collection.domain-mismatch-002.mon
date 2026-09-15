@@ -36,6 +36,7 @@
 :TEST-REFINES atom.env.error
 :TEST-RELATED atom.codegen.error.menu
 :TEST-CLI-TARGET codegen errors env env
+:TEST-EXPECT-STDOUT-B64 Q291bGRuJ3QgbWF0Y2ggY29sbGVjdGlvbiBlbGVtZW50IHR5cGUK
 
 (module Main)
 (define (env_menu_double_7_2 [x : Int] -> Int) (+ x x))

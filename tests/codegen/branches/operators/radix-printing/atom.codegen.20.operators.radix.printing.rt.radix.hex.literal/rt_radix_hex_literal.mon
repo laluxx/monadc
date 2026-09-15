@@ -10,6 +10,7 @@
 :TEST-PURPOSE Radix-r hex notation 16rFF equals decimal 255.
 :TEST-ATOM (show 16rFF) prints 255.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MjU1Cg==
 
 :TEST-COVERAGE codegen.c:20-operators/radix-printing branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

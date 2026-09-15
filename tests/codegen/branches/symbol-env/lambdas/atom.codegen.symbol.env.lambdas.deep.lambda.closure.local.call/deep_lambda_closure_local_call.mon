@@ -11,6 +11,7 @@
 :TEST-ATOM Lambda values should compile to callable functions with typed params.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:AST_LAMBDA function emission
+:TEST-EXPECT-STDOUT-B64 NDIKOQo=
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-MENU branches/symbol-env/lambdas/atom.codegen.symbol.env.lambdas.deep.lambda.closure.local.call

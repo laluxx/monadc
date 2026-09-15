@@ -21,6 +21,7 @@
 :TEST-TAG show
 :TEST-COVERAGE codegen.c:3494-3890 AST_NUMBER/AST_STRING/AST_CHAR/AST_KEYWORD/AST_SYMBOL
 :TEST-COVERAGE codegen.c:1219-1255 codegen_show_value primitive branches
+:TEST-EXPECT-STDOUT-B64 MAotNwozLjI1CmJyYW5jaApBCjprdwpUcnVlCkZhbHNlCm5pbAo=
 
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy
 :TEST-MENU branches/smoke-legacy/uncategorized-legacy/atom.codegen.value.scalar-display-spectrum

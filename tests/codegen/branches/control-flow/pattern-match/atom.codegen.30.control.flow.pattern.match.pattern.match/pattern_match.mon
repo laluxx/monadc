@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern matching compiles and evaluates clauses correctly.
 :TEST-ATOM (match 1 with | 0 -> 10 | 1 -> 20 | _ -> 30) evaluates to 20.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MjAKMjAK
 
 :TEST-COVERAGE codegen.c:30-control-flow/pattern-match branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

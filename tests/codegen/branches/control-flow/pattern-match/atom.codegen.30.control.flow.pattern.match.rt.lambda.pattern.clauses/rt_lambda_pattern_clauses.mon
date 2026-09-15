@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern codegen coverage for AST_LAMBDA bodies backed by AST_PMATCH clauses.
 :TEST-ATOM A lambda with integer and wildcard pattern clauses should be callable.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTAKMjAK
 
 :TEST-COVERAGE codegen.c:30-control-flow/pattern-match branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

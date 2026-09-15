@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_wisp_refinement_define
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Wisp refinement declaration and typed define parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+module Main
+
+type Positive { x ∈ Int | (> x 0) }
+define [n :: Positive] 3
+show n

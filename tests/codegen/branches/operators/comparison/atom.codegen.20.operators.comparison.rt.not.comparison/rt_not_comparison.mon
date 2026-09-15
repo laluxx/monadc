@@ -10,6 +10,7 @@
 :TEST-PURPOSE Not applied to comparison expression works at runtime.
 :TEST-ATOM (not (> 3 5)) evaluates to True since (> 3 5) is False.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQo=
 
 :TEST-COVERAGE codegen.c:20-operators/comparison branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

@@ -1,0 +1,12 @@
+:TEST-ID tests.interaction.interaction_map_periodic_values
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Map values can contain periodic decimals.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(define repeating #{:third 0.(3) :ninth 0.(1)})

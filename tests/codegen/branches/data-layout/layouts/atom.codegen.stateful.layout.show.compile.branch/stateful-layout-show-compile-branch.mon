@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/layouts/atom.codegen.stateful.layout.show.compile.branch
 :TEST-ATOM-LEAF atom.codegen.stateful.layout.show.compile.branch
 :TEST-CLI-TARGET codegen branches data-layout layouts
+:TEST-EXPECT-STDOUT-B64
 
 (module Main)
 (layout Point [x :: Int] [y :: Int])

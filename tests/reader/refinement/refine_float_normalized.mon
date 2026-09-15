@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_float_normalized
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Normalized signed float refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type Normalized { x ∈ Float | (and (>= x -1.0) (<= x 1.0)) })

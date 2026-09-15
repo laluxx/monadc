@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/adt-constructors/atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip
 :TEST-ATOM-LEAF atom.codegen.50.data.layout.adt.constructors.deep.adt.match.show.roundtrip
 :TEST-CLI-TARGET codegen branches data-layout adt-constructors
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (data Maybe Nothing | Just Int)

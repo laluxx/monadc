@@ -1,0 +1,13 @@
+:TEST-ID tests.language.quasiquote_unquote_splicing
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Unquote-splicing via paren form parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY quasiquote_unquote_splicing
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+⌜1 2 (unquote-splicing list) 3⌝

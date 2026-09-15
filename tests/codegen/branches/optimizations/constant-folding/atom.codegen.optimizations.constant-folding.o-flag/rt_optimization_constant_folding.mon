@@ -15,6 +15,7 @@
 :TEST-MENU-PATH codegen/branches/optimizations/constant-folding/atom.codegen.optimizations.constant-folding.o-flag
 :TEST-ATOM-LEAF atom.codegen.optimizations.constant-folding.o-flag
 :TEST-CLI-TARGET codegen branches optimizations constant-folding
+:TEST-EXPECT-DESUGAR-B64 KG1vZHVsZSBNYWluIFtdKQooZGVmaW5lICh4IDo6IEludCkgMzApCihkZWZpbmUgeSAxMikKKHNob3cgKCsgNDAgeSkpCihzaG93IDYpCg==
 
 (module Main)
 x :: Int = 30

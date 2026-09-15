@@ -25,6 +25,7 @@
 :TEST-USES-ATOM atom.codegen.string.index
 :TEST-DEPENDS-ON atom.type.hm.collection-element
 :TEST-REFINES atom.type.hm.string-element-char
+:TEST-EXPECT-STDOUT-B64 Ywo=
 
 (module Main)
 (define (hm_string_idx_02 [s : String] [idx : Int] -> Char) (s idx))

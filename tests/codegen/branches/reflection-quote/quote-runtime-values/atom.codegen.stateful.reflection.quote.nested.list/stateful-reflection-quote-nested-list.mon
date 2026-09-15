@@ -30,6 +30,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quote.nested.list
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.quote.nested.list
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 KGEgKGIgYykgKDEgMikpCg==
 
 (module Main)
 (show (quote (a (b c) (1 2))))

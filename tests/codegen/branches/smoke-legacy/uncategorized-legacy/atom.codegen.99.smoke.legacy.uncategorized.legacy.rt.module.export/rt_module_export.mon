@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime module declarations with export lists compile and allow exported code to run.
 :TEST-ATOM (module Main [show]) followed by (show 42) compiles and prints 42.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.wisp_for_forward
+:TEST-CONTEXT monadc.context.wisp.sugar.for-sugar
+:TEST-PURPOSE Wisp for with -> forward iteration desugars.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+for c -> "hello"
+  show c

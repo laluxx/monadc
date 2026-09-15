@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+# Commits must start from a source-only checkout. We reject generated state
+# rather than deleting it behind Git's back; `./make clean` is the repair.
+exec ./make clean --check

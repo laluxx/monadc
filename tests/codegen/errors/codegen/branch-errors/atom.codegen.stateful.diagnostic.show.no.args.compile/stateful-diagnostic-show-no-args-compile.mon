@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.show.no.args.compile
 :TEST-ATOM-LEAF atom.codegen.stateful.diagnostic.show.no.args.compile
 :TEST-CLI-TARGET codegen errors codegen branch-errors
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6
 
 (module Main)
 (show)

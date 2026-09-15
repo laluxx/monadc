@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects array literals that violate explicit sized array annotations.
 :TEST-ATOM Arr :: 2 :: Int with three values must fail.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGFycmF5IHNpemUgbWlzbWF0Y2gg4oCUIGRlY2xhcmVkIDIgYnV0IGdvdCAzIGVsZW1lbnRzCg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

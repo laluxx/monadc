@@ -30,6 +30,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quote.lambda.runtime.value.compile
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.quote.lambda.runtime.value.compile
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 KGxhbWJkYSAoeCkgKCsgeCAxKSkK
 
 (module Main)
 (show-value (quote (lambda (x) (+ x 1))))

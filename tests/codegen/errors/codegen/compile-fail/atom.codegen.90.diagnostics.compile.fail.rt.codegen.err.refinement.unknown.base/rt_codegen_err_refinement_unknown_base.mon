@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects refinements whose base type is unknown.
 :TEST-ATOM { x ∈ Nope | True } must fail because Nope is undefined.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IHJlZmluZW1lbnQgdHlwZSDigJhUaGluZ+KAmSBoYXMgdW5rbm93biBiYXNlIHR5cGUg4oCYTm9wZeKAmSDigJQgZGlkIHlvdSBmb3JnZXQgdG8gZGVmaW5lIGl0IGZpcnN0Pwo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

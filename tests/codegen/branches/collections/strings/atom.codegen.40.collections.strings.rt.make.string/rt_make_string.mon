@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/collections/strings/atom.codegen.40.collections.strings.rt.make.string
 :TEST-ATOM-LEAF atom.codegen.40.collections.strings.rt.make.string
 :TEST-CLI-TARGET codegen branches collections strings
+:TEST-EXPECT-STDOUT-B64 QUFBQUEKCg==
 (module Main)
 (show (make-string 5 (Char 65)))
 (show (make-string 0 (Char 66)))

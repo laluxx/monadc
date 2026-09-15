@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.quasiquote_unquote_splicing_var
+:TEST-CONTEXT monadc.context.reader.sugar.quasiquote-corner
+:TEST-PURPOSE Unquote bracket outside quasiquote is rejected.
+:TEST-EXPECT fail:compile
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DIAGNOSTIC Unquote bracket used outside of a quasiquote block
+:TEST-STATUS passing-baseline-2026-06-15
+
+⌞xs⌟

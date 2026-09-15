@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/collections-refinements/atom.reader.error.reader.map.odd.forms
 :TEST-ATOM-LEAF atom.reader.error.reader.map.odd.forms
 :TEST-CLI-TARGET codegen errors reader collections-refinements
+:TEST-EXPECT-STDOUT-B64 bWFwIGxpdGVyYWwgcmVxdWlyZXMgYW4gZXZlbiBudW1iZXIgb2YgZm9ybXMK
 
 (module Main)
 (show #{:a})

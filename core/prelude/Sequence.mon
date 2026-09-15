@@ -405,15 +405,15 @@ method nth :: [a] -> Int -> a
 method take :: Int -> [a] -> [a]
   _ [] -> []
   n [x|xs]
-    | n > 0     -> prepend x (take (n - 1) xs)
-    | otherwise -> []
+      | n > 0     -> prepend x (take (n - 1) xs)
+      | otherwise -> []
 
 
 method drop :: Int -> [a] -> [a]
   _ [] -> []
   n [x|xs]
-    | n > 0     -> drop (n - 1) xs
-    | otherwise -> prepend x xs
+      | n > 0     -> drop (n - 1) xs
+      | otherwise -> prepend x xs
 
 
 method take-while :: [a] -> (a -> Bool) -> [a]
@@ -501,7 +501,6 @@ instance MaterializedSequence Coll
 
 
 tests
-
   :structure:
   assert-eq ([].null?)                            True        "null? empty"
   assert-eq ((list 1).null?)                      False       "null? nonempty"

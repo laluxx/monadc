@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.radix_refinement_layout
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Radix literals combine with refinement predicate and layout.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET radix,refinement,layout
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(type Byteish { n ∈ Int | (and (>= n 2r0) (<= n 16rFF)) })
+(layout Packet [tag :: Byteish])

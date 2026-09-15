@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime cons function works on lists.
 :TEST-ATOM (cons 1 '(2 3)) = (1 2 3).
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 KDEgMiAzKQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

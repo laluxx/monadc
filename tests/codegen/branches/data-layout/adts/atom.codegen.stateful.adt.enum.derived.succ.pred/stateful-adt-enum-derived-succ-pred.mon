@@ -18,6 +18,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.derived.succ.pred
 :TEST-ATOM-LEAF atom.codegen.stateful.adt.enum.derived.succ.pred
 :TEST-CLI-TARGET codegen branches data-layout adts
+:TEST-EXPECT-STDOUT-B64 MAoxCjEKMwoyCg==
 
 (import Data.Enum)
 (data Traffic A | B | C deriving [Enum Show])

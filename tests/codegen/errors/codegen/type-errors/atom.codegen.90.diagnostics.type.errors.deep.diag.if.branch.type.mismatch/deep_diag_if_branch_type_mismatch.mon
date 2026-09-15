@@ -17,6 +17,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/type-errors/atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch
 :TEST-ATOM-LEAF atom.codegen.90.diagnostics.type.errors.deep.diag.if.branch.type.mismatch
 :TEST-CLI-TARGET codegen errors codegen type-errors
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6Cg==
 
 (module Main)
 (show (if True 1 "bad"))

@@ -11,6 +11,7 @@
 :TEST-PURPOSE Runtime error form aborts execution with a diagnostic.
 :TEST-ATOM (error "boom") compiles and exits nonzero with the message boom.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Ym9vbQo=
 
 :TEST-COVERAGE codegen.c:20-operators/boolean-logic branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

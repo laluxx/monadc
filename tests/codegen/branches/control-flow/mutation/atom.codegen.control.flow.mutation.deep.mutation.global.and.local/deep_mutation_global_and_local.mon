@@ -11,6 +11,7 @@
 :TEST-ATOM set! should mutate the nearest binding and preserve outer globals.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:set! env lookup and store
+:TEST-EXPECT-STDOUT-B64 MTEKNQoxMQo=
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/mutation/atom.codegen.control.flow.mutation.deep.mutation.global.and.local

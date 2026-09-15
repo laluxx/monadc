@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.match.missing.with
 :TEST-ATOM-LEAF atom.reader.error.reader.match.missing.with
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ3dpdGgnIGFmdGVyIG1hdGNoIGV4cHJlc3Npb24K
 
 (module Main)
 (match 1)

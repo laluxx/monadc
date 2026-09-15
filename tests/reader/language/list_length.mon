@@ -1,0 +1,13 @@
+:TEST-ID tests.language.list_length
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE List length function parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY list_length
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(length '(1 2 3))

@@ -6,6 +6,7 @@
 :TEST-WORKFLOW core-prelude
 :TEST-ATOM old-core style functions can pass a function parameter to another call.
 :TEST-CONTEXT monadc.context.wisp.old-core-prelude-compat
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 module Main
 

@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:ADT constructor codegen
 :TEST-COVERAGE codegen.c:codegen_show_value TYPE_LAYOUT/TYPE_APP ADT branch
+:TEST-EXPECT-STDOUT-B64 Tm90aGluZwooSnVzdCA0MikK
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/adt-constructors/atom.codegen.data.layout.adt.constructors.deep.adt.show.two.constructors

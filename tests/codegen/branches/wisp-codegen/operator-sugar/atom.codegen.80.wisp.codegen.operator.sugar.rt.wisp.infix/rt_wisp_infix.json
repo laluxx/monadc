@@ -1,9 +1,0 @@
-[
-  {"line":19,"col":14,"type":"symbol","name":"module"},
-  {"line":19,"col":14,"type":"symbol","name":"Main"},
-  {"line":20,"col":14,"type":"list","items":[{"line":20,"col":15,"type":"symbol","name":"show"},{"line":20,"col":20,"type":"list","items":[{"line":20,"col":21,"type":"symbol","name":"+"},{"line":20,"col":23,"type":"number","value":"3"},{"line":20,"col":25,"type":"number","value":"4"}]}]},
-  {"line":21,"col":14,"type":"list","items":[{"line":21,"col":15,"type":"symbol","name":"show"},{"line":21,"col":20,"type":"list","items":[{"line":21,"col":21,"type":"symbol","name":"-"},{"line":21,"col":23,"type":"number","value":"10"},{"line":21,"col":26,"type":"number","value":"3"}]}]},
-  {"line":22,"col":14,"type":"list","items":[{"line":22,"col":15,"type":"symbol","name":"show"},{"line":22,"col":20,"type":"list","items":[{"line":22,"col":21,"type":"symbol","name":"*"},{"line":22,"col":23,"type":"number","value":"2"},{"line":22,"col":25,"type":"number","value":"5"}]}]},
-  {"line":23,"col":14,"type":"list","items":[{"line":23,"col":15,"type":"symbol","name":"show"},{"line":23,"col":20,"type":"list","items":[{"line":23,"col":21,"type":"symbol","name":"/"},{"line":23,"col":23,"type":"number","value":"20"},{"line":23,"col":26,"type":"number","value":"4"}]}]},
-  {"line":24,"col":14,"type":"list","items":[{"line":24,"col":15,"type":"symbol","name":"show"},{"line":24,"col":20,"type":"list","items":[{"line":24,"col":21,"type":"symbol","name":"%"},{"line":24,"col":23,"type":"number","value":"17"},{"line":24,"col":26,"type":"number","value":"5"}]}]}
-]

@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.map_match_count
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Map count combines with match expression.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET map-count,match
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define cfg #{:a 1 :b 2})
+(match (count cfg) with 0 -> "empty" _ -> "some")

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.path_absolute
+:TEST-CONTEXT monadc.context.reader.sugar.path-literal
+:TEST-PURPOSE Absolute path literal.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR /tmp/file
+:TEST-STATUS passing-baseline-2026-06-15
+
+/tmp/file

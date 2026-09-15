@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.cond.else.missing.bracket
 :TEST-ATOM-LEAF atom.reader.error.reader.cond.else.missing.bracket
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ10nIHRvIGNsb3NlICdlbHNlJyBjbGF1c2UK
 
 (module Main)
 (cond [else 1)

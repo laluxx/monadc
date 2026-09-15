@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.size_array_gb_approx
+:TEST-CONTEXT monadc.context.reader.sugar.size-array
+:TEST-PURPOSE [1gb] is rejected as too large for static x86-64 allocation.
+:TEST-EXPECT fail:compile
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DIAGNOSTIC Static array 'buf' is too large to allocate on x86-64
+:TEST-STATUS passing-baseline-2026-06-15
+
+define buf :: [1gb]

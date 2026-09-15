@@ -10,6 +10,7 @@
 :TEST-PURPOSE Where clause provides local value bindings.
 :TEST-ATOM f x -> result where result = x + 1 evaluates f 5 to 6.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Ngo=
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

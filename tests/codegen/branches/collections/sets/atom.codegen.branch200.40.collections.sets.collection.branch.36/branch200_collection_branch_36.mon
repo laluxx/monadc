@@ -18,6 +18,7 @@
 :TEST-COVERAGE codegen.c:8358-8565 set/map runtime operations
 :TEST-COVERAGE codegen.c:8620-8858 string/count/contains branches
 :TEST-COVERAGE codegen.c:12966-13040 collection expression indexing path
+:TEST-EXPECT-STDOUT-B64 RmFsc2UK
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-USES-ATOM atom.codegen.subset.40.collections.sets

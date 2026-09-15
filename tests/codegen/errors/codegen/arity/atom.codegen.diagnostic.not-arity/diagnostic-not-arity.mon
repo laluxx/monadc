@@ -15,6 +15,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG arity
 :TEST-COVERAGE codegen.c:7980 not arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdub3QnIHJlcXVpcmVzIDEgYXJndW1lbnQK
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.not-arity

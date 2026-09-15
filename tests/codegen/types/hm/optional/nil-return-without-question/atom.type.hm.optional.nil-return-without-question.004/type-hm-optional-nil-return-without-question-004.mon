@@ -29,6 +29,7 @@
 :TEST-USES-ATOM atom.type.hm.nil
 :TEST-DEPENDS-ON atom.env.error.nil.optional.return
 :TEST-REFINES atom.type.hm.optional.nil-guard
+:TEST-EXPECT-STDOUT-B64 RnVuY3Rpb24g4oCYaG1fbmlsX3JldHVybl8wNOKAmSBjYW4gcmV0dXJuIG5pbAo=
 
 (module Main)
 (define (hm_nil_return_04 [flag : Bool] -> Int) (if flag nil 0))

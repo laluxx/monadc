@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/quote-feature-postfix/atom.reader.error.reader.unquote.parens.invalid
 :TEST-ATOM-LEAF atom.reader.error.reader.unquote.parens.invalid
 :TEST-CLI-TARGET codegen errors reader quote-feature-postfix
+:TEST-EXPECT-STDOUT-B64 4oyeKC4uLinijJ8gaXMgaW52YWxpZCDigJQgZG8gbm90IHdyYXAgdGhlIGV4cHJlc3Npb24gaW4gcGFyZW5zIGluc2lkZSBhbiB1bnF1b3RlCg==
 
 (module Main)
 (show ⌜a ⌞(+ 1 2)⌟ b⌝)

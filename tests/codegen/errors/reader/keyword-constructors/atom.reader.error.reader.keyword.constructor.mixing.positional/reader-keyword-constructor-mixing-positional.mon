@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.mixing.positional
 :TEST-ATOM-LEAF atom.reader.error.reader.keyword.constructor.mixing.positional
 :TEST-CLI-TARGET codegen errors reader keyword-constructors
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQga2V5d29yZCBpbiBrZXl3b3JkIGNvbnN0cnVjdG9yIGNhbGwgJ1BvaW50Jwo=
 
 (module Main)
 (layout Point [x :: Int] [y :: Int])

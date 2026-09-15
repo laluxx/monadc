@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/wisp-codegen/basic-values/atom.codegen.80.wisp.codegen.basic.values.rt.wisp.basic
 :TEST-ATOM-LEAF atom.codegen.80.wisp.codegen.basic.values.rt.wisp.basic
 :TEST-CLI-TARGET codegen branches wisp-codegen basic-values
+:TEST-EXPECT-STDOUT-B64 NDIKMy4xNApoZWxsbwoxMAo=
 module Main
 show 42
 show 3.14

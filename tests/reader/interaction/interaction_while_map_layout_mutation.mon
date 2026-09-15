@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_while_map_layout_mutation
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE While loop mutates layout field while map literal is in scope.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(layout Counter [n :: Int])
+(define c (Counter 0))
+(define cfg #{:limit 3})
+(while (< c.n (find cfg :limit)) (set! c.n (+ c.n 1)))

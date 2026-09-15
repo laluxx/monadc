@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects arithmetic forms without operands.
 :TEST-ATOM (+) must fail because arithmetic operators need at least one argument.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 cmVxdWlyZXMgYXQgbGVhc3QgMSBhcmd1bWVudAo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

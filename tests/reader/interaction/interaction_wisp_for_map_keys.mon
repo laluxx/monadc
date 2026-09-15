@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_wisp_for_map_keys
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Wisp for loop over map keys parses.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+module Main
+
+define cfg #{:a 1 :b 2}
+for k -> keys cfg
+  show k

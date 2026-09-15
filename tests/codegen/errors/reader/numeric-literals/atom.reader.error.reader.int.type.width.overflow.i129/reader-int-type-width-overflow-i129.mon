@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.overflow.i129
 :TEST-ATOM-LEAF atom.reader.error.reader.int.type.width.overflow.i129
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 aW52YWxpZCBpbnRlZ2VyIHR5cGUgJ0kxMjknOiBiaXQtd2lkdGggMTI5IGV4Y2VlZHMgdGhlIG1heGltdW0gb2YgMTI4Cg==
 
 (module Main)
 (define [x : I129] 1)

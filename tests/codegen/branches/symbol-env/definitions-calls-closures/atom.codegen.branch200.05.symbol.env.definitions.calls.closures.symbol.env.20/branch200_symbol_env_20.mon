@@ -17,6 +17,7 @@
 :TEST-COVERAGE codegen.c:define/function/lambda codegen branches
 :TEST-COVERAGE codegen.c:closure ABI/env capture path
 :TEST-COVERAGE codegen.c:emit_type_cast return coercion
+:TEST-EXPECT-STDOUT-B64 QQo=
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-USES-ATOM atom.codegen.subset.05.symbol.env.definitions.calls.closures

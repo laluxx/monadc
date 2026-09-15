@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/lexer-tokens/atom.reader.error.reader.adjacent.string.literals
 :TEST-ATOM-LEAF atom.reader.error.reader.adjacent.string.literals
 :TEST-CLI-TARGET codegen errors reader lexer-tokens
+:TEST-EXPECT-STDOUT-B64 YWRqYWNlbnQgc3RyaW5nIGxpdGVyYWxzIGFyZSBub3Qgc3VwcG9ydGVkCg==
 
 (module Main)
 (show "hello""world")

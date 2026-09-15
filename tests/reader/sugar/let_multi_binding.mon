@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.let_multi_binding
+:TEST-CONTEXT monadc.context.reader.sugar.let-desugar
+:TEST-PURPOSE Let with multiple bindings desugars.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER known-fail
+:TEST-STATUS quarantined-baseline-2026-06-15
+
+(let [x 1 y 2] (+ x y))

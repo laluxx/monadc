@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.let.missing.binding.form
 :TEST-ATOM-LEAF atom.reader.error.reader.let.missing.binding.form
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJygnIG9yICdbJyBhZnRlciAnbGV0Jwo=
 
 (module Main)
 (let 1)

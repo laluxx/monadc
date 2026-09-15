@@ -30,6 +30,7 @@
 :TEST-USES-ATOM atom.codegen.adt
 :TEST-DEPENDS-ON atom.type.dep.adt-bridge
 :TEST-REFINES atom.type.bridge.adt-return-mismatch
+:TEST-EXPECT-STDOUT-B64 dHlwZSBlcnJvcjogY2Fubm90IHVuaWZ5Cg==
 
 (module Main)
 (data BridgeMaybe00 BN | BJ Int)

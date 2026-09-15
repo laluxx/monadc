@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:function call argument lowering
 :TEST-COVERAGE codegen.c:typed return coercion
+:TEST-EXPECT-STDOUT-B64 MTUKLTEKNTAK
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.function.arguments

@@ -1551,6 +1551,19 @@ integer members.  The declaration equals sign is punctuation, and the REPL
 normalizes it before Wisp form counting.  Associated-type equations inside
 classes remain untouched.  Regression: =tests/finite_type_range.mon=.
 
+** Primitive integer family in Data.Int
+:PROPERTIES:
+:ID: feature.type.int-family-2026-09-15
+:END:
+
+The primitive width names =I8=, =U8=, =I16=, =U16=, =I32=, =U32=, =I64=,
+=U64=, =I128=, and =U128= are representation types, not finite
+enumerations. They must not be redeclared with range syntax: large ranges
+cannot be enumerated and range members are values rather than types. The
+Int-specific predicate module therefore uses =Self= for its method signatures;
+the compiler accepts fixed-width integer representations as members of the
+integer family at calls. Regression: =tests/data_int_integer_family.mon=.
+
 ** Reified finite types and typed lambda binders
 :PROPERTIES:
 :ID: feature.type.reified-finite-type-typed-lambda-2026-09-14

@@ -2,20 +2,21 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import hashlib
 import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -29,18 +30,289 @@ BUILD_ROOT = ROOT / "build"
 DIST_DIR = BUILD_ROOT / "dist"
 VENDOR_DIR = BUILD_ROOT / "vendor"
 STATIC_DIR = BUILD_ROOT / "static"
+COMPDB_PATH = BUILD_ROOT / "compile_commands.json"
+COMPDB_LINK = ROOT / "compile_commands.json"
 LOADED_CONFIGS: list[Path] = []
-COLOR = True
 
 ### Console
 
-def supports_glyph(glyph: str) -> bool:
-    enc = sys.stdout.encoding or "utf-8"
-    try:
-        glyph.encode(enc)
-        return True
-    except Exception:
-        return False
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+@dataclass(frozen=True)
+class Theme:
+    # Deliberately small palette: identity, accent, and status.
+    # Ordinary prose stays terminal-default so color provides hierarchy, not noise.
+    brand: str = "1;35"
+    accent: str = "1;36"
+    info: str = "1;36"
+    success: str = "1;32"
+    warning: str = "1;33"
+    error: str = "1;31"
+    strong: str = "1"
+    muted: str = "2"
+    rule: str = "2;35"
+    subtle: str = "2"
+    accent_soft: str = "36"
+    info_soft: str = "36"
+    warning_soft: str = "33"
+    error_soft: str = "31"
+
+
+@dataclass
+class Renderer:
+    color: bool = True
+    verbose: bool = False
+    theme: Theme = field(default_factory=Theme)
+
+    @staticmethod
+    def supports_glyph(glyph: str) -> bool:
+        if os.environ.get("MAKE_ASCII", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return False
+        if os.environ.get("TERM") == "dumb":
+            return False
+        enc = sys.stdout.encoding or "utf-8"
+        try:
+            glyph.encode(enc)
+            return True
+        except Exception:
+            return False
+
+    def glyph(self, preferred: str, fallback: str) -> str:
+        return preferred if self.supports_glyph(preferred) else fallback
+
+    def paint(self, code: str, text: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if self.color else text
+
+    @staticmethod
+    def strip_ansi(text: str) -> str:
+        return ANSI_RE.sub("", text)
+
+    def visible_width(self, text: str) -> int:
+        return len(self.strip_ansi(text))
+
+    def pad_right(self, text: str, width: int) -> str:
+        return text + " " * max(0, width - self.visible_width(text))
+
+    @staticmethod
+    def width() -> int:
+        try:
+            width = shutil.get_terminal_size((96, 24)).columns
+        except OSError:
+            width = 96
+        return max(40, min(width, 112))
+
+    def rule(self, char: str | None = None, width: int | None = None) -> str:
+        char = char or self.glyph("─", "-")
+        return char * max(1, width or self.width())
+
+    def dim(self, text: str) -> str:
+        return self.paint(self.theme.muted, text)
+
+    def brand(self, text: str) -> str:
+        return self.paint(self.theme.brand, text)
+
+    def accent(self, text: str) -> str:
+        return self.paint(self.theme.accent, text)
+
+    def strong(self, text: str) -> str:
+        return self.paint(self.theme.strong, text)
+
+    def mark(self, kind: str) -> str:
+        marks = {
+            "ok": ("✓", "OK"),
+            "fail": ("✗", "X"),
+            "warn": ("▲", "!"),
+            "step": ("›", ">"),
+            "bullet": ("◆", "*"),
+            "note": ("•", "*"),
+            "hint": ("↳", "->"),
+        }
+        preferred, fallback = marks[kind]
+        return self.glyph(preferred, fallback)
+
+    def tag(self, name: str, code: str | None = None) -> str:
+        return self.paint(code or self.theme.brand, name.upper())
+
+    def emit_wrapped(self, prefix: str, message: str, *, stream=None, code: str | None = None) -> None:
+        stream = stream or sys.stdout
+        available = max(18, self.width() - self.visible_width(prefix))
+        lines = textwrap.wrap(
+            message,
+            width=available,
+            break_long_words=False,
+            break_on_hyphens=False,
+            replace_whitespace=False,
+        ) or [""]
+        continuation = " " * self.visible_width(prefix)
+        for index, line in enumerate(lines):
+            rendered = self.paint(code, line) if code else line
+            print((prefix if index == 0 else continuation) + rendered, file=stream, flush=True)
+
+    def log(self, name: str, msg: str, role: str = "brand") -> None:
+        code = getattr(self.theme, role)
+        mark = self.paint(code, self.mark("bullet"))
+        label = self.pad_right(self.tag(name, code), 10)
+        self.emit_wrapped(f"{mark} {label} ", msg)
+
+    def step(self, msg: str) -> None:
+        self.emit_wrapped(f"{self.paint(self.theme.accent, self.mark('step'))} ", msg)
+
+    def ok(self, msg: str) -> None:
+        self.emit_wrapped(f"{self.paint(self.theme.success, self.mark('ok'))} ", msg)
+
+    def note(self, msg: str) -> None:
+        self.emit_wrapped(f"{self.paint(self.theme.info, self.mark('note'))} ", msg)
+
+    def hint(self, msg: str, *, stream=None) -> None:
+        self.emit_wrapped(f"  {self.dim(self.mark('hint'))} ", msg, stream=stream, code=self.theme.muted)
+
+    def error_detail(self, msg: str) -> None:
+        self.emit_wrapped(
+            f"  {self.paint(self.theme.error_soft, self.mark('hint'))} ", msg, stream=sys.stderr, code=self.theme.error_soft
+        )
+
+    def warn(self, msg: str) -> None:
+        sys.stdout.flush()
+        prefix = (
+            f"{self.paint(self.theme.warning, self.mark('warn'))} "
+            f"{self.paint(self.theme.warning, 'warning')} {self.dim('·')} "
+        )
+        self.emit_wrapped(prefix, msg, stream=sys.stderr)
+
+    def error(self, msg: str) -> None:
+        sys.stdout.flush()
+        prefix = (
+            f"{self.paint(self.theme.error, self.mark('fail'))} "
+            f"{self.paint(self.theme.error, 'error')} {self.dim('·')} "
+        )
+        self.emit_wrapped(prefix, msg, stream=sys.stderr)
+
+    def header(self, title: str, subtitle: str | None = None) -> None:
+        width = self.width()
+        project = PROJECT.name if "PROJECT" in globals() else "make"
+        leader = f"{self.brand(self.mark('bullet'))} {self.brand(project)}"
+        if title:
+            leader += f"  {self.paint(self.theme.subtle, self.glyph('·', '/'))}  {self.accent(title)}"
+        print(leader)
+        if subtitle:
+            lines = textwrap.wrap(
+                subtitle,
+                width=max(24, width - 2),
+                break_long_words=False,
+                break_on_hyphens=False,
+            ) or [subtitle]
+            for line in lines:
+                print(f"  {self.paint(self.theme.subtle, line)}")
+        print(self.paint(self.theme.rule, self.rule(width=width)), flush=True)
+
+    def section(self, title: str) -> None:
+        width = self.width()
+        prefix = f"{self.brand(self.mark('bullet'))} {self.brand(title)} "
+        remaining = max(3, width - self.visible_width(prefix))
+        print(f"{prefix}{self.paint(self.theme.subtle, self.rule(width=remaining))}")
+
+    def status_word(self, good: bool) -> str:
+        code = self.theme.success if good else self.theme.error
+        return self.paint(code, self.mark("ok" if good else "fail"))
+
+    def row(self, name: str, state: str | None, value: str, *, good: bool | None = None) -> None:
+        state_s = "" if state is None else state
+        if good is not None:
+            state_s = self.status_word(good)
+        name_width = 20 if self.width() >= 70 else 14
+        state_col = self.pad_right(state_s, 4)
+        name_col = self.pad_right(self.dim(name), name_width)
+        prefix = f"  {state_col} {name_col} "
+        available = max(16, self.width() - self.visible_width(prefix))
+        lines = textwrap.wrap(value, width=available, break_long_words=False, break_on_hyphens=False) or [""]
+        print(prefix + lines[0])
+        continuation = " " * self.visible_width(prefix)
+        for line in lines[1:]:
+            print(continuation + line)
+
+    def kv_rows(self, rows: list[tuple[str, str]], *, indent: int = 2) -> None:
+        if not rows:
+            return
+        width = max(self.visible_width(k) for k, _ in rows)
+        prefix = " " * indent
+        for key, value in rows:
+            print(
+                f"{prefix}{self.pad_right(self.strong(key), width)}  "
+                f"{self.dim(self.glyph('·', ':'))}  {value}"
+            )
+
+    def option_rows(self, rows: list[tuple[str, str]], *, indent: int = 2) -> None:
+        if not rows:
+            return
+        total_width = self.width()
+        longest = max(self.visible_width(k) for k, _ in rows)
+        key_width = min(longest, max(14, min(34, total_width // 2 - 3)))
+        prefix = " " * indent
+        for key, description in rows:
+            if self.visible_width(key) > key_width:
+                print(f"{prefix}{self.paint(self.theme.accent, key)}")
+                desc_width = max(18, total_width - indent - 2)
+                wrapped = textwrap.wrap(
+                    description, width=desc_width, break_long_words=False, break_on_hyphens=False
+                ) or [""]
+                for line in wrapped:
+                    print(f"{prefix}  {line}")
+                continue
+            desc_width = max(18, total_width - indent - key_width - 3)
+            wrapped = textwrap.wrap(
+                description, width=desc_width, break_long_words=False, break_on_hyphens=False
+            ) or [""]
+            print(f"{prefix}{self.pad_right(self.paint(self.theme.accent, key), key_width)}   {wrapped[0]}")
+            for line in wrapped[1:]:
+                print(f"{prefix}{' ' * key_width}   {line}")
+
+    def artifact(self, label: str, path: Path | str, detail: str | None = None) -> None:
+        prefix = f"{self.paint(self.theme.success, self.mark('ok'))} {self.strong(label)}  "
+        self.emit_wrapped(prefix, str(path), code=self.theme.accent)
+        if detail:
+            self.hint(detail)
+
+    def color_build_line(self, line: str) -> str:
+        if not self.color or not line or "\x1b[" in line:
+            return line
+        low = line.lower()
+        stripped = line.lstrip()
+        if (
+            "error:" in low
+            or "fatal error:" in low
+            or "undefined reference" in low
+            or stripped.startswith(("FAILED:", "FAIL:"))
+            or " failed" in low
+            or "***" in line
+            or re.search(r"\bError \d+\b", line)
+        ):
+            return self.paint(self.theme.error, line)
+        if "warning:" in low or " warning" in low:
+            return self.paint(self.theme.warning, line)
+        if "note:" in low:
+            return self.paint(self.theme.accent_soft, line)
+        if stripped.startswith("[") and "]" in stripped[:16]:
+            end = stripped.find("]") + 1
+            lead = line[: len(line) - len(stripped)]
+            return lead + self.paint(self.theme.accent, stripped[:end]) + stripped[end:]
+        if stripped.startswith("--"):
+            return self.paint(self.theme.accent_soft, line)
+        return line
+
+
+@dataclass(frozen=True)
+class CliError(Exception):
+    message: str
+    code: int = 2
+    hint: str | None = None
+    details: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        return self.message
+
+
+UI = Renderer()
 
 
 def parse_color_mode(raw: str | None) -> str:
@@ -51,79 +323,24 @@ def parse_color_mode(raw: str | None) -> str:
         return "never"
     if value in ("auto", "tty", "default", ""):
         return "auto"
-    raise SystemExit(f"make: invalid color mode '{raw}' (expected auto|always|never)")
+    raise CliError(f"invalid color mode '{raw}' (expected auto|always|never)")
 
 
 def color_enabled(mode: str) -> bool:
-    if os.environ.get("NO_COLOR"):
+    if "NO_COLOR" in os.environ or os.environ.get("CLICOLOR", "").strip() == "0":
         return False
-    if os.environ.get("FORCE_COLOR") or os.environ.get("CLICOLOR_FORCE"):
+    if mode == "never":
+        return False
+    force = os.environ.get("FORCE_COLOR") or os.environ.get("CLICOLOR_FORCE")
+    if force is not None and force.strip().lower() not in {"", "0", "false", "no", "off"}:
         return True
     if mode == "always":
         return True
-    if mode == "never":
-        return False
     return (sys.stdout.isatty() or sys.stderr.isatty()) and os.environ.get("TERM", "") != "dumb"
 
 
-def c(code: str, text: str) -> str:
-    if not COLOR:
-        return text
-    return f"\033[{code}m{text}\033[0m"
-
-
-def ok_mark() -> str:
-    return "OK" if not supports_glyph("✓") else "✓"
-
-
-def fail_mark() -> str:
-    return "FAIL" if not supports_glyph("✗") else "✗"
-
-
-def tag(name: str, color: str = "1;35") -> str:
-    return c(color, name)
-
-
-def log(name: str, msg: str, color: str = "1;35") -> None:
-    print(f"{tag(name, color)} {msg}", flush=True)
-
-
-def step(msg: str) -> None:
-    arrow = "->" if not supports_glyph("→") else "→"
-    print(f"{c('1;36', arrow)} {c('36', msg)}", flush=True)
-
-
-def ok(msg: str) -> None:
-    print(f"{c('1;32', ok_mark())} {c('32', msg)}", flush=True)
-
-
-def warn(msg: str) -> None:
-    print(f"{c('1;33', 'WARN')} {c('33', msg)}", file=sys.stderr, flush=True)
-
-
-def err(msg: str) -> None:
-    print(f"{c('1;31', 'ERROR')} {msg}", file=sys.stderr, flush=True)
-
-
-def die(msg: str, code: int = 2) -> None:
-    err(msg)
-    raise SystemExit(code)
-
-
-def status_word(good: bool) -> str:
-    return c("1;32", "ok") if good else c("1;31", "missing")
-
-
-def print_section(title: str) -> None:
-    print(c("1;36", title))
-
-
-def print_row(name: str, state: str | None, value: str, *, good: bool | None = None) -> None:
-    state_s = "" if state is None else state
-    if good is not None:
-        state_s = status_word(good)
-    print(f"  {state_s:<18} {c('1', name):<24} {value}")
-
+def die(msg: str, code: int = 2, *, hint: str | None = None, details: tuple[str, ...] = ()) -> None:
+    raise CliError(msg, code=code, hint=hint, details=details)
 
 ### Host
 
@@ -146,49 +363,87 @@ def which(name: str) -> str:
     return shutil.which(name) or ""
 
 
-def run_capture(cmd: list[str] | str, *, cwd: Path | None = None, shell: bool = False, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
+def run_capture(
+    cmd: list[str] | str,
+    *,
+    cwd: Path | None = None,
+    shell: bool = False,
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(cmd, cwd=str(cwd or ROOT), shell=shell, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        return subprocess.run(
+            cmd,
+            cwd=str(cwd or ROOT),
+            shell=shell,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return subprocess.CompletedProcess(cmd, 127, "", str(exc))
 
 
-def color_build_line(line: str) -> str:
-    if not COLOR or not line:
-        return line
-    low = line.lower()
-    stripped = line.lstrip()
-    if "error:" in low or stripped.startswith("FAILED:") or " failed" in low:
-        return c("1;31", line)
-    if "warning:" in low or " warning" in low:
-        return c("1;33", line)
-    if stripped.startswith("[") and "]" in stripped[:16]:
-        end = stripped.find("]") + 1
-        lead = line[: len(line) - len(stripped)]
-        return lead + c("1;36", stripped[:end]) + stripped[end:]
-    if stripped.startswith("--"):
-        return c("36", line)
-    return line
+def command_display(cmd: list[str] | str) -> str:
+    if isinstance(cmd, str):
+        return cmd
+    return " ".join(shlex.quote(str(x)) for x in cmd)
 
 
-def run(cmd: list[str] | str, *, cwd: Path | None = None, shell: bool = False, env: dict[str, str] | None = None, quiet: bool = False) -> None:
+def format_elapsed(seconds: float) -> str:
+    if seconds < 1:
+        return f"{int(seconds * 1000)}ms"
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes = int(seconds // 60)
+    return f"{minutes}m{seconds - minutes * 60:04.1f}s"
+
+
+def run(
+    cmd: list[str] | str,
+    *,
+    cwd: Path | None = None,
+    shell: bool = False,
+    env: dict[str, str] | None = None,
+    quiet: bool = False,
+    announce: bool = True,
+) -> None:
     merged = os.environ.copy()
     if env:
         merged.update(env)
-    if COLOR:
+    if UI.color:
         merged.setdefault("FORCE_COLOR", "1")
         merged.setdefault("CLICOLOR_FORCE", "1")
+    if UI.verbose and announce:
+        UI.step("$ " + command_display(cmd))
     if quiet:
-        res = subprocess.run(cmd, cwd=str(cwd or ROOT), shell=shell, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=merged)
+        res = subprocess.run(
+            cmd,
+            cwd=str(cwd or ROOT),
+            shell=shell,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=merged,
+        )
         if res.returncode != 0:
             if res.stdout:
                 sys.stderr.write(res.stdout)
             raise subprocess.CalledProcessError(res.returncode, cmd)
         return
-    proc = subprocess.Popen(cmd, cwd=str(cwd or ROOT), shell=shell, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=merged, bufsize=1)
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd or ROOT),
+        shell=shell,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=merged,
+        bufsize=1,
+    )
     assert proc.stdout is not None
     for line in proc.stdout:
-        print(color_build_line(line.rstrip("\n")), file=sys.stderr, flush=True)
+        print(UI.color_build_line(line.rstrip("\n")), flush=True)
     rc = proc.wait()
     if rc != 0:
         raise subprocess.CalledProcessError(rc, cmd)
@@ -331,11 +586,18 @@ def make_has_target(target: str) -> bool:
     return target in make_targets()
 
 
-def system_make() -> str:
+def find_system_make() -> str:
     for name in ("gmake", "make"):
         p = which(name)
         if p and Path(p).resolve() != Path(__file__).resolve():
             return p
+    return ""
+
+
+def system_make() -> str:
+    p = find_system_make()
+    if p:
+        return p
     die("system make was not found")
 
 
@@ -352,10 +614,26 @@ def discover_project() -> Project:
     runtime_lib = os.environ.get("MAKE_RUNTIME_LIB", "").strip() or parse_make_var("RUNTIME_LIB")
     source_dirs = [p for p in ("src", "include", "core", "lib", "tests", "context", "docs", "scripts") if (ROOT / p).exists()]
     source_files = [p for p in ("Makefile", "makefile", "GNUmakefile", "make", "main.c", "runtime.c", "runtime.h") if (ROOT / p).exists()]
-    package_files = [p for p in ("README", "README.md", "LICENSE", "LICENSE.txt", "COPYING", "CHANGELOG.md", "pyproject.toml", "CMakeLists.txt") if (ROOT / p).exists()]
+    package_files = [
+        p
+        for p in (
+            "README", "README.md", "LICENSE", "LICENSE.txt", "COPYING",
+            "CHANGELOG.md", "pyproject.toml", "CMakeLists.txt",
+        )
+        if (ROOT / p).exists()
+    ]
     build_target = os.environ.get("MAKE_BUILD_TARGET", "").strip() or ("all" if make_has_target("all") else "")
     release_target = os.environ.get("MAKE_RELEASE_TARGET", "").strip() or ("release" if make_has_target("release") else build_target)
-    return Project(name=name, target=target, runtime_lib=runtime_lib, build_target=build_target, release_target=release_target, source_dirs=source_dirs, source_files=source_files, package_files=package_files)
+    return Project(
+        name=name,
+        target=target,
+        runtime_lib=runtime_lib,
+        build_target=build_target,
+        release_target=release_target,
+        source_dirs=source_dirs,
+        source_files=source_files,
+        package_files=package_files,
+    )
 
 
 PROJECT = discover_project()
@@ -363,9 +641,19 @@ load_config(PROJECT.name)
 PROJECT = discover_project()
 
 
+@dataclass(frozen=True)
+class AppContext:
+    project: Project
+    jobs: int
+    jobs_source: str
+    ui: Renderer
+
+
 def rel(path: Path) -> str:
+    """Display a checkout-relative path without dereferencing symlinks."""
     try:
-        return str(path.resolve().relative_to(ROOT.resolve()))
+        absolute = path.absolute() if path.is_absolute() else (ROOT / path).absolute()
+        return str(absolute.relative_to(ROOT.absolute()))
     except Exception:
         return str(path)
 
@@ -425,10 +713,10 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def write_manifest(root: Path, extra: dict[str, object] | None = None) -> None:
+def write_manifest(root: Path, extra: dict[str, object] | None = None, *, filename: str = "MANIFEST.json") -> None:
     files: list[dict[str, object]] = []
     for p in sorted(root.rglob("*")):
-        if p.name == "MANIFEST.json":
+        if p.name == filename:
             continue
         if p.is_symlink():
             try:
@@ -447,7 +735,7 @@ def write_manifest(root: Path, extra: dict[str, object] | None = None) -> None:
     }
     if extra:
         data.update(extra)
-    (root / "MANIFEST.json").write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (root / filename).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def make_tar_gz(archive_base: Path, parent: Path, package_name: str) -> Path:
@@ -468,7 +756,7 @@ def make_tar_gz(archive_base: Path, parent: Path, package_name: str) -> Path:
 
 ### Makefile bridge
 
-def run_make(targets: list[str] | None = None, *, jobs: int = 0, extra: list[str] | None = None) -> None:
+def run_make(targets: list[str] | None = None, *, jobs: int = 0, extra: list[str] | None = None, env: dict[str, str] | None = None) -> None:
     cmd = [system_make()]
     if jobs > 0:
         cmd.append(f"-j{jobs}")
@@ -476,8 +764,8 @@ def run_make(targets: list[str] | None = None, *, jobs: int = 0, extra: list[str
         cmd.extend(targets)
     if extra:
         cmd.extend(extra)
-    log("MAKE", " ".join(cmd), "1;34")
-    run(cmd)
+    UI.log("MAKE", command_display(cmd), "info")
+    run(cmd, env=env, announce=False)
 
 
 def possible_binary_paths() -> list[Path]:
@@ -486,6 +774,9 @@ def possible_binary_paths() -> list[Path]:
     if PROJECT.target:
         for prefix in (ROOT, BUILD_ROOT, BUILD_ROOT / "release", BUILD_ROOT / "debug", ROOT / "bin", BUILD_ROOT / "bin"):
             out.append(prefix / (PROJECT.target + exe))
+        # Source packages may carry a verified portable launcher. Keep it last
+        # so a freshly built project binary always wins.
+        out.append(VENDOR_DIR / "run")
     return out
 
 
@@ -495,7 +786,7 @@ def find_binary(build_if_missing: bool = False, jobs: int = 0) -> Path:
             return p
     if build_if_missing:
         target = PROJECT.release_target if PROJECT.release_target and make_has_target(PROJECT.release_target) else PROJECT.build_target
-        step(f"build: running make {target or 'all'}")
+        UI.step(f"build: running make {target or 'all'}")
         run_make([target] if target else None, jobs=jobs)
         for p in possible_binary_paths():
             if p.exists() and p.is_file():
@@ -524,20 +815,34 @@ def detected_link_libraries() -> list[str]:
 
 
 def detected_pkg_config_packages() -> list[str]:
+    """Extract package operands from simple pkg-config shell expressions."""
     pkgs: list[str] = []
-    for m in re.finditer(r"pkg-config\s+([^\n\r`$()]*)", makefile_text()):
-        tail = m.group(1)
-        for token in re.findall(r"[A-Za-z0-9_.+-]+", tail):
-            if token.startswith("-") or token in {"pkg-config", "cflags", "libs", "exists", "echo", "2", "dev", "null"}:
+    for match in re.finditer(r"pkg-config\s+([^\n\r`$()]*)", makefile_text()):
+        # Ignore fallback shell branches such as `|| echo -I/usr/...`; they are
+        # not pkg-config package names.
+        command = re.split(r"\|\||&&|;", match.group(1), maxsplit=1)[0].strip()
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            tokens = command.split()
+        for token in tokens:
+            if token.startswith("-") or re.match(r"^[0-9]*[<>]", token):
                 continue
-            pkgs.append(token)
+            if ">/" in token or token in {"true", "false"}:
+                continue
+            if re.fullmatch(r"[A-Za-z0-9_.+-]+", token):
+                pkgs.append(token)
     pkgs.extend(env_list("MAKE_VENDOR_PKGS"))
     return sorted(dict.fromkeys(pkgs))
 
 
 def llvm_config_path() -> str:
     raw = os.environ.get("LLVM_CONFIG", "").strip()
-    for name in [raw, "llvm-config", "llvm-config-22", "llvm-config-21", "llvm-config-20", "llvm-config-19", "llvm-config-18", "llvm-config-17", "llvm-config-16"]:
+    for name in [
+        raw,
+        "llvm-config", "llvm-config-22", "llvm-config-21", "llvm-config-20",
+        "llvm-config-19", "llvm-config-18", "llvm-config-17", "llvm-config-16",
+    ]:
         if not name:
             continue
         if os.sep in name and Path(name).exists():
@@ -549,29 +854,58 @@ def llvm_config_path() -> str:
 
 
 def dependency_report() -> dict[str, object]:
-    return {"link_libraries": detected_link_libraries(), "pkg_config_packages": detected_pkg_config_packages(), "llvm_config": llvm_config_path()}
+    return {
+        "link_libraries": detected_link_libraries(),
+        "pkg_config_packages": detected_pkg_config_packages(),
+        "llvm_config": llvm_config_path(),
+    }
 
 
 ### Runtime closure
 
-def ldd_paths(binary: Path) -> list[Path]:
+def ldd_dependency_info(binary: Path) -> tuple[list[tuple[str, Path]], list[str]]:
+    """Return Linux dynamic dependencies as (soname, path) plus unresolved sonames."""
     if host_os() != "linux" or not which("ldd"):
-        return []
+        return [], []
     res = run_capture(["ldd", str(binary)], timeout=10)
-    text = (res.stdout or "") + (res.stderr or "")
-    out: list[Path] = []
+    text = (res.stdout or "") + "\n" + (res.stderr or "")
+    found: list[tuple[str, Path]] = []
+    missing: list[str] = []
     for line in text.splitlines():
         s = line.strip()
-        if not s or "linux-vdso" in s or "not a dynamic executable" in s.lower():
+        if not s or "linux-vdso" in s or "not a dynamic executable" in s.lower() or "statically linked" in s.lower():
             continue
-        path = ""
-        m = re.search(r"=>\s+(/\S+)", s)
+        m_missing = re.match(r"(\S+)\s+=>\s+not found", s)
+        if m_missing:
+            missing.append(m_missing.group(1))
+            continue
+        m = re.match(r"(\S+)\s+=>\s+(/\S+)", s)
+        if m and Path(m.group(2)).exists():
+            found.append((m.group(1), Path(m.group(2))))
+            continue
+        if s.startswith("/"):
+            p = Path(s.split()[0])
+            if p.exists():
+                found.append((p.name, p))
+    dedup: dict[tuple[str, str], tuple[str, Path]] = {}
+    for name, path in found:
+        dedup[(name, str(path))] = (name, path)
+    return list(dedup.values()), list(dict.fromkeys(missing))
+
+
+def elf_needed_names(binary: Path) -> list[str]:
+    if host_os() != "linux" or not which("readelf"):
+        return []
+    res = run_capture(["readelf", "-d", str(binary)], timeout=10)
+    if res.returncode != 0:
+        return []
+    out: list[str] = []
+    for line in res.stdout.splitlines():
+        if "(NEEDED)" not in line:
+            continue
+        m = re.search(r"\[(.*?)\]", line)
         if m:
-            path = m.group(1)
-        elif s.startswith("/"):
-            path = s.split()[0]
-        if path and Path(path).exists():
-            out.append(Path(path))
+            out.append(m.group(1))
     return list(dict.fromkeys(out))
 
 
@@ -584,56 +918,238 @@ def otool_paths(binary: Path) -> list[Path]:
         first = line.strip().split(" ", 1)[0]
         if first.startswith("/") and Path(first).exists():
             out.append(Path(first))
+        elif first.startswith("@loader_path/"):
+            p = binary.parent / first[len("@loader_path/"):]
+            if p.exists():
+                out.append(p)
+        elif first.startswith("@executable_path/"):
+            p = binary.parent / first[len("@executable_path/"):]
+            if p.exists():
+                out.append(p)
     return list(dict.fromkeys(out))
 
 
-def dependency_paths(binary: Path) -> list[Path]:
-    return ldd_paths(binary) or otool_paths(binary)
+def binary_linkage_status(binary: Path) -> tuple[str, str]:
+    """Classify a binary as static, dynamic, or unknown without guessing from an empty dependency list."""
+    if not binary.exists() or not binary.is_file():
+        return "unknown", "file does not exist"
+    if host_os() == "linux":
+        if which("ldd"):
+            res = run_capture(["ldd", str(binary)], timeout=10)
+            raw = ((res.stdout or "") + "\n" + (res.stderr or "")).strip()
+            low = raw.lower()
+            needed = elf_needed_names(binary)
+            if "not a dynamic executable" in low or "statically linked" in low:
+                return "static", "ELF static executable"
+            if "=>" in raw or needed:
+                count = len(needed)
+                noun = "entry" if count == 1 else "entries"
+                return "dynamic", f"ELF dynamic executable · {count} direct DT_NEEDED {noun}"
+        if which("readelf"):
+            res = run_capture(["readelf", "-l", str(binary)], timeout=10)
+            if "Requesting program interpreter" in res.stdout:
+                return "dynamic", "ELF program interpreter present"
+        if which("file"):
+            detail = run_capture(["file", "-b", str(binary)], timeout=5).stdout.strip()
+            low = detail.lower()
+            if "statically linked" in low:
+                return "static", detail
+            if "dynamically linked" in low:
+                return "dynamic", detail
+            return "unknown", detail
+    if host_os() == "macos":
+        deps = otool_paths(binary)
+        if deps:
+            return "dynamic", f"{len(deps)} Mach-O dependencies"
+        if which("file"):
+            return "unknown", run_capture(["file", "-b", str(binary)], timeout=5).stdout.strip()
+    return "unknown", "linkage inspection unavailable on this host"
 
 
-def dependency_closure(binary: Path, *, include_system: bool = True) -> list[Path]:
-    """Return the transitive dynamic-library closure, deduplicated by real path."""
-    queue = dependency_paths(binary)
+def runtime_search_dirs(binary: Path) -> list[Path]:
+    out: list[Path] = [binary.parent]
+    for var in ("LD_LIBRARY_PATH", "LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+        for item in os.environ.get(var, "").split(os.pathsep):
+            if item.strip():
+                out.append(Path(item).expanduser())
+    cfg = llvm_config_path()
+    if cfg:
+        libdir = run_capture([cfg, "--libdir"], timeout=5).stdout.strip().splitlines()
+        if libdir:
+            out.append(Path(libdir[0]))
+    for p in (
+        "/lib", "/lib64", "/usr/lib", "/usr/lib64", "/usr/local/lib", "/usr/local/lib64",
+        "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu", "/lib/aarch64-linux-gnu",
+    ):
+        out.append(Path(p))
+    final: list[Path] = []
     seen: set[str] = set()
-    out: list[Path] = []
-    while queue:
-        dep = queue.pop(0)
+    for p in out:
         try:
-            real = dep.resolve()
+            key = str(p.resolve())
         except Exception:
-            real = dep
-        key = str(real)
-        if key in seen:
+            key = str(p)
+        if key not in seen and p.exists() and p.is_dir():
+            seen.add(key)
+            final.append(p)
+    return final
+
+
+def soname_major(name: str) -> str:
+    m = re.search(r"\.so\.(\d+)", name)
+    return m.group(1) if m else ""
+
+
+def resolve_soname(name: str, search_dirs: list[Path]) -> Path | None:
+    for d in search_dirs:
+        p = d / name
+        if p.exists():
+            return p
+    if ".so" not in name:
+        return None
+    stem = name.split(".so", 1)[0] + ".so"
+    required_major = soname_major(name)
+    candidates: list[Path] = []
+    for d in search_dirs:
+        try:
+            candidates.extend(d.glob(stem + "*"))
+        except OSError:
+            pass
+    for p in sorted(candidates, key=lambda x: (0 if x.name == name else 1, len(x.name))):
+        if not p.exists():
             continue
-        seen.add(key)
-        if not include_system and re.search(r"^(?:libc|libm|libdl|libpthread|librt|ld-linux|libSystem)", real.name):
-            continue
-        if not real.exists() or not real.is_file():
-            continue
-        out.append(real)
-        for more in dependency_paths(real):
+        if required_major:
+            candidate_major = soname_major(p.name)
             try:
-                more_key = str(more.resolve())
+                resolved_major = soname_major(p.resolve().name)
             except Exception:
-                more_key = str(more)
-            if more_key not in seen:
-                queue.append(more)
-    return out
+                resolved_major = candidate_major
+            if candidate_major not in ("", required_major) or resolved_major not in ("", required_major):
+                continue
+        return p
+    return None
+
+
+def is_system_runtime_name(name: str) -> bool:
+    n = Path(name).name
+    base = n.split(".so", 1)[0]
+    if n.startswith(("ld-linux", "ld-musl")):
+        return True
+    if n.startswith("libSystem"):
+        return True
+    return base in {"libc", "libm", "libdl", "libpthread", "librt", "libutil", "libgcc_s", "libstdc++"}
+
+
+def dependency_closure_details(binary: Path, *, include_system: bool = True) -> tuple[list[Path], list[str]]:
+    """Return transitive runtime dependencies and unresolved sonames."""
+    queue: list[Path] = [binary]
+    seen_inputs: set[str] = set()
+    seen_output: set[str] = set()
+    out: list[Path] = []
+    unresolved: set[str] = set()
+    search_dirs = runtime_search_dirs(binary)
+    root_key = str(binary.resolve()) if binary.exists() else str(binary)
+
+    while queue:
+        cur = queue.pop(0)
+        try:
+            cur_key = str(cur.resolve())
+        except Exception:
+            cur_key = str(cur)
+        if cur_key in seen_inputs or not cur.exists():
+            continue
+        seen_inputs.add(cur_key)
+
+        deps: list[tuple[str, Path]] = []
+        missing: list[str] = []
+        if host_os() == "linux":
+            deps, missing = ldd_dependency_info(cur)
+            resolved_names = {name for name, _ in deps}
+            for needed in elf_needed_names(cur):
+                if needed in resolved_names:
+                    continue
+                resolved = resolve_soname(needed, search_dirs)
+                if resolved is not None:
+                    deps.append((needed, resolved))
+                    resolved_names.add(needed)
+                elif needed not in missing:
+                    missing.append(needed)
+        else:
+            deps = [(p.name, p) for p in otool_paths(cur)]
+
+        for name in missing:
+            if include_system or not is_system_runtime_name(name):
+                unresolved.add(name)
+
+        for name, dep in deps:
+            if not include_system and is_system_runtime_name(name):
+                continue
+            try:
+                real = dep.resolve()
+            except Exception:
+                real = dep
+            if not real.exists() or not real.is_file():
+                unresolved.add(name)
+                continue
+            key = str(real)
+            if key != root_key and key not in seen_output:
+                seen_output.add(key)
+                out.append(real)
+            if key not in seen_inputs:
+                queue.append(real)
+            if real.parent not in search_dirs:
+                search_dirs.insert(0, real.parent)
+
+    return out, sorted(unresolved)
+
+
+def elf_soname(path: Path) -> str:
+    """Return an ELF DT_SONAME when available."""
+    if host_os() != "linux" or not which("readelf"):
+        return ""
+    proc = run_capture(["readelf", "-d", str(path)], timeout=10)
+    if proc.returncode != 0:
+        return ""
+    match = re.search(r"\(SONAME\).*?\[([^]]+)\]", proc.stdout)
+    return match.group(1).strip() if match else ""
+
+
+def ensure_elf_soname_alias(path: Path, lib_dir: Path) -> None:
+    """Materialize the loader-visible SONAME alias for a copied ELF library."""
+    soname = elf_soname(path)
+    if not soname or soname == path.name:
+        return
+    alias = lib_dir / soname
+    if alias.exists() or alias.is_symlink():
+        return
+    relative_symlink(path, alias)
+    if UI.verbose:
+        UI.log("LINK", f"{alias.name} -> {path.name}", "accent_soft")
 
 
 def copy_runtime_flat(binary: Path, bin_dir: Path, lib_dir: Path, *, include_system: bool = True) -> tuple[Path, list[Path]]:
-    """Create the minimal runnable layout: one binary and one copy of each shared lib."""
+    """Create a relocatable runtime layout and fail closed on unresolved dependencies."""
     bin_dir.mkdir(parents=True, exist_ok=True)
     lib_dir.mkdir(parents=True, exist_ok=True)
     binary_dst = bin_dir / binary.name
     copy_file(binary, binary_dst)
     chmod_executable(binary_dst)
+    closure, unresolved = dependency_closure_details(binary, include_system=include_system)
+    if unresolved:
+        message = "unresolved runtime dependencies: " + ", ".join(unresolved)
+        if env_flag("MAKE_VENDOR_ALLOW_UNRESOLVED", False):
+            UI.warn(message)
+        else:
+            die(message + " (set MAKE_VENDOR_ALLOW_UNRESOLVED=1 to override)")
     copied: list[Path] = []
-    for dep in dependency_closure(binary, include_system=include_system):
+    for dep in closure:
         dst = lib_dir / dep.name
         if copy_file_unique(dep, dst):
             copied.append(dst)
-            log("VENDOR", f"  lib {dep.name}")
+            if UI.verbose:
+                UI.log("LIB", dep.name, "accent_soft")
+        ensure_elf_soname_alias(dst, lib_dir)
     return binary_dst, copied
 
 
@@ -645,14 +1161,14 @@ def copy_binary_rootfs(binary: Path, rootfs: Path, *, include_system: bool = Tru
     copy_file(binary, dst)
     chmod_executable(dst)
     copied.append(dst)
-    for dep in dependency_closure(binary, include_system=include_system):
-        # Preserve the dependency's resolved absolute location once.  Do not mirror
-        # usr/lib into lib and do not create a second flat copy.
+    closure, unresolved = dependency_closure_details(binary, include_system=include_system)
+    if unresolved and not env_flag("MAKE_VENDOR_ALLOW_UNRESOLVED", False):
+        die("rootfs unresolved runtime dependencies: " + ", ".join(unresolved))
+    for dep in closure:
         dep_dst = rootfs / str(dep).lstrip("/")
         copy_file(dep, dep_dst)
         copied.append(dep_dst)
     return copied
-
 
 ### LLVM vendor
 
@@ -672,9 +1188,11 @@ def llvm_required_link_names(llvm_libs: str) -> list[str]:
 
 
 def bundle_llvm(vendor_dir: Path) -> None:
+    if not project_needs_llvm() and not env_flag("MAKE_VENDOR_LLVM", False):
+        return
     cfg = llvm_config_path()
     if not cfg:
-        log("VENDOR", "no llvm-config found; skipping LLVM/Clang headers", "1;33")
+        UI.warn("vendor: llvm-config was not found; LLVM/Clang headers were not bundled")
         return
     version = run_capture([cfg, "--version"]).stdout.strip() or "unknown"
     major = version.split(".", 1)[0]
@@ -684,7 +1202,7 @@ def bundle_llvm(vendor_dir: Path) -> None:
     libs = run_capture([cfg, "--libs", "all", "--system-libs"]).stdout.strip()
     ldflags = run_capture([cfg, "--ldflags"]).stdout.strip()
     if not inc_s:
-        log("VENDOR", "llvm-config did not report includedir", "1;33")
+        UI.warn("vendor: llvm-config did not report an include directory")
         return
     inc = Path(inc_s[0])
     libdir = Path(lib_s[0]) if lib_s else Path()
@@ -692,8 +1210,8 @@ def bundle_llvm(vendor_dir: Path) -> None:
     vendor_lib = vendor_dir / "lib"
     vendor_bin = vendor_dir / "bin"
 
-    # monadc is C: the C API headers are sufficient by default.  Shipping the
-    # llvm/ and clang/ C++ trees costs tens of megabytes and is opt-in.
+    # C API headers are the lean default. Shipping the full LLVM/Clang C++
+    # header trees costs tens of megabytes and remains explicitly opt-in.
     header_sets = ["llvm-c", "clang-c"]
     if env_flag("MAKE_VENDOR_LLVM_CPP_HEADERS", False):
         header_sets += ["llvm", "clang"]
@@ -727,7 +1245,7 @@ def bundle_llvm(vendor_dir: Path) -> None:
                     source = matches[0]
                     alias_name = generic_names[0] if ".so" in source.name else generic_names[1]
             if source is None:
-                warn(f"vendor: linker library -l{link_name} not found in {libdir}")
+                UI.warn(f"vendor: linker library -l{link_name} not found in {libdir}")
                 continue
             try:
                 real = source.resolve()
@@ -736,7 +1254,7 @@ def bundle_llvm(vendor_dir: Path) -> None:
             if not real.exists() or not real.is_file():
                 continue
             if not llvm_library_matches(real.name, major) and real.name.startswith(("libLLVM", "libclang")):
-                warn(f"vendor: ignoring non-active LLVM library {real.name}")
+                UI.warn(f"vendor: ignoring non-active LLVM library {real.name}")
                 continue
             payload = vendor_lib / real.name
             copy_file_unique(real, payload)
@@ -778,7 +1296,7 @@ esac
     path.write_text(script, encoding="utf-8")
     chmod_executable(path)
     detail = ", ".join(f"-l{name}" for name in required) or "runtime closure only"
-    log("VENDOR", f"vendored llvm-config {version}: {detail}")
+    UI.log("VENDOR", f"vendored llvm-config {version}: {detail}")
 
 
 ### Dependency sources
@@ -827,15 +1345,15 @@ def try_download_apt_sources(dst: Path) -> list[str]:
     if not env_flag("MAKE_VENDOR_FETCH_SOURCES", False):
         return []
     if host_os() != "linux" or not which("apt-get"):
-        warn("MAKE_VENDOR_FETCH_SOURCES=1 but apt-get is unavailable")
+        UI.warn("MAKE_VENDOR_FETCH_SOURCES=1 but apt-get is unavailable")
         return []
     dst.mkdir(parents=True, exist_ok=True)
     fetched: list[str] = []
     for name in apt_source_names():
-        step(f"vendor: fetching source package {name}")
+        UI.step(f"vendor: fetching source package {name}")
         res = run_capture(["apt-get", "source", "--download-only", name], cwd=dst)
         if res.returncode != 0:
-            warn(f"apt-get source failed for {name}")
+            UI.warn(f"apt-get source failed for {name}")
             if res.stderr:
                 sys.stderr.write(res.stderr)
             continue
@@ -860,68 +1378,102 @@ def bundle_dependency_sources(vendor_dir: Path) -> dict[str, object]:
         copied_archives.append(rel(archive))
     fetched = try_download_apt_sources(system_root)
     source_root.mkdir(parents=True, exist_ok=True)
-    info = {"local_source_dirs": copied_dirs, "source_archives": copied_archives, "fetched_system_sources": fetched, "detected_dependencies": dependency_report()}
+    info = {
+        "local_source_dirs": copied_dirs,
+        "source_archives": copied_archives,
+        "fetched_system_sources": fetched,
+        "detected_dependencies": dependency_report(),
+    }
     (source_root / "DEPENDENCIES.json").write_text(json.dumps(info, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if copied_dirs:
-        log("VENDOR", f"local dependency source trees: {', '.join(copied_dirs)}")
+        UI.log("VENDOR", f"local dependency source trees: {', '.join(copied_dirs)}")
     if copied_archives:
-        log("VENDOR", f"dependency source archives: {', '.join(copied_archives)}")
+        UI.log("VENDOR", f"dependency source archives: {', '.join(copied_archives)}")
     if fetched:
-        log("VENDOR", f"downloaded system dependency sources: {', '.join(fetched)}")
+        UI.log("VENDOR", f"downloaded system dependency sources: {', '.join(fetched)}")
     if not copied_dirs and not copied_archives and not fetched:
         msg = "no dependency source trees found; set MAKE_VENDOR_SOURCE_DIRS or MAKE_VENDOR_FETCH_SOURCES=1"
         if env_flag("MAKE_VENDOR_REQUIRE_SOURCES", False):
             die("vendor: " + msg)
-        log("VENDOR", msg, "1;33")
+        if UI.verbose:
+            UI.log("SOURCE", msg, "muted")
     return info
 
 
 ### Vendor
 
-def write_vendor_env(vendor_dir: Path, binary_name: str) -> None:
-    text = f'''#!/usr/bin/env sh
-### Source this to use the lean vendored compiler environment
-here=$(CDPATH= cd -- "$(dirname -- "${{BASH_SOURCE:-$0}}")" && pwd)
-export PATH="$here/bin${{PATH:+:$PATH}}"
-export LD_LIBRARY_PATH="$here/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
-export DYLD_LIBRARY_PATH="$here/lib${{DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}}"
-export LIBRARY_PATH="$here/lib${{LIBRARY_PATH:+:$LIBRARY_PATH}}"
-export CPATH="$here/include${{CPATH:+:$CPATH}}"
-if [ -x "$here/bin/llvm-config" ]; then export LLVM_CONFIG="$here/bin/llvm-config"; fi
-echo "{PROJECT.name} vendor environment loaded"
-'''
-    path = vendor_dir / "env.sh"
+def write_runtime_launcher(root: Path, binary: Path, lib_dir: Path, *, name: str = "run") -> Path:
+    """Write a launcher that avoids injecting a bundled libc into the host loader."""
+    path = root / name
+    bin_rel = os.path.relpath(binary, root).replace(os.sep, "/")
+    lib_rel = os.path.relpath(lib_dir, root).replace(os.sep, "/")
+    text = '#!/usr/bin/env sh\nset -eu\nhere=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
+    if host_os() == "linux":
+        loaders = sorted(lib_dir.glob("ld-linux*.so*")) + sorted(lib_dir.glob("ld-musl*.so*"))
+        if loaders:
+            loader_rel = os.path.relpath(loaders[0], root).replace(os.sep, "/")
+            text += f'exec "$here/{loader_rel}" --library-path "$here/{lib_rel}" "$here/{bin_rel}" "$@"\n'
+        else:
+            text += f'export LD_LIBRARY_PATH="$here/{lib_rel}${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"\n'
+            text += f'exec "$here/{bin_rel}" "$@"\n'
+    elif host_os() == "macos":
+        text += f'export DYLD_LIBRARY_PATH="$here/{lib_rel}${{DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}}"\n'
+        text += f'exec "$here/{bin_rel}" "$@"\n'
+    else:
+        text += f'exec "$here/{bin_rel}" "$@"\n'
     path.write_text(text, encoding="utf-8")
     chmod_executable(path)
-    run_path = vendor_dir / "run"
-    run_path.write_text(f'''#!/usr/bin/env sh
-### Generated by ./make vendor
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-export LD_LIBRARY_PATH="$here/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
-exec "$here/bin/{binary_name}" "$@"
-''', encoding="utf-8")
-    chmod_executable(run_path)
+    return path
 
 
-def run_vendor(args: list[str], jobs: int) -> int:
-    if args and args[0] in ("-h", "--help", "help"):
-        print(c("1;36", f"{PROJECT.name} vendor"))
-        print("Usage:")
-        print("  ./make vendor                         minimal flat runtime + build deps")
-        print("  ./make vendor <command-or-path> [dir] vendor an arbitrary binary")
-        print("  MAKE_VENDOR_ROOTFS=1 ./make vendor   additionally build a chroot view")
-        print("")
-        print("Output:")
-        print("  build/vendor/bin                     binary + llvm-config wrapper")
-        print("  build/vendor/lib                     one copy of each runtime/LLVM library")
-        print("  build/vendor/include                 C API headers; C++ headers are opt-in")
-        print("  build/vendor/src/DEPENDENCIES.json   source dependency manifest")
-        print("")
-        print("Size controls:")
-        print("  MAKE_VENDOR_LLVM_CPP_HEADERS=1       include llvm/ and clang/ C++ headers")
-        print("  MAKE_VENDOR_NO_CLANG_BUILTINS=1      omit Clang resource headers")
-        print("  MAKE_VENDOR_NO_SYSTEM_LIBS=1         omit libc/libm/etc from runtime closure")
-        return 0
+def write_vendor_env(vendor_dir: Path, binary_name: str) -> None:
+    lib_dir = vendor_dir / "lib"
+    write_runtime_launcher(vendor_dir, vendor_dir / "bin" / binary_name, lib_dir, name="run")
+    shim_dir = vendor_dir / "shim"
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    shim = shim_dir / binary_name
+    shim.write_text(
+        '#!/usr/bin/env sh\n'
+        'here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
+        'exec "$here/../run" "$@"\n',
+        encoding="utf-8",
+    )
+    chmod_executable(shim)
+    has_bundled_loader = bool(list(lib_dir.glob("ld-linux*.so*")) or list(lib_dir.glob("ld-musl*.so*")))
+    lines = [
+        "#!/usr/bin/env sh",
+        "### Source this file from Bash or Zsh to activate the vendored build environment.",
+        'if [ -n "${BASH_VERSION:-}" ] && [ -n "${BASH_SOURCE:-}" ]; then',
+        '  _make_vendor_source=$BASH_SOURCE',
+        'elif [ -n "${ZSH_VERSION:-}" ]; then',
+        "  _make_vendor_source=$(eval 'printf \"%s\" \"${(%):-%N}\"')",
+        'else',
+        '  printf "%s\n" "env.sh: source this file from Bash or Zsh" >&2',
+        '  return 2 2>/dev/null || exit 2',
+        'fi',
+        '_make_vendor_root=$(CDPATH= cd -- "$(dirname -- "$_make_vendor_source")" && pwd)',
+        'export PATH="$_make_vendor_root/shim:$_make_vendor_root/bin${PATH:+:$PATH}"',
+    ]
+    if not has_bundled_loader:
+        lines.extend([
+            'export LD_LIBRARY_PATH="$_make_vendor_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"',
+            'export DYLD_LIBRARY_PATH="$_make_vendor_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"',
+        ])
+    lines.extend([
+        'export LIBRARY_PATH="$_make_vendor_root/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"',
+        'export CPATH="$_make_vendor_root/include${CPATH:+:$CPATH}"',
+        'if [ -x "$_make_vendor_root/bin/llvm-config" ]; then export LLVM_CONFIG="$_make_vendor_root/bin/llvm-config"; fi',
+        f'printf "%s\n" "{PROJECT.name} vendor environment ready"',
+        'printf "  %-8s %s\n" "runner" "$_make_vendor_root/run"',
+        'unset _make_vendor_source _make_vendor_root',
+        "",
+    ])
+    path = vendor_dir / "env.sh"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    chmod_executable(path)
+
+def run_vendor(args: list[str], ctx: AppContext) -> int:
+    jobs = ctx.jobs
     if args:
         binary = resolve_program(args[0])
         vendor_dir = Path(args[1]).expanduser() if len(args) > 1 else VENDOR_DIR
@@ -931,8 +1483,7 @@ def run_vendor(args: list[str], jobs: int) -> int:
     shutil.rmtree(vendor_dir, ignore_errors=True)
     bin_dir = vendor_dir / "bin"
     lib_dir = vendor_dir / "lib"
-    log("VENDOR", f"using {rel(vendor_dir)}")
-    log("VENDOR", f"binary {binary}")
+    UI.log("VENDOR", f"binary {rel(binary)}")
     binary_dst, runtime_libs = copy_runtime_flat(
         binary, bin_dir, lib_dir, include_system=not env_flag("MAKE_VENDOR_NO_SYSTEM_LIBS", False)
     )
@@ -944,7 +1495,7 @@ def run_vendor(args: list[str], jobs: int) -> int:
         rootfs = vendor_dir / "rootfs"
         copied = copy_binary_rootfs(binary, rootfs, include_system=not env_flag("MAKE_VENDOR_NO_SYSTEM_LIBS", False))
         rootfs_files = [str(p.relative_to(vendor_dir)) for p in copied if p.exists()]
-        log("VENDOR", f"optional rootfs files: {len(copied)}")
+        UI.log("VENDOR", f"optional rootfs files: {len(copied)}")
     write_manifest(vendor_dir, {
         "binary": str(binary),
         "runtime_binary": str(binary_dst.relative_to(vendor_dir)),
@@ -952,22 +1503,15 @@ def run_vendor(args: list[str], jobs: int) -> int:
         "rootfs_files": rootfs_files,
         "dependency_sources": source_info,
     })
-    log("VENDOR", f"runtime libs: {len(runtime_libs)} unique files")
-    ok(f"vendor ready: {rel(vendor_dir)}")
-    print(c("90", f"Run with: {rel(vendor_dir / 'run')} --help"))
+    UI.log("VENDOR", f"runtime libs: {len(runtime_libs)} unique files")
+    UI.artifact("vendor ready", rel(vendor_dir), f"run: {rel(vendor_dir / 'run')} --help")
     return 0
 
 
 ### Static
 
-def run_static(args: list[str], jobs: int) -> int:
-    if not args or args[0] in ("-h", "--help", "help"):
-        print(c("1;36", f"{PROJECT.name} static"))
-        print("Usage:")
-        print("  ./make static bin")
-        print("  ./make bin-static")
-        print("  ./make static check <binary>")
-        return 0
+def run_static(args: list[str], ctx: AppContext) -> int:
+    jobs = ctx.jobs
     cmd = args[0]
     if cmd == "bin":
         binary = find_binary(build_if_missing=True, jobs=jobs)
@@ -978,193 +1522,920 @@ def run_static(args: list[str], jobs: int) -> int:
             STATIC_DIR / "lib",
             include_system=not env_flag("MAKE_STATIC_NO_SYSTEM_LIBS", False),
         )
-        run_script = STATIC_DIR / "run"
-        run_script.write_text(f'''#!/usr/bin/env sh
-### Generated by ./make static bin
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-export LD_LIBRARY_PATH="$here/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
-exec "$here/bin/{binary.name}" "$@"
-''', encoding="utf-8")
-        chmod_executable(run_script)
+        write_runtime_launcher(STATIC_DIR, binary_dst, STATIC_DIR / "lib", name="run")
         write_manifest(STATIC_DIR, {
             "binary": str(binary),
             "runtime_binary": str(binary_dst.relative_to(STATIC_DIR)),
             "runtime_libs": [str(p.relative_to(STATIC_DIR)) for p in libs],
         })
-        log("STATIC", f"binary {rel(binary)}")
-        log("STATIC", f"bundled {len(libs)} unique shared libs")
-        ok(f"static ready: {rel(STATIC_DIR)}")
+        UI.log("STATIC", f"binary {rel(binary)}")
+        UI.log("STATIC", f"bundled {len(libs)} unique shared libs")
+        UI.artifact("portable bundle ready", rel(STATIC_DIR), f"run: {rel(STATIC_DIR / 'run')}")
         return 0
     if cmd == "check":
         if len(args) < 2:
             die("usage: ./make static check <binary>")
         binary = Path(args[1]).expanduser()
-        deps = dependency_paths(binary)
-        log("STATIC", f"{binary}: {'dynamic' if deps else 'static or unknown'}")
-        for dep in deps:
-            print(f"  {dep}")
-        return 1 if deps else 0
+        if not binary.is_absolute():
+            binary = ROOT / binary
+        status, detail = binary_linkage_status(binary)
+        UI.section("Linkage")
+        UI.row("binary", None, rel(binary))
+        state = UI.status_word(True) if status == "static" else (UI.status_word(False) if status == "dynamic" else UI.dim("?"))
+        UI.row("classification", state, status)
+        if detail:
+            UI.row("detail", None, detail)
+        if status == "dynamic":
+            deps, unresolved = dependency_closure_details(binary)
+            if deps:
+                print("")
+                UI.section("Runtime dependencies")
+                for dep in deps:
+                    UI.note(str(dep))
+            if unresolved:
+                print("")
+                UI.error("unresolved runtime dependencies")
+                for name in unresolved:
+                    UI.error_detail(name)
+            return 1
+        return 0 if status == "static" else 2
     die(f"unknown static command: {cmd}")
 
 
 ### Tar
 
 def tar_source_ignore(_dir: str, names: list[str]) -> set[str]:
-    ignored_names = {".git", ".hg", ".svn", ".cache", ".pytest_cache", "__pycache__", "build", "dist", "tmp", "temp", "CMakeFiles", "CMakeCache.txt", "compile_commands.json"}
-    ignored_suffixes = (".o", ".a", ".so", ".dylib", ".dll", ".exe", ".pyc", ".pyo", ".gcda", ".gcno", ".profraw", ".profdata")
-    return {n for n in names if n in ignored_names or n.endswith(ignored_suffixes)}
+    ignored_names = {
+        ".git", ".hg", ".svn", ".cache", ".pytest_cache", "__pycache__",
+        "build", "dist", "tmp", "temp", "CMakeFiles", "CMakeCache.txt",
+        "compile_commands.json", ".monadc-test-artifacts", ".last-failures",
+        ".test-results.json", ".last-first-failure.org",
+    }
+    ignored_suffixes = (
+        ".o", ".obj", ".a", ".so", ".dylib", ".dll", ".exe", ".pyc", ".pyo",
+        ".gcda", ".gcno", ".profraw", ".profdata", ".mqti", ".ll", ".bc", ".tmp",
+    )
+    return {
+        name for name in names
+        if name in ignored_names or name.startswith(".#") or name.endswith("~") or name.endswith(ignored_suffixes)
+    }
 
 
-def copy_source_tree(package_dir: Path) -> None:
-    copied: set[str] = set()
-    for name in PROJECT.source_dirs:
-        src = ROOT / name
-        if src.exists():
-            copytree_replace(src, package_dir / name, ignore=tar_source_ignore)
-            copied.add(name)
-    for name in PROJECT.source_files + PROJECT.package_files:
-        src = ROOT / name
-        if src.exists():
-            copy_file(src, package_dir / name)
-            copied.add(name)
-    for p in ROOT.iterdir():
-        if p.name in copied or p.name.startswith(".") or p.name == "build":
+SOURCE_PACKAGE_REQUIRED = (
+    "Makefile",
+    "CMakeLists.txt",
+    "make",
+    "src/main.c",
+    "src/runtime.c",
+    "src/tooling/lsp.c",
+    "src/tooling/repl.c",
+    "src/testing/runner.py",
+    "src/testing/core_runner.py",
+    "core",
+    "tests",
+)
+
+
+def validate_source_package_surface(root: Path = ROOT) -> None:
+    missing = [item for item in SOURCE_PACKAGE_REQUIRED if not (root / item).exists()]
+    if missing:
+        raise CliError("source package surface is incomplete", detail="missing: " + ", ".join(missing))
+    test_files = [path for path in (root / "tests").rglob("*") if path.is_file()]
+    non_monad = [rel(path) for path in test_files if path.suffix != ".mon"]
+    if non_monad:
+        preview = ", ".join(non_monad[:8])
+        suffix = " ..." if len(non_monad) > 8 else ""
+        raise CliError("tests/ must contain authored .mon files only", detail=preview + suffix)
+
+
+def source_package_entry(path: Path, *, with_context: bool) -> bool:
+    """Whether a root entry belongs in the minimal complete source package."""
+    essential_dirs = {"src", "core", "tests", "how_to", "examples", ".githooks", ".github"}
+    if with_context:
+        # Context verification references the research/glyph assets, so this is
+        # one opt-in documentation payload rather than a subtly incomplete one.
+        essential_dirs.update({"context", "glyph", "etc"})
+    essential_files = {
+        "Makefile", "CMakeLists.txt", "make", "README.md", ".gitignore",
+        "LICENSE", "LICENSE.txt", "COPYING", "CHANGELOG.md",
+    }
+    return path.name in essential_dirs or path.name in essential_files
+
+
+def copy_source_tree(package_dir: Path, *, with_context: bool) -> None:
+    """Copy the complete build/verification surface without repository baggage."""
+    for src in sorted(ROOT.iterdir(), key=lambda path: path.name):
+        if not source_package_entry(src, with_context=with_context):
             continue
-        if p.is_file() and p.suffix in (".md", ".txt", ".toml", ".json", ".yaml", ".yml", ".ini"):
-            copy_file(p, package_dir / p.name)
+        dst = package_dir / src.name
+        if src.is_dir():
+            copytree_replace(src, dst, ignore=tar_source_ignore)
+        elif src.is_file():
+            copy_file(src, dst)
+    validate_source_package_surface(package_dir)
 
 
-def write_agent_build(package_dir: Path, with_binaries: bool) -> None:
+def write_agent_build(package_dir: Path, *, with_binaries: bool, with_vendor: bool, with_context: bool) -> None:
     target = PROJECT.target or "target"
-    text = f'''# Agent build notes for {PROJECT.name}
-
-This package was produced by ./make tar.
-
-## Included
-
-- Project source tree.
-- build/vendor/bin with the compiler/tool binary and llvm-config wrapper.
-- build/vendor/lib with one deduplicated runtime/LLVM library closure.
-- build/vendor/include with LLVM/Clang C API headers when detected.
-- build/vendor/src/DEPENDENCIES.json with dependency source metadata.
-- build/static when built with --with-binaries.
-- MANIFEST.json with hashes.
-
-## Build from source
-
-```sh
-. build/vendor/env.sh 2>/dev/null || true
-./make doctor
-./make all
-```
-
-Or directly:
-
-```sh
-. build/vendor/env.sh 2>/dev/null || true
-make all
-```
-
-## Run vendored compiler/tool
-
-```sh
-. build/vendor/env.sh 2>/dev/null || true
-build/vendor/run --help 2>/dev/null || build/vendor/run
-```
-
-## Optional chroot view
-
-Generate it only when needed:
-
-```sh
-MAKE_VENDOR_ROOTFS=1 ./make vendor
-sudo chroot build/vendor/rootfs /bin/{target}
-```
-'''
+    included = [
+        "src/ — compiler, runtime, embedding, tooling, and host verification infrastructure",
+        "core/ — shipped Monad core library",
+        "tests/ — authored .mon verification corpus only",
+        "how_to/ and examples/ — executable language examples",
+        "Makefile, CMakeLists.txt, and ./make — canonical build frontends",
+        ".githooks/ and .github/ — clean-tree enforcement and CI verification contract",
+        "SOURCE_MANIFEST.json — package hashes and build metadata",
+    ]
+    if with_vendor:
+        included.append("build/vendor/ — optional relocatable dependency/toolchain bundle")
     if with_binaries:
-        text += "\n## Static folder\n\n```sh\nbuild/static/run --help 2>/dev/null || build/static/run\n```\n"
-    (package_dir / "AGENT_BUILD.md").write_text(text, encoding="utf-8")
+        included.append("build/static/ — optional portable binary folder")
+    if with_context:
+        included.append("context/, glyph/, etc/ — optional design/research context payload")
+
+    lines = [
+        f"# Agent build notes for {PROJECT.name}",
+        "",
+        "This archive was produced by `./make tar` from the canonical source layout.",
+        "",
+        "## Included",
+        "",
+        *(f"- {item}" for item in included),
+        "",
+        "## Build and verify",
+        "",
+        "```sh",
+    ]
+    if with_vendor:
+        lines.append(". build/vendor/env.sh")
+    lines.extend([
+        "./make doctor",
+        "./make all",
+        "./make test",
+        "```",
+        "",
+        "`./make all` refreshes `compile_commands.json` for clangd automatically.",
+        "Run `./make compdb` explicitly when you only want to refresh editor metadata.",
+        "",
+        "## Clean-tree invariant",
+        "",
+        "```sh",
+        "./make clean --check",
+        "```",
+        "",
+        "Generated compiler/test/build state belongs under `build/` and is never source.",
+    ])
+    if with_vendor:
+        lines.extend([
+            "",
+            "## Vendored runner",
+            "",
+            "```sh",
+            "build/vendor/run --help 2>/dev/null || build/vendor/run",
+            "```",
+            "",
+            "Optional chroot view:",
+            "",
+            "```sh",
+            "MAKE_VENDOR_ROOTFS=1 ./make vendor",
+            f"sudo chroot build/vendor/rootfs /bin/{target}",
+            "```",
+        ])
+    if with_binaries:
+        lines.extend([
+            "",
+            "## Portable binary folder",
+            "",
+            "```sh",
+            "build/static/run --help 2>/dev/null || build/static/run",
+            "```",
+        ])
+    (package_dir / "AGENT_BUILD.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
-def run_tar(args: list[str], jobs: int) -> int:
-    if args and args[0] in ("-h", "--help", "help"):
-        print(c("1;36", f"{PROJECT.name} tar"))
-        print("Usage:")
-        print("  ./make tar")
-        print("  ./make tar --with-binaries")
-        return 0
+def run_tar(args: list[str], ctx: AppContext) -> int:
     with_binaries = "--with-binaries" in args or env_flag("MAKE_TAR_WITH_BINARIES", False)
+    with_vendor = "--with-vendor" in args or env_flag("MAKE_TAR_WITH_VENDOR", False)
+    with_context = "--with-context" in args or env_flag("MAKE_TAR_WITH_CONTEXT", False)
+    known = {"--with-binaries", "--with-vendor", "--with-context"}
+    unknown = [arg for arg in args if arg not in known]
+    if unknown:
+        die("tar: unknown option(s): " + " ".join(unknown))
+
+    validate_source_package_surface()
+    if missing_referenced_sources():
+        report_source_integrity(fail=True)
+
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     package_name = f"{PROJECT.name}-static" if with_binaries else f"{PROJECT.name}-source"
     package_dir = DIST_DIR / package_name
     shutil.rmtree(package_dir, ignore_errors=True)
     package_dir.mkdir(parents=True, exist_ok=True)
-    log("TAR", f"package {package_name}", "1;36")
-    if not (VENDOR_DIR / "env.sh").exists():
-        step("tar: building vendor first")
-        run_vendor([], jobs)
-    log("VENDOR", f"using {rel(VENDOR_DIR)}")
-    copytree_replace(VENDOR_DIR, package_dir / "build" / "vendor")
+    UI.log("TAR", f"package {package_name}", "accent")
+
+    copy_source_tree(package_dir, with_context=with_context)
+
+    if with_vendor:
+        if not (VENDOR_DIR / "env.sh").exists():
+            UI.step("tar: building optional vendor bundle")
+            run_vendor([], ctx)
+        UI.log("VENDOR", f"including {rel(VENDOR_DIR)}")
+        copytree_replace(VENDOR_DIR, package_dir / "build" / "vendor")
     if with_binaries:
-        log("STATIC", "building portable binary folder")
-        run_static(["bin"], jobs)
+        UI.log("STATIC", "building portable binary folder")
+        run_static(["bin"], ctx)
         copytree_replace(STATIC_DIR, package_dir / "build" / "static")
-    else:
-        log("STATIC", "source package only; pass --with-binaries to include build/static")
-    copy_source_tree(package_dir)
-    write_agent_build(package_dir, with_binaries)
-    write_manifest(package_dir, {"with_binaries": with_binaries, "dependency_report": dependency_report()})
-    archive = make_tar_gz(DIST_DIR / package_name, DIST_DIR, package_name)
-    ok(f"tar ready: {rel(archive)}")
+
+    write_agent_build(
+        package_dir,
+        with_binaries=with_binaries,
+        with_vendor=with_vendor,
+        with_context=with_context,
+    )
+    write_manifest(package_dir, {
+        "with_binaries": with_binaries,
+        "with_vendor": with_vendor,
+        "with_context": with_context,
+        "dependency_report": dependency_report(),
+    }, filename="SOURCE_MANIFEST.json")
+    archive = make_tar_gz(package_dir, DIST_DIR, package_name)
+    detail = format_bytes(archive.stat().st_size) if archive.exists() else "created"
+    UI.artifact("archive ready", rel(archive), detail)
+    if not with_vendor:
+        UI.hint("vendor toolchains are excluded by default; add --with-vendor only when portability requires them")
     return 0
+
+
+### Developer workflow
+
+def total_memory_bytes() -> int:
+    try:
+        if host_os() == "linux":
+            for line in Path("/proc/meminfo").read_text(encoding="utf-8", errors="ignore").splitlines():
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) * 1024
+        if host_os() == "macos":
+            res = run_capture(["sysctl", "-n", "hw.memsize"], timeout=3)
+            if res.returncode == 0 and res.stdout.strip().isdigit():
+                return int(res.stdout.strip())
+        if host_os() == "windows":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MEMORYSTATUSEX()
+            status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.ullTotalPhys)
+    except Exception:
+        pass
+    return 0
+
+
+def format_bytes(value: int) -> str:
+    if value <= 0:
+        return "unknown"
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    n = float(value)
+    for unit in units:
+        if n < 1024 or unit == units[-1]:
+            return f"{n:.1f} {unit}" if unit not in ("B", "KiB") else f"{int(n)} {unit}"
+        n /= 1024
+    return str(value)
+
+
+def resolve_jobs(requested: int) -> tuple[int, str]:
+    if requested > 0:
+        return requested, "explicit"
+    raw = os.environ.get("MAKE_JOBS", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw), "MAKE_JOBS"
+    cpu = max(1, os.cpu_count() or 1)
+    jobs = max(1, int(cpu * 0.75))
+    if cpu >= 2:
+        jobs = max(2, jobs)
+    memory = total_memory_bytes()
+    per_job_mb = int(os.environ.get("MAKE_JOB_MEMORY_MB", "1536") or "1536")
+    if memory > 0 and per_job_mb > 0:
+        memory_jobs = max(1, memory // (per_job_mb * 1024 * 1024))
+        jobs = min(jobs, int(memory_jobs))
+    return max(1, jobs), f"auto from {cpu} CPUs/{format_bytes(memory)} RAM"
+
+
+def env_words(name: str) -> list[str]:
+    raw = os.environ.get(name, "").strip()
+    return [x for x in re.split(r"[\s,;]+", raw) if x] if raw else []
+
+
+SOURCE_REFERENCE_SUFFIXES = ("c", "cc", "cpp", "cxx", "h", "hh", "hpp")
+
+
+def referenced_source_files() -> list[str]:
+    """Collect literal native-source references from the declared build files."""
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9_])([A-Za-z0-9_./+-]+\.(?:"
+        + "|".join(SOURCE_REFERENCE_SUFFIXES)
+        + r"))(?![A-Za-z0-9_])"
+    )
+    refs: set[str] = set()
+    for name in ("Makefile", "makefile", "GNUmakefile", "CMakeLists.txt"):
+        path = ROOT / name
+        if not path.is_file():
+            continue
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        # Build-file comments are prose, not dependency declarations.  Strip
+        # them before scanning so documentation such as ``features.h`` does
+        # not become a false source-integrity requirement.
+        build_text = "\n".join(line.split("#", 1)[0] for line in raw.splitlines())
+        for match in pattern.finditer(build_text):
+            value = match.group(1)
+            if value.startswith("/") or "$" in value or value.startswith("<"):
+                continue
+            refs.add(value)
+    return sorted(refs)
+
+
+def missing_referenced_sources() -> list[str]:
+    return [name for name in referenced_source_files() if not (ROOT / name).exists()]
+
+
+def report_source_integrity(*, fail: bool = False) -> int:
+    refs = referenced_source_files()
+    missing = missing_referenced_sources()
+    UI.section("Source integrity")
+    UI.row("referenced native files", None, str(len(refs)))
+    UI.row("missing", None, str(len(missing)), good=not missing)
+    if missing:
+        sys.stdout.flush()
+        visible = missing if UI.verbose else missing[:12]
+        for name in visible:
+            UI.error_detail(name)
+        if len(missing) > len(visible):
+            UI.hint(f"{len(missing) - len(visible)} more missing source paths; use --verbose for the complete list")
+        if fail:
+            raise CliError(
+                f"source package is incomplete: {len(missing)} build-referenced native source files are missing",
+                hint="recreate the package from a complete checkout; source archives copy the full repository minus generated state",
+            )
+    return len(missing)
+
+
+def source_hygiene_files() -> list[Path]:
+    default_exts = {
+        ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".m", ".mm",
+        ".py", ".sh", ".rs", ".go", ".java", ".kt", ".mon", ".ny", ".cmake",
+    }
+    configured = env_words("MAKE_HYGIENE_EXTENSIONS")
+    exts = {x if x.startswith(".") else "." + x for x in configured} if configured else default_exts
+    out: list[Path] = []
+    for name in PROJECT.source_dirs:
+        root = ROOT / name
+        if not root.exists():
+            continue
+        for p in root.rglob("*"):
+            if p.is_file() and (p.suffix.lower() in exts or p.name in {"Makefile", "makefile", "GNUmakefile"}):
+                out.append(p)
+    for name in PROJECT.source_files:
+        p = ROOT / name
+        if p.exists() and p.is_file() and p not in out:
+            out.append(p)
+    return out
+
+
+def check_source_hygiene() -> int:
+    """Fail on corrupt text inputs or unresolved merge-conflict markers."""
+    bad: list[str] = []
+    conflict = re.compile(r"^(?:<<<<<<< |>>>>>>> )")
+    max_bytes = int(os.environ.get("MAKE_HYGIENE_MAX_FILE_MB", "16") or "16") * 1024 * 1024
+    files = source_hygiene_files()
+    for p in files:
+        try:
+            if p.stat().st_size > max_bytes:
+                continue
+            data = p.read_bytes()
+        except OSError as exc:
+            bad.append(f"{rel(p)}: unreadable: {exc}")
+            continue
+        if b"\x00" in data:
+            bad.append(f"{rel(p)}: contains NUL byte(s)")
+            continue
+        text = data.decode("utf-8", errors="replace")
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if conflict.match(line):
+                bad.append(f"{rel(p)}:{line_no}: unresolved merge-conflict marker")
+                break
+        if len(bad) >= 50:
+            break
+    if bad:
+        UI.error("source hygiene failed")
+        for item in bad:
+            UI.error_detail(item)
+        return 1
+    UI.ok(f"source hygiene ({len(files)} files)")
+    return 0
+
+
+GENERATED_DIR_NAMES = frozenset({
+    "__pycache__", ".pytest_cache", ".monadc-test-artifacts", "CMakeFiles",
+})
+GENERATED_SUFFIXES = frozenset({
+    ".mqti", ".ll", ".bc", ".o", ".obj", ".pyc", ".pyo",
+    ".gcda", ".gcno", ".profraw", ".profdata", ".tmp",
+})
+GENERATED_EXACT_PATHS = frozenset({
+    "MANIFEST.json",
+    "compile_commands.json",
+    "CMakeCache.txt",
+    "tests/.test-results.json",
+    "tests/.last-first-failure.org",
+    "tests/.fuzz-results.json",
+    "tests/.fuzz-history.json",
+})
+GENERATED_TREE_PATHS = frozenset({
+    "build",
+    "dist",
+    ".dryc",
+    "tests/.last-failures",
+})
+
+
+def generated_root_outputs() -> set[Path]:
+    names = {PROJECT.target, PROJECT.runtime_lib}
+    for var in (
+        "TARGET", "TARGET_BASE", "RUNTIME_LIB", "EMBED_STATIC_LIB", "EMBED_SHARED_LIB",
+        "COMPILER_STATIC_LIB", "COMPILER_SHARED_LIB",
+    ):
+        value = parse_make_var(var).strip()
+        if value and "$" not in value and "/" not in value and "\\" not in value:
+            names.add(value)
+    out: set[Path] = set()
+    for name in names:
+        if not name:
+            continue
+        path = ROOT / name
+        if path.exists() and path.is_file():
+            out.add(path)
+        exe = ROOT / f"{name}.exe"
+        if exe.exists() and exe.is_file():
+            out.add(exe)
+    return out
+
+
+def generated_artifacts() -> list[Path]:
+    """Return generated repository state covered by the canonical clean policy."""
+    found: set[Path] = set(generated_root_outputs())
+    for relpath in GENERATED_TREE_PATHS | GENERATED_EXACT_PATHS:
+        path = ROOT / relpath
+        if path.exists() or path.is_symlink():
+            found.add(path)
+
+    for current, dirs, files in os.walk(ROOT, topdown=True):
+        base = Path(current)
+        rel_base = base.relative_to(ROOT)
+        if rel_base.parts and rel_base.parts[0] == ".git":
+            dirs[:] = []
+            continue
+        # Whole generated trees are already represented once; do not enumerate them.
+        pruned: list[str] = []
+        for name in list(dirs):
+            path = base / name
+            rel = path.relative_to(ROOT).as_posix()
+            if rel in GENERATED_TREE_PATHS or name in GENERATED_DIR_NAMES:
+                found.add(path)
+            else:
+                pruned.append(name)
+        dirs[:] = pruned
+
+        for name in files:
+            path = base / name
+            rel = path.relative_to(ROOT).as_posix()
+            if name.startswith(".#") or name.endswith("~") or name == ".DS_Store":
+                found.add(path)
+                continue
+            if path.suffix.lower() in GENERATED_SUFFIXES:
+                found.add(path)
+                continue
+            # Core JSON is compiler interface/cache output. JSON elsewhere may be source/golden data.
+            if path.suffix.lower() == ".json" and rel.startswith("core/"):
+                found.add(path)
+    return sorted(found, key=lambda path: (len(path.parts), path.as_posix()))
+
+
+def artifact_size(path: Path) -> int:
+    try:
+        if path.is_symlink() or path.is_file():
+            return path.lstat().st_size
+        if path.is_dir():
+            return sum(artifact_size(child) for child in path.iterdir())
+    except OSError:
+        return 0
+    return 0
+
+
+def remove_artifact(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+    elif path.is_dir():
+        shutil.rmtree(path, ignore_errors=False)
+
+
+def command_clean(args: list[str], _ctx: AppContext) -> int:
+    """Deep-clean the repository or enforce cleanliness without mutating it."""
+    check_only = "--check" in args
+    unknown = [arg for arg in args if arg != "--check"]
+    if unknown:
+        die("clean: unknown option(s): " + " ".join(unknown))
+
+    if not check_only and make_has_target("clean"):
+        UI.step("Makefile clean")
+        run_make(["clean"], jobs=1)
+
+    artifacts = generated_artifacts()
+    if check_only:
+        if not artifacts:
+            UI.ok("repository is clean")
+            return 0
+        total = sum(artifact_size(path) for path in artifacts)
+        UI.error(f"generated repository state detected ({len(artifacts)} paths · {format_bytes(total)})")
+        visible = artifacts if UI.verbose else artifacts[:10]
+        for path in visible:
+            UI.error_detail(path.relative_to(ROOT).as_posix())
+        if len(artifacts) > len(visible):
+            UI.hint(f"{len(artifacts) - len(visible)} more paths; use --verbose to inspect all", stream=sys.stderr)
+        UI.hint("run ./make clean, then stage the deletion before committing", stream=sys.stderr)
+        return 1
+
+    if not artifacts:
+        UI.ok("repository already clean")
+        return 0
+    total = sum(artifact_size(path) for path in artifacts)
+    removed = 0
+    for path in sorted(artifacts, key=lambda item: len(item.parts), reverse=True):
+        if not (path.exists() or path.is_symlink()):
+            continue
+        if UI.verbose:
+            UI.log("CLEAN", rel(path), "accent_soft")
+        remove_artifact(path)
+        removed += 1
+    UI.ok(f"deep clean removed {removed} paths · reclaimed {format_bytes(total)}")
+    return 0
+
+
+def append_flags(env: dict[str, str], name: str, flags: str) -> None:
+    env[name] = ((env.get(name, "") + " " + flags).strip())
+
+
+def command_sanitizer(kind: str, args: list[str], ctx: AppContext) -> int:
+    jobs = ctx.jobs
+    build_only = "--build-only" in args
+    forwarded = [a for a in args if a != "--build-only"]
+    if make_has_target(kind):
+        started = time.perf_counter()
+        run_make([kind], jobs=jobs, extra=forwarded)
+        UI.ok(f"{kind} completed in {format_elapsed(time.perf_counter() - started)}")
+        return 0
+    flags = {
+        "asan": "-fsanitize=address -fno-omit-frame-pointer -g",
+        "ubsan": "-fsanitize=undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined -g",
+    }[kind]
+    env = os.environ.copy()
+    append_flags(env, "CFLAGS", flags)
+    append_flags(env, "CXXFLAGS", flags)
+    append_flags(env, "LDFLAGS", flags.replace(" -g", ""))
+    target = ctx.project.build_target or ("all" if make_has_target("all") else "")
+    display_target = target or "the default target"
+    UI.step(f"{kind}: Makefile has no '{kind}' target; injecting sanitizer flags into {display_target}")
+    started = time.perf_counter()
+    run_make([target] if target else None, jobs=jobs, env=env)
+    if not build_only and make_has_target("test"):
+        run_make(["test"], jobs=jobs, env=env)
+    UI.ok(f"{kind} completed in {format_elapsed(time.perf_counter() - started)}")
+    return 0
+
+
+def command_test(args: list[str], ctx: AppContext) -> int:
+    """Run the project's canonical test frontend when one is present.
+
+    Monad keeps authored fixtures in tests/ and the host runner in src/testing;
+    other projects continue to fall back to their Makefile test target.
+    """
+    jobs = ctx.jobs
+    no_build = "--no-build" in args
+    forwarded = [arg for arg in args if arg != "--no-build"]
+    runner = ROOT / "src" / "testing" / "runner.py"
+    started = time.perf_counter()
+
+    if runner.is_file():
+        metadata_only = any(
+            arg in {"--list", "--list-targets", "--list-tiers",
+                    "--validate-context-links", "--validate-metadata"}
+            for arg in forwarded
+        )
+        if not no_build and not metadata_only:
+            target = ctx.project.build_target or ("all" if make_has_target("all") else "")
+            run_make([target] if target else None, jobs=jobs)
+        env = os.environ.copy()
+        if not metadata_only:
+            binary = find_binary(build_if_missing=not no_build, jobs=jobs)
+            env["MONAD_BINARY"] = str(binary)
+        proc = subprocess.run(
+            [sys.executable, "-B", "-m", "src.testing.runner", *forwarded],
+            cwd=str(ROOT), env=env, check=False,
+        )
+        if proc.returncode == 0:
+            UI.ok(f"tests completed in {format_elapsed(time.perf_counter() - started)}")
+        return proc.returncode
+
+    if not make_has_target("test"):
+        die("Makefile has no test target")
+    if forwarded:
+        die("this project exposes test arguments only through a canonical src/testing runner")
+    run_make(["test"], jobs=jobs)
+    UI.ok(f"tests completed in {format_elapsed(time.perf_counter() - started)}")
+    return 0
+
+
+def command_check(args: list[str], ctx: AppContext) -> int:
+    jobs = ctx.jobs
+    no_build = "--no-build" in args
+    no_tests = "--no-tests" in args or "--quick" in args
+    unknown = [a for a in args if a not in {"--no-build", "--no-tests", "--quick"}]
+    if unknown:
+        die("check: unknown option(s): " + " ".join(unknown))
+    started = time.perf_counter()
+    if check_source_hygiene() != 0:
+        return 1
+
+    explicit = env_words("MAKE_CHECK_TARGETS")
+    if explicit:
+        for target in explicit:
+            if not make_has_target(target):
+                die(f"MAKE_CHECK_TARGETS names missing target: {target}")
+            run_make([target], jobs=jobs)
+        UI.ok(f"check completed in {format_elapsed(time.perf_counter() - started)}")
+        return 0
+
+    if make_has_target("check") and not args:
+        run_make(["check"], jobs=jobs)
+        UI.ok(f"check completed in {format_elapsed(time.perf_counter() - started)}")
+        return 0
+
+    for target in ("format-check", "fmt-check", "lint", "static-analysis"):
+        if make_has_target(target):
+            run_make([target], jobs=jobs)
+    if not no_build:
+        target = PROJECT.build_target or ("all" if make_has_target("all") else "")
+        run_make([target] if target else None, jobs=jobs)
+    if not no_tests and make_has_target("test"):
+        result = command_test(["--no-build"], ctx)
+        if result != 0:
+            return result
+    UI.ok(f"check completed in {format_elapsed(time.perf_counter() - started)}")
+    return 0
+
+
+def read_os_release() -> dict[str, str]:
+    p = Path("/etc/os-release")
+    out: dict[str, str] = {}
+    try:
+        for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                out[k.strip()] = v.strip().strip('"')
+    except OSError:
+        pass
+    return out
+
+
+def project_needs_llvm() -> bool:
+    hay = makefile_text().lower()
+    libs = {x.lower() for x in detected_link_libraries()}
+    pkgs = {x.lower() for x in detected_pkg_config_packages()}
+    names = libs | pkgs
+    return any("llvm" in x or "clang" in x for x in names) or "llvm-config" in hay
+
+
+def pkg_config_exists(name: str) -> bool:
+    tool = which("pkg-config") or which("pkgconf")
+    return bool(tool and run_capture([tool, "--exists", name], timeout=5).returncode == 0)
+
+
+def required_dependency_state() -> tuple[list[str], list[str]]:
+    missing_tools: list[str] = []
+    if not find_system_make():
+        missing_tools.append("make")
+    if not (os.environ.get("CC") or which("cc") or which("clang") or which("gcc")):
+        missing_tools.append("cc")
+    text = makefile_text().lower()
+    if "pkg-config" in text and not (which("pkg-config") or which("pkgconf")):
+        missing_tools.append("pkg-config")
+    if "cmake" in text and not which("cmake"):
+        missing_tools.append("cmake")
+    if "ninja" in text and not which("ninja"):
+        missing_tools.append("ninja")
+    if project_needs_llvm() and not llvm_config_path():
+        missing_tools.append("llvm")
+    missing_pkgs = [pkg for pkg in detected_pkg_config_packages() if not pkg_config_exists(pkg)]
+    return list(dict.fromkeys(missing_tools)), missing_pkgs
+
+
+def install_dependencies(missing: list[str]) -> None:
+    if not missing:
+        return
+    os_name = host_os()
+    if os_name == "linux":
+        info = read_os_release()
+        distro = info.get("ID", "").lower()
+        like = info.get("ID_LIKE", "").lower()
+        prefix = [] if hasattr(os, "geteuid") and os.geteuid() == 0 else (["sudo"] if which("sudo") else [])
+        if distro in {"debian", "ubuntu", "linuxmint", "pop", "raspbian"} or "debian" in like:
+            mapping = {
+                "make": "build-essential",
+                "cc": "build-essential",
+                "pkg-config": "pkg-config",
+                "cmake": "cmake",
+                "ninja": "ninja-build",
+                "llvm": "llvm-dev clang",
+            }
+            pkgs = sorted({p for item in missing for p in mapping.get(item, item).split()})
+            run([*prefix, "apt-get", "update"])
+            run([*prefix, "apt-get", "install", "-y", *pkgs])
+            return
+        if distro in {"arch", "manjaro"} or "arch" in like:
+            mapping = {
+                "make": "base-devel",
+                "cc": "base-devel",
+                "pkg-config": "pkgconf",
+                "cmake": "cmake",
+                "ninja": "ninja",
+                "llvm": "llvm clang",
+            }
+            pkgs = sorted({p for item in missing for p in mapping.get(item, item).split()})
+            run([*prefix, "pacman", "-S", "--needed", "--noconfirm", *pkgs])
+            return
+        if distro in {"fedora", "rhel", "centos", "rocky"} or "fedora" in like or "rhel" in like:
+            mapping = {
+                "make": "make",
+                "cc": "gcc",
+                "pkg-config": "pkgconf-pkg-config",
+                "cmake": "cmake",
+                "ninja": "ninja-build",
+                "llvm": "llvm-devel clang",
+            }
+            pkgs = sorted({p for item in missing for p in mapping.get(item, item).split()})
+            run([*prefix, "dnf", "install", "-y", *pkgs])
+            return
+    if os_name == "macos":
+        if ("make" in missing or "cc" in missing) and not which("cc"):
+            die("install Apple command-line tools first: xcode-select --install")
+        if not which("brew"):
+            die("Homebrew is required for automatic dependency installation on macOS")
+        mapping = {"pkg-config": "pkg-config", "cmake": "cmake", "ninja": "ninja", "llvm": "llvm"}
+        pkgs = sorted({mapping[item] for item in missing if item in mapping})
+        if pkgs:
+            run(["brew", "install", *pkgs])
+        return
+    die("automatic dependency installation is not implemented for this host; use ./make deps for the missing list")
+
+
+def command_deps(args: list[str], _ctx: AppContext) -> int:
+    install = "--install" in args
+    unknown = [a for a in args if a != "--install"]
+    if unknown:
+        die("deps: unknown option(s): " + " ".join(unknown))
+    missing, missing_pkgs = required_dependency_state()
+    if install and missing:
+        install_dependencies(missing)
+        missing, missing_pkgs = required_dependency_state()
+    if missing:
+        UI.error("missing build tools: " + ", ".join(missing))
+    if missing_pkgs:
+        UI.error("missing pkg-config packages: " + ", ".join(missing_pkgs))
+    if missing or missing_pkgs:
+        if not install:
+            UI.hint("run ./make deps --install for supported host tools; project libraries may still need manual packages")
+        return 1
+    UI.ok("build dependencies available")
+    return 0
+
+
+def command_hooks(_args: list[str], _ctx: AppContext) -> int:
+    if not which("git"):
+        die("hooks: git was not found")
+    hook_dir = ROOT / ".githooks"
+    if not hook_dir.is_dir():
+        die("hooks: .githooks directory was not found")
+    hooks = [p for p in sorted(hook_dir.iterdir()) if p.is_file() and not p.name.startswith(".")]
+    if not hooks:
+        die("hooks: .githooks contains no hook files")
+    if host_os() != "windows":
+        for hook in hooks:
+            chmod_executable(hook)
+    run(["git", "config", "--local", "core.hooksPath", ".githooks"])
+    UI.ok(f"Git hooks installed ({len(hooks)} files)")
+    return 0
+
+
+def command_run(args: list[str], ctx: AppContext) -> int:
+    jobs = ctx.jobs
+    literal_args = bool(args and args[0] == "--")
+    if literal_args:
+        args = args[1:]
+    binary = find_binary(build_if_missing=True, jobs=jobs)
+    return subprocess.run([str(binary), *args], cwd=str(ROOT), env=os.environ.copy()).returncode
 
 
 ### Doctor and env
 
-def run_doctor(_args: list[str], _jobs: int) -> int:
+def run_doctor(_args: list[str], ctx: AppContext) -> int:
     dep = dependency_report()
-    print(c("1;36", f"{PROJECT.name} build doctor"))
-    print_section("Layout")
-    print_row("root", None, str(ROOT), good=True)
-    print_row("Makefile", None, rel(makefile_path()), good=makefile_path().exists())
-    print_row("build dir", None, rel(BUILD_ROOT), good=True)
+    missing_tools, missing_pkgs = required_dependency_state()
+    jobs, jobs_source = ctx.jobs, ctx.jobs_source
+    UI.section("Layout")
+    UI.row("root", None, str(ROOT), good=True)
+    UI.row("Makefile", None, rel(makefile_path()), good=makefile_path().exists())
+    build_state = UI.status_word(True) if BUILD_ROOT.exists() else UI.dim(UI.glyph("·", "-"))
+    UI.row("build dir", build_state, rel(BUILD_ROOT))
+    bad = not makefile_path().exists()
     print("")
-    print_section("Required tools")
+    missing_sources = report_source_integrity()
+    bad = bad or bool(missing_sources)
+    print("")
+    UI.section("Host")
+    UI.row("os", None, host_os())
+    UI.row("arch", None, host_arch())
+    UI.row("memory", None, format_bytes(total_memory_bytes()))
+    UI.row("jobs", None, f"{jobs} ({jobs_source})")
+    print("")
+    UI.section("Required tools")
+    make_path = find_system_make()
+    cc = os.environ.get("CC") or which("cc") or which("clang") or which("gcc")
     checks = [
         ("python3", sys.executable, True),
-        ("make", system_make(), bool(system_make())),
-        ("cc", os.environ.get("CC") or which("cc") or which("gcc") or which("clang"), bool(os.environ.get("CC") or which("cc") or which("gcc") or which("clang"))),
-        ("target", PROJECT.target or "-", bool(PROJECT.target)),
+        ("make", make_path or "-", bool(make_path)),
+        ("cc", cc or "-", bool(cc)),
     ]
-    bad = False
+    if project_needs_llvm():
+        checks.append(("llvm-config", llvm_config_path() or "-", bool(llvm_config_path())))
     for name, value, good in checks:
-        print_row(name, None, value, good=good)
+        UI.row(name, None, value, good=good)
         bad = bad or not good
     print("")
-    print_section("Common optional tools")
-    for name in ("git", "tar", "gzip", "ldd", "readelf", "pkg-config", "llvm-config"):
-        value = which(name) if name != "llvm-config" else str(dep["llvm_config"] or "")
-        print_row(name, None, value or "-", good=bool(value))
+    UI.section("Common optional tools")
+    for name in ("git", "tar", "gzip", "ldd", "readelf", "otool", "pkg-config", "cmake", "ninja", "bear"):
+        if name == "otool" and host_os() != "macos":
+            continue
+        value = which(name)
+        state = UI.status_word(True) if value else UI.dim(UI.glyph("·", "-"))
+        UI.row(name, state, value or "not installed")
     print("")
-    print_section("Detected project")
-    print_row("name", None, PROJECT.name)
-    print_row("target", None, PROJECT.target or "-")
-    print_row("runtime lib", None, PROJECT.runtime_lib or "-")
-    print_row("link libs", None, ", ".join(dep["link_libraries"]) or "-")
-    print_row("pkg-config", None, ", ".join(dep["pkg_config_packages"]) or "-")
-    print_row("vendor", None, rel(VENDOR_DIR))
-    print_row("static", None, rel(STATIC_DIR))
+    UI.section("Detected project")
+    UI.row("name", None, PROJECT.name)
+    UI.row("target", None, PROJECT.target or "-")
+    UI.row("build target", None, PROJECT.build_target or "-")
+    UI.row("release target", None, PROJECT.release_target or "-")
+    UI.row("runtime lib", None, PROJECT.runtime_lib or "-")
+    UI.row("link libs", None, ", ".join(dep["link_libraries"]) or "-")
+    UI.row("pkg-config", None, ", ".join(dep["pkg_config_packages"]) or "-")
+    UI.row("vendor", None, rel(VENDOR_DIR))
+    UI.row("static", None, rel(STATIC_DIR))
+    UI.row("compdb", None, rel(COMPDB_LINK) if COMPDB_LINK.exists() or COMPDB_LINK.is_symlink() else "not generated")
     if LOADED_CONFIGS:
-        print_row("config", None, "; ".join(rel(p) for p in LOADED_CONFIGS))
+        UI.row("config", None, "; ".join(rel(p) for p in LOADED_CONFIGS))
+    binary = next((p for p in possible_binary_paths() if p.exists() and p.is_file()), None)
+    if binary and host_os() == "linux":
+        _, unresolved = dependency_closure_details(binary)
+        UI.row("runtime closure", None, "complete" if not unresolved else "missing: " + ", ".join(unresolved), good=not unresolved)
+        bad = bad or bool(unresolved)
     print("")
+    if missing_pkgs:
+        UI.error("missing pkg-config packages: " + ", ".join(missing_pkgs))
+        bad = True
+    if missing_tools:
+        UI.error("missing tools: " + ", ".join(missing_tools))
+        bad = True
     if bad:
-        err("doctor found missing required pieces")
+        UI.error("doctor found missing required pieces")
         return 1
-    ok("doctor passed")
+    UI.ok("doctor passed")
     return 0
 
 
-def run_env(args: list[str], _jobs: int) -> int:
+def run_env(args: list[str], ctx: AppContext) -> int:
+    if any(a != "--json" for a in args):
+        die("env: only --json is supported")
+    jobs, jobs_source = ctx.jobs, ctx.jobs_source
     data = {
         "ROOT": str(ROOT),
         "BUILD_ROOT": str(BUILD_ROOT),
@@ -1176,104 +2447,472 @@ def run_env(args: list[str], _jobs: int) -> int:
         "RUNTIME_LIB": PROJECT.runtime_lib,
         "HOST_OS": host_os(),
         "HOST_ARCH": host_arch(),
-        "SYSTEM_MAKE": system_make(),
+        "HOST_MEMORY_BYTES": total_memory_bytes(),
+        "JOBS": jobs,
+        "JOBS_SOURCE": jobs_source,
+        "SYSTEM_MAKE": find_system_make(),
         "DEPENDENCIES": dependency_report(),
     }
     if args and args[0] == "--json":
         print(json.dumps(data, indent=2, sort_keys=True))
     else:
         for k, v in data.items():
-            print(f"{k}={json.dumps(v, sort_keys=True) if isinstance(v, (dict, list)) else v}")
+            raw = json.dumps(v, sort_keys=True, separators=(",", ":")) if isinstance(v, (dict, list)) else str(v)
+            print(f"{k}={shlex.quote(raw)}")
     return 0
 
 
-### Help
+### Command model
 
-def print_help() -> None:
-    print(c("1;36", f"{PROJECT.name} build tool"))
-    print(f"{c('1', 'Usage:')} {c('1;32', './make')} {c('36', '<command>')} {c('32', '[options]')}")
-    print("")
-    groups = (
-        ("Build", (("all", "run Makefile all target"), ("release", "run Makefile release target"), ("debug", "run Makefile debug target or all"), ("asan", "run Makefile asan target"), ("test", "run Makefile test target"), ("clean", "run Makefile clean target"))),
-        ("Portable", (("vendor", "minimal flat compiler/runtime bundle in build/vendor"), ("vendor <cmd> [dir]", "copy arbitrary command like the bash concept"), ("static bin", "build build/static portable folder"), ("bin-static", "alias for static bin"), ("tar", f"create build/dist/{PROJECT.name}-source.tar.gz"), ("tar --with-binaries", f"create build/dist/{PROJECT.name}-static.tar.gz"))),
-        ("Info", (("doctor", "check tools and detected dependencies"), ("env", "print resolved environment"), ("targets", "list Makefile targets"), ("help", "show help"))),
+CommandFunc = Callable[[list[str], AppContext], int]
+
+
+@dataclass(frozen=True)
+class CommandSpec:
+    name: str
+    group: str
+    usage: str
+    summary: str
+    handler: CommandFunc
+    options: tuple[tuple[str, str], ...] = ()
+    present: bool = True
+    help_on_empty: bool = False
+    no_args: bool = False
+
+
+GROUP_ORDER = ("Build", "Quality", "Portable", "Inspect")
+HELP_TOKENS = {"-h", "--help", "help"}
+
+GLOBAL_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("-j, --jobs N", "Parallel jobs. The default is capped from both CPU count and available system memory."),
+    ("-v, --verbose", "Show executed subprocesses and fine-grained timing information."),
+    ("--color MODE", "Color policy: always (default), auto, or never."),
+    ("--no-color", "Disable ANSI color while preserving the same textual hierarchy."),
+    ("-h, --help", "Show top-level help, or focused help when used with a command."),
+)
+
+ENVIRONMENT_HELP: tuple[tuple[str, str], ...] = (
+    ("MAKE_TARGET=name", "Override the inferred project binary."),
+    ("MAKE_PROJECT_NAME=name", "Override the package/project display name."),
+    ("MAKE_JOBS=N", "Override automatic parallelism when -j is absent."),
+    ("MAKE_JOB_MEMORY_MB=1536", "Estimated memory budget per automatic build job."),
+    ("MAKE_ASCII=1", "Force ASCII-only UI glyphs for constrained terminals and logs."),
+    ("MAKE_CHECK_TARGETS=a,b", "Ordered Makefile targets used by the composed quality gate."),
+    ("MAKE_HYGIENE_EXTENSIONS=c,h,...", "Override text-source extensions scanned by source hygiene."),
+    ("MAKE_COMPDB=0", "Disable automatic compilation-database refresh after successful builds."),
+    ("MAKE_VENDOR_SOURCE_DIRS=a:b", "Local dependency source trees to preserve in a vendor bundle."),
+    ("MAKE_VENDOR_SOURCE_ARCHIVES=a:b", "Dependency source archives to preserve in a vendor bundle."),
+    ("MAKE_VENDOR_FETCH_SOURCES=1", "Attempt apt-get source for detected system dependencies."),
+    ("MAKE_VENDOR_NO_SYSTEM_LIBS=1", "Omit system runtime libraries from the vendor bundle."),
+    ("MAKE_VENDOR_ALLOW_UNRESOLVED=1", "Allow an incomplete runtime closure instead of failing closed."),
+    ("MAKE_VENDOR_LLVM_CPP_HEADERS=1", "Include LLVM/Clang C++ header trees."),
+    ("MAKE_VENDOR_NO_CLANG_BUILTINS=1", "Omit Clang resource headers."),
+    ("MAKE_VENDOR_ROOTFS=1", "Also construct an optional chroot-compatible rootfs."),
+)
+
+
+def list_make_targets(_args: list[str], _ctx: AppContext) -> int:
+    for target in sorted(make_targets()):
+        print(target)
+    return 0
+
+
+def _join_shell_continuations(text: str) -> list[str]:
+    lines: list[str] = []
+    pending = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if pending:
+            pending += " " + line
+        else:
+            pending = line
+        if pending.endswith("\\"):
+            pending = pending[:-1].rstrip()
+            continue
+        lines.append(pending)
+        pending = ""
+    if pending:
+        lines.append(pending)
+    return lines
+
+
+def _native_compdb_from_make() -> list[dict[str, object]]:
+    """Generate a clang compilation database from this project's Make dry-run.
+
+    Bear remains the preferred parser when installed; this deterministic fallback
+    keeps clangd usable on fresh checkouts without making Bear a hard dependency.
+    """
+    env = os.environ.copy()
+    env["LC_ALL"] = "C"
+    proc = subprocess.run(
+        [system_make(), "-Bnwk", "all"], cwd=str(ROOT), env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
     )
-    for title, rows in groups:
-        print(c("1", title + ":"))
-        width = max(len(k) for k, _ in rows) + 2
-        for name, desc in rows:
-            print(f"  {name:<{width}} {desc}")
-        print("")
-    print(c("1", "Env:"))
-    print("  MAKE_TARGET=name                    override binary target")
-    print("  MAKE_PROJECT_NAME=name              override package name")
-    print("  MAKE_VENDOR_SOURCE_DIRS=a:b         dependency source trees to include")
-    print("  MAKE_VENDOR_SOURCE_ARCHIVES=a:b     dependency source archives to include")
-    print("  MAKE_VENDOR_FETCH_SOURCES=1         try apt-get source for detected deps")
-    print("  MAKE_VENDOR_NO_SYSTEM_LIBS=1        omit libc/libm/etc from runtime bundle")
-    print("  MAKE_VENDOR_LLVM_CPP_HEADERS=1      include large LLVM/Clang C++ headers")
-    print("  MAKE_VENDOR_NO_CLANG_BUILTINS=1     omit Clang resource headers")
-    print("  MAKE_VENDOR_ROOTFS=1                also build an optional chroot tree")
+    if proc.returncode not in (0, 1):
+        raise CliError("could not obtain Make dry-run for compile_commands.json", detail=proc.stderr.strip())
+    candidates: dict[str, tuple[int, dict[str, object]]] = {}
+    compiler_names = {"cc", "gcc", "clang", "clang-cl", "c99", "c11"}
+    for line in _join_shell_continuations(proc.stdout):
+        try:
+            argv = shlex.split(line)
+        except ValueError:
+            continue
+        if not argv or Path(argv[0]).name not in compiler_names or "-c" not in argv:
+            continue
+        source = next((arg for arg in argv if arg.endswith((".c", ".cc", ".cpp", ".cxx")) and (ROOT / arg).exists()), None)
+        if source is None:
+            continue
+        output = argv[argv.index("-o") + 1] if "-o" in argv and argv.index("-o") + 1 < len(argv) else ""
+        rank = 0 if "/compiler/" in output else 1 if "/runtime/" in output else 2 if "/embed/" in output else 3
+        entry = {"directory": str(ROOT), "file": str((ROOT / source).resolve()), "arguments": argv}
+        current = candidates.get(entry["file"])
+        if current is None or rank < current[0]:
+            candidates[entry["file"]] = (rank, entry)
+    return [item[1] for item in sorted(candidates.values(), key=lambda item: str(item[1]["file"]))]
 
 
-def list_make_targets(_args: list[str], _jobs: int) -> int:
-    for t in sorted(make_targets()):
-        print(t)
+def _publish_compdb(path: Path) -> None:
+    if COMPDB_LINK.exists() or COMPDB_LINK.is_symlink():
+        COMPDB_LINK.unlink()
+    try:
+        relative_symlink(path, COMPDB_LINK)
+    except OSError:
+        shutil.copy2(path, COMPDB_LINK)
+
+
+def generate_compdb(ctx: AppContext, *, quiet: bool = False) -> int:
+    BUILD_ROOT.mkdir(parents=True, exist_ok=True)
+    entries: list[dict[str, object]] | None = None
+    source = "Make dry-run"
+    bear = which("bear")
+    if bear:
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+        dry = subprocess.run(
+            [system_make(), "-Bnwk", "all"], cwd=str(ROOT), env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
+        )
+        parsed = subprocess.run(
+            [bear, "parse-sh", "-o", str(COMPDB_PATH)], cwd=str(ROOT), env=env,
+            input=dry.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
+        )
+        if parsed.returncode == 0 and COMPDB_PATH.is_file():
+            try:
+                loaded = json.loads(COMPDB_PATH.read_text(encoding="utf-8"))
+                if isinstance(loaded, list) and loaded:
+                    entries = loaded
+                    source = "Bear"
+            except (OSError, json.JSONDecodeError):
+                entries = None
+    if entries is None:
+        entries = _native_compdb_from_make()
+        if not entries:
+            raise CliError("no compiler invocations were found for compile_commands.json")
+        COMPDB_PATH.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+    _publish_compdb(COMPDB_PATH)
+    if not quiet:
+        UI.ok(f"compilation database ready · {len(entries)} translation units · {source}")
+        UI.hint(f"clangd discovery: {rel(COMPDB_LINK)} -> {rel(COMPDB_PATH)}")
     return 0
 
 
-### CLI
+def command_compdb(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("compdb takes no arguments")
+    return generate_compdb(ctx)
 
-CommandFunc = Callable[[list[str], int], int]
+
+def refresh_compdb(ctx: AppContext) -> None:
+    if not env_flag("MAKE_COMPDB", True):
+        return
+    try:
+        generate_compdb(ctx, quiet=True)
+        if UI.verbose:
+            UI.log("COMPDB", f"refreshed {rel(COMPDB_PATH)}", "accent_soft")
+    except Exception as exc:
+        UI.warn(f"could not refresh compile_commands.json: {exc}")
 
 
-def command_all(args: list[str], jobs: int) -> int:
-    run_make(["all"] if make_has_target("all") else None, jobs=jobs, extra=args)
+def command_all(args: list[str], ctx: AppContext) -> int:
+    started = time.perf_counter()
+    run_make(["all"] if make_has_target("all") else None, jobs=ctx.jobs, extra=args)
+    refresh_compdb(ctx)
+    UI.ok(f"build completed in {format_elapsed(time.perf_counter() - started)}")
     return 0
 
 
 def command_make_target(target: str) -> CommandFunc:
-    def inner(args: list[str], jobs: int) -> int:
-        t = target
-        if target == "release" and not make_has_target("release"):
-            t = PROJECT.build_target or "all"
-        if target == "debug" and not make_has_target("debug"):
-            t = PROJECT.build_target or "all"
-        if target in ("asan", "test") and not make_has_target(target):
-            die(f"Makefile has no {target} target")
-        run_make([t], jobs=jobs, extra=args)
+    def handler(args: list[str], ctx: AppContext) -> int:
+        resolved = target
+        if target in {"release", "debug"} and not make_has_target(target):
+            resolved = ctx.project.build_target
+        if resolved and not make_has_target(resolved):
+            die(f"Makefile has no {resolved} target")
+        started = time.perf_counter()
+        run_make([resolved] if resolved else None, jobs=ctx.jobs, extra=args)
+        if target in {"release", "debug"}:
+            refresh_compdb(ctx)
+        UI.ok(f"{target} completed in {format_elapsed(time.perf_counter() - started)}")
         return 0
-    return inner
+
+    return handler
 
 
-def command_help(_args: list[str], _jobs: int) -> int:
+def command_help(args: list[str], _ctx: AppContext) -> int:
+    if args:
+        return 0 if print_command_help(args[0]) else 2
     print_help()
     return 0
 
 
-def command_bin_static(args: list[str], jobs: int) -> int:
-    return run_static(["bin", *args], jobs)
+def command_bin_static(args: list[str], ctx: AppContext) -> int:
+    return run_static(["bin", *args], ctx)
 
 
-COMMANDS: dict[str, CommandFunc] = {
-    "help": command_help,
-    "doctor": run_doctor,
-    "env": run_env,
-    "targets": list_make_targets,
-    "vendor": run_vendor,
-    "static": run_static,
-    "bin-static": command_bin_static,
-    "tar": run_tar,
-    "all": command_all,
-    "release": command_make_target("release"),
-    "debug": command_make_target("debug"),
-    "asan": command_make_target("asan"),
-    "test": command_make_target("test"),
-    "clean": command_make_target("clean"),
-    "install": command_make_target("install"),
-    "uninstall": command_make_target("uninstall"),
-}
+def command_asan(args: list[str], ctx: AppContext) -> int:
+    return command_sanitizer("asan", args, ctx)
 
+
+def command_ubsan(args: list[str], ctx: AppContext) -> int:
+    return command_sanitizer("ubsan", args, ctx)
+
+
+COMMAND_SPECS: tuple[CommandSpec, ...] = (
+    CommandSpec(
+        "all", "Build", "./make all [make args]",
+        "Build the project's default target with CPU/RAM-aware parallelism.",
+        command_all,
+        (("-j, --jobs N", "Override automatic parallelism."),),
+    ),
+    CommandSpec(
+        "release", "Build", "./make release [make args]",
+        "Run the release target, falling back to the default build target.",
+        command_make_target("release"),
+    ),
+    CommandSpec(
+        "debug", "Build", "./make debug [make args]",
+        "Run the debug target, falling back to the default build target.",
+        command_make_target("debug"),
+    ),
+    CommandSpec(
+        "compdb", "Build", "./make compdb",
+        "Generate compile_commands.json for clangd from the canonical Make build.",
+        command_compdb, no_args=True,
+    ),
+    CommandSpec(
+        "run", "Build", "./make run [--] [program args]",
+        "Build the inferred project binary if needed, then execute it.",
+        command_run,
+        (("--", "Treat every following token literally as a program argument."),),
+        present=False,
+    ),
+    CommandSpec(
+        "install", "Build", "./make install [make args]",
+        "Delegate installation to the Makefile.", command_make_target("install"),
+    ),
+    CommandSpec(
+        "uninstall", "Build", "./make uninstall [make args]",
+        "Delegate uninstallation to the Makefile.", command_make_target("uninstall"),
+    ),
+    CommandSpec(
+        "clean", "Build", "./make clean [--check]",
+        "Deep-clean generated repository state or verify that none is present.", command_clean,
+        (
+            ("--check", "Fail without mutating the checkout when generated state is present; intended for Git hooks."),
+            ("--verbose", "Show every generated path removed or rejected."),
+        ),
+    ),
+    CommandSpec(
+        "check", "Quality", "./make check [--quick|--no-build|--no-tests]",
+        "Run the fail-closed project quality gate.", command_check,
+        (
+            ("--quick", "Run hygiene and configured quality targets, but skip tests in the composed fallback gate."),
+            ("--no-build", "Skip the build stage in the composed fallback gate."),
+            ("--no-tests", "Skip the test stage in the composed fallback gate."),
+            ("MAKE_CHECK_TARGETS=a,b", "Use an explicit ordered set of Makefile targets for the gate."),
+        ),
+    ),
+    CommandSpec(
+        "test", "Quality", "./make test [filters] [options]",
+        "Run the canonical .mon verification suite with the shared terminal UI.", command_test,
+        (
+            ("filter ...", "Select a recursive test menu, for example: codegen errors reader."),
+            ("--name REGEX", "Select tests by TEST-ID/name; repeatable."),
+            ("--tier NAME", "Select regression, known-fail, future, or generated tiers."),
+            ("--all-tiers", "Include every test tier instead of the regression gate."),
+            ("--list", "List selected .mon fixtures without executing them."),
+            ("--list-targets", "List recursive test-menu targets."),
+            ("--only-failed", "Rerun failures recorded by the previous suite execution."),
+            ("--rerun-first-failure", "Rerun only the previous first failure."),
+            ("--fail-fast", "Stop after the first failing fixture."),
+            ("--max-failures N", "Stop after N failures."),
+            ("--validate-metadata", "Validate required TEST-* metadata and exit."),
+            ("--validate-context-links", "Validate TEST-CONTEXT references and exit."),
+            ("--no-build", "Use an existing compiler instead of building first."),
+        ),
+        present=False,
+    ),
+    CommandSpec(
+        "asan", "Quality", "./make asan [--build-only]",
+        "Run AddressSanitizer through a native target or a generic compiler-flag fallback.",
+        command_asan,
+        (("--build-only", "Build with sanitizer instrumentation without automatically running the test target."),),
+    ),
+    CommandSpec(
+        "ubsan", "Quality", "./make ubsan [--build-only]",
+        "Run UndefinedBehaviorSanitizer through a native target or a generic compiler-flag fallback.",
+        command_ubsan,
+        (("--build-only", "Build with sanitizer instrumentation without automatically running the test target."),),
+    ),
+    CommandSpec(
+        "hooks", "Quality", "./make hooks",
+        "Activate repository-managed .githooks for this checkout.", command_hooks,
+        no_args=True,
+    ),
+    CommandSpec(
+        "vendor", "Portable", "./make vendor [command-or-path] [dir]",
+        "Create a relocatable runtime/toolchain bundle with manifests and dependency metadata.",
+        run_vendor,
+        (
+            ("build/vendor/bin", "Bundled binary plus tool wrappers."),
+            ("build/vendor/lib", "Deduplicated runtime and toolchain libraries."),
+            ("build/vendor/include", "C API headers; large C++ headers remain opt-in."),
+            ("build/vendor/src", "Dependency source metadata and optional source payloads."),
+            ("MAKE_VENDOR_ROOTFS=1", "Additionally create the optional chroot-compatible filesystem view."),
+            ("MAKE_VENDOR_NO_SYSTEM_LIBS=1", "Create a thinner same-system bundle without libc/libm-style system libraries."),
+            ("MAKE_VENDOR_ALLOW_UNRESOLVED=1", "Permit packaging with unresolved runtime SONAMEs; disabled by default."),
+            ("MAKE_VENDOR_LLVM_CPP_HEADERS=1", "Include the large LLVM/Clang C++ header trees."),
+            ("MAKE_VENDOR_NO_CLANG_BUILTINS=1", "Omit Clang resource/builtin headers."),
+        ),
+    ),
+    CommandSpec(
+        "static", "Portable", "./make static bin | ./make static check <binary>",
+        "Create or inspect the portable binary folder.", run_static,
+        (
+            ("bin", "Build build/static with launcher, runtime closure, and manifest."),
+            ("check <binary>", "Classify linkage and report dynamic dependencies or unresolved SONAMEs."),
+        ),
+        help_on_empty=True,
+    ),
+    CommandSpec(
+        "bin-static", "Portable", "./make bin-static",
+        "Alias for ./make static bin.", command_bin_static,
+    ),
+    CommandSpec(
+        "tar", "Portable", "./make tar [--with-binaries] [--with-vendor] [--with-context]",
+        "Create the minimal complete source package, with heavy portable assets opt-in.", run_tar,
+        (
+            ("--with-binaries", "Include build/static in the package and use the -static package name."),
+            ("--with-vendor", "Include the self-contained vendor/toolchain bundle."),
+            ("--with-context", "Include context/, glyph/, and etc/ design/research material."),
+            ("MAKE_TAR_WITH_BINARIES=1", "Environment equivalent of --with-binaries."),
+            ("MAKE_TAR_WITH_VENDOR=1", "Environment equivalent of --with-vendor."),
+        ),
+    ),
+    CommandSpec(
+        "doctor", "Inspect", "./make doctor",
+        "Audit project discovery, host capacity, tools, dependencies, and runtime closure.",
+        run_doctor, present=True, no_args=True,
+    ),
+    CommandSpec(
+        "deps", "Inspect", "./make deps [--install]",
+        "Inspect required host tools and pkg-config dependencies.", command_deps,
+        (("--install", "Install generic host build tools on supported package-manager platforms."),),
+    ),
+    CommandSpec(
+        "env", "Inspect", "./make env [--json]",
+        "Emit the resolved build environment for humans or automation.", run_env,
+        (("--json", "Emit stable JSON instead of KEY=value lines."),),
+        present=False,
+    ),
+    CommandSpec(
+        "targets", "Inspect", "./make targets",
+        "List discovered Makefile targets, one per line for shell-friendly use.",
+        list_make_targets, present=False, no_args=True,
+    ),
+    CommandSpec(
+        "help", "Inspect", "./make help [command]",
+        "Show the command index or focused documentation for one command.",
+        command_help, present=False,
+    ),
+)
+
+
+def build_command_registry(specs: tuple[CommandSpec, ...]) -> dict[str, CommandSpec]:
+    registry: dict[str, CommandSpec] = {}
+    valid_groups = set(GROUP_ORDER)
+    for spec in specs:
+        if spec.name in registry:
+            raise RuntimeError(f"duplicate command specification: {spec.name}")
+        if spec.group not in valid_groups:
+            raise RuntimeError(f"unknown command group {spec.group!r} for {spec.name}")
+        if not spec.usage.startswith("./make"):
+            raise RuntimeError(f"invalid command usage for {spec.name}: {spec.usage}")
+        if not spec.summary.strip():
+            raise RuntimeError(f"missing command summary for {spec.name}")
+        registry[spec.name] = spec
+    return registry
+
+
+COMMANDS = build_command_registry(COMMAND_SPECS)
+
+
+def command_summary(name: str) -> str:
+    spec = COMMANDS.get(name)
+    return spec.summary if spec else "Run a Makefile target through the project build frontend."
+
+
+def print_command_help(name: str) -> bool:
+    spec = COMMANDS.get(name)
+    if spec is None:
+        if make_has_target(name):
+            UI.header(name, "Raw Makefile target exposed through the project build frontend.")
+            UI.section("Usage")
+            print(f"  {UI.paint(UI.theme.accent, './make ' + name)} {UI.dim('[make args]')}")
+            print("")
+            UI.section("Global options")
+            UI.option_rows(list(GLOBAL_OPTIONS))
+            return True
+        UI.error(f"unknown help topic '{name}'")
+        UI.hint("use ./make help for the command index or ./make targets for raw Makefile targets")
+        return False
+
+    UI.header(spec.name, spec.summary)
+    UI.section("Usage")
+    print(f"  {UI.paint(UI.theme.accent, spec.usage)}")
+    if spec.options:
+        print("")
+        UI.section("Details")
+        UI.option_rows(list(spec.options))
+    print("")
+    UI.section("Global options")
+    UI.option_rows(list(GLOBAL_OPTIONS))
+    return True
+
+
+def print_help() -> None:
+    UI.header("build frontend", "One entry point for build, quality, diagnostics, packaging, and portable artifacts.")
+    UI.section("Usage")
+    print(f"  {UI.paint(UI.theme.accent, './make')} {UI.strong('<command>')} {UI.dim('[options]')}")
+    print(f"  {UI.paint(UI.theme.accent, './make help')} {UI.strong('<command>')}")
+    print("")
+    for group in GROUP_ORDER:
+        specs = [spec for spec in COMMAND_SPECS if spec.group == group]
+        UI.section(group)
+        UI.option_rows([(spec.name, spec.summary) for spec in specs])
+        print("")
+    UI.section("Global options")
+    UI.option_rows(list(GLOBAL_OPTIONS))
+    print("")
+    UI.section("Environment")
+    UI.option_rows(list(ENVIRONMENT_HELP))
+    print("")
+    UI.hint("run ./make help <command> for focused documentation")
+
+
+### CLI
 
 def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(add_help=False)
@@ -1281,7 +2920,8 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--version", action="store_true")
     parser.add_argument("--color", nargs="?", const="always", default=None)
     parser.add_argument("--no-color", action="store_true")
-    parser.add_argument("-j", "--jobs", type=int, default=int(os.environ.get("MAKE_JOBS", "0") or "0"))
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-j", "--jobs", type=int, default=0)
     global_args: list[str] = []
     rest: list[str] = []
     i = 0
@@ -1290,19 +2930,41 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         if arg == "--":
             rest = argv[i + 1:]
             break
-        if arg in ("--help", "-h", "--version", "--no-color"):
+        if arg in ("--help", "-h", "--version", "--no-color", "-v", "--verbose"):
             global_args.append(arg)
             i += 1
             continue
-        if arg in ("--color", "-j", "--jobs"):
-            global_args.append(arg)
-            if i + 1 < len(argv):
-                global_args.append(argv[i + 1])
+        if arg == "--color":
+            valid_modes = {"auto", "always", "never", "on", "off", "tty", "default", "1", "0", "true", "false", "yes", "no"}
+            if i + 1 < len(argv) and argv[i + 1].strip().lower() in valid_modes:
+                global_args.extend([arg, argv[i + 1]])
                 i += 2
             else:
+                global_args.append("--color=always")
                 i += 1
             continue
-        if arg.startswith("--color=") or arg.startswith("--jobs="):
+        if arg in ("-j", "--jobs"):
+            if i + 1 >= len(argv):
+                raise CliError(f"{arg} requires a positive integer")
+            try:
+                if int(argv[i + 1]) <= 0:
+                    raise ValueError
+            except ValueError as exc:
+                raise CliError(f"{arg} requires a positive integer") from exc
+            global_args.extend([arg, argv[i + 1]])
+            i += 2
+            continue
+        if arg.startswith("--color="):
+            global_args.append(arg)
+            i += 1
+            continue
+        if arg.startswith("--jobs="):
+            value = arg.split("=", 1)[1]
+            try:
+                if int(value) <= 0:
+                    raise ValueError
+            except ValueError as exc:
+                raise CliError("--jobs requires a positive integer") from exc
             global_args.append(arg)
             i += 1
             continue
@@ -1310,32 +2972,95 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         break
     else:
         rest = []
-    ns = parser.parse_args(global_args)
-    return ns, rest
+    return parser.parse_args(global_args), rest
+
+
+def command_help_requested(spec: CommandSpec, args: list[str]) -> bool:
+    if spec.help_on_empty and not args:
+        return True
+    return bool(args and args[0] in HELP_TOKENS)
+
+
+def validate_command_args(spec: CommandSpec, args: list[str]) -> None:
+    if spec.no_args and args:
+        die(f"{spec.name}: no arguments are supported")
+
+
+def execute_command(spec: CommandSpec, args: list[str], ctx: AppContext) -> int:
+    if command_help_requested(spec, args):
+        return 0 if print_command_help(spec.name) else 2
+    validate_command_args(spec, args)
+    if spec.present:
+        ctx.ui.header(spec.name, spec.summary)
+        if ctx.ui.verbose:
+            ctx.ui.kv_rows([("jobs", f"{ctx.jobs} ({ctx.jobs_source})"), ("host", f"{host_os()} / {host_arch()}")])
+            print("")
+    elif ctx.ui.verbose:
+        ctx.ui.log("HOST", f"jobs={ctx.jobs} ({ctx.jobs_source})", "info")
+    return spec.handler(args, ctx)
+
+
+def _main(argv: list[str]) -> int:
+    ns, rest = parse(argv)
+    mode = "never" if ns.no_color else parse_color_mode(ns.color)
+    UI.color = color_enabled(mode)
+    UI.verbose = bool(ns.verbose)
+
+    if ns.version:
+        print(f"{PROJECT.name} build frontend")
+        return 0
+    if ns.help:
+        if rest:
+            return 0 if print_command_help(rest[0]) else 2
+        print_help()
+        return 0
+    if not rest:
+        print_help()
+        return 0
+
+    jobs, jobs_source = resolve_jobs(ns.jobs)
+    ctx = AppContext(PROJECT, jobs, jobs_source, UI)
+    cmd, args = rest[0], rest[1:]
+    spec = COMMANDS.get(cmd)
+    if spec is not None:
+        return execute_command(spec, args, ctx)
+
+    if make_has_target(cmd):
+        if args and args[0] in HELP_TOKENS:
+            return 0 if print_command_help(cmd) else 2
+        UI.header(cmd, command_summary(cmd))
+        if UI.verbose:
+            UI.kv_rows([("jobs", f"{jobs} ({jobs_source})"), ("host", f"{host_os()} / {host_arch()}")])
+            print("")
+        started = time.perf_counter()
+        run_make([cmd], jobs=jobs, extra=args)
+        UI.ok(f"{cmd} completed in {format_elapsed(time.perf_counter() - started)}")
+        return 0
+
+    die(
+        f"unknown command '{cmd}'",
+        hint="run ./make help for commands or ./make targets for raw Makefile targets",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
-    global COLOR
-    ns, rest = parse(list(sys.argv[1:] if argv is None else argv))
-    mode = "never" if ns.no_color else parse_color_mode(ns.color)
-    COLOR = color_enabled(mode)
-    if ns.version:
-        print(f"{PROJECT.name} build tool")
-        return 0
-    if ns.help or not rest:
-        print_help()
-        return 0
-    jobs = ns.jobs if ns.jobs > 0 else (os.cpu_count() or 1)
-    cmd, args = rest[0], rest[1:]
     try:
-        if cmd in COMMANDS:
-            return COMMANDS[cmd](args, jobs)
-        if make_has_target(cmd):
-            run_make([cmd], jobs=jobs, extra=args)
-            return 0
-        die(f"unknown command '{cmd}'. Run ./make help or ./make targets.")
+        return _main(list(sys.argv[1:] if argv is None else argv))
+    except CliError as exc:
+        UI.error(exc.message)
+        for detail in exc.details:
+            UI.error_detail(detail)
+        if exc.hint:
+            UI.hint(exc.hint, stream=sys.stderr)
+        return exc.code
     except subprocess.CalledProcessError as exc:
-        return int(exc.returncode or 1)
+        rc = int(exc.returncode or 1)
+        UI.error(f"command failed with exit status {rc}")
+        return rc
+    except KeyboardInterrupt:
+        print(file=sys.stderr)
+        UI.warn("interrupted")
+        return 130
 
 
 if __name__ == "__main__":

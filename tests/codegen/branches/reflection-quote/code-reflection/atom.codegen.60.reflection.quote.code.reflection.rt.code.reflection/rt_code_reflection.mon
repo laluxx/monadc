@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime code reflection attempts to retrieve source for a defined function.
 :TEST-ATOM (code inc) is a codegen-backed coverage point for function source retention.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQoobGFtYmRhICh4KSAoKyB4IDEpKQo=
 
 :TEST-COVERAGE codegen.c:60-reflection-quote/code-reflection branch family
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote

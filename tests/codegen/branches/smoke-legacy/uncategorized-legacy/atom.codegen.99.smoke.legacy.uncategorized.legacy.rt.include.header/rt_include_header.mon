@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime include forms compile alongside executable code.
 :TEST-ATOM (include "math.h") does not block following show output.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

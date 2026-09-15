@@ -10,6 +10,7 @@
 :TEST-PURPOSE Boolean or evaluates correctly.
 :TEST-ATOM (or True False) = True, (or False False) = False.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 :TEST-COVERAGE codegen.c:20-operators/boolean-logic branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

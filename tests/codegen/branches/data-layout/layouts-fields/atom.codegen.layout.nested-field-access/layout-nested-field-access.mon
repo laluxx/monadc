@@ -19,6 +19,7 @@
 :TEST-TAG nested
 :TEST-COVERAGE codegen.c:717-769 type_to_llvm TYPE_LAYOUT branches
 :TEST-COVERAGE codegen.c:3315-3340 nested layout field access branches
+:TEST-EXPECT-STDOUT-B64 Ygo0CjkK
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.layout.nested-field-access

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.unicode_prefix_gamma
+:TEST-CONTEXT monadc.context.reader.sugar.unicode-prefix
+:TEST-PURPOSE Gamma prefix becomes prefix call.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER known-fail
+:TEST-EXPECT-DESUGAR (γ x)
+:TEST-STATUS quarantined-baseline-2026-06-15
+
+γx

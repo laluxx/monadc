@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/quote-feature-postfix/atom.reader.error.reader.feature.missing.end
 :TEST-ATOM-LEAF atom.reader.error.reader.feature.missing.end
 :TEST-CLI-TARGET codegen errors reader quote-feature-postfix
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgIy0tLSB0byBjbG9zZSBmZWF0dXJlIGJsb2NrCg==
 
 (module Main)
 #+ experimental

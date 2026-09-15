@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime string concatenation with ++ operator (binary).
 :TEST-ATOM (++ "ab" "cd") = "abcd"; (++ "x" "yz") = "xyz".
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 YWJjZAp4eXoK
 
 :TEST-COVERAGE codegen.c:40-collections/strings branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

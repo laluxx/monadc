@@ -11,6 +11,7 @@
 :TEST-ATOM dot should reject fields that cannot be resolved to any known layout.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:12913 explicit dot no-layout diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IG5vIGxheW91dCB3aXRoIGZpZWxkICdtaXNzaW5nJyBmb3VuZAo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.no.layout.field

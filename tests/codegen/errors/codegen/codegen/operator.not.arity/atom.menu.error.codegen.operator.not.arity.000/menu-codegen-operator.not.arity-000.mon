@@ -35,6 +35,7 @@
 :TEST-REFINES atom.codegen.error
 :TEST-RELATED atom.codegen.error.menu
 :TEST-CLI-TARGET codegen errors codegen codegen
+:TEST-EXPECT-STDOUT-B64 bm90IGV4cGVjdHMK
 
 (module Main)
 (show (not True False))

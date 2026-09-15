@@ -11,6 +11,7 @@
 :TEST-PURPOSE For loop with backward arrow iterates over string in reverse.
 :TEST-ATOM (for c <- "cba" (show c)) prints c, b, a.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 YQpiCmMKYQpiCmMK
 
 :TEST-COVERAGE codegen.c:30-control-flow/loops branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

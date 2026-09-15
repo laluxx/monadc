@@ -32,6 +32,7 @@
 :TEST-MENU-PATH codegen/errors/env/nil-optional-return/atom.env.error.env.nil.optional.return.02
 :TEST-ATOM-LEAF atom.env.error.env.nil.optional.return.02
 :TEST-CLI-TARGET codegen errors env nil-optional-return
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IEZ1bmN0aW9uIOKAmGVudl9uaWxfcmV0dXJuXzAy4oCZIGNhbiByZXR1cm4gbmlsIGJ1dCByZXR1cm4gdHlwZSAnQm9vbCcgZG9lcyBub3QgZW5kIHdpdGgg4oCYP+KAmQo=
 
 (module Main)
 (define (env_nil_return_02 [flag : Bool] -> Bool) (if flag True nil))

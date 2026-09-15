@@ -10,6 +10,7 @@
 :TEST-PURPOSE Six integer parameters cover every SysV register allocator slot.
 :TEST-ATOM The first six Int parameters remain callable and addable.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

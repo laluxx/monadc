@@ -17,6 +17,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/layouts-fields/atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function
 :TEST-ATOM-LEAF atom.codegen.50.data.layout.layouts.fields.deep.layout.field.feeds.function
 :TEST-CLI-TARGET codegen branches data-layout layouts-fields
+:TEST-EXPECT-STDOUT-B64 MTIK
 
 (module Main)
 (layout Point [x :: Int] [y :: Int])

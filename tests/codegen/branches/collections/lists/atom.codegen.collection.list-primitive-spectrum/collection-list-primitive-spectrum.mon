@@ -25,6 +25,7 @@
 :TEST-COVERAGE codegen.c:7132 head branch
 :TEST-COVERAGE codegen.c:7193 tail branch
 :TEST-COVERAGE codegen.c:7315 ++ branch
+:TEST-EXPECT-STDOUT-B64 KCkKVHJ1ZQpUcnVlCjEKKDIgMykKNAooNSA2KQooMSAyIDMpCigxIDIgMykKKDEgMiAzIDQpClRydWUK
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/lists/atom.codegen.collection.list-primitive-spectrum

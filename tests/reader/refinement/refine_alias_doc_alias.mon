@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_alias_doc_alias
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Pure alias with doc and alias keywords parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type Email String :doc "email text" :alias Contact)

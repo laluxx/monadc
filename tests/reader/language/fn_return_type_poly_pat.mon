@@ -1,0 +1,13 @@
+:TEST-ID tests.language.fn_return_type_poly_pat
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Polymorphic pattern-match with return type in name parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY fn_return_type_poly_pat
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(define (last List -> a) [] -> nil [x] -> x [_ | xs] -> (last xs))

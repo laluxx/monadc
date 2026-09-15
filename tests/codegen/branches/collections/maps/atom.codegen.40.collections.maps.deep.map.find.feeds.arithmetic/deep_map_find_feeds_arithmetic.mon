@@ -17,6 +17,7 @@
 :TEST-MENU-PATH codegen/branches/collections/maps/atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic
 :TEST-ATOM-LEAF atom.codegen.40.collections.maps.deep.map.find.feeds.arithmetic
 :TEST-CLI-TARGET codegen branches collections maps
+:TEST-EXPECT-STDOUT-B64 MjUK
 
 (module Main)
 (define m #{:a 20 :b 5})

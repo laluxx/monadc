@@ -1,0 +1,13 @@
+:TEST-ID tests.language.data_deriving_multi
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Data with three deriving classes parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY data_deriving_multi
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(data Weekday Mon | Tue | Wed | Thu | Fri deriving [Bounded Enum Show Eq])

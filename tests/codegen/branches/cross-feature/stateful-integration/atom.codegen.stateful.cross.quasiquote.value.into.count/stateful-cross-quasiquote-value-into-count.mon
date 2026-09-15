@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/cross-feature/stateful-integration/atom.codegen.stateful.cross.quasiquote.value.into.count
 :TEST-ATOM-LEAF atom.codegen.stateful.cross.quasiquote.value.into.count
 :TEST-CLI-TARGET codegen branches cross-feature stateful-integration
+:TEST-EXPECT-STDOUT-B64 KGEgNDIpCjIK
 
 (module Main)
 (show (quasiquote (a (unquote 42))))

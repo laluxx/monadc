@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/sequencing-env/atom.codegen.stateful.control.do.with.mutation
 :TEST-ATOM-LEAF atom.codegen.stateful.control.do.with.mutation
 :TEST-CLI-TARGET codegen branches control-flow sequencing-env
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (define x 0)

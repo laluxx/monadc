@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.address_layout_field_map
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Address-of field sugar combines with map literal.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET address-of,layout-field,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(layout Node [id :: Int])
+(define n (Node 1))
+(define refs #{:id &n.id})

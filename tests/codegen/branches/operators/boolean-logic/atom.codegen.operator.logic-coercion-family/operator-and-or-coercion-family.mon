@@ -19,6 +19,7 @@
 :TEST-TAG logic
 :TEST-COVERAGE codegen.c:7718-7730 and/or branches
 :TEST-COVERAGE codegen.c:7743-7805 condition coercion helper paths
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpUcnVlCkZhbHNlClRydWUK
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/boolean-logic/atom.codegen.operator.logic-coercion-family

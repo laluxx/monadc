@@ -1,0 +1,13 @@
+:TEST-ID tests.language.shift_right
+:TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
+:TEST-PURPOSE Arithmetic right shift parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY shift_right
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(>> 16 2)

@@ -1,0 +1,19 @@
+:TEST-ID tests.sugar.wisp_higher_order_predicate_arg
+:TEST-CONTEXT monadc.context.wisp.old-core-prelude-compat
+:TEST-PURPOSE Wisp preserves bare predicate symbols in function-typed argument positions.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define all? (lambda ([p :: (( a -> Bool ))] [xs :: ([ a ])] -> Bool) True))\n(define null? (lambda ([xs :: ([ a ])] -> Bool) True))\n(define ok (lambda ([rows :: ([ [ Int ] ])] -> Bool) (all? null? rows)))
+:TEST-STATUS wisp-function-arg-regression-2026-06-20
+
+define all? :: (a -> Bool) -> [a] -> Bool
+  p xs -> True
+
+define null? :: [a] -> Bool
+  xs -> True
+
+define ok :: [[Int]] -> Bool
+  rows -> all? null? rows

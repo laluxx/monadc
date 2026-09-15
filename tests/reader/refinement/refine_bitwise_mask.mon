@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_bitwise_mask
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Bitwise mask predicate refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type Masked { n ∈ Int | (= (& n 1) 1) })

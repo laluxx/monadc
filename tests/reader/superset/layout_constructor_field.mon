@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.layout_constructor_field
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Layout declaration combines with constructor call and field access.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET layout,constructor,field-access
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 1 2))
+(show p.x)

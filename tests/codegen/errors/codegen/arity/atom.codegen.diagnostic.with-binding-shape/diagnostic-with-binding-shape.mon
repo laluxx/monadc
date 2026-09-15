@@ -15,6 +15,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG with
 :TEST-COVERAGE codegen.c:8019 with binding shape diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICd3aXRoJyBiaW5kaW5ncyBtdXN0IGJlIFtuYW1lIHZhbHVlIC4uLl0K
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.with-binding-shape

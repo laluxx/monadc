@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.wisp_quote_list
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Wisp quote combines with list literal syntax.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET wisp,quote,list
+:TEST-STATUS passing-baseline-2026-06-15
+
+module Main
+
+define xs '(1 2 3)
+show xs

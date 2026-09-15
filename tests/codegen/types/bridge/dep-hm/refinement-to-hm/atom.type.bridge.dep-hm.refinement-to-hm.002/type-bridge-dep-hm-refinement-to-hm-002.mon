@@ -27,6 +27,7 @@
 :TEST-USES-ATOM atom.type.hm.numeric
 :TEST-DEPENDS-ON atom.type.dep.embed
 :TEST-REFINES atom.type.bridge.refinement-int
+:TEST-EXPECT-STDOUT-B64 NQo=
 
 (module Main)
 (type BridgeNat02 { x ∈ Int | (>= x 0) })

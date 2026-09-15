@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.lambda_refinement_value
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Typed lambda combines with refinement-annotated value.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET lambda-typed,refinement,typed-define
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(type Positive { n ∈ Int | (> n 0) })
+(define [n :: Positive] 3)
+((lambda ([x : Int] -> Int) (+ x 1)) n)

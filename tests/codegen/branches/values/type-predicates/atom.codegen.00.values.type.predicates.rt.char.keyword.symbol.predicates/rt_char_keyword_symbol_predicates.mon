@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime predicates recognize character, keyword, and quoted symbol values.
 :TEST-ATOM Char?, Keyword?, and Symbol? return True for their corresponding literal forms.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUK
 
 :TEST-COVERAGE codegen.c:00-values/type-predicates branch family
 :TEST-USES-ATOM atom.codegen.category.00.values

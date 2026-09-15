@@ -20,6 +20,7 @@
 :TEST-COVERAGE codegen.c:4270-5450 define value branch
 :TEST-COVERAGE codegen.c:7642 set! branch
 :TEST-COVERAGE codegen.c:3494-3860 AST_SYMBOL env lookup/load
+:TEST-EXPECT-STDOUT-B64 MQozCjcK
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/sets/atom.codegen.env.global-set-load-sequence

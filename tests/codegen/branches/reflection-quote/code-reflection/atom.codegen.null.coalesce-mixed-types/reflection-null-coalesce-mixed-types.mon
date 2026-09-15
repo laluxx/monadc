@@ -17,6 +17,7 @@
 :TEST-TAG null
 :TEST-TAG reflection
 :TEST-COVERAGE codegen.c:5936 ?? arity branch and null coalesce lowering
+:TEST-EXPECT-STDOUT-B64 NDIKMApmYWxsYmFjawp2YWx1ZQo=
 
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote
 :TEST-MENU branches/reflection-quote/code-reflection/atom.codegen.null.coalesce-mixed-types

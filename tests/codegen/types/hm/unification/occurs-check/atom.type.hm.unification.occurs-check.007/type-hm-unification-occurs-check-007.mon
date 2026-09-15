@@ -27,6 +27,7 @@
 :TEST-USES-ATOM atom.type.hm.occurs-check
 :TEST-DEPENDS-ON atom.type.hm.fresh-var
 :TEST-REFINES atom.type.hm.infinite-type
+:TEST-EXPECT-STDOUT-B64 aW5maW5pdGUgdHlwZSAob2NjdXJzIGNoZWNrIGZhaWxlZCkK
 
 (module Main)
 (define (hm_occurs_07 [f : Fn] -> Int) (f f))

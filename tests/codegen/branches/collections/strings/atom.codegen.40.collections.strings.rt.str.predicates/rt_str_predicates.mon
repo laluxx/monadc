@@ -9,6 +9,7 @@
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE String predicate functions starts-with?, ends-with?, contains?.
 :TEST-ATOM (starts-with? "hello world" "hello") = True,
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKRmFsc2UKRmFsc2UK
 ;;           (ends-with? "hello world" "world") = True,
 ;;           (contains? "hello world" "lo wo") = True
 :TEST-EXPECT compile, run

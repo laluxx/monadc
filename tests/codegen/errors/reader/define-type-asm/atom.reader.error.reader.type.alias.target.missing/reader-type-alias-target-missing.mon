@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/define-type-asm/atom.reader.error.reader.type.alias.target.missing
 :TEST-ATOM-LEAF atom.reader.error.reader.type.alias.target.missing
 :TEST-CLI-TARGET codegen errors reader define-type-asm
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgdGFyZ2V0IHR5cGUgbmFtZSBvciAneycgYWZ0ZXIgdHlwZSBuYW1lCg==
 
 (module Main)
 (type Alias )

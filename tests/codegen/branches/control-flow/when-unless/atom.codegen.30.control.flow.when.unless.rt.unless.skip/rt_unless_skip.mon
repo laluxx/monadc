@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime unless skips its body when the condition is true.
 :TEST-ATOM (unless True (set! x 7)) leaves x unchanged.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MAo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/when-unless branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

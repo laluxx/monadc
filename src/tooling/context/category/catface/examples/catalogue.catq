@@ -1,0 +1,95 @@
+# 󰄛 Catface catalogue — paste one line at a time or feed to --query.
+# The goal is to make every major UI/search feature easy to exercise.
+
+# 1. Start here: daily work queues
+@todo
+@hot
+@triage
+@bugs
+@blocked
+@fix
+
+# 2. Notes by trust level
+@notes
+@obs
+@dec
+@inf
+@records
+:Record
+:Record reader
+:Record wisp
+:Record codegen
+
+# 3. Compiler surfaces
+@reader
+@wisp
+@codegen
+@source reader
+@source wisp
+@source codegen
+@info reader
+@reports
+
+# 4. Field-specific indexed search
+# These avoid asking fuzzy search to guess which field you meant.
+title:reader
+path:reader.c
+path:tests
+id:monadc.context
+preview:TODO
+tag:source
+
+# 5. Category arrows as questions
+@tests -> reader
+reader <- @tests
+%verifies @tests -> reader
+%verifies @tests -> codegen
+%supports @notes -> @source
+%blocks @todo -> @source
+%refines @notes -> @notes
+@blocked -> @source
+
+# 6. Hom expansion from selected result sets
+reader >
+reader <
+reader ~
+wisp define ~
+codegen proj
+reader layout proj
+
+# 7. Shape diagnostics
+@roots
+@leaves
+@orphans
+@roots -> @leaves
+%mentions @notes
+%generated-by @reports
+
+# 8. Regression-hunting examples
+@bugs reader
+@bugs wisp
+@bugs codegen
+@todo FAIL
+@todo error:
+@hot path literal
+@hot layout
+
+# 9. Exact token / no-fuzzy probes
+=reader
+=TODO
+=needlefast
+=path
+
+# v0.7.4 uniform query language checks
+id:monadc
+title:reader
+path:reader
+preview:TODO
+tag:tests
+=reader
+%verifies
+%supports
+%blocks
+@obs
+@dec
+@inf

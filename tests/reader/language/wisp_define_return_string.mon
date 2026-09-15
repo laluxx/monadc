@@ -1,0 +1,14 @@
+:TEST-ID tests.language.wisp_define_return_string
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Wisp return-typed zero-argument defines parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY wisp_define_return_string
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+define return-string -> String
+  "ciao"

@@ -9,6 +9,7 @@
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE All primitive type predicates.
 :TEST-ATOM (Int? 42) = True, (Float? 3.14) = True, (String? "hi") = True,
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlCg==
 ;;           (Bool? True) = True, (Char? (Char 65)) = True, (nil? nil) = True,
 ;;           (Number? 42) = True, (Number? 3.14) = True
 :TEST-EXPECT compile, run

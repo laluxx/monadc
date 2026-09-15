@@ -16,5 +16,6 @@
 :TEST-MENU-PATH codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.empty.ops
 :TEST-ATOM-LEAF atom.codegen.40.collections.sets.rt.set.empty.ops
 :TEST-CLI-TARGET codegen branches collections sets
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQo=
 (module Main)
 (show (empty? {}))

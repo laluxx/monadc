@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/ratio/atom.codegen.20.operators.ratio.rt.ratio.func
 :TEST-ATOM-LEAF atom.codegen.20.operators.ratio.rt.ratio.func
 :TEST-CLI-TARGET codegen branches operators ratio
+:TEST-EXPECT-STDOUT-B64 MjUKNQo3NQowLjUK
 (module Main)
 (show (1/4 100))
 (show (1/2 10))

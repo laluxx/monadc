@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.field.missing.separator
 :TEST-ATOM-LEAF atom.reader.error.reader.layout.field.missing.separator
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJzo6JyBvciAnLT4nIGFmdGVyIGxheW91dCBmaWVsZCBuYW1lICd4Jwo=
 
 (module Main)
 (layout Point [x Int])

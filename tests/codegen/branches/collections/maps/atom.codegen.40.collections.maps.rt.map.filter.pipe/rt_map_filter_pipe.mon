@@ -11,6 +11,7 @@
 :TEST-PURPOSE Map and filter with pipe-forward chains correctly.
 :TEST-ATOM Filter evens then double: (filter even? xs) |> (map double).
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 KDQgOCAxMikK
 
 :TEST-COVERAGE codegen.c:40-collections/maps branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

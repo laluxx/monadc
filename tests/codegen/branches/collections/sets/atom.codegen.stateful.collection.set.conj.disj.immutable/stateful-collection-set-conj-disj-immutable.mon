@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/collections/sets/atom.codegen.stateful.collection.set.conj.disj.immutable
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.set.conj.disj.immutable
 :TEST-CLI-TARGET codegen branches collections sets
+:TEST-EXPECT-STDOUT-B64 RmFsc2UKVHJ1ZQpGYWxzZQo=
 
 (module Main)
 (define s {1 2})

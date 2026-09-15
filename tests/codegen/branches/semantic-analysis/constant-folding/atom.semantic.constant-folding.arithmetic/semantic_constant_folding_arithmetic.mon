@@ -5,6 +5,7 @@
 :TEST-TIER regression
 :TEST-COMPILE-FLAGS -O
 :TEST-MENU-PATH codegen/branches/semantic-analysis/constant-folding
+:TEST-EXPECT-DESUGAR-B64 KG1vZHVsZSBNYWluIFtdKQooc2hvdyAyMCkK
 
 (module Main)
 (show (+ (* 2 5) (- 9 3) (/ 8 2)))

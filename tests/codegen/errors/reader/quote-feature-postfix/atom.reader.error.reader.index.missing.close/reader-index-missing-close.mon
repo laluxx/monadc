@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/quote-feature-postfix/atom.reader.error.reader.index.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.index.missing.close
 :TEST-CLI-TARGET codegen errors reader quote-feature-postfix
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ10nIHRvIGNsb3NlIGluZGV4IGV4cHJlc3Npb24K
 
 (module Main)
 (define xs [1 2])

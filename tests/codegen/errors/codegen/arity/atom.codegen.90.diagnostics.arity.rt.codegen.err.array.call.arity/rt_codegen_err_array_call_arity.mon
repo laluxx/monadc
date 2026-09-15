@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces array-as-function arity.
 :TEST-ATOM (xs) must fail when xs is an array because array calls require one index.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 YXJyYXkgdXNlZCBhcyBmdW5jdGlvbiByZXF1aXJlcyBleGFjdGx5IDEgYXJndW1lbnQgKGluZGV4KQo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

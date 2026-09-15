@@ -1,109 +1,269 @@
 # Monad
 
-<div align="center">
-  <img src="./etc/logo.png" alt="Monad logo" width="160">
-</div>
+Monad is an experimental functional systems language implemented in C and LLVM.
+It combines S-expression and indentation-friendly Wisp syntax, Hindley-Milner
+inference, dependent-type experiments, algebraic data types, type classes, C
+FFI, inline assembly, a REPL, language-server tooling, and a large executable
+language specification.
 
-Monad is an experimental functional systems language implemented in C and
-LLVM. It combines a Lisp-like core, indentation-friendly Wisp syntax,
-Hindley-Milner inference, dependent-type experiments, algebraic data types,
-type classes, C FFI, inline assembly, a REPL, and an end-to-end compiler test
-suite.
-
-This repository is the compiler, runtime, standard-library seed, examples,
-tests, and project context for the language.
-
-## Current Status
-
-Monad is not a polished general-purpose language yet. It is a serious compiler
-workbench with many implemented language features and a large regression suite.
-
-What is usable today:
-
-- Compile `.mon` files to native executables through LLVM.
-- Use either S-expression syntax or Wisp indentation syntax.
-- Run the REPL, CLI helpers, core library tests, codegen fixtures, reader tests,
-  and bytecode experiments.
-- Parse C headers through libclang for FFI declarations.
-- Build on Linux and MSYS2/Windows through the checked-in build paths.
-
-What is still experimental:
-
-- Some language areas are intentionally covered by future/known-failure tests.
-- The core library is still being shaped.
-- REPL/JIT and FFI-heavy workflows depend on platform linker behavior.
-- The context corpus is extensive and useful, but it is not introductory
-  documentation.
+The repository is deliberately split between **implementation**, **language
+source**, and **generated state**. Generated state does not belong beside source
+files.
 
 ## Quick Start
 
-Dependencies on Linux:
+The canonical developer front door is `./make`:
 
 ```sh
-sudo apt install build-essential cmake ninja-build python3 llvm-dev libclang-dev libreadline-dev libgmp-dev pkg-config
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-./build/monad --help
-```
-
-Run the main test suite:
-
-```sh
-make test
-```
-
-Explore the focused test suites:
-
-```sh
-./build/monad test list
-./build/monad test runner
-./build/monad test how-to
-python tests/main.py list
-python tests/main.py runner
-python tests/main.py how-to
-```
-
-Run core library tests:
-
-```sh
-make test-core
-```
-
-Use the Python build wrapper for diagnostics:
-
-```sh
-./make doctor
+./make deps
+./make all
 ./make test
 ```
 
-## Windows / MSYS2
+The compiler produced by the Make build lives at:
 
-Windows is supported through MSYS2. Use the MSYS shell, not PowerShell or a
-plain `cmd.exe` prompt.
-
-Install dependencies:
-
-```sh
-pacman -S --needed base-devel git
-pacman -S --needed mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-readline mingw-w64-ucrt-x86_64-gmp
+```text
+build/bin/monad
 ```
 
-Build and smoke test:
+Inspect the available workflows with:
+
+```sh
+./make help
+./make doctor
+./make targets
+```
+
+On supported Linux distributions and macOS, `./make deps --install` can install
+common host build tools. Project libraries may still require the platform's LLVM,
+libclang, readline, GMP, and pthread development packages.
+
+## Repository Layout
+
+```text
+src/                         host implementation source
+├── *.c, *.h                 compiler/runtime/frontend/backend
+├── qtt/                     quantitative/dependent compiler pipeline
+├── effects/                 effect-system implementation
+├── concurrency/             concurrency runtime/compiler support
+├── embed/                   embedding and compiler APIs
+├── tooling/                 developer-facing tools
+│   ├── lsp.c/.h             language server
+│   ├── repl.c/.h            REPL
+│   ├── lsp_repl.c/.h        LSP/REPL bridge
+│   ├── context/             context tooling
+│   └── console.py           shared terminal presentation
+└── testing/                 host-side test infrastructure/contracts
+
+core/                        shipped Monad core/prelude library
+tests/                       authored Monad tests — .mon files only
+how_to/                      focused executable examples
+examples/                    larger language demonstrations
+context/                     design/project knowledge, optional for building
+glyph/                       Glyph design material, optional for building
+etc/                         research/assets, optional for building
+build/                       all generated build/test/editor state
+```
+
+Developer tooling is rooted at `src/tooling/`; host verification infrastructure is rooted at `src/testing/`.
+
+The important boundary is simple:
+
+- implementation code belongs under `src/`;
+- authored language verification belongs under `tests/` and is `.mon`;
+- host contracts that genuinely require Python/C/C++ belong under
+  `src/testing/`;
+- generated state belongs under `build/` and is disposable.
+
+## Building
+
+### Canonical Make build
+
+```sh
+./make all
+./make debug
+./make release
+```
+
+The underlying `Makefile` keeps objects, libraries, and executables under
+`build/`:
+
+```text
+build/obj/
+build/lib/
+build/bin/
+```
+
+Useful lower-level targets remain available when needed:
+
+```sh
+make all
+make release
+make asan
+make ubsan
+make test
+make test-core
+make test-embedding
+```
+
+### CMake build
+
+CMake remains a supported portable/CI build path:
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-./build/monad.exe --help
-MONAD_BINARY="$PWD/build/monad.exe" ./build/monad.exe test runner
 ```
 
-The repository also includes a GitHub Actions workflow at
-`.github/workflows/ci.yml` that performs CMake builds on Linux and
-MSYS2/UCRT64 Windows.
+CMake exports a compilation database automatically.
 
-## First Program
+## Editor / clangd Support
+
+`./make` maintains `compile_commands.json` for the Make build so clangd can
+understand files at any depth under `src/` without changing source includes to
+editor-only paths such as `../../...`.
+
+```sh
+./make compdb
+```
+
+The canonical database is written to:
+
+```text
+build/compile_commands.json
+```
+
+and a root `compile_commands.json` link is published for normal clangd ancestor
+discovery.
+
+If Bear is installed, `./make compdb` uses Bear to parse the Make dry-run. If it
+is not installed, Monad uses its deterministic Make-command parser instead.
+Bear is therefore a preferred integration, not a hard build dependency.
+Successful `./make all`, `./make debug`, and `./make release` refresh the
+database automatically. Set `MAKE_COMPDB=0` only when you explicitly do not want
+that behavior.
+
+## Tests
+
+The public test front doors are:
+
+```sh
+./make test
+build/bin/monad test list
+build/bin/monad test runner
+build/bin/monad test core
+```
+
+`tests/` is intentionally data, not test infrastructure. Every authored file in
+that tree is a `.mon` fixture. Expectations live in fixture metadata rather than
+parallel `.stdout`, `.json`, or ad-hoc Python sidecars.
+
+The canonical language runner lives under `src/testing/runner.py`. The core
+module runner lives under `src/testing/core_runner.py`. Host-level contracts for
+embedding ABIs, portability, CMake, PTYs, packaging, and similar concerns live
+under `src/testing/contracts/` because those concerns cannot honestly be tested
+as Monad programs alone.
+
+Useful selection commands include:
+
+```sh
+./make test --list
+./make test codegen
+./make test codegen errors reader
+./make test --name 'pattern'
+./make test --only-failed
+./make test --rerun-first-failure
+./make test --fail-fast
+./make test --validate-metadata
+```
+
+All test frontends use the same restrained terminal presentation as `./make`.
+
+## Clean-Tree Policy
+
+`./make clean` means a repository-level scrub, not merely `make clean`:
+
+```sh
+./make clean
+./make clean --check
+```
+
+It removes generated build/test/editor/compiler state such as build trees,
+objects, archives, compiler intermediates (`.mqti`, `.ll`, `.bc`), Python
+caches, generated core JSON, compilation databases, coverage/profiling files,
+and editor debris.
+
+`--check` is non-destructive and exits unsuccessfully if generated state is
+present. Managed Git hooks enforce the policy:
+
+```sh
+./make hooks
+```
+
+The hooks use:
+
+```text
+pre-commit  ./make clean --check
+pre-push    ./make clean --check && ./make check
+```
+
+This makes a dirty source tree visible before garbage reaches Git history.
+
+## Quality Gate
+
+```sh
+./make check
+```
+
+The fallback quality gate is fail-closed: source hygiene, build, and canonical
+tests. Projects can layer additional Make quality targets without changing the
+front-end contract.
+
+Sanitizer workflows are first-class:
+
+```sh
+./make asan
+./make ubsan
+```
+
+## Source Archives
+
+The default archive is intentionally small and source-complete:
+
+```sh
+./make tar
+```
+
+It contains the material needed to build and verify the language:
+
+- `src/`
+- `core/`
+- `.mon` tests
+- `how_to/` and `examples/`
+- `Makefile`, `CMakeLists.txt`, and `./make`
+- managed Git hooks and package metadata
+
+It does **not** copy `.git`, build products, caches, vendored toolchains,
+prebuilt binaries, screenshots, fonts, or research PDFs.
+
+Additional payloads are explicit:
+
+```sh
+./make tar --with-binaries
+./make tar --with-vendor
+./make tar --with-context
+```
+
+`--with-context` adds the design/research payload (`context/`, `glyph/`, and
+`etc/`). `--with-vendor` adds the relocatable dependency/toolchain bundle.
+`--with-binaries` adds the portable runtime folder.
+
+Every archive contains `SOURCE_MANIFEST.json` and `AGENT_BUILD.md`, and packaging fails
+closed if the canonical source surface is incomplete or if `tests/` contains
+anything other than authored `.mon` files.
+
+## Running Programs
 
 Create `hello.mon`:
 
@@ -111,23 +271,18 @@ Create `hello.mon`:
 show "Hello, Monad"
 ```
 
-Compile and run it:
+Compile it:
 
 ```sh
-./build/monad hello.mon
+build/bin/monad hello.mon -o hello
 ./hello
 ```
 
-On MSYS2/Windows the output binary is suffixed:
-
-```sh
-./build/monad.exe hello.mon
-./hello.exe
-```
+On MSYS2/Windows the compiler and generated executable use the `.exe` suffix.
 
 ## Package Builds
 
-For a small package, place source under `src/` and add `package.yaml`:
+A Monad package can keep its own language source under its own `src/` directory:
 
 ```yaml
 name: hello
@@ -137,146 +292,44 @@ executables:
     source-dirs: src
 ```
 
-Create `src/Main.mon`:
-
 ```monad
 (module Main)
 show "Hello, package"
 ```
 
-Build and run it from the package directory:
+Then:
 
 ```sh
-/path/to/monadc/build/monad build
+/path/to/monadc/build/bin/monad build
 ./build/hello
 ```
 
-`monad build` finds checkout-local `core/` and `libmonad.a` through the compiler
-binary location, so a development checkout does not need `make install` before
-building a package.
+The compiler resolves checkout-local `core/` and the runtime archive during
+development, so installing Monad globally is not required first.
 
-## Examples
+## Windows / MSYS2
 
-The `how_to/` directory contains executable language examples:
+Use an MSYS2 UCRT64 shell. Install the UCRT64 toolchain, CMake/Ninja, Python,
+pkg-config, LLVM/Clang, readline, and GMP packages, then use either `./make` or
+the CMake workflow above.
 
-```sh
-./build/monad how_to/Syntax.mon
-./build/monad how_to/AlgebraicDataTypes.mon
-./build/monad how_to/Macros.mon
-./build/monad how_to/Iter.mon
-./build/monad how_to/ReaderSyntax.mon
-./build/monad how_to/FirstOrderModalLogic.mon
-```
-
-Some examples depend on external graphics libraries or platform-specific
-headers. Start with the syntax, ADT, macro, and iterator examples before trying
-the speedrun demos.
-
-## Build Targets
-
-The CMake build is the primary portable build path.
-
-| Command                                      | Purpose                                                  |
-|----------------------------------------------|----------------------------------------------------------|
-| `cmake -S . -B build -G Ninja`               | Configure a debug build                                  |
-| `cmake --build build --parallel`             | Build `monad` and `libmonad.a`                           |
-| `ctest --test-dir build --output-on-failure` | Run CMake smoke and portability checks                   |
-| `cmake --install build --prefix /path`       | Install compiler, runtime archive, header, and core libs |
-
-The root `Makefile` remains available while the migration completes.
-
-| Command                     | Purpose                                                     |
-|-----------------------------|-------------------------------------------------------------|
-| `make` or `make all`        | Debug compiler build                                        |
-| `make release`              | Optimized compiler build                                    |
-| `make asan`                 | AddressSanitizer build                                      |
-| `make test`                 | Full runner: reader, Wisp, language, and codegen fixtures   |
-| `make test-core`            | Core module test blocks                                     |
-| `make test-runner`          | Compiler-facing unified runner suite                        |
-| `make test-how-to`          | Compiler-facing README-listed example smoke suite           |
-| `make clean`                | Remove compiler artifacts                                   |
-| `make install PREFIX=/path` | Install compiler, runtime archive, header, and core modules |
-
-The `./make` helper wraps common workflows and adds project diagnostics,
-portable packaging, and vendor/runtime closure commands:
-
-```sh
-./make help
-./make doctor
-./make release
-./make vendor
-./make tar --with-binaries
-```
-
-## Repository Map
-
-| Path         | What lives there                                                 |
-|--------------|------------------------------------------------------------------|
-| `*.c`, `*.h` | Compiler, runtime, REPL, FFI, LSP, bytecode, and support code    |
-| `core/`      | Active core/prelude modules                                      |
-| `how_to/`    | Small executable examples                                        |
-| `tests/`     | Regression fixtures and Python test harnesses                    |
-| `context/`   | Source-grounded project memory, design notes, and subsystem docs |
-| `etc/`       | Logo, screenshots, fonts, and reference PDFs                     |
-| `CMakeLists.txt` | Primary portable build/test/install path                     |
-| `Makefile`   | Legacy build/test/install path during migration                  |
-| `make`       | Python build helper                                              |
+The checked-in GitHub Actions workflow builds and verifies Linux and MSYS2
+Windows configurations.
 
 ## Language Surface
 
-Monad currently includes:
+Monad currently explores:
 
-- S-expression and Wisp syntaxes for the same AST.
-- Functions, lambdas, pattern matching, algebraic data types, and type classes.
-- Hindley-Milner inference with monomorphized codegen.
-- Dependent-type and refinement-type experiments.
-- Arrays, lists, sets, maps, paths, chars, strings, numeric literals, and
-  fixed-width numeric types.
-- C FFI through libclang header parsing.
-- Inline assembly and low-level layout support.
-- Test blocks that can be compiled and executed by the test runner.
+- S-expression and Wisp syntaxes for the same AST;
+- functions, lambdas, pattern matching, ADTs, and type classes;
+- Hindley-Milner inference and monomorphized code generation;
+- dependent, refinement, and quantitative type-system work;
+- effects and concurrency;
+- arrays, lists, sets, maps, paths, strings, characters, and numeric families;
+- C FFI through libclang;
+- inline assembly and low-level layout support;
+- REPL/JIT workflows;
+- compiler-checked test blocks and first-class verification metadata.
 
-For deeper language docs, start in `context/info/index.org`.
-
-## Verification
-
-The important local checks are:
-
-```sh
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-python tests/test_windows_portability.py
-./build/monad test list
-./build/monad test runner
-python tests/main.py list
-python tests/main.py runner
-make test-runner
-make test-core
-make test
-```
-
-`make test` is the broadest suite and can take longer because it compiles and
-runs many fixtures. Use the narrower commands while working on a specific
-subsystem.
-
-## Editor Support
-
-The companion Emacs mode is
-[monad-mode](https://github.com/laluxx/monad-mode). It provides syntax
-highlighting, REPL integration, inline assembly support, and linting helpers.
-
-## Project Notes
-
-Monad is intentionally ambitious: it explores the boundary between high-level
-functional programming and low-level systems control. The cost of that ambition
-is complexity. The way to keep the project workable is to route changes through
-small tests, source-grounded context records, and honest build verification.
-
-Useful entry points:
-
-- `context/info/index.org` for language documentation.
-- `context/build.org` for build and verification policy.
-- `context/tests.org` for test metadata and regression conventions.
-- `context/source-map.org` for source-file orientation.
-- `TODO.org` for open work.
+For the full design corpus, start at `context/info/index.org` in the repository
+or build an archive with `./make tar --with-context`.

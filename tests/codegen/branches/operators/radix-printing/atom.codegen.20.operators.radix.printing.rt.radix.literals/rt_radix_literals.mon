@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/radix-printing/atom.codegen.20.operators.radix.printing.rt.radix.literals
 :TEST-ATOM-LEAF atom.codegen.20.operators.radix.printing.rt.radix.literals
 :TEST-CLI-TARGET codegen branches operators radix-printing
+:TEST-EXPECT-STDOUT-B64 MHgxQQoKMG83NwoKMGIxMDEwCgo=
 (module Main)
 (show (Hex 0x1A))
 (show (Oct 0o77))

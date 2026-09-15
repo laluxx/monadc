@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/collections/lists/atom.codegen.stateful.collection.list.ends.scalar.suffix
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.list.ends.scalar.suffix
 :TEST-CLI-TARGET codegen branches collections lists
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 (module Main)
 (show (ends-with? (list 1 42) 42))

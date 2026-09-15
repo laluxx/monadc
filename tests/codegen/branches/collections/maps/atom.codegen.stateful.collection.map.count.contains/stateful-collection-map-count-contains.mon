@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/collections/maps/atom.codegen.stateful.collection.map.count.contains
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.map.count.contains
 :TEST-CLI-TARGET codegen branches collections maps
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlCjIK
 
 (module Main)
 (define m #{:a 40 :b 2})

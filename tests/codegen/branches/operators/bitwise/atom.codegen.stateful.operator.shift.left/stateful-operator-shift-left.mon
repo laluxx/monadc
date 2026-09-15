@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/bitwise/atom.codegen.stateful.operator.shift.left
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.shift.left
 :TEST-CLI-TARGET codegen branches operators bitwise
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (<< 21 1))

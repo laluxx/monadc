@@ -19,6 +19,7 @@
 :TEST-TAG while
 :TEST-COVERAGE codegen.c:8130-8175 while condition/body/end blocks
 :TEST-COVERAGE codegen.c:7642 set! branch
+:TEST-EXPECT-STDOUT-B64 NgowCg==
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/loops/atom.codegen.control.while-mutation-countdown

@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.module_include_define
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Module, include, and define form a minimal C-call program.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET module,include,define
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(include "math.h")
+(define r (sqrt 16.0))

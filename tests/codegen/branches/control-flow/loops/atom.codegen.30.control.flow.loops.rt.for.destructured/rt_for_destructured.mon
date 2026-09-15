@@ -11,6 +11,7 @@
 :TEST-PURPOSE For with destructured pair bindings works.
 :TEST-ATOM (for [[x y] [[1 2] [3 4]]] (show (+ x y))) shows sums.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo3Cg==
 
 :TEST-COVERAGE codegen.c:30-control-flow/loops branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

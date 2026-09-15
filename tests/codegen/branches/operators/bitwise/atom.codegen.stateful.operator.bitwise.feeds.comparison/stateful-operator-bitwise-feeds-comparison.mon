@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/bitwise/atom.codegen.stateful.operator.bitwise.feeds.comparison
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.bitwise.feeds.comparison
 :TEST-CLI-TARGET codegen branches operators bitwise
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQo=
 
 (module Main)
 (show (= (& 255 42) 42))

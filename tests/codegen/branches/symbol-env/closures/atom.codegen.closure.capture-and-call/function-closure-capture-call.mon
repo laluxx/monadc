@@ -20,6 +20,7 @@
 :TEST-TAG function
 :TEST-COVERAGE codegen.c:9900-12100 closure/lifted call branches
 :TEST-COVERAGE codegen.c:11355-11525 lifted closure argument branches
+:TEST-EXPECT-STDOUT-B64 MTIKMTAK
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-MENU branches/symbol-env/closures/atom.codegen.closure.capture-and-call

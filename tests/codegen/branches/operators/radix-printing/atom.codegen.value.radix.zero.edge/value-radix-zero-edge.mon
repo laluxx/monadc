@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:1224-1230 hex/bin/oct show branches
 :TEST-COVERAGE codegen.c:515 get_or_declare_print_binary zero branch
+:TEST-EXPECT-STDOUT-B64 MHgwCgowYjAKCjBvMAoK
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/radix-printing/atom.codegen.value.radix.zero.edge

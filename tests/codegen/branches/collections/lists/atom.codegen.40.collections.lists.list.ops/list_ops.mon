@@ -10,6 +10,7 @@
 :TEST-PURPOSE Basic list operations compile and evaluate.
 :TEST-ATOM car and cdr of a quoted list work.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQooMiAzKQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

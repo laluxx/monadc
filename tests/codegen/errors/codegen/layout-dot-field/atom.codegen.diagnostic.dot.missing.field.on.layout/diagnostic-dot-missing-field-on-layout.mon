@@ -12,6 +12,7 @@
 :TEST-ATOM dot should report layout-specific missing fields after resolving the base type.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:12929 explicit dot missing-field diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IG5vIGxheW91dCB3aXRoIGZpZWxkICd5JyBmb3VuZAo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/layout-dot-field/atom.codegen.diagnostic.dot.missing.field.on.layout

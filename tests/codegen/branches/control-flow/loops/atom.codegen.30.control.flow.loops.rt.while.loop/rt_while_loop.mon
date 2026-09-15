@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.rt.while.loop
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.loops.rt.while.loop
 :TEST-CLI-TARGET codegen branches control-flow loops
+:TEST-EXPECT-STDOUT-B64 MAoxCjIK
 (module Main)
 (define i 0)
 (while (< i 3) (begin (show i) (set! i (+ i 1))))

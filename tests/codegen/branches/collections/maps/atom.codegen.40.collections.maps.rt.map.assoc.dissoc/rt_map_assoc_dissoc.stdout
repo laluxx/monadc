@@ -1,8 +1,0 @@
-True
-3
-::green
-::cyan
-::blue
-(::red ::green ::blue)
-(1 2 3)
-False

@@ -14,6 +14,7 @@
 :TEST-MENU branches/values/core-sequence-optional-at
 :TEST-MENU-PATH codegen/branches/values/core-sequence-optional-at
 :TEST-CLI-TARGET codegen core sequence optional at
+:TEST-EXPECT-STDOUT-B64 NgpuaWwK
 
 import Sequence
 

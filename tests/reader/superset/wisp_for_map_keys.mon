@@ -1,0 +1,16 @@
+:TEST-ID tests.superset.wisp_for_map_keys
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Wisp for combines with map keys.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET wisp,for,map-keys
+:TEST-STATUS passing-baseline-2026-06-15
+
+module Main
+
+define cfg #{:a 1 :b 2}
+for k -> keys cfg
+  show k

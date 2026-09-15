@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/arithmetic/atom.codegen.stateful.operator.division.integer.chain
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.division.integer.chain
 :TEST-CLI-TARGET codegen branches operators arithmetic
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (/ 168 2 2))

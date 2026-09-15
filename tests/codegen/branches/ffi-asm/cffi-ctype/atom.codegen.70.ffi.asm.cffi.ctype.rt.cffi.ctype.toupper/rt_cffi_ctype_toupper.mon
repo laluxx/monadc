@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime C FFI calls a ctype conversion function.
 :TEST-ATOM (toupper 97) prints ASCII code 65.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NjUK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/cffi-ctype branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

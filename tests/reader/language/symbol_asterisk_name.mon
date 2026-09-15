@@ -1,0 +1,13 @@
+:TEST-ID tests.language.symbol_asterisk_name
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Asterisk in symbol name parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY symbol_asterisk_name
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+safe-read*

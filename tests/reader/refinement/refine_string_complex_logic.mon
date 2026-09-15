@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_string_complex_logic
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Complex string logic predicate parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type CleanName { s ∈ String | (and (> (count s) 0) (not (contains? s "/")) (not (contains? s "\\"))) })

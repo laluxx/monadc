@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime type predicates cover collection, boolean, numeric, and function values.
 :TEST-ATOM List?, Arr?, Bool?, Number?, and Fn? return expected booleans.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlCg==
 
 :TEST-COVERAGE codegen.c:00-values/type-predicates branch family
 :TEST-USES-ATOM atom.codegen.category.00.values

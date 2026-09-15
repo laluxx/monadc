@@ -10,6 +10,7 @@
 :TEST-PURPOSE Float identity with explicit movsd covers SSE operand formatting.
 :TEST-ATOM movsd x %xmm0 ret returns the original float.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 My4yNQo=
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Typed define function shorthand compiles and returns value.
 :TEST-ATOM (define (double [x : Int] -> Int) (* 2 x)) then (show (double 5)) prints 10.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTAK
 
 :TEST-COVERAGE codegen.c:05-symbol-env/defines-and-calls branch family
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env

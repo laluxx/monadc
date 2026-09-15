@@ -28,6 +28,7 @@
 :TEST-USES-ATOM atom.type.dep.hole
 :TEST-DEPENDS-ON atom.type.dep.check
 :TEST-REFINES atom.type.dep.unsolved-hole
+:TEST-EXPECT-STDOUT-B64 aG9sZQo=
 
 (module Main)
 (define (dep_hole_01 [x : Int] -> Int) ?)

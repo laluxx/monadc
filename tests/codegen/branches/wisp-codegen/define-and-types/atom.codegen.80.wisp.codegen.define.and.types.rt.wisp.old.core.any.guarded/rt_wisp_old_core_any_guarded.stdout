@@ -1,3 +1,0 @@
-PASS any? finds matching element
-PASS any? returns false when no element matches
-PASS any? empty collection

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Cond with three clauses matches sign of integer.
 :TEST-ATOM (cond [(> x 0) 1] [(< x 0) -1] [else 0])
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQotMQowCg==
 
 :TEST-COVERAGE codegen.c:30-control-flow/if-cond-phi branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.postfix_index_two
+:TEST-CONTEXT monadc.context.reader.sugar.postfix-index
+:TEST-PURPOSE Postfix two-index becomes a collection call.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (xs 0 1)
+:TEST-STATUS passing-baseline-2026-06-15
+
+xs[0 1]

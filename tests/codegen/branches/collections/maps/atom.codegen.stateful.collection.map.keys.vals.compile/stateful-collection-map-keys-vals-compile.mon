@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/maps/atom.codegen.stateful.collection.map.keys.vals.compile
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.map.keys.vals.compile
 :TEST-CLI-TARGET codegen branches collections maps
+:TEST-EXPECT-STDOUT-B64
 
 (module Main)
 (define m #{:a 1 :b 2})

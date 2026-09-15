@@ -11,6 +11,7 @@
 :TEST-ATOM Inner bindings should shadow without mutating outer bindings.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:with child env creation/lookup
+:TEST-EXPECT-STDOUT-B64 Mwo3CjEK
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/lexical-scope/atom.codegen.control.flow.lexical.scope.deep.with.shadowing.chain

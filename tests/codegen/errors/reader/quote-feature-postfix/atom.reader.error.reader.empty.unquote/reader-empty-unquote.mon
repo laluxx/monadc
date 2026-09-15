@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/quote-feature-postfix/atom.reader.error.reader.empty.unquote
 :TEST-ATOM-LEAF atom.reader.error.reader.empty.unquote
 :TEST-CLI-TARGET codegen errors reader quote-feature-postfix
+:TEST-EXPECT-STDOUT-B64 RW1wdHkgdW5xdW90ZSDijJ7ijJ8g4oCUIGV4cGVjdGVkIGFuIGV4cHJlc3Npb24gaW5zaWRlCg==
 
 (module Main)
 (show ⌜a ⌞⌟ b⌝)

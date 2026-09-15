@@ -1,0 +1,13 @@
+:TEST-ID tests.language.str_equality
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE String equality function parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY str_equality
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(string=? "a" "b")

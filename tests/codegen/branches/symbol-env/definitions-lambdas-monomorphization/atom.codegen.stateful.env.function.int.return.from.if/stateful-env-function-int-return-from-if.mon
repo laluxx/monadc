@@ -22,6 +22,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.function.int.return.from.if
 :TEST-ATOM-LEAF atom.codegen.stateful.env.function.int.return.from.if
 :TEST-CLI-TARGET codegen branches symbol-env definitions-lambdas-monomorphization
+:TEST-EXPECT-STDOUT-B64 MQoyCg==
 
 (module Main)
 (define (choose [b : Bool] [x : Int] [y : Int] -> Int) (if b x y))

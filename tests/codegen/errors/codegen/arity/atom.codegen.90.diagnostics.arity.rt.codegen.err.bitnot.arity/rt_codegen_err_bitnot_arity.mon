@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces bitwise-not arity.
 :TEST-ATOM (~ 1 2) must fail because ~ is unary.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICd+JyByZXF1aXJlcyAxIGFyZ3VtZW50Cg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

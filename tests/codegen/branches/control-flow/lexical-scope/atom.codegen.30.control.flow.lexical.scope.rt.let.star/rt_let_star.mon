@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime let* sequential binding works.
 :TEST-ATOM (let* [x 1] x) evaluates to 1.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/lexical-scope branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

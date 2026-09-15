@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/monomorphization/atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types
 :TEST-ATOM-LEAF atom.codegen.05.symbol.env.monomorphization.deep.poly.identity.three.types
 :TEST-CLI-TARGET codegen branches symbol-env monomorphization
+:TEST-EXPECT-STDOUT-B64 NwpvawpUcnVlCg==
 
 (module Main)
 (define id (lambda (x) x))

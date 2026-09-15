@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.range_array_map
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Array ranges combine with map literal values.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET range-array,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define ranges #{:small [0..3] :odd [1,3..9]})

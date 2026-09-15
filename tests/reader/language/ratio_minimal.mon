@@ -1,0 +1,13 @@
+:TEST-ID tests.language.ratio_minimal
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Minimal ratio parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY ratio_minimal
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+0/1

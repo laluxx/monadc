@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:AST_BEGIN/AST_DO sequence branches
 :TEST-COVERAGE codegen.c:set! assignment
+:TEST-EXPECT-STDOUT-B64 MQoyCjQK
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/begin-do-sequence/atom.codegen.control.flow.begin.do.sequence.deep.begin.do.mutation.return

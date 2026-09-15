@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_alias_pure_int
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Pure type alias syntax parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type UserId Int)

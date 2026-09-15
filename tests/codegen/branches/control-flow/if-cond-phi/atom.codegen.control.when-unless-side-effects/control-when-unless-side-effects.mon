@@ -20,6 +20,7 @@
 :TEST-TAG unless
 :TEST-COVERAGE codegen.c:8052-8091 when branch blocks
 :TEST-COVERAGE codegen.c:8092-8129 unless branch blocks
+:TEST-EXPECT-STDOUT-B64 NQo=
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/if-cond-phi/atom.codegen.control.when-unless-side-effects

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime record-like values use layout declarations, not ADT brace fields.
 :TEST-ATOM (layout Person [name :: String] [age :: Int]) constructs and exposes named fields.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 YWRhCjM3Cg==
 
 :TEST-COVERAGE codegen.c:50-data-layout/records branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

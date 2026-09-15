@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/signatures-params/atom.reader.error.reader.rest.param.needs.name
 :TEST-ATOM-LEAF atom.reader.error.reader.rest.param.needs.name
 :TEST-CLI-TARGET codegen errors reader signatures-params
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgcGFyYW1ldGVyIG5hbWUgb3IgJ1tuYW1lIDo6IFR5cGVdJyBhZnRlciAnLicK
 
 (module Main)
 (lambda (. 123) 0)

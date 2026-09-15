@@ -16,6 +16,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG map
 :TEST-COVERAGE codegen.c:8508 merge arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdtZXJnZScgcmVxdWlyZXMgMiBhcmd1bWVudHMK
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.merge-arity

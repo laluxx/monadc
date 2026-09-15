@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_when_map_percent_layout
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE When form combines map percentage lookup and layout field access.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(layout Tax [rate :: Ratio])
+(define t (Tax 22%))
+(define cfg #{:tax t.rate})
+(when (Map? cfg) (show (find cfg :tax)))

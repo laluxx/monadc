@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.wisp_def_simple
+:TEST-CONTEXT monadc.context.wisp.sugar.def
+:TEST-PURPOSE Wisp def shorthand desugars to define.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define x 42)
+:TEST-STATUS passing-baseline-2026-06-15
+
+define x 42

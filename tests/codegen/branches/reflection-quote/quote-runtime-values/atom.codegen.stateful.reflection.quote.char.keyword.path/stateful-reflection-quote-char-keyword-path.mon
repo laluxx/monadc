@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quote.char.keyword.path
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.quote.char.keyword.path
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 KChDaGFyIDY1KSA6ayAuL2N0eCkK
 
 (module Main)
 (show (quote ((Char 65) :k ./ctx)))

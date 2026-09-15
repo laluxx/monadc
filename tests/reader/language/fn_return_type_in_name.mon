@@ -1,0 +1,13 @@
+:TEST-ID tests.language.fn_return_type_in_name
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Function with return type in name position parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY fn_return_type_in_name
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(define (my-count String -> Int) x -> (count x))

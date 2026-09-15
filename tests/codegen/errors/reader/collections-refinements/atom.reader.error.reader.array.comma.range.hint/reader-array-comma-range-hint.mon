@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/collections-refinements/atom.reader.error.reader.array.comma.range.hint
 :TEST-ATOM-LEAF atom.reader.error.reader.array.comma.range.hint
 :TEST-CLI-TARGET codegen errors reader collections-refinements
+:TEST-EXPECT-STDOUT-B64 VW5leHBlY3RlZCAnLCcg4oCUIGRpZCB5b3UgbWVhbiBhIHJhbmdlIFtzdGFydCxzdGVwLi5lbmRdPwo=
 
 (module Main)
 (show [1,2])

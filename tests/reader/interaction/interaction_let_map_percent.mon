@@ -1,0 +1,12 @@
+:TEST-ID tests.interaction.interaction_let_map_percent
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Let binding with map and percentage parses.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(let [rates #{:half 50%}] (find rates :half))

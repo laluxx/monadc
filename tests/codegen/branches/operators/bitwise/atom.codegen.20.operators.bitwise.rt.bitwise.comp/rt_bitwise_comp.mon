@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/bitwise/atom.codegen.20.operators.bitwise.rt.bitwise.comp
 :TEST-ATOM-LEAF atom.codegen.20.operators.bitwise.rt.bitwise.comp
 :TEST-CLI-TARGET codegen branches operators bitwise
+:TEST-EXPECT-STDOUT-B64 NAozCi0xCjAKOQo0CjE2CjEyCjQKLTQKNAo=
 (module Main)
 (show (& 12 5))
 (show (& 7 3))

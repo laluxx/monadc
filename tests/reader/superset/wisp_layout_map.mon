@@ -1,0 +1,18 @@
+:TEST-ID tests.superset.wisp_layout_map
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Wisp layout declaration combines with constructor and map literal.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET wisp,layout,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+module Main
+
+layout Point
+  [x :: Int]
+  [y :: Int]
+define p Point 1 2
+define cfg #{:x p.x :y p.y}

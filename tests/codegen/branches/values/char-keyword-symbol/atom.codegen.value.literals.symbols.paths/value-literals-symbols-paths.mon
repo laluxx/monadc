@@ -15,6 +15,7 @@
 :TEST-COVERAGE codegen.c:3859 AST_STRING/3865 AST_PATH
 :TEST-COVERAGE codegen.c:3879 AST_KEYWORD
 :TEST-COVERAGE codegen.c:1221-1246 codegen_show_value primitive display
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpuaWwKOmJyYW5jaApicmFuY2gtc3ltYm9sCloKLi9jb250ZXh0Cg==
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/char-keyword-symbol/atom.codegen.value.literals.symbols.paths

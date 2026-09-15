@@ -20,6 +20,7 @@
 :TEST-TAG phi
 :TEST-COVERAGE codegen.c:7743-7965 if PHI branches
 :TEST-COVERAGE codegen.c:10000-11950 recursive function call path
+:TEST-EXPECT-STDOUT-B64 MTIwCg==
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-MENU branches/symbol-env/recursion/atom.codegen.function.recursive-self-call

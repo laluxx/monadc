@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.deriving.compile
 :TEST-ATOM-LEAF atom.codegen.stateful.adt.enum.deriving.compile
 :TEST-CLI-TARGET codegen branches data-layout adts
+:TEST-EXPECT-STDOUT-B64 MgowCg==
 
 (module Main)
 (data T A | B | C deriving [Bounded Enum Show])

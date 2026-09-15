@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/functions/higher-order-prefix-function-arg/atom.codegen.functions.higher.order.prefix.function.arg
 :TEST-ATOM-LEAF atom.codegen.functions.higher.order.prefix.function.arg
 :TEST-CLI-TARGET codegen branches functions higher-order-prefix-function-arg
+:TEST-EXPECT-STDOUT-B64 OQo=
 
 module Main
 

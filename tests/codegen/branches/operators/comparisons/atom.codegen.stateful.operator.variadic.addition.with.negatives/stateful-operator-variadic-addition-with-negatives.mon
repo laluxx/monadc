@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparisons/atom.codegen.stateful.operator.variadic.addition.with.negatives
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.variadic.addition.with.negatives
 :TEST-CLI-TARGET codegen branches operators comparisons
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (+ 100 -50 -8))

@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.ends.with.array
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.array.ends.with.array
 :TEST-CLI-TARGET codegen branches collections arrays-ranges
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 (module Main)
 (show (ends-with? [1 2 3] [2 3]))

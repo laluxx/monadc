@@ -1,0 +1,14 @@
+:TEST-ID tests.interaction.interaction_lambda_data_match_map
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Typed lambda returns a data match over a map lookup.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(data MaybeInt | None | Some Int)
+(define cfg #{:value 3})
+((lambda ([m : Map] -> Int) (match (Some (find m :value)) with (Some x) -> x _ -> 0)) cfg)

@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.cond_three_ifs
+:TEST-CONTEXT monadc.context.reader.sugar.cond-to-if
+:TEST-PURPOSE Cond with three clauses desugars to nested if.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(cond [(> x 0) 1] [(< x 0) -1] [else 0])

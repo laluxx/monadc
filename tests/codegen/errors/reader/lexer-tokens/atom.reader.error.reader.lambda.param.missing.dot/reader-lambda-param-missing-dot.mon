@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/lexer-tokens/atom.reader.error.reader.lambda.param.missing.dot
 :TEST-ATOM-LEAF atom.reader.error.reader.lambda.param.missing.dot
 :TEST-CLI-TARGET codegen errors reader lexer-tokens
+:TEST-EXPECT-STDOUT-B64 ZXhwZWN0ZWQgJy4nIG9yIGFub3RoZXIgcGFyYW1ldGVyIGFmdGVyIM67IHBhcmFtZXRlciBuYW1lCg==
 
 (module Main)
 (show λx 123)

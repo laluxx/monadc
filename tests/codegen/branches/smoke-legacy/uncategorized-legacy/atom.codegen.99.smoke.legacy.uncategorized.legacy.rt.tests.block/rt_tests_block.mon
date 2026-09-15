@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime tests blocks compile alongside executable code.
 :TEST-ATOM (tests (= 1 1)) does not block following show output.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

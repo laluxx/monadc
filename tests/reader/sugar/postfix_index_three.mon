@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.postfix_index_three
+:TEST-CONTEXT monadc.context.reader.sugar.postfix-index
+:TEST-PURPOSE Postfix three-index becomes a three-arg collection call.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (arr i j k)
+:TEST-STATUS passing-baseline-2026-06-15
+
+arr[i j k]

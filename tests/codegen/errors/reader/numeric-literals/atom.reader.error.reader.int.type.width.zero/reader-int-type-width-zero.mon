@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.zero
 :TEST-ATOM-LEAF atom.reader.error.reader.int.type.width.zero
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 aW52YWxpZCBpbnRlZ2VyIHR5cGUgJ0kwJzogYml0LXdpZHRoIG11c3QgYmUgYXQgbGVhc3QgMQo=
 
 (module Main)
 (define [x : I0] 1)

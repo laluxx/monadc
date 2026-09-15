@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/strings/atom.codegen.stateful.collection.string.starts.with.char
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.string.starts.with.char
 :TEST-CLI-TARGET codegen branches collections strings
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 (module Main)
 (show (starts-with? "abc" (Char 97)))

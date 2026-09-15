@@ -11,6 +11,7 @@
 :TEST-PURPOSE Runtime mutually recursive top-level functions are a codegen-backed forward-reference coverage point.
 :TEST-ATOM even? calls odd? before odd? is defined and should still evaluate even? 10.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQo=
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

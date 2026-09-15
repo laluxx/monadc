@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.address_of_var
+:TEST-CONTEXT monadc.context.reader.sugar.address-of
+:TEST-PURPOSE Ampersand adjacent to symbol is address-of.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR &x
+:TEST-STATUS passing-baseline-2026-06-15
+
+&x

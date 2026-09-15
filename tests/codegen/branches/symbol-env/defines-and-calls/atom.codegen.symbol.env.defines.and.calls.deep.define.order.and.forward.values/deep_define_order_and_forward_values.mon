@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:AST_DEFINE top-level globals
 :TEST-COVERAGE codegen.c:symbol env lookup and call
+:TEST-EXPECT-STDOUT-B64 Mwo3Cg==
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-MENU branches/symbol-env/defines-and-calls/atom.codegen.symbol.env.defines.and.calls.deep.define.order.and.forward.values

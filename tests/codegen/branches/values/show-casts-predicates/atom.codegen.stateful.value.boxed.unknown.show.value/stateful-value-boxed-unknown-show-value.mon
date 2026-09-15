@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.boxed.unknown.show.value
 :TEST-ATOM-LEAF atom.codegen.stateful.value.boxed.unknown.show.value
 :TEST-CLI-TARGET codegen branches values show-casts-predicates
+:TEST-EXPECT-STDOUT-B64 KDEgIngiIDprKQo=
 
 (module Main)
 (show-value (quote (1 "x" :k)))

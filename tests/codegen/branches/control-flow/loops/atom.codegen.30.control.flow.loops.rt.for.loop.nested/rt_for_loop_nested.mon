@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime nested for loops produce correct product sum.
 :TEST-ATOM Two nested loops summing i*j over i=[0,3), j=[0,2) = 0+0+0+1+0+2 = 3? Actually 0*0+0*1+1*0+1*1+2*0+2*1 = 0+0+0+1+0+2 = 3.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/loops branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

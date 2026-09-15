@@ -20,6 +20,7 @@
 :TEST-COVERAGE codegen.c:7732-7741 begin branch
 :TEST-COVERAGE codegen.c:8001 do branch
 :TEST-COVERAGE codegen.c:7642 set! branch
+:TEST-EXPECT-STDOUT-B64 Mwo3CjcK
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/begin-do-sequence/atom.codegen.control.sequence-return-last

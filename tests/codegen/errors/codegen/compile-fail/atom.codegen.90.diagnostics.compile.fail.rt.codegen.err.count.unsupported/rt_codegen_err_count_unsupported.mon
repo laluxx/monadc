@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects count on unsupported scalar types.
 :TEST-ATOM (count 1) must fail because Int is not a countable collection.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdjb3VudCcgbm90IHN1cHBvcnRlZCBmb3IgdHlwZSBJbnQK
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/adts/atom.codegen.stateful.adt.field.show
 :TEST-ATOM-LEAF atom.codegen.stateful.adt.field.show
 :TEST-CLI-TARGET codegen branches data-layout adts
+:TEST-EXPECT-STDOUT-B64 KEp1c3QgNDIpCg==
 
 (module Main)
 (data Maybe Nothing | Just Int)

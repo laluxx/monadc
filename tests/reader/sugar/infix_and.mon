@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.infix_and
+:TEST-CONTEXT monadc.context.reader.sugar.infix
+:TEST-PURPOSE Infix && parses correctly.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+True && False

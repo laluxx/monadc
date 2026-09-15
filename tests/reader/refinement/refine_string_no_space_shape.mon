@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_string_no_space_shape
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE String negated contains predicate parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type NoSpaces { s ∈ String | (not (contains? s " ")) })

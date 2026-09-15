@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.ptr_type_single
+:TEST-CONTEXT monadc.context.reader.sugar.ptr-type
+:TEST-PURPOSE Single star expands to Pointer :: Type.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (Pointer :: Int)
+:TEST-STATUS passing-baseline-2026-06-15
+
+*Int

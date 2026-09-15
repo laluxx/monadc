@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/keyword-constructors/atom.reader.error.reader.keyword.constructor.unknown.field
 :TEST-ATOM-LEAF atom.reader.error.reader.keyword.constructor.unknown.field
 :TEST-CLI-TARGET codegen errors reader keyword-constructors
+:TEST-EXPECT-STDOUT-B64 VW5rbm93biBmaWVsZCAnOnonIGluIGtleXdvcmQgY29uc3RydWN0b3IgY2FsbCBmb3IgbGF5b3V0ICdQb2ludCcK
 
 (module Main)
 (layout Point [x :: Int] [y :: Int])

@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/conditionals-phi/atom.codegen.stateful.control.nested.if.phi
 :TEST-ATOM-LEAF atom.codegen.stateful.control.nested.if.phi
 :TEST-CLI-TARGET codegen branches control-flow conditionals-phi
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (if True (if False 1 42) 0))

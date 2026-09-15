@@ -1,0 +1,13 @@
+:TEST-ID tests.interaction.interaction_module_cffi_math_define
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE C include, FFI-shaped call, and define parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(include "math.h")
+(define root (sqrt 16.0))

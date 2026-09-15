@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.map_nested_array_set
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Map literals combine nested array and set values.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET map-literal,array-literal,set-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define cfg #{:ports [80 443] :flags {True False}})

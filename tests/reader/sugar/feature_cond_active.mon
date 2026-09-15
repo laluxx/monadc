@@ -1,0 +1,14 @@
+:TEST-ID tests.sugar.feature_cond_active
+:TEST-CONTEXT monadc.context.reader.sugar.feature-cond
+:TEST-PURPOSE Active #+ feature conditional keeps inner expr.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR 42
+:TEST-STATUS passing-baseline-2026-06-15
+
+#+LINUX
+42
+#---

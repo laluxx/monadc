@@ -10,6 +10,7 @@
 :TEST-PURPOSE Closure codegen pressure for passing a function value as a typed Fn parameter.
 :TEST-ATOM apply1 should call a function argument through the runtime closure ABI.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:05-symbol-env/closures branch family
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env

@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/loops/atom.codegen.stateful.control.while.condition.from.function
 :TEST-ATOM-LEAF atom.codegen.stateful.control.while.condition.from.function
 :TEST-CLI-TARGET codegen branches control-flow loops
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (define (lt42 [x : Int] -> Bool) (< x 42))

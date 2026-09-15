@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.value.into.function
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.array.value.into.function
 :TEST-CLI-TARGET codegen branches collections arrays-ranges
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (define (inc [x : Int] -> Int) (+ x 1))

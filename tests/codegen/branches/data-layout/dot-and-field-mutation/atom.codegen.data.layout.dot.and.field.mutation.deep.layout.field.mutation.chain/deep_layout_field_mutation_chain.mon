@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:dot field GEP/load
 :TEST-COVERAGE codegen.c:set! field store
+:TEST-EXPECT-STDOUT-B64 MTAKMjEKMzEK
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/dot-and-field-mutation/atom.codegen.data.layout.dot.and.field.mutation.deep.layout.field.mutation.chain

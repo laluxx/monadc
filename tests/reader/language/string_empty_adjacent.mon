@@ -1,0 +1,14 @@
+:TEST-ID tests.language.string_empty_adjacent
+:TEST-CONTEXT monadc.context.language.adjacent-strings
+:TEST-PURPOSE Connected empty string literals are rejected with a targeted diagnostic.
+:TEST-EXPECT fail:compile
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY string_empty_adjacent
+:TEST-EXPECT-DIAGNOSTIC adjacent string literals are not supported
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+""""

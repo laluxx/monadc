@@ -1,0 +1,13 @@
+:TEST-ID tests.language.import_simple
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Simple import declarations parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY import_simple
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(import Foo)

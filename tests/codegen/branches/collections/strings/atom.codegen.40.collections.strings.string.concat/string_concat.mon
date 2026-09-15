@@ -11,6 +11,7 @@
 :TEST-PURPOSE String concatenation at runtime works.
 :TEST-ATOM ("hello " ++ "world") concatenates to "hello world".
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 aGVsbG8gd29ybGQK
 
 :TEST-COVERAGE codegen.c:40-collections/strings branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

@@ -1,0 +1,13 @@
+:TEST-ID tests.language.include_with_angle
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Include with angle-bracket path parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY include_with_angle
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(include <stdio.h>)

@@ -1,0 +1,13 @@
+:TEST-ID tests.language.list_empty_predicate_call
+:TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
+:TEST-PURPOSE List emptiness predicate parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY list_empty_predicate_call
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(empty? (list))

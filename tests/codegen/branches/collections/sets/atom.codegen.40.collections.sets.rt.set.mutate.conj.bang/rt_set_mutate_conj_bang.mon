@@ -10,6 +10,7 @@
 :TEST-PURPOSE conj! mutates a set by adding an element in place.
 :TEST-ATOM (conj! s 3) adds 3 to set s, observable via contains? and count.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQozCg==
 
 :TEST-COVERAGE codegen.c:40-collections/sets branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

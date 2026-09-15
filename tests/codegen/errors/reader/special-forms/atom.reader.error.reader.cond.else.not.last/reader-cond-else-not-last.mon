@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.cond.else.not.last
 :TEST-ATOM-LEAF atom.reader.error.reader.cond.else.not.last
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJyknIGFmdGVyICdlbHNlJyBjbGF1c2Ug4oCUICdlbHNlJyBtdXN0IGJlIGxhc3QK
 
 (module Main)
 (cond [else 1] [True 2])

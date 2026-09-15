@@ -10,6 +10,7 @@
 :TEST-PURPOSE disj! mutates a set by removing an element in place.
 :TEST-ATOM (disj! s 2) removes 2 from set s, observable via contains? and count.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 RmFsc2UKMgo=
 
 :TEST-COVERAGE codegen.c:40-collections/sets branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/wisp-codegen/collections-quote-path/atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.lists
 :TEST-ATOM-LEAF atom.codegen.80.wisp.codegen.collections.quote.path.rt.wisp.lists
 :TEST-CLI-TARGET codegen branches wisp-codegen collections-quote-path
+:TEST-EXPECT-STDOUT-B64 MQooMiAzKQooMSAyIDMgMTAgMjApCkZhbHNlCkZhbHNlCg==
 module Main
 define xs '(1 2 3)
 show car xs

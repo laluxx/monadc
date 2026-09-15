@@ -21,6 +21,7 @@
 :TEST-COVERAGE codegen.c:120-168 mono_cache_lookup/insert
 :TEST-COVERAGE codegen.c:245-466 codegen_specialize
 :TEST-COVERAGE codegen.c:10900-11950 generic call specialization
+:TEST-EXPECT-STDOUT-B64 NDIKb2sK
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-MENU branches/symbol-env/defines-and-calls/atom.codegen.monomorph.id.int-string

@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_string_doc_alias
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE String refinement with doc and alias metadata parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type NameText { s ∈ String | (> (count s) 0) } :doc "names" :alias Identifier)

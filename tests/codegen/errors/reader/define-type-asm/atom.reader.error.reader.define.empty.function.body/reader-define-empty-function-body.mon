@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/define-type-asm/atom.reader.error.reader.define.empty.function.body
 :TEST-ATOM-LEAF atom.reader.error.reader.define.empty.function.body
 :TEST-CLI-TARGET codegen errors reader define-type-asm
+:TEST-EXPECT-STDOUT-B64 ZnVuY3Rpb24gYm9keSBjYW5ub3QgYmUgZW1wdHkK
 
 (module Main)
 (define (empty [] -> Int))

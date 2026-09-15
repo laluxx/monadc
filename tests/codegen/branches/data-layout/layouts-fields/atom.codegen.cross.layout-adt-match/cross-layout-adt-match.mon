@@ -24,6 +24,7 @@
 :TEST-COVERAGE codegen.c:717-769 TYPE_LAYOUT
 :TEST-COVERAGE codegen.c:1267-1395 ADT show/tag paths
 :TEST-COVERAGE codegen.c:3315-3340 nested dot field branches
+:TEST-EXPECT-STDOUT-B64 MAo3Cg==
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.cross.layout-adt-match

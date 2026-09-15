@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/layouts/atom.codegen.stateful.layout.field.setbang.symbol.dot
 :TEST-ATOM-LEAF atom.codegen.stateful.layout.field.setbang.symbol.dot
 :TEST-CLI-TARGET codegen branches data-layout layouts
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (layout Box [value :: Int])

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.quest
 :TEST-ATOM-LEAF atom.codegen.60.reflection.quote.nil.null.coalesce.rt.null.quest
 :TEST-CLI-TARGET codegen branches reflection-quote nil-null-coalesce
+:TEST-EXPECT-STDOUT-B64 ZGVmYXVsdAo0Mgo=
 (module Main)
 (show (?? nil "default"))
 (show (?? 42 "default"))

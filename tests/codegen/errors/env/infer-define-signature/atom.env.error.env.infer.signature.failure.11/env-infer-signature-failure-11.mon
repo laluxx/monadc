@@ -31,6 +31,7 @@
 :TEST-MENU-PATH codegen/errors/env/infer-define-signature/atom.env.error.env.infer.signature.failure.11
 :TEST-ATOM-LEAF atom.env.error.env.infer.signature.failure.11
 :TEST-CLI-TARGET codegen errors env infer-define-signature
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IFR5cGUgaW5mZXJlbmNlIGZhaWxlZCBmb3IgZnVuY3Rpb24g4oCYZW52X2luZmVyX3NpZ18xMeKAmQo=
 
 (module Main)
 (define (env_infer_sig_11 [x : Bool] -> Bool) (and x True))

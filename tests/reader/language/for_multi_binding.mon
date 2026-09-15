@@ -1,0 +1,13 @@
+:TEST-ID tests.language.for_multi_binding
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE For with multiple bindings parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY for_multi_binding
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(for [x [1 2 3] y [4 5 6]] (+ x y))

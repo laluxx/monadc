@@ -18,6 +18,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/adts/atom.codegen.stateful.adt.enum.user.instance.defaults
 :TEST-ATOM-LEAF atom.codegen.stateful.adt.enum.user.instance.defaults
 :TEST-CLI-TARGET codegen branches data-layout adts
+:TEST-EXPECT-STDOUT-B64 MQoxCjMKMgo=
 
 (import Data.Enum)
 (data Dial D0 | D1 | D2)

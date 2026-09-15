@@ -1,5 +1,0 @@
-#+TITLE: Last First Failing Test
-#+DATE: 2026-08-24T00:21:11
-
-[OBS id:obs.tests.last-first-failure src:tests/run.py conf:high]
-  The latest test-suite run had no failing tests.

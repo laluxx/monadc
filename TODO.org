@@ -6,10 +6,19 @@
 #+TODO: NEXT(n) TODO(t) DOING(i) BLOCKED(b) RESEARCH(r) | DONE(d) SUPERSEDED(s)
 #+TAGS: compiler(c) core(k) types(y) qtt(q) effects(e) modal(m) runtime(r) tooling(o) research(h)
 
-#+begin_src mon
+#+begin_src monad
 "." ++ take 3 "monad"
 <input>:1:1: error: REPL expected one complete form, got 5
   - Hint: terminate multiline Wisp forms with a blank line, or send one top-level form at a time.
+
+...
+
+proof = λ[value]. value : (Int -> Int)
+proof
+proof : {} ⊢ λ(value : _). value : Π(_ : Int). Int
+
+valid-function-proof = λ[a]. a : ([a] -> a)
+Error: ORC could not add REPL module: In __repl_9, duplicate definition of symbol '__monad_repl_get_76_61_6c_69_64_2d_66_75_6e_63_74_69_6f_6e_2d_70_72_6f_6f_66'
 #+end_src
 
 
@@ -822,7 +831,7 @@ data Vec (A : Type a) : ℕ -> Type a
  :end:
  #+end_src
 
-** TODO Code blocks [0/2]
+** NEXT Code blocks [0/2]
  - [ ] We shoudl have code blocks for any language
  - [ ] The major mode should syntax highlight based on the language like org-mode
 

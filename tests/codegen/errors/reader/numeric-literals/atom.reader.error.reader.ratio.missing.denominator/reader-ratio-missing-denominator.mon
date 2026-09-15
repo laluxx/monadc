@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.ratio.missing.denominator
 :TEST-ATOM-LEAF atom.reader.error.reader.ratio.missing.denominator
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 SW52YWxpZCByYXRpbzogbWlzc2luZyBkZW5vbWluYXRvcgo=
 
 (module Main)
 (show 1/)

@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.int.type.width.gap.i65
 :TEST-ATOM-LEAF atom.reader.error.reader.int.type.width.gap.i65
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 aW52YWxpZCBpbnRlZ2VyIHR5cGUgJ0k2NSc6IGJpdC13aWR0aHMgNjXigJMxMjcgYXJlIG5vdCBzdXBwb3J0ZWQ7IHZhbGlkIHdpZHRocyBhcmUgMeKAkzY0IGFuZCAxMjgK
 
 (module Main)
 (define [x : I65] 1)

@@ -28,6 +28,7 @@
 :TEST-USES-ATOM atom.type.hm.error.scalar-as-collection
 :TEST-DEPENDS-ON atom.codegen.collection.count
 :TEST-REFINES atom.type.hm.coll-scalar-hard-error
+:TEST-EXPECT-STDOUT-B64 dHlwZSBlcnJvcjogY2Fubm90IHVzZQo=
 
 (module Main)
 (define (hm_coll_scalar_03 [xs : Coll] -> Int) (count xs))

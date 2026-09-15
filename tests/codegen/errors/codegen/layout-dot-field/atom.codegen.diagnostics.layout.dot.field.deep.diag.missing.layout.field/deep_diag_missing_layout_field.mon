@@ -12,6 +12,7 @@
 :TEST-ATOM Dot access should reject unknown layout fields.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:dot field lookup diagnostics
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6Cg==
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/layout-dot-field/atom.codegen.diagnostics.layout.dot.field.deep.diag.missing.layout.field

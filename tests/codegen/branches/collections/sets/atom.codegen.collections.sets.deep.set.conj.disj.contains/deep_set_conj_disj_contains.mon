@@ -12,6 +12,7 @@
 :TEST-ATOM Set runtime helpers should return new sets with expected membership.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:set runtime helper lowering
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQozCjIK
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/sets/atom.codegen.collections.sets.deep.set.conj.disj.contains

@@ -1,4 +1,0 @@
-(module Main [])
-(define (x :: Int) 30)
-(define y 12)
-(show (+ 30 y))

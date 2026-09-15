@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/signatures-params/atom.reader.error.reader.lambda.expected.open.paren
 :TEST-ATOM-LEAF atom.reader.error.reader.lambda.expected.open.paren
 :TEST-CLI-TARGET codegen errors reader signatures-params
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJygnIGFmdGVyICdsYW1iZGEnCg==
 
 (module Main)
 (lambda x x)

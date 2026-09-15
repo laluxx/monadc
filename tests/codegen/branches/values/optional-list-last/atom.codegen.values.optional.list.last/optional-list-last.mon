@@ -14,6 +14,7 @@
 :TEST-MENU branches/values/optional-list-last
 :TEST-MENU-PATH codegen/branches/values/optional-list-last
 :TEST-CLI-TARGET codegen optional list last
+:TEST-EXPECT-STDOUT-B64 bmlsCjMK
 
 module OptionalListLast
 

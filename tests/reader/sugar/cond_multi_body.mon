@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.cond_multi_body
+:TEST-CONTEXT monadc.context.reader.sugar.cond-to-if
+:TEST-PURPOSE Cond clause with multi body wraps in begin.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (if (> 3 2) (begin 1 2) 0)
+:TEST-STATUS passing-baseline-2026-06-15
+
+(cond [(> 3 2) 1 2] [else 0])

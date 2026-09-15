@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_nested_and_three
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Three-way and predicate refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type RangedScore { n ∈ Int | (and (>= n 0) (<= n 100) (!= n 13)) })

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces doc reflection arity.
 :TEST-ATOM (doc) must fail because doc requires one symbol argument.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdkb2MnIHJlcXVpcmVzIDEgb3IgMiBhcmd1bWVudHMK
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

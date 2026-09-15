@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_keyword_id
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Keyword equality refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type IdKeyword { k ∈ Keyword | (= k :id) })

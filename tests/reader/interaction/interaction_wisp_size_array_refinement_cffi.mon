@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_wisp_size_array_refinement_cffi
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Wisp size-array sugar beside C include and refinement declaration parses.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+module Main
+include "stdint.h"
+type Bytes { b ∈ Arr | (> (count b) 0) }
+define buf :: [1kb U8]
+show buf

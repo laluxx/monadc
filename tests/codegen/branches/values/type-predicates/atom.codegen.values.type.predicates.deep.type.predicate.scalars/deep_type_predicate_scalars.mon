@@ -12,6 +12,7 @@
 :TEST-ATOM Scalar predicates should discriminate runtime representations.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:predicate/type conversion dispatch
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpGYWxzZQo=
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/type-predicates/atom.codegen.values.type.predicates.deep.type.predicate.scalars

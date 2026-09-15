@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.cond.clause.not.bracketed
 :TEST-ATOM-LEAF atom.reader.error.reader.cond.clause.not.bracketed
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 J2NvbmQnIGNsYXVzZXMgbXVzdCB1c2UgYnJhY2tldCBzeW50YXggW3Rlc3QgYm9keS4uLl0K
 
 (module Main)
 (cond True)

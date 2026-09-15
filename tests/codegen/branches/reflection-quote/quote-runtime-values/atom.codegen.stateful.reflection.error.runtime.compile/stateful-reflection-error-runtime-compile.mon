@@ -30,6 +30,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.error.runtime.compile
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.error.runtime.compile
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64
 
 (module Main)
 (error "boom")

@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.periodic_two_digit_repeat
+:TEST-CONTEXT monadc.context.reader.sugar.periodic
+:TEST-PURPOSE Two-digit repeating block.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR 12/99
+:TEST-STATUS passing-baseline-2026-06-15
+
+0.(12)

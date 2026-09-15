@@ -20,6 +20,7 @@
 :TEST-COVERAGE codegen.c:1267-1395 codegen_show_value ADT constructor printing
 :TEST-COVERAGE codegen.c:7545 __adt_tag branch
 :TEST-COVERAGE codegen.c:3554 ADT constructor symbol lookup
+:TEST-EXPECT-STDOUT-B64 MAoxCihOb3RoaW5nKQooSnVzdCA1KQo=
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.adt.tag-and-show-two-constructors

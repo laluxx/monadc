@@ -10,6 +10,7 @@
 :TEST-PURPOSE Begin with multiple expressions returns the last value.
 :TEST-ATOM (begin (+ 1 2) (* 3 4)) evaluates to 12.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTIK
 
 :TEST-COVERAGE codegen.c:30-control-flow/begin-do-sequence branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

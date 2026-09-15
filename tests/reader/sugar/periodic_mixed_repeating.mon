@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.periodic_mixed_repeating
+:TEST-CONTEXT monadc.context.reader.sugar.periodic
+:TEST-PURPOSE Mixed non-repeating and repeating parts.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR 313845/99900
+:TEST-STATUS passing-baseline-2026-06-15
+
+3.14(159)

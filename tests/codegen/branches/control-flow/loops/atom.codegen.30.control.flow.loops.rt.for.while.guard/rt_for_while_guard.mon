@@ -10,6 +10,7 @@
 :TEST-PURPOSE For loop with :while guard stops early.
 :TEST-ATOM (for [i 0 10] :while (< i 3) (show i)) prints 0,1,2.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MAoxCjIKMwo0CjUKNgo3CjgKOQo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/loops branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

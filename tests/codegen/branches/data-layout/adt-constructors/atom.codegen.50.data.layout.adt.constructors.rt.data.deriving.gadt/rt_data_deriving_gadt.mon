@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime data declarations cover deriving clauses and parameterized constructor fields.
 :TEST-ATOM Data deriving and Vec-style parameterized constructors compile as declarations.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64
 
 :TEST-COVERAGE codegen.c:50-data-layout/adt-constructors branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

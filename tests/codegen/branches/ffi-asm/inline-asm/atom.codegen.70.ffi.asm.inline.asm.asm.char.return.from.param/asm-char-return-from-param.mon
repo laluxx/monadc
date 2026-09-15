@@ -10,6 +10,7 @@
 :TEST-PURPOSE Char return type selects byte-sized LLVM return type.
 :TEST-ATOM mov x %al returns a Char from an integer byte.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 QQo=
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

@@ -1,0 +1,15 @@
+:TEST-ID tests.language.comment_mixed_line_block
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Line comment then block comment parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY comment_mixed_line_block
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+;; line
+-| block |-
+42

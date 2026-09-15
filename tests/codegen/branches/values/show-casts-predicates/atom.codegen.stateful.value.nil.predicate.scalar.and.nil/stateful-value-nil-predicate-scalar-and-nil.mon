@@ -22,6 +22,7 @@
 :TEST-MENU-PATH codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.nil.predicate.scalar.and.nil
 :TEST-ATOM-LEAF atom.codegen.stateful.value.nil.predicate.scalar.and.nil
 :TEST-CLI-TARGET codegen branches values show-casts-predicates
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpGYWxzZQo=
 
 (module Main)
 (show (nil? nil))

@@ -11,6 +11,7 @@
 :TEST-ATOM Layout constructors should populate fields by position and keyword.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:layout constructor positional/keyword field lowering
+:TEST-EXPECT-STDOUT-B64 Mwo0CjgKNwo=
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.data.layout.layouts.fields.deep.layout.keyword.and.positional

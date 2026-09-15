@@ -1,0 +1,14 @@
+:TEST-ID tests.interaction.interaction_wisp_define_map_percent
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Wisp define combines map and percentage values.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+module Main
+
+define rates #{:vat 22% :half 50%}
+show count rates

@@ -11,6 +11,7 @@
 :TEST-PURPOSE Data.List length over quoted list input works through core.
 :TEST-ATOM Data.List owns length; count remains the compiler primitive.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NQo=
 
 :TEST-COVERAGE codegen.c:60-reflection-quote/quote-symbols branch family
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote

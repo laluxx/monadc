@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime with binding forms are a codegen-backed coverage point for scoped bindings.
 :TEST-ATOM Single and multi-binding with forms should expose bound names to the body.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo2Cg==
 
 :TEST-COVERAGE codegen.c:30-control-flow/lexical-scope branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

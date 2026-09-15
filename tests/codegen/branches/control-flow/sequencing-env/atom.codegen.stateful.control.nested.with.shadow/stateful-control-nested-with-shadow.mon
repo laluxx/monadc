@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/sequencing-env/atom.codegen.stateful.control.nested.with.shadow
 :TEST-ATOM-LEAF atom.codegen.stateful.control.nested.with.shadow
 :TEST-CLI-TARGET codegen branches control-flow sequencing-env
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (with [x 1] (with [x 42] x)))

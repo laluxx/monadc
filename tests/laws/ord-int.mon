@@ -1,0 +1,14 @@
+:TEST-ID tests.laws.ord-int
+:TEST-CONTEXT dec.core.laws
+:TEST-PURPOSE Ord Int seeded law
+:TEST-EXPECT test
+:TEST-MENU laws
+:TEST-MENU-PATH laws
+:TEST-CLI-TARGET laws
+:TEST-TIER regression
+
+import Data.Ord
+import Test.QuickCheck
+module CoreOrdLaws []
+tests
+  seeded law Ord Int

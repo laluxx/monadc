@@ -10,6 +10,7 @@
 :TEST-PURPOSE String equality via = evaluates to False for different strings.
 :TEST-ATOM (= "abc" "def") evaluates to False.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 RmFsc2UK
 
 :TEST-COVERAGE codegen.c:40-collections/strings branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

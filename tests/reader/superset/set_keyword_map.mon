@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.set_keyword_map
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Set literal combines with keyword values inside map.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET set-literal,keyword,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define cfg #{:modes {:fast :safe}})

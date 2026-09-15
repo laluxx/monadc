@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_collection_char_base
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Parameterized collection bases work in set-builder types.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-07-22
+
+(type CharacterSequence { chars ∈ [Char] | True })

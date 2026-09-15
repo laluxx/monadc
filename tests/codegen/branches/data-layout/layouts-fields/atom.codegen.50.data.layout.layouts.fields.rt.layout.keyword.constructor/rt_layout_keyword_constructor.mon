@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime layout construction with unordered keyword fields is a codegen-backed coverage point.
 :TEST-ATOM (Point :x 3 :y 4) should construct the same layout value as positional construction.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NAozCg==
 
 :TEST-COVERAGE codegen.c:50-data-layout/layouts-fields branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

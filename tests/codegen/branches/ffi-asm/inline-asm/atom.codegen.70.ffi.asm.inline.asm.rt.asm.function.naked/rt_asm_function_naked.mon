@@ -8,6 +8,7 @@
 :TEST-SECTION codegen
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE Inline asm in a naked function body — raw register manipulation.
+:TEST-EXPECT-STDOUT-B64 NjAK
 ;;   Currently returns first param only; the add instruction result is not propagated.
 :TEST-ATOM (asm ...) inside naked function — documents naked asm gap.
 :TEST-EXPECT compile, run

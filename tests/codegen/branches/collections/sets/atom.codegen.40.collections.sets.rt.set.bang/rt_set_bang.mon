@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime set! mutation works.
 :TEST-ATOM (define x 0) then (set! x 42) then (show x) prints 42.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:40-collections/sets branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

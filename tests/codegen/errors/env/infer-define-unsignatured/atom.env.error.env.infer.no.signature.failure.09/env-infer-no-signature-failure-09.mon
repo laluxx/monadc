@@ -31,6 +31,7 @@
 :TEST-MENU-PATH codegen/errors/env/infer-define-unsignatured/atom.env.error.env.infer.no.signature.failure.09
 :TEST-ATOM-LEAF atom.env.error.env.infer.no.signature.failure.09
 :TEST-CLI-TARGET codegen errors env infer-define-unsignatured
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IFR5cGUgaW5mZXJlbmNlIGZhaWxlZCBmb3IgZnVuY3Rpb24g4oCYZW52X2luZmVyX3Vuc2lnXzA54oCZCg==
 
 (module Main)
 (define (env_infer_unsig_09 x) (tail x))

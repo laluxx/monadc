@@ -9,6 +9,7 @@
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE Every type predicate from type_preds[] array plus nil? (separate handler).
 :TEST-ATOM (Int? 42) = True, (Float? 3.14) = True, (Number? 42) = True, (Char? (Char 65)) = True,
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQo=
 ;;           (String? "hi") = True, (Bool? True) = True, (Symbol? (quote foo)) = True,
 ;;           (Keyword? :hello) = True, (List? (list)) = True, (Set? {1 2 3}) = True,
 ;;           (nil? nil) = True

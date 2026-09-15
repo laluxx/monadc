@@ -15,6 +15,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG layout
 :TEST-COVERAGE codegen.c:3315 layout field missing diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGxheW91dCAnUG9pbnQnIGhhcyBubyBmaWVsZCAneScK
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/layout-dot-field/atom.codegen.diagnostic.layout-missing-field

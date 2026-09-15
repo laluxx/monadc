@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime display of nested list structures works.
 :TEST-ATOM (show '((1 2) (3 4))) = ((1 2) (3 4)).
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 KCgxIDIpICgzIDQpKQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

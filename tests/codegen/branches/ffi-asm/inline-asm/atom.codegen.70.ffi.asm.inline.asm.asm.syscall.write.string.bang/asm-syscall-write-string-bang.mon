@@ -10,6 +10,7 @@
 :TEST-PURPOSE String operand syscall test uses real side effects safely.
 :TEST-ATOM write(2) returns the requested byte count after writing to stdout.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 aGkyCg==
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

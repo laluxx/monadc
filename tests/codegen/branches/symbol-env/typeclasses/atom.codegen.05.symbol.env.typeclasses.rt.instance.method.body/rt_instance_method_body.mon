@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime instance declarations cover method bodies.
 :TEST-ATOM An instance declaration with pattern-style method clauses compiles before executable code.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:05-symbol-env/typeclasses branch family
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env

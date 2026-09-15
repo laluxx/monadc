@@ -29,6 +29,7 @@
 :TEST-USES-ATOM atom.type.dep.conversion
 :TEST-DEPENDS-ON atom.type.hm.annotation
 :TEST-REFINES atom.type.dep.annotation-mismatch
+:TEST-EXPECT-STDOUT-B64 RGVwZW5kZW50IFR5cGUgRXJyb3IK
 
 (module Main)
 (define (dep_ann_mismatch_03 [x : Int] -> Int) (the String x))

@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.array_ratio_map
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Array literal combines with ratio values inside a map.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET array-literal,ratio,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define cfg #{:weights [1/2 1/3 1/6]})

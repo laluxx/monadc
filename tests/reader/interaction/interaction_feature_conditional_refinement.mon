@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_feature_conditional_refinement
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Feature conditional and refinement declaration parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+#+LINUX
+(type LinuxOnly { n ∈ Int | (> n 0) })
+#---
+(show 1)

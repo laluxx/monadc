@@ -20,6 +20,7 @@
 :TEST-TAG arithmetic
 :TEST-COVERAGE codegen.c:9494-9810 arithmetic operator branches
 :TEST-COVERAGE codegen.c:9502 arithmetic minimum arity check
+:TEST-EXPECT-STDOUT-B64 MTAKMTIKMjQKMTAKLTE1Cg==
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/arithmetic/atom.codegen.operator.integer-reduction

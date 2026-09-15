@@ -18,6 +18,8 @@ import Data.Bool
 module Data.Int
   [zero? nonzero? positive? negative? divisible?]
 
+| In this primitive module Self denotes the complete integer representation
+| family: Int plus the fixed-width signed and unsigned integer kinds.
 
 method zero? :: Self -> Bool
   x | = 0       -> True
@@ -40,9 +42,9 @@ method negative? :: Self -> Bool
 
 
 method divisible? :: Self -> Self -> Bool
-  _ 0                         -> False
-  x divisor | (= (% x divisor) 0) -> True
-            | otherwise           -> False
+  _ 0                 -> False
+  x divisor | (x % divisor) = 0 -> True
+            | otherwise         -> False
 
 
 tests

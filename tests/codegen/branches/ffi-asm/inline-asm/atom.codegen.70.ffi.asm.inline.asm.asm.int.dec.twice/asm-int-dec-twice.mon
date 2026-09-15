@@ -10,6 +10,7 @@
 :TEST-PURPOSE Repeated decrement operations stay in the tied output register.
 :TEST-ATOM dec x dec x returns x - 2.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

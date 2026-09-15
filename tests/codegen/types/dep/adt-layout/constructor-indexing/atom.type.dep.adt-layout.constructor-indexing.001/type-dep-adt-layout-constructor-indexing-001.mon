@@ -28,6 +28,7 @@
 :TEST-USES-ATOM atom.codegen.adt.match
 :TEST-DEPENDS-ON atom.codegen.data.adt
 :TEST-REFINES atom.type.dep.adt-bridge
+:TEST-EXPECT-STDOUT-B64 NAo=
 
 (module Main)
 (data DepMaybe01 DNothing | DJust Int)

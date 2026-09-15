@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/loops/atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.loops.deep.while.mutates.two.slots
 :TEST-CLI-TARGET codegen branches control-flow loops
+:TEST-EXPECT-STDOUT-B64 Mwo2Cg==
 
 (module Main)
 (define i 0)

@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/conditionals-phi/atom.codegen.stateful.control.if.bool.phi
 :TEST-ATOM-LEAF atom.codegen.stateful.control.if.bool.phi
 :TEST-CLI-TARGET codegen branches control-flow conditionals-phi
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQo=
 
 (module Main)
 (show (if True True False))

@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/sets/atom.codegen.stateful.collection.collection.predicate.set.list.array
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.collection.predicate.set.list.array
 :TEST-CLI-TARGET codegen branches collections sets
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKRmFsc2UK
 
 (module Main)
 (show (collection? {1}))

@@ -31,6 +31,7 @@
 :TEST-MENU-PATH codegen/errors/env/call-argument-type-mismatch/atom.env.error.env.call.argument.mismatch.08
 :TEST-ATOM-LEAF atom.env.error.env.call.argument.mismatch.08
 :TEST-CLI-TARGET codegen errors env call-argument-type-mismatch
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IENvdWxkbid0IG1hdGNoIGV4cGVjdGVkIHR5cGUK
 
 (module Main)
 (define (env_arg_mismatch_08 [x : Bool] -> Int) 0)

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/collections/arrays-ranges/atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function
 :TEST-ATOM-LEAF atom.codegen.40.collections.arrays.ranges.deep.array.value.flows.into.function
 :TEST-CLI-TARGET codegen branches collections arrays-ranges
+:TEST-EXPECT-STDOUT-B64 MTEK
 
 (module Main)
 (define (inc [x : Int] -> Int) (+ x 1))

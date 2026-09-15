@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:AST_PATH literal lowering
 :TEST-COVERAGE codegen.c:codegen_show_value TYPE_PATH
+:TEST-EXPECT-STDOUT-B64 Li9jb250ZXh0Ci90bXAvbW9uYWRjLWNvZGVnZW4K
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/paths/atom.codegen.values.paths.deep.path.define.and.show

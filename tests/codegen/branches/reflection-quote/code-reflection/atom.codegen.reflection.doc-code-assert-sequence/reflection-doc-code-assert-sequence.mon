@@ -21,6 +21,7 @@
 :TEST-COVERAGE codegen.c:6539 doc branch
 :TEST-COVERAGE codegen.c:6569 code branch
 :TEST-COVERAGE codegen.c:6602 assert-eq branch
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQphZGQgb25lCihsYW1iZGEgKHgpICgrIHggMSkpClRydWUK
 
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote
 :TEST-MENU branches/reflection-quote/code-reflection/atom.codegen.reflection.doc-code-assert-sequence

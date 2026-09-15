@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.let.binding.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.let.binding.missing.close
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ10nIGFmdGVyIGxldCBiaW5kaW5nIHZhbHVlCg==
 
 (module Main)
 (let ([x 1) x)

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Integer multiplication evaluates at runtime.
 :TEST-ATOM (* 6 7) evaluates to 42.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:20-operators/arithmetic branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

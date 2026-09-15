@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/branch-errors/atom.codegen.stateful.diagnostic.ends.with.string.bad.suffix.type
 :TEST-ATOM-LEAF atom.codegen.stateful.diagnostic.ends.with.string.bad.suffix.type
 :TEST-CLI-TARGET codegen errors codegen branch-errors
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6
 
 (module Main)
 (ends-with? "abc" 1)

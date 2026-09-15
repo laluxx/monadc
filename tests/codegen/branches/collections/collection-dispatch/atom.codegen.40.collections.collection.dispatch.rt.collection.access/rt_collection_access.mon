@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime collection access helpers compile and return expected values.
 :TEST-ATOM head and tail operate on quoted lists.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NAooNSA2KQo=
 
 :TEST-COVERAGE codegen.c:40-collections/collection-dispatch branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

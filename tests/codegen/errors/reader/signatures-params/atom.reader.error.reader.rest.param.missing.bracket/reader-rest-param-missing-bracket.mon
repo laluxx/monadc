@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/signatures-params/atom.reader.error.reader.rest.param.missing.bracket
 :TEST-ATOM-LEAF atom.reader.error.reader.rest.param.missing.bracket
 :TEST-CLI-TARGET codegen errors reader signatures-params
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ10nIGFmdGVyIHR5cGVkIHJlc3QgcGFyYW1ldGVyCg==
 
 (module Main)
 (lambda (. [xs : Int) xs)

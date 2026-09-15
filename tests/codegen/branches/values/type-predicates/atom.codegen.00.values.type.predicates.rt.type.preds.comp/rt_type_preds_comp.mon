@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/values/type-predicates/atom.codegen.00.values.type.predicates.rt.type.preds.comp
 :TEST-ATOM-LEAF atom.codegen.00.values.type.predicates.rt.type.preds.comp
 :TEST-CLI-TARGET codegen branches values type-predicates
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlClRydWUKVHJ1ZQo=
 (module Main)
 (show (Int? 42))
 (show (Float? 3.14))

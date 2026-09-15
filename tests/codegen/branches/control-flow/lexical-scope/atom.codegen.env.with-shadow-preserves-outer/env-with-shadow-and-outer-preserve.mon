@@ -19,6 +19,7 @@
 :TEST-TAG with
 :TEST-COVERAGE codegen.c:8012-8047 with binding environment branch
 :TEST-COVERAGE codegen.c:7642 set! local lvalue branch
+:TEST-EXPECT-STDOUT-B64 MwoxMAo=
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/lexical-scope/atom.codegen.env.with-shadow-preserves-outer

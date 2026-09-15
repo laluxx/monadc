@@ -10,6 +10,7 @@
 :TEST-PURPOSE Writing eax in asm zero-extends to the Int return register.
 :TEST-ATOM mov immediate %eax ret exposes x86-64 zero-extension behavior for 32-bit writes.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDI5NDk2NzI5NQo=
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

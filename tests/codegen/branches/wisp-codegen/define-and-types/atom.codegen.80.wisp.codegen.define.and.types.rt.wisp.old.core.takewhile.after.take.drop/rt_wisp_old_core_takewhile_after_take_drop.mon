@@ -6,6 +6,7 @@
 :TEST-WORKFLOW core-prelude
 :TEST-ATOM old-core style takeWhile compiles after take/drop definitions in the same module.
 :TEST-CONTEXT monadc.context.wisp.old-core-prelude-compat
+:TEST-EXPECT-STDOUT-B64 WzcgOF0KW10K
 
 module Main
 

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces pair? arity.
 :TEST-ATOM (pair?) must fail because pair? requires one argument.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdwYWlyPycgcmVxdWlyZXMgMSBhcmd1bWVudAo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

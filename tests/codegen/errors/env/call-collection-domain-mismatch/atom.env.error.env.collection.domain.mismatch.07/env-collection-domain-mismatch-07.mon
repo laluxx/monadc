@@ -32,6 +32,7 @@
 :TEST-MENU-PATH codegen/errors/env/call-collection-domain-mismatch/atom.env.error.env.collection.domain.mismatch.07
 :TEST-ATOM-LEAF atom.env.error.env.collection.domain.mismatch.07
 :TEST-CLI-TARGET codegen errors env call-collection-domain-mismatch
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IENvdWxkbid0IG1hdGNoIGNvbGxlY3Rpb24gZWxlbWVudCB0eXBlCg==
 
 (module Main)
 (define (env_domain_fn_07 [x : Float] -> Float) x)

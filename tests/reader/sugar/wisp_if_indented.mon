@@ -1,0 +1,14 @@
+:TEST-ID tests.sugar.wisp_if_indented
+:TEST-CONTEXT monadc.context.wisp.sugar.if-sugar
+:TEST-PURPOSE Wisp indented if/then/else desugars.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+if cond
+  then-branch
+else
+  else-branch

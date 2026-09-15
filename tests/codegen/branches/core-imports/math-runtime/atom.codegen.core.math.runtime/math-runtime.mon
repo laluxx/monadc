@@ -4,6 +4,7 @@
 :TEST-PURPOSE Exported Math constants and functions execute safely through an imported Core module.
 :TEST-EXPECT compile, run, stdout
 :TEST-SECTION codegen
+:TEST-EXPECT-STDOUT-B64 My4xNDE1OTI2NTM1ODk3OTMKNzIwCjU1ClRydWUKNTA1MAoxMjAKODEK
 
 import Math
 module Main []

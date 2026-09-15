@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.match_layout_field
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Match combines with layout field access.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET match,layout-field
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(layout Point [x :: Int] [y :: Int])
+(define p (Point 1 2))
+(match p.x with 1 -> p.y _ -> 0)

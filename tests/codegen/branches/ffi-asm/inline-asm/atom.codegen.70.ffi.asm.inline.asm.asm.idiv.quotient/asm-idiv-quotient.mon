@@ -10,6 +10,7 @@
 :TEST-PURPOSE Signed division uses explicit rax/rdx setup around a placeholder divisor.
 :TEST-ATOM mov into rax, cqo, and idiv by a parameter returns the quotient.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

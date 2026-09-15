@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/dot-and-field-mutation/atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set
 :TEST-ATOM-LEAF atom.codegen.50.data.layout.dot.and.field.mutation.deep.layout.swap.by.field.set
 :TEST-CLI-TARGET codegen branches data-layout dot-and-field-mutation
+:TEST-EXPECT-STDOUT-B64 MgoxCg==
 
 (module Main)
 (layout Pair [a :: Int] [b :: Int])

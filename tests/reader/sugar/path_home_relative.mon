@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.path_home_relative
+:TEST-CONTEXT monadc.context.reader.sugar.path-literal
+:TEST-PURPOSE Home-relative path literal.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR ~/projects/code
+:TEST-STATUS passing-baseline-2026-06-15
+
+~/projects/code

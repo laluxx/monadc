@@ -35,6 +35,7 @@
 :TEST-REFINES atom.reader.error
 :TEST-RELATED atom.codegen.error.menu
 :TEST-CLI-TARGET codegen errors reader reader
+:TEST-EXPECT-STDOUT-B64 aW52YWxpZCBpbnRlZ2VyIHR5cGUgJ0kxMjknOiBiaXQtd2lkdGggMTI5IGV4Y2VlZHMK
 
 (module Main)
 ;; reader menu variant 5

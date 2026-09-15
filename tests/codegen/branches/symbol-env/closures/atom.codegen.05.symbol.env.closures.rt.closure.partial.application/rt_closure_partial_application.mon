@@ -10,6 +10,7 @@
 :TEST-PURPOSE Closure codegen covers partial application of a two-argument function.
 :TEST-ATOM (add 10) returns a closure that can later be called with the remaining argument.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTUK
 
 :TEST-COVERAGE codegen.c:05-symbol-env/closures branch family
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env

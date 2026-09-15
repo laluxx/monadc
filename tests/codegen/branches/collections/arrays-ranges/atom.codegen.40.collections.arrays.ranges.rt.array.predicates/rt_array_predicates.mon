@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime array predicates and count observe array values.
 :TEST-ATOM Arr?, collection?, and count recognize [1 2 3].
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlCjMK
 
 :TEST-COVERAGE codegen.c:40-collections/arrays-ranges branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

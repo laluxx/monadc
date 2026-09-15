@@ -22,6 +22,7 @@
 :TEST-COVERAGE codegen.c:9900 string-as-function index branch
 :TEST-COVERAGE codegen.c:9900-12100 closure call branches
 :TEST-COVERAGE codegen.c:7743-7965 if PHI branch
+:TEST-EXPECT-STDOUT-B64 Ygo/Cg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/maps/atom.codegen.cross.closure-string-if

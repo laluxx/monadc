@@ -1,0 +1,18 @@
+:TEST-ID tests.language.feature_cond_reopen
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Sequential active feature conditional blocks parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY feature_cond_reopen
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+#+LINUX
+42
+#---
+#+LINUX
+43
+#---

@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/tests-infix-calls/atom.reader.error.reader.tests.block.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.tests.block.missing.close
 :TEST-CLI-TARGET codegen errors reader tests-infix-calls
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJyknIHRvIGNsb3NlIHRlc3RzIGJsb2NrCg==
 
 (module Main)
 (tests (assert True)

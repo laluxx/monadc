@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.class.missing.type.var
 :TEST-ATOM-LEAF atom.reader.error.reader.class.missing.type.var
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgdHlwZSB2YXJpYWJsZSBhZnRlciBjbGFzcyBuYW1lCg==
 
 (module Main)
 (class Eq)

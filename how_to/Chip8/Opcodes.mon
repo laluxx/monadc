@@ -256,7 +256,7 @@ define execute-opcode :: Int -e-> Int where e has state.write
          | otherwise -> execute-family (opcode-family opcode) opcode
 
 
-define execute-family :: Int -> Int -e-> Int where e has state.write
+define execute-family :: Int -> Int -state.write-> Int
   0x0 opcode -> halt-machine opcode
   0x1 opcode -> jump (opcode-address opcode)
   0x2 opcode -> call (opcode-address opcode)

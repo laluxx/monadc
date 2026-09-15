@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
-
 project(monadc C)
 
 include(GNUInstallDirs)
-
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+# clangd/clang-tidy should work from any nested source directory after configure.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile_commands.json" FORCE)
 
 find_program(LLVM_CONFIG_EXECUTABLE
   NAMES llvm-config llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16
@@ -26,7 +26,6 @@ find_package(LLVM REQUIRED CONFIG)
 find_package(Threads REQUIRED)
 find_package(PkgConfig QUIET)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
 if(PkgConfig_FOUND)
   pkg_check_modules(LIBCLANG QUIET libclang)
 endif()
@@ -34,14 +33,9 @@ endif()
 set(MONADC_LLVM_COMPONENTS core orcjit native passes)
 llvm_map_components_to_libnames(LLVM_LIBRARIES ${MONADC_LLVM_COMPONENTS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
-
 find_library(READLINE_LIBRARY NAMES readline REQUIRED)
 find_library(GMP_LIBRARY NAMES gmp REQUIRED)
-find_library(CLANG_LIBRARY
-  NAMES clang libclang
-  HINTS ${LLVM_LIBRARY_DIRS} ${LIBCLANG_LIBRARY_DIRS}
-  REQUIRED
-)
+find_library(CLANG_LIBRARY NAMES clang libclang HINTS ${LLVM_LIBRARY_DIRS} ${LIBCLANG_LIBRARY_DIRS} REQUIRED)
 
 execute_process(
   COMMAND ${LLVM_CONFIG_EXECUTABLE} --ldflags
@@ -58,140 +52,58 @@ execute_process(
 separate_arguments(LLVM_CONFIG_LDFLAGS_LIST UNIX_COMMAND "${LLVM_CONFIG_LDFLAGS}")
 separate_arguments(LLVM_CONFIG_LIBS_LIST UNIX_COMMAND "${LLVM_CONFIG_LIBS}")
 
-set(MONADC_WARNING_FLAGS
-  -Wall
-  -Wextra
+set(MONADC_WARNING_FLAGS -Wall -Wextra)
+set(MONADC_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+# Keep project-private quoted headers out of the angle-bracket search path.
+# Monad has a features.h; using -Isrc would shadow libc <features.h>.
+set(MONADC_PRIVATE_INCLUDE_FLAGS
+  "-iquote${MONADC_SOURCE_DIR}"
+  "-iquote${MONADC_SOURCE_DIR}/tooling"
 )
-
-set(MONADC_RUNTIME_SOURCES
-  arena.c
-  runtime.c
-  runtime_errors.c
-)
-
-set(MONADC_COMPILER_SOURCES
-  asm.c
-  buildsystem.c
-  bytecode.c
-  cli.c
-  codegen.c
-  completion.c
-  config.c
-  debugger.c
-  dep.c
-  env.c
-  features.c
-  ffi.c
-  infer.c
-  lsp.c
-  lsp_repl.c
-  tooling/diagnostic.c
-  tooling/cst.c
-  tooling/format.c
-  tooling/rewrite.c
-  tooling/lint.c
-  macro.c
-  main.c
-  module.c
-  module_export.c
-  optimizations.c
-  pmatch.c
-  concurrency/channel.c
-  concurrency/channel_effect.c
-  concurrency/channel_machine.c
-  concurrency/commutation.c
-  concurrency/cleanup_bridge.c
-  concurrency/coverage.c
-  concurrency/deterministic.c
-  concurrency/dependence.c
-  concurrency/effect.c
-  concurrency/exploration.c
-  concurrency/failure.c
-  concurrency/kernel.c
-  concurrency/network.c
-  concurrency/network_trace.c
-  concurrency/native.c
-  concurrency/process.c
-  concurrency/process_commutation.c
-  qtt/bindings.c
-  qtt/anf.c
-  qtt/backend.c
-  qtt/call.c
-  qtt/coherence.c
-  qtt/compiler.c
-  qtt/compiler_module.c
-  qtt/closure.c
-  qtt/closure_policy.c
-  qtt/constraints.c
-  qtt/core.c
-  qtt/core_effect.c
-  qtt/core_usage.c
-  qtt/demand.c
-  qtt/drop.c
-  effects/constraints.c
-  effects/effect.c
-  qtt/elaboration.c
-  qtt/environment.c
-  qtt/effect_runtime.c
-  qtt/eval.c
-  qtt/evidence.c
-  qtt/graded.c
-  qtt/interface.c
-  qtt/kind.c
-  qtt/quantity.c
-  qtt/pipeline.c
-  qtt/place.c
-  qtt/resource.c
-  qtt/rules.c
-  qtt/semantic_ir.c
-  qtt/semantic_closure.c
-  qtt/semantic_anf.c
-  qtt/rir.c
-  qtt/signature.c
-  qtt/signature_env.c
-  qtt/module.c
-  qtt/type_identity.c
-  qtt/usage.c
-  reader.c
-  spirv.c
-  reader_diagnostic.c
-  reader_syntax.c
-  repl.c
-  typeclass.c
-  types.c
-  typst_emit.c
-  wisp.c
-  wisp_syntax_policy.c
-)
-
-if(WIN32)
-  list(REMOVE_ITEM MONADC_COMPILER_SOURCES debugger.c)
-endif()
-
-add_library(monad_runtime STATIC ${MONADC_RUNTIME_SOURCES})
-set_target_properties(monad_runtime PROPERTIES
-  OUTPUT_NAME monad
-  POSITION_INDEPENDENT_CODE ON
-)
-target_compile_options(monad_runtime PRIVATE ${MONADC_WARNING_FLAGS})
-target_include_directories(monad_runtime PRIVATE
-  ${LLVM_INCLUDE_DIRS}
-)
-target_compile_options(monad_runtime PRIVATE ${LLVM_DEFINITIONS_LIST})
-
-add_executable(monad ${MONADC_COMPILER_SOURCES})
-target_compile_options(monad PRIVATE ${MONADC_WARNING_FLAGS} ${LLVM_DEFINITIONS_LIST})
-target_include_directories(monad PRIVATE
+set(MONADC_INCLUDE_DIRS
+  "${MONADC_SOURCE_DIR}/embed/include"
   ${LLVM_INCLUDE_DIRS}
   ${LIBCLANG_INCLUDE_DIRS}
 )
+
+set(MONADC_RUNTIME_SOURCES
+  src/arena.c
+  src/runtime.c
+  src/runtime_errors.c
+)
+file(GLOB MONADC_ROOT_SOURCES CONFIGURE_DEPENDS src/*.c)
+file(GLOB MONADC_QTT_SOURCES CONFIGURE_DEPENDS src/qtt/*.c)
+file(GLOB MONADC_CONCURRENCY_SOURCES CONFIGURE_DEPENDS src/concurrency/*.c)
+file(GLOB MONADC_EFFECT_SOURCES CONFIGURE_DEPENDS src/effects/*.c)
+file(GLOB MONADC_TOOLING_SOURCES CONFIGURE_DEPENDS src/tooling/*.c)
+set(MONADC_COMPILER_SOURCES
+  ${MONADC_ROOT_SOURCES}
+  ${MONADC_QTT_SOURCES}
+  ${MONADC_CONCURRENCY_SOURCES}
+  ${MONADC_EFFECT_SOURCES}
+  ${MONADC_TOOLING_SOURCES}
+)
+list(REMOVE_ITEM MONADC_COMPILER_SOURCES ${MONADC_RUNTIME_SOURCES})
+if(WIN32)
+  list(REMOVE_ITEM MONADC_COMPILER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/debugger.c" src/debugger.c)
+endif()
+
+add_library(monad_runtime STATIC ${MONADC_RUNTIME_SOURCES})
+set_target_properties(monad_runtime PROPERTIES OUTPUT_NAME monad POSITION_INDEPENDENT_CODE ON)
+target_compile_options(monad_runtime PRIVATE ${MONADC_WARNING_FLAGS} ${MONADC_PRIVATE_INCLUDE_FLAGS} ${LLVM_DEFINITIONS_LIST})
+target_include_directories(monad_runtime PRIVATE ${MONADC_INCLUDE_DIRS})
+
+add_executable(monad ${MONADC_COMPILER_SOURCES})
+target_compile_options(monad PRIVATE ${MONADC_WARNING_FLAGS} ${MONADC_PRIVATE_INCLUDE_FLAGS} ${LLVM_DEFINITIONS_LIST})
+target_include_directories(monad PRIVATE ${MONADC_INCLUDE_DIRS})
 target_link_options(monad PRIVATE ${LLVM_CONFIG_LDFLAGS_LIST})
 if(WIN32)
-  # Core loading and dependent inference are deeply recursive. Reserve ample
-  # virtual stack so address-layout variation cannot make Windows CI flaky.
   target_link_options(monad PRIVATE "-Wl,--stack,1073741824")
+else()
+  target_link_options(monad PRIVATE -rdynamic)
 endif()
-target_link_libraries(monad PRIVATE monad_runtime
+target_link_libraries(monad PRIVATE
+  monad_runtime
   ${READLINE_LIBRARY}
   ${GMP_LIBRARY}
   ${CLANG_LIBRARY}
@@ -200,127 +112,67 @@ target_link_libraries(monad PRIVATE monad_runtime
   m
 )
 
-if(NOT WIN32)
-  target_link_options(monad PRIVATE -rdynamic)
-endif()
+# Small public embedding surface. The full compiler embedding libraries remain
+# owned by the Makefile, which is the canonical release build.
+add_library(monad_embed_static STATIC src/embed/embed.c src/embed/monad.c)
+set_target_properties(monad_embed_static PROPERTIES OUTPUT_NAME monad-embed POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(monad_embed_static PRIVATE MONAD_EMBED_BUILD)
+target_compile_options(monad_embed_static PRIVATE ${MONADC_WARNING_FLAGS} ${MONADC_PRIVATE_INCLUDE_FLAGS} -fvisibility=hidden)
+target_include_directories(monad_embed_static PRIVATE ${MONADC_INCLUDE_DIRS})
+
+add_library(monad_embed_shared SHARED src/embed/embed.c src/embed/monad.c)
+set_target_properties(monad_embed_shared PROPERTIES OUTPUT_NAME monad-embed POSITION_INDEPENDENT_CODE ON)
+target_compile_definitions(monad_embed_shared PRIVATE MONAD_EMBED_BUILD)
+target_compile_options(monad_embed_shared PRIVATE ${MONADC_WARNING_FLAGS} ${MONADC_PRIVATE_INCLUDE_FLAGS} -fvisibility=hidden)
+target_include_directories(monad_embed_shared PRIVATE ${MONADC_INCLUDE_DIRS})
+target_link_libraries(monad_embed_shared PRIVATE Threads::Threads)
 
 enable_testing()
-
 add_executable(tooling_cst_test
-  tests/tooling_cst_test.c
-  tooling/cst.c
+  src/testing/contracts/fixtures/tooling_cst_test.c
+  src/tooling/cst.c
 )
-target_include_directories(tooling_cst_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/tooling
-)
+target_include_directories(tooling_cst_test PRIVATE src/tooling)
 target_compile_options(tooling_cst_test PRIVATE ${MONADC_WARNING_FLAGS})
 add_test(NAME tooling_cst_roundtrip COMMAND tooling_cst_test)
 
 add_executable(tooling_rewrite_test
-  tests/tooling_rewrite_test.c
-  tooling/diagnostic.c
-  tooling/rewrite.c
+  src/testing/contracts/fixtures/tooling_rewrite_test.c
+  src/tooling/diagnostic.c
+  src/tooling/rewrite.c
 )
-target_include_directories(tooling_rewrite_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/tooling
-)
+target_include_directories(tooling_rewrite_test PRIVATE src/tooling)
 target_compile_options(tooling_rewrite_test PRIVATE ${MONADC_WARNING_FLAGS})
 add_test(NAME tooling_checked_rewrite COMMAND tooling_rewrite_test)
 
+function(monadc_python_test name module)
+  add_test(NAME ${name} COMMAND ${Python3_EXECUTABLE} -B -m ${module})
+  set_tests_properties(${name} PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
+  )
+endfunction()
+
 add_test(NAME monad_help COMMAND $<TARGET_FILE:monad> --help)
-add_test(
-  NAME windows_portability_contract
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_windows_portability.py
+add_test(NAME monad_test_suite_menu COMMAND $<TARGET_FILE:monad> test list)
+set_tests_properties(monad_test_suite_menu PROPERTIES
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
 )
-add_test(
-  NAME cmake_build_contract
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cmake_build.py
-)
-add_test(
-  NAME unified_test_entrypoint_contract
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unified_test_entrypoint.py
-)
-add_test(
-  NAME repl_contract
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_repl.py
-)
-add_test(
-  NAME monad_test_suite_menu
-  COMMAND $<TARGET_FILE:monad> test list
-)
-add_test(
-  NAME how_to_examples
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_how_to_examples.py
-)
-add_test(
-  NAME core_zero_cost_contract
-  COMMAND ${CMAKE_COMMAND} -E env MONAD_BINARY=$<TARGET_FILE:monad>
-    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_core_zero_cost.py
-)
-add_test(
-  NAME anonymous_finite_type_contract
-  COMMAND ${CMAKE_COMMAND} -E env MONAD_BINARY=$<TARGET_FILE:monad>
-    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_anonymous_finite_types.py
-)
-set(MONADC_CHECKOUT_LOCAL_TESTS
-  test_relative_monad_binary_env_resolves_from_checkout_root
-  test_windows_drive_monad_binary_env_is_already_absolute
-  test_generated_executable_prefers_windows_suffix_when_present
-  test_compiler_discovers_checkout_core_and_runtime_archive
-  test_legacy_buildsystem_links_runtime_archive_not_object_file
-  test_repl_module_import_link_uses_runtime_archive_resolver
-  test_checkout_compiler_can_compile_program_without_install_env
-  test_compiler_returns_failure_when_linker_fails
-  test_package_build_finds_checkout_core_from_project_directory
-  test_compiler_bootstraps_a_crlf_core_checkout
-)
+monadc_python_test(windows_portability_contract src.testing.contracts.test_windows_portability)
+monadc_python_test(cmake_build_contract src.testing.contracts.test_cmake_build)
+monadc_python_test(unified_test_entrypoint_contract src.testing.contracts.test_unified_test_entrypoint)
+monadc_python_test(checkout_local_paths_contract src.testing.contracts.test_checkout_local_paths)
+monadc_python_test(repl_contract src.testing.contracts.test_repl)
+monadc_python_test(how_to_examples src.testing.contracts.test_how_to_examples)
+monadc_python_test(core_zero_cost_contract src.testing.contracts.test_core_zero_cost)
+monadc_python_test(anonymous_finite_type_contract src.testing.contracts.test_anonymous_finite_types)
 
-foreach(checkout_local_test IN LISTS MONADC_CHECKOUT_LOCAL_TESTS)
-  add_test(
-    NAME checkout_local_paths.${checkout_local_test}
-    COMMAND ${Python3_EXECUTABLE}
-      ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_checkout_local_paths.py
-      CheckoutLocalPathTests.${checkout_local_test}
-  )
-endforeach()
-
-set_tests_properties(
-  windows_portability_contract
-  cmake_build_contract
-  unified_test_entrypoint_contract
-  PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-set_tests_properties(
-  unified_test_entrypoint_contract
-  repl_contract
-  monad_test_suite_menu
-  PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
-)
-
-set_tests_properties(
-  how_to_examples
-  PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
-)
-
-foreach(checkout_local_test IN LISTS MONADC_CHECKOUT_LOCAL_TESTS)
-  set_tests_properties(
-    checkout_local_paths.${checkout_local_test}
-    PROPERTIES
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      ENVIRONMENT "MONAD_BINARY=$<TARGET_FILE:monad>"
-  )
-endforeach()
-
-install(TARGETS monad monad_runtime
+install(TARGETS monad monad_runtime monad_embed_static monad_embed_shared
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
-install(FILES runtime.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/monad)
-install(DIRECTORY core/ DESTINATION ${CMAKE_INSTALL_LIBDIR}/monad/core
-  FILES_MATCHING PATTERN "*.mon"
-)
+install(FILES src/runtime.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/monad)
+install(DIRECTORY src/embed/include/monad/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/monad FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY core/ DESTINATION ${CMAKE_INSTALL_LIBDIR}/monad/core FILES_MATCHING PATTERN "*.mon")

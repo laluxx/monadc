@@ -8,6 +8,7 @@
 :TEST-SECTION codegen
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE Inline asm in a non-naked function body — size-suffix inference
+:TEST-EXPECT-STDOUT-B64 MzAK
 ;;   currently generates 32-bit (l) suffix for Int parameters, causing LLVM error.
 :TEST-ATOM (asm add x y) inside non-naked function — documents size-suffix gap.
 :TEST-EXPECT compile, run

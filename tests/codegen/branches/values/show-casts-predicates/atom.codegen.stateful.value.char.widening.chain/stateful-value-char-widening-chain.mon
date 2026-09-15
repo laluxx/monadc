@@ -22,6 +22,7 @@
 :TEST-MENU-PATH codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.char.widening.chain
 :TEST-ATOM-LEAF atom.codegen.stateful.value.char.widening.chain
 :TEST-CLI-TARGET codegen branches values show-casts-predicates
+:TEST-EXPECT-STDOUT-B64 QQo2NQpCCg==
 
 (module Main)
 (show (Char 65))

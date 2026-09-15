@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.returned.lambda.immediate.call
 :TEST-ATOM-LEAF atom.codegen.stateful.env.returned.lambda.immediate.call
 :TEST-CLI-TARGET codegen branches symbol-env definitions-lambdas-monomorphization
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (((lambda (x) (lambda (y) (+ x y))) 20) 22))

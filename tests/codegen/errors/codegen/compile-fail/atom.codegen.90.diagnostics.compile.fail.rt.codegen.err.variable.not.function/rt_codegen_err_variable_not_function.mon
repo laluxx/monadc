@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects scalar variables in function-call position.
 :TEST-ATOM (x 2) must fail when x is an Int variable.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICd4JyBpcyBhIHZhcmlhYmxlLCBub3QgYSBmdW5jdGlvbgo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

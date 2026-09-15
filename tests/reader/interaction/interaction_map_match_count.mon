@@ -1,0 +1,13 @@
+:TEST-ID tests.interaction.interaction_map_match_count
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Map count expression inside match parses.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(define cfg #{:a 1 :b 2})
+(match (count cfg) with 0 -> "empty" _ -> "some")

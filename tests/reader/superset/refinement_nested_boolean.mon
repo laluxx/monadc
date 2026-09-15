@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.refinement_nested_boolean
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Refinement combines nested boolean predicate and percentage literal.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET refinement,boolean,percentage
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(type Discount { r ∈ Ratio | (and (>= r 0%) (or (= r 0%) (< r 100%))) })

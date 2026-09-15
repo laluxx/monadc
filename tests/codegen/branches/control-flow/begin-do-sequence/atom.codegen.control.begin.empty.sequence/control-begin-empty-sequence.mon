@@ -11,6 +11,7 @@
 :TEST-ATOM Empty begin returns zero; non-empty begin returns the last expression after executing earlier forms.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:7732-7741 begin empty and sequence branches
+:TEST-EXPECT-STDOUT-B64 MAozCjMK
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/begin-do-sequence/atom.codegen.control.begin.empty.sequence

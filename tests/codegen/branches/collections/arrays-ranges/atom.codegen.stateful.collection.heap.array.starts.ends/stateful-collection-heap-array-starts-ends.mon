@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/arrays-ranges/atom.codegen.stateful.collection.heap.array.starts.ends
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.heap.array.starts.ends
 :TEST-CLI-TARGET codegen branches collections arrays-ranges
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlCg==
 
 (module Main)
 (show (starts-with? ~[1 2 3] ~[1 2]))

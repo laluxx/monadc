@@ -9,6 +9,7 @@
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE Type conversion functions Int, Float, Hex, Oct, Bin, Char.
 :TEST-ATOM (Float 42) = 42.0, (Int 3.14) = 3, (Hex 255) = 0xFF,
+:TEST-EXPECT-STDOUT-B64 NDIKMwoweEZGCgowbzM3NwoKMGIxMTEKCkEK
 ;;           (Oct 255) = 0o377, (Bin 7) = 0b111, (Char 65) = #\A
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:00-values/casts-conversions branch family

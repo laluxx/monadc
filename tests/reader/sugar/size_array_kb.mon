@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.size_array_kb
+:TEST-CONTEXT monadc.context.reader.sugar.size-array
+:TEST-PURPOSE [16kb] desugars to [16384 U8] array.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define (buf :: Arr :: 16384 :: U8) [])
+:TEST-STATUS passing-baseline-2026-06-15
+
+define buf :: [16kb]

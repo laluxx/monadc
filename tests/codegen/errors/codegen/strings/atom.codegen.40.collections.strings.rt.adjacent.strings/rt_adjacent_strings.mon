@@ -11,6 +11,7 @@
 :TEST-PURPOSE Connected string literals produce a targeted syntax diagnostic instead of a later type error.
 :TEST-ATOM "hello""world" is rejected with guidance to write one string literal.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 PHJlcG8+L3Rlc3RzL2NvZGVnZW4vcnRfYWRqYWNlbnRfc3RyaW5ncy5tb246ODoxNDogZXJyb3I6IGFkamFjZW50IHN0cmluZyBsaXRlcmFscyBhcmUgbm90IHN1cHBvcnRlZAogIC0gSGludDogd3JpdGUgb25lIHN0cmluZyBsaXRlcmFsLCBmb3IgZXhhbXBsZSAiaGVsbG93b3JsZCI7IHN0cmluZ3MgbWF5IGFscmVhZHkgc3BhbiBtdWx0aXBsZSBsaW5lcyBpbnNpZGUgb25lIHBhaXIgb2YgcXVvdGVzCiAgICA4IHwgKHNob3cgImhlbGxvIiJ3b3JsZCIpCiAgICAgIHwgICAgICAgICAgICAgIF4K
 
 :TEST-COVERAGE codegen.c:40-collections/strings branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

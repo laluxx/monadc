@@ -20,6 +20,7 @@
 :TEST-COVERAGE codegen.c:8985-9018 runtime value equality fallback
 :TEST-COVERAGE codegen.c:9363-9382 string strcmp branch
 :TEST-COVERAGE codegen.c:9432-9454 float/int comparison branches
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlCg==
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/comparison/atom.codegen.operator.runtime-equality-spectrum

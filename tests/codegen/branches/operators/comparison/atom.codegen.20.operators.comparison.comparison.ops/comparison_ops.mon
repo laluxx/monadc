@@ -10,6 +10,7 @@
 :TEST-PURPOSE Comparison operators evaluate at runtime.
 :TEST-ATOM (< 3 5) evaluates to True, (> 5 3) evaluates to True, (= 4 4) evaluates to True.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpUcnVlCg==
 
 :TEST-COVERAGE codegen.c:20-operators/comparison branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

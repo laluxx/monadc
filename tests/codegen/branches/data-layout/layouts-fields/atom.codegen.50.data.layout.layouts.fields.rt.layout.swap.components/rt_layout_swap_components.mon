@@ -11,6 +11,7 @@
 :TEST-PURPOSE Function swapping two layout fields via set! on fields.
 :TEST-ATOM swap-components v exchanges v.x and v.y.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MjAKMTAK
 
 :TEST-COVERAGE codegen.c:50-data-layout/layouts-fields branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

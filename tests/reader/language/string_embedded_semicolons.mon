@@ -1,0 +1,13 @@
+:TEST-ID tests.language.string_embedded_semicolons
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE String with comment-like characters parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY string_embedded_semicolons
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+";;embedded"

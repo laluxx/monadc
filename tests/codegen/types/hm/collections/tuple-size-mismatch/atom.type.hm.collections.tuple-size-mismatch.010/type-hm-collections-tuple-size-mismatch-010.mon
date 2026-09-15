@@ -29,6 +29,7 @@
 :TEST-USES-ATOM atom.type.hm.tuple
 :TEST-DEPENDS-ON atom.env.error.fixed-list-size
 :TEST-REFINES atom.type.hm.tuple-size
+:TEST-EXPECT-STDOUT-B64 Q291bGRuJ3QgbWF0Y2ggZXhwZWN0ZWQgbGlzdCBzaXplCg==
 
 (module Main)
 (define (hm_tuple2_10 [xs : [Int Int]] -> Int) (+ (xs 0) (xs 1)))

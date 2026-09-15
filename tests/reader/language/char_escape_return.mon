@@ -1,0 +1,13 @@
+:TEST-ID tests.language.char_escape_return
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Escaped carriage-return character literal parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY char_escape_return
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+'\r'

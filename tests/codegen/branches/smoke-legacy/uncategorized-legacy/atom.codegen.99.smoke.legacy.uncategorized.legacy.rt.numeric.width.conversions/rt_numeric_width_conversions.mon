@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime fixed-width integer conversion helpers wrap large values.
 :TEST-ATOM I8, U8, I16, and U16 convert out-of-range positive integers to low-width values.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQoxCjEKMQo=
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

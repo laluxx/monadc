@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.percent_high_precision
+:TEST-CONTEXT monadc.context.reader.sugar.percent
+:TEST-PURPOSE High-precision float percentage.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR 999/1000
+:TEST-STATUS passing-baseline-2026-06-15
+
+99.9%

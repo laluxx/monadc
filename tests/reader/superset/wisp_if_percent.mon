@@ -1,0 +1,17 @@
+:TEST-ID tests.superset.wisp_if_percent
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Wisp if combines with percentage/ratio comparison.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET wisp,if,percentage,ratio
+:TEST-STATUS passing-baseline-2026-06-15
+
+module Main
+
+define half 50%
+if half = 1/2
+  show "half"
+  show "other"

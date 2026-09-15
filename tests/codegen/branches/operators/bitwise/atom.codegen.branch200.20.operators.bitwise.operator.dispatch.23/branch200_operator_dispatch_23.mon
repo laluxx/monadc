@@ -15,6 +15,7 @@
 :TEST-COVERAGE codegen.c:7668-7714 bitwise/logical operator special forms
 :TEST-COVERAGE codegen.c:8932-9453 comparison dispatch branches
 :TEST-COVERAGE codegen.c:9463-9810 arithmetic dispatch branches
+:TEST-EXPECT-STDOUT-B64 NAo=
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-USES-ATOM atom.codegen.subset.20.operators.bitwise

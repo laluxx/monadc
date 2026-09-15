@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime for loop range accumulates to expected sum.
 :TEST-ATOM (for [i 0 5] ...) sums 0..4 = 10; (for [i 1 4] ...) sums 1..3 = 6.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTAKNgoxMgo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/loops branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

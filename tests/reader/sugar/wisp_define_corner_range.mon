@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.wisp_define_corner_range
+:TEST-CONTEXT monadc.context.wisp.sugar.def, monadc.context.reader.sugar.quasiquote-corner, monadc.context.reader.sugar.range-sugar
+:TEST-PURPOSE Wisp define preserves corner-quoted range with interior spaces.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define (xs :: List) (quote (0..)))
+:TEST-STATUS passing-baseline-2026-06-18
+
+define [xs :: List] ⌜0..  ⌝

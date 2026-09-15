@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.assign_arrow_field
+:TEST-CONTEXT monadc.context.reader.sugar.assign-arrow
+:TEST-PURPOSE Set! struct field uses dot notation.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (set! p.x 5)
+:TEST-STATUS passing-baseline-2026-06-15
+
+p.x <- 5

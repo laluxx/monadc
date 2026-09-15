@@ -5,6 +5,7 @@
 :TEST-TIER regression
 :TEST-COMPILE-FLAGS -O
 :TEST-MENU-PATH codegen/branches/semantic-analysis/shadowing
+:TEST-EXPECT-DESUGAR-B64 KG1vZHVsZSBNYWluIFtdKQooZGVmaW5lICh4IDo6IEludCkgMzApCihzaG93ICgobGFtYmRhIChbeCA6OiBJbnRdKSAoKyB4IDEpKSA1KSkK
 
 (module Main)
 x :: Int = 30

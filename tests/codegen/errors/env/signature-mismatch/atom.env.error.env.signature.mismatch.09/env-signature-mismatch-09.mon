@@ -31,6 +31,7 @@
 :TEST-MENU-PATH codegen/errors/env/signature-mismatch/atom.env.error.env.signature.mismatch.09
 :TEST-ATOM-LEAF atom.env.error.env.signature.mismatch.09
 :TEST-CLI-TARGET codegen errors env signature-mismatch
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IFNpZ25hdHVyZSBtaXNtYXRjaCBmb3IgZGVmaW5pdGlvbiAnZW52X3NpZ19taXNtYXRjaF8wOScK
 
 (module Main)
 (define (env_sig_mismatch_09 [x : Int] -> String) (if True 1 2))

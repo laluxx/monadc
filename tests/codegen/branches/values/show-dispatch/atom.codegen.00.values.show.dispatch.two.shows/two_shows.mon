@@ -10,6 +10,7 @@
 :TEST-PURPOSE Multiple show expressions in sequence both run.
 :TEST-ATOM Two sequential (show ...) calls
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQoyCg==
 
 :TEST-COVERAGE codegen.c:00-values/show-dispatch branch family
 :TEST-USES-ATOM atom.codegen.category.00.values

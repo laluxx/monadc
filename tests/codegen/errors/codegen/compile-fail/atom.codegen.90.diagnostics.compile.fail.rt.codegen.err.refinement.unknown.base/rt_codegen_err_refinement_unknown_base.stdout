@@ -1,1 +1,0 @@
-error: refinement type ‘Thing’ has unknown base type ‘Nope’ — did you forget to define it first?

@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparisons/atom.codegen.stateful.operator.mixed.float.int.comparison
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.mixed.float.int.comparison
 :TEST-CLI-TARGET codegen branches operators comparisons
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlCg==
 
 (module Main)
 (show (< 41.5 42))

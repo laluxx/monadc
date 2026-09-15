@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/nil-null-coalesce/atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic
 :TEST-ATOM-LEAF atom.codegen.60.reflection.quote.nil.null.coalesce.deep.coalesce.result.feeds.arithmetic
 :TEST-CLI-TARGET codegen branches reflection-quote nil-null-coalesce
+:TEST-EXPECT-STDOUT-B64 NDUK
 
 (module Main)
 (show (+ (?? nil 40) (?? 5 99)))

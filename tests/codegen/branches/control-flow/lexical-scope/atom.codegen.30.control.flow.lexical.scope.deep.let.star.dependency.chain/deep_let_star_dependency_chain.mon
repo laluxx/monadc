@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/lexical-scope/atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.lexical.scope.deep.let.star.dependency.chain
 :TEST-CLI-TARGET codegen branches control-flow lexical-scope
+:TEST-EXPECT-STDOUT-B64 Ngo=
 
 (module Main)
 (show (let* ([x 1] [y (+ x 2)] [z (+ y 3)]) z))

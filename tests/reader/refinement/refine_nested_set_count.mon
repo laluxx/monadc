@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_nested_set_count
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Nested set count predicate parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type SingletonSet { xs ∈ Set | (= (count xs) 1) })

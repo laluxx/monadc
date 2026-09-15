@@ -11,6 +11,7 @@
 :TEST-ATOM __adt_tag without exactly one argument should fail during codegen.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:7543 __adt_tag arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdfX2FkdF90YWcnIHJlcXVpcmVzIDEgYXJndW1lbnQK
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.adt.tag.arity

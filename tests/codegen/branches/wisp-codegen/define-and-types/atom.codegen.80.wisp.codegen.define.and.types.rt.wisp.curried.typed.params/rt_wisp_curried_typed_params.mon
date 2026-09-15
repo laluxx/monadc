@@ -1,3 +1,4 @@
+:TEST-EXPECT-STDOUT-B64 UEFTUyBjdXJyaWVkIHR5cGVkIHBhcmFtcyB0cnVlClBBU1MgY3VycmllZCB0eXBlZCBwYXJhbXMgZmFsc2UK
 module Main
 
 (define (divisible? [x : Int] -> [y : Int] -> Bool)

@@ -18,6 +18,7 @@
 :TEST-TAG dot
 :TEST-COVERAGE codegen.c:12660-12675 keyword constructor argument branches
 :TEST-COVERAGE codegen.c:12919-12930 layout dot lookup branches
+:TEST-EXPECT-STDOUT-B64 YWRhCjM3Cg==
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.layout.keyword-constructor-dot-order

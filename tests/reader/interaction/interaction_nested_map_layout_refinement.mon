@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_nested_map_layout_refinement
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Nested map payload combines layout fields and refinement-typed values.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(type Positive { n ∈ Int | (> n 0) })
+(layout User [id :: Positive] [name :: String])
+(define u (User 1 "ada"))
+(define payload #{:user #{:id u.id :name u.name} :active True})

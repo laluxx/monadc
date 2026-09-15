@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime C FFI calls a two-argument libm function and prints its result.
 :TEST-ATOM (hypot 3.0 4.0) prints 5.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NQo=
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/cffi-math branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

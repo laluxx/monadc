@@ -1,0 +1,16 @@
+:TEST-ID tests.language.feature_cond_inactive_skip
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Inactive feature conditional drops expression.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY feature_cond_inactive_skip
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+#+WINDOWS
+99
+#---
+42

@@ -11,6 +11,7 @@
 :TEST-ATOM count should dispatch on runtime container representation.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:8858-8925 count dispatch branches
+:TEST-EXPECT-STDOUT-B64 NAozCjMKMgoyCg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/collection-dispatch/atom.codegen.collection.count.multiple.types

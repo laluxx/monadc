@@ -1,0 +1,13 @@
+:TEST-ID tests.language.list_map
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Map function parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY list_map
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(map (lambda (x) (+ 1 x)) '(1 2 3))

@@ -1,0 +1,13 @@
+:TEST-ID tests.language.define_empty_map
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Defines of empty maps parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY define_empty_map
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(define m #{})

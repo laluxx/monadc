@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_ratio_unit
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Unit ratio refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type UnitRatio { r ∈ Ratio | (and (>= r 0/1) (<= r 1/1)) })

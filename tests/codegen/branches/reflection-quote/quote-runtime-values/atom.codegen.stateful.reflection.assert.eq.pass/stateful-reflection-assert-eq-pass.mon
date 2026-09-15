@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.assert.eq.pass
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.assert.eq.pass
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (assert-eq (+ 40 2) 42 "answer")

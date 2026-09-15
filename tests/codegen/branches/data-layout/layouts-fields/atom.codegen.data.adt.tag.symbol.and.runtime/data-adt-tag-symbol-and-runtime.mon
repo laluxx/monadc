@@ -14,6 +14,7 @@
 :TEST-COVERAGE codegen.c:3550 __adt_tag_ symbol branch
 :TEST-COVERAGE codegen.c:7543 __adt_tag runtime branch
 :TEST-COVERAGE codegen.c:1785 codegen_data constructor tags
+:TEST-EXPECT-STDOUT-B64 MAoxCjAKMQo=
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.data.adt.tag.symbol.and.runtime

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime map literals cover mixed key token families.
 :TEST-ATOM String, number, and keyword keys can coexist in a map literal.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQozCg==
 
 :TEST-COVERAGE codegen.c:40-collections/maps branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

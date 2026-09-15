@@ -1,0 +1,13 @@
+:TEST-ID tests.language.do_with_let
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Do with embedded let binding parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY do_with_let
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(do [x <- (list 1 2)] [y <- (list 3 4)] (+ x y))

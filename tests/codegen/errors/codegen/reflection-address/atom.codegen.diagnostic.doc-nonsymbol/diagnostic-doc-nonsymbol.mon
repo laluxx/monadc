@@ -15,6 +15,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG reflection
 :TEST-COVERAGE codegen.c:6545 doc argument diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdkb2MnIGFyZ3VtZW50IG11c3QgYmUgYSBzeW1ib2wK
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/reflection-address/atom.codegen.diagnostic.doc-nonsymbol

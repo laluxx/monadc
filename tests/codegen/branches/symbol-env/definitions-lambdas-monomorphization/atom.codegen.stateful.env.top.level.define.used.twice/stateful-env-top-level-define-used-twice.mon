@@ -22,6 +22,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.top.level.define.used.twice
 :TEST-ATOM-LEAF atom.codegen.stateful.env.top.level.define.used.twice
 :TEST-CLI-TARGET codegen branches symbol-env definitions-lambdas-monomorphization
+:TEST-EXPECT-STDOUT-B64 NDIKMjEK
 
 (module Main)
 (define x 21)

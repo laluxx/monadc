@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.include_refinement_define
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE C include combines with refinement declaration and typed define.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET include,refinement,typed-define
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(include "stdlib.h")
+(type Positive { n ∈ Int | (> n 0) })
+(define [n :: Positive] (atoi "7"))

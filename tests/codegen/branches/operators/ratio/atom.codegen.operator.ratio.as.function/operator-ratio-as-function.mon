@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:3891 AST_RATIO
 :TEST-COVERAGE codegen.c:4240 ratio-as-function integer/float branches
+:TEST-EXPECT-STDOUT-B64 MgoxLjUKNgo=
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/ratio/atom.codegen.operator.ratio.as.function

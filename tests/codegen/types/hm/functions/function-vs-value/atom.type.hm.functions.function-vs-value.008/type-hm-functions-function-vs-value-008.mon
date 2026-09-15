@@ -29,6 +29,7 @@
 :TEST-USES-ATOM atom.type.hm.arrow
 :TEST-DEPENDS-ON atom.env.error.call.argument.mismatch
 :TEST-REFINES atom.type.hm.fn-vs-value
+:TEST-EXPECT-STDOUT-B64 Q291bGRuJ3QgbWF0Y2ggZXhwZWN0ZWQgdHlwZQo=
 
 (module Main)
 (define (hm_apply_int_08 [f : Fn] [x : Int] -> Int) (f x))

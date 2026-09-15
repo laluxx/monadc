@@ -11,6 +11,7 @@
 :TEST-ATOM A normal user function named color-to-string should compile, call, and print normally.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:12072 color-to-string call-site branch
+:TEST-EXPECT-STDOUT-B64 cmVkCg==
 
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote
 :TEST-MENU branches/reflection-quote/code-reflection/atom.codegen.reflection.color.to.string.call.name

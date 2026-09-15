@@ -15,6 +15,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/control-core/atom.codegen.30.control.flow.control.core.rt.control.all
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.control.core.rt.control.all
 :TEST-CLI-TARGET codegen branches control-flow control-core
+:TEST-EXPECT-STDOUT-B64 eWVzCm5vCjMKVHJ1ZQpGYWxzZQpUcnVlCkZhbHNlCkZhbHNlClRydWUKZXhlY3V0ZWQKbmlsCg==
 (module Main)
 (show (if True "yes" "no"))
 (show (if False "yes" "no"))

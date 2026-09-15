@@ -11,6 +11,7 @@
 :TEST-ATOM Recursive calls should resolve to the function being emitted.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:function env insertion before body codegen
+:TEST-EXPECT-STDOUT-B64 MTUKMQo=
 
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env
 :TEST-MENU branches/symbol-env/recursion/atom.codegen.symbol.env.recursion.deep.recursion.sumdown

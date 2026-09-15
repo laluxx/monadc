@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/numeric/negative-float-call-arg/atom.codegen.numeric.negative.float.call.arg
 :TEST-ATOM-LEAF atom.codegen.numeric.negative.float.call.arg
 :TEST-CLI-TARGET codegen branches numeric negative-float-call-arg
+:TEST-EXPECT-STDOUT-B64 LTYK
 (module Main)
 
 (show

@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_float_percent
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Percent float refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type PercentFloat { x ∈ Float | (and (>= x 0.0) (<= x 100.0)) })

@@ -11,6 +11,7 @@
 :TEST-ATOM Boolean operators should compose and print as Bool.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:boolean operator dispatch and show bool
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpUcnVlCkZhbHNlCg==
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/boolean-logic/atom.codegen.operators.boolean.logic.deep.boolean.logic.phi

@@ -8,6 +8,7 @@
 :TEST-SECTION codegen
 :TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
 :TEST-PURPOSE Connected workflow exercising set ops (conj!, disj!, contains?, count),
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQozCjEwCjIwClRydWUKVHJ1ZQpGYWxzZQo=
 ;;               list ops (append!, car, cdr), and predicates (collection?).
 ;;               Demonstrates cross-type collection operations in a single program.
 :TEST-ATOM Set mutation + query + list mutation + car/cdr + collection? predicates.

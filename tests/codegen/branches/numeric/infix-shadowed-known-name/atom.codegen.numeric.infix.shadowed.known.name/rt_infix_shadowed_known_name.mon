@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/numeric/infix-shadowed-known-name/atom.codegen.numeric.infix.shadowed.known.name
 :TEST-ATOM-LEAF atom.codegen.numeric.infix.shadowed.known.name
 :TEST-CLI-TARGET codegen branches numeric infix-shadowed-known-name
+:TEST-EXPECT-STDOUT-B64 OQo=
 
 module Main
 

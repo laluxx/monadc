@@ -30,6 +30,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.quote.number.string.symbol
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.quote.number.string.symbol
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 KDEgIngiIHkpCg==
 
 (module Main)
 (show (quote (1 "x" y)))

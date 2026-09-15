@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/precise-types/atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
 :TEST-ATOM-LEAF atom.codegen.diagnostic.codegen.branch.if.branch.type.mismatch.connected
 :TEST-CLI-TARGET codegen errors codegen precise-types
+:TEST-EXPECT-STDOUT-B64 dHlwZQo=
 
 (module Main)
 (show (if True 1 "bad"))

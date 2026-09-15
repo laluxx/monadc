@@ -10,6 +10,7 @@
 :TEST-PURPOSE HM generalisation supports a two-argument polymorphic function.
 :TEST-ATOM const can be instantiated as Int -> String -> Int and String -> Int -> String.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NwpsZWZ0Cg==
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

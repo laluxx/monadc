@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.let_map_percent
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Let binding combines map literal and percentage value.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET let,map-literal,percentage
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(let [rates #{:half 50%}] (find rates :half))

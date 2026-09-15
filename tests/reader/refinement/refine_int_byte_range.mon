@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_int_byte_range
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Byte-range integer refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type ByteRange { n ∈ Int | (and (>= n 0) (< n 256)) })

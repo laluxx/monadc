@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects nested field access through non-layout fields.
 :TEST-ATOM p.x.y must fail when x is Int.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGZpZWxkICd4JyBpcyBub3QgYSBsYXlvdXQgdHlwZSwgY2Fubm90IGFjY2VzcyBuZXN0ZWQgZmllbGRzCg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/layout-dot-field branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

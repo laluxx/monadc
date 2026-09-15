@@ -23,6 +23,7 @@
 :TEST-COVERAGE codegen.c:4169-4178 conj/disj/conj!/disj! branches
 :TEST-COVERAGE codegen.c:4181 Set? branch
 :TEST-COVERAGE codegen.c:4197 collection? branch
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlClRydWUKVHJ1ZQpGYWxzZQpUcnVlCkZhbHNlCg==
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/sets/atom.codegen.collection.set-functional-mutating

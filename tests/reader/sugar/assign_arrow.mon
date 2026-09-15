@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.assign_arrow
+:TEST-CONTEXT monadc.context.reader.sugar.assign-arrow
+:TEST-PURPOSE Left arrow becomes set! and returns value.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (set! x 5)
+:TEST-STATUS passing-baseline-2026-06-15
+
+x <- 5

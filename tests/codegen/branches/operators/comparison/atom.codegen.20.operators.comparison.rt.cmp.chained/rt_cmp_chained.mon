@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparison/atom.codegen.20.operators.comparison.rt.cmp.chained
 :TEST-ATOM-LEAF atom.codegen.20.operators.comparison.rt.cmp.chained
 :TEST-CLI-TARGET codegen branches operators comparison
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpUcnVlCkZhbHNlClRydWUKVHJ1ZQpUcnVlCg==
 (module Main)
 (show (< 1 2))
 (show (= 5 5))

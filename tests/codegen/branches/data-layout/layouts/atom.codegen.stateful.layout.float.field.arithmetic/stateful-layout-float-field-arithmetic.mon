@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/layouts/atom.codegen.stateful.layout.float.field.arithmetic
 :TEST-ATOM-LEAF atom.codegen.stateful.layout.float.field.arithmetic
 :TEST-CLI-TARGET codegen branches data-layout layouts
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (layout Vec [x :: Float] [y :: Float])

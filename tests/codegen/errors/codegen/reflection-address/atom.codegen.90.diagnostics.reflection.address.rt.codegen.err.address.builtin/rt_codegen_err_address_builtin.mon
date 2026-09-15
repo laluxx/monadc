@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects address-of on builtins.
 :TEST-ATOM &show must fail because builtins are not lvalues.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGNhbm5vdCB0YWtlIGFkZHJlc3Mgb2YgYnVpbHRpbiAnc2hvdycK
 
 :TEST-COVERAGE codegen.c:90-diagnostics/reflection-address branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

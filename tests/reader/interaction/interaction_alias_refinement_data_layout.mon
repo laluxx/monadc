@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_alias_refinement_data_layout
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Type alias, refinement, data declaration, and layout parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(type UserId Int)
+(type Positive { n ∈ Int | (> n 0) })
+(data Status | Active | Disabled)
+(layout User [id :: UserId] [score :: Positive] [status :: Status])

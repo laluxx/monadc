@@ -22,6 +22,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/definitions-lambdas-monomorphization/atom.codegen.stateful.env.lexical.shadow.does.not.mutate.outer
 :TEST-ATOM-LEAF atom.codegen.stateful.env.lexical.shadow.does.not.mutate.outer
 :TEST-CLI-TARGET codegen branches symbol-env definitions-lambdas-monomorphization
+:TEST-EXPECT-STDOUT-B64 NDIKMTAK
 
 (module Main)
 (define x 10)

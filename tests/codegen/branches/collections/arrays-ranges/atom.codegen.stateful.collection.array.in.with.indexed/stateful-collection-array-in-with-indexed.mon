@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/collections/arrays-ranges/atom.codegen.stateful.collection.array.in.with.indexed
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.array.in.with.indexed
 :TEST-CLI-TARGET codegen branches collections arrays-ranges
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (with [xs [40 2] i 1] (+ (xs 0) (xs i))))

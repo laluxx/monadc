@@ -1,0 +1,13 @@
+:TEST-ID tests.language.dep_if_term
+:TEST-CONTEXT monadc.context.language.type-system-surface
+:TEST-PURPOSE If term surface used by dependent elaboration parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY dep_if_term
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(if True 1 0)

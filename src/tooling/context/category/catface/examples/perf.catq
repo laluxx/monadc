@@ -1,0 +1,72 @@
+# 󰄛 Catface performance probe catalogue
+# Run a handful with --query while watching wall clock, then compare with footer telemetry in the TUI.
+
+needlefast
+@todo
+@hot
+@blocked
+@tests -> reader
+reader <- @tests
+%verifies @tests -> codegen
+%supports @notes -> @source
+reader ~
+wisp define ~
+codegen proj
+title:reader
+path:reader
+preview:TODO
+@roots
+@leaves
+@orphans
+
+=reader
+=needlefast
+
+# v0.7.4 cache/index/structured perf probes
+=reader
+=TODO
+@hot
+@blocked
+@roots
+@leaves
+@orphans
+@tests -> reader
+reader <- @tests
+%verifies @tests -> reader
+title:reader path:src
+preview:needlefast
+
+# v0.7.4 structured perf report command
+# Run these outside the TUI and paste the JSONL output back when tuning:
+#   zig build perf
+#   zig build run -- --perf ../../../
+
+=reader
+=needlefast
+@roots
+@orphans
+@tests -> reader
+reader <- @tests
+%verifies @tests -> codegen
+
+# v0.7.4 structured report probes
+=reader
+=TODO
+@roots
+@leaves
+@orphans
+@tests -> reader
+reader <- @tests
+%verifies @tests -> codegen
+
+# Persistent cache / info lookup probes
+@info
+@info advanced-types
+=advanced-types
+=monadc.info.advanced-types
+
+# Function/type performance probes
+@functions
+a -> a
+function:id
+path:core @functions

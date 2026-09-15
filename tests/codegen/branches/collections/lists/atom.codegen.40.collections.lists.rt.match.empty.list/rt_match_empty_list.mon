@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern codegen coverage for PAT_LIST_EMPTY.
 :TEST-ATOM (match [] with | [] -> 1 | _ -> 0) should select the empty-list clause.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

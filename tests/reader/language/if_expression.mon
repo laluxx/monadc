@@ -1,0 +1,13 @@
+:TEST-ID tests.language.if_expression
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE If expressions with list condition parse as list AST.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY if_expression
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(if (> 3 2) 1 0)

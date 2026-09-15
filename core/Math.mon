@@ -22,12 +22,12 @@ module Math
    factorial fib prime?
    sum-range product-range pow]
 
-
-define [pi      :: Float] 3.141592653589793  :alias π
-define [tau     :: Float] 6.283185307179586  :alias τ
-define [half-pi :: Float] 1.5707963267948966 :alias π/2
-define [e       :: Float] 2.718281828459045  :alias ℯ
-define [phi     :: Float] 1.6180339887498949 :alias φ
+| TODO make the ascii name disappear in =monad-mode.el=
+define [pi   π :: Float] 3.141592653589793
+define [tau       τ :: Float] 6.283185307179586
+define [half-pi π/2 :: Float] 1.5707963267948966
+define [e         ℯ :: Float] 2.718281828459045
+define [phi       φ :: Float] 1.6180339887498949
 
 
 define factorial :: Int -> Int
@@ -81,14 +81,13 @@ define pow-positive :: Int -> Int -> Int -> Int
     | otherwise ->
         pow-positive (base * base) (exponent / 2) acc
 
-
+╭─ Raise BASE to a non-negative integer EXPONENT using exponentiation by squaring.
 define pow :: Int -> Int -> Int
-  :doc "Raise BASE to a non-negative integer EXPONENT using exponentiation by squaring."
-  _ exponent | exponent < 0 -> error "Math.pow: negative exponent has no general Int result"
-  base exponent -> pow-positive base exponent 1
+  _ exponent | < 0 -> error "Math.pow: negative exponent has no general Int result"
+  base exp -> pow-positive base exp 1
 
 
-tests
+tests [/]
   :factorial:
   assert-eq (factorial 0) 1 "Math factorial zero"
   assert-eq (factorial 1) 1 "Math factorial one"

@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_float_non_nan_shape
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Float self-equality predicate shape parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type NotNaN { x ∈ Float | (= x x) })

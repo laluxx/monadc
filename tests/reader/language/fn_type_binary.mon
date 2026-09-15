@@ -1,0 +1,13 @@
+:TEST-ID tests.language.fn_type_binary
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Fn function type with two args parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY fn_type_binary
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(Fn Int Int)

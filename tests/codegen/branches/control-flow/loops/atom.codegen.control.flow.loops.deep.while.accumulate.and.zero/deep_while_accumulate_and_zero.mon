@@ -11,6 +11,7 @@
 :TEST-ATOM while should branch correctly for true loop and false entry.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:while loop cond/body/end branches
+:TEST-EXPECT-STDOUT-B64 MTAKOTkK
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/loops/atom.codegen.control.flow.loops.deep.while.accumulate.and.zero

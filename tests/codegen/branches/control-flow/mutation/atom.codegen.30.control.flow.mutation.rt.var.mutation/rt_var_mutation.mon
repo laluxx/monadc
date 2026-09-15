@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/mutation/atom.codegen.30.control.flow.mutation.rt.var.mutation
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.mutation.rt.var.mutation
 :TEST-CLI-TARGET codegen branches control-flow mutation
+:TEST-EXPECT-STDOUT-B64 Mgo=
 (module Main)
 (define x 1)
 (set! x 2)

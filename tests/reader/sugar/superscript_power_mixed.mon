@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.superscript_power_mixed
+:TEST-CONTEXT monadc.context.reader.sugar.superscript
+:TEST-PURPOSE Mixed digit superscripts become chain.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (^ x 20)
+:TEST-STATUS passing-baseline-2026-06-15
+
+x²⁰

@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.wisp_arrow_single
+:TEST-CONTEXT monadc.context.wisp.sugar.arrow-clause
+:TEST-PURPOSE Wisp arrow clause desugars to lambda.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+x -> x + 1

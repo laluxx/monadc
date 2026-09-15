@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.postfix_call_binary
+:TEST-CONTEXT monadc.context.reader.sugar.postfix-call
+:TEST-PURPOSE Postfix with multiple args.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (add 1 2)
+:TEST-STATUS passing-baseline-2026-06-15
+
+add(1 2)

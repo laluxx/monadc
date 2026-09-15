@@ -11,6 +11,7 @@
 :TEST-ATOM Cast constructors should lower through emit_type_cast/runtime conversion paths.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:emit_type_cast integer/float/char conversion branches
+:TEST-EXPECT-STDOUT-B64 Nwo3CkIKNjYKNjYK
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/casts-conversions/atom.codegen.values.casts.conversions.deep.cast.int.float.char.string

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/functions/known-call-parenthesized-infix-arg/atom.codegen.functions.known.call.parenthesized.infix.arg
 :TEST-ATOM-LEAF atom.codegen.functions.known.call.parenthesized.infix.arg
 :TEST-CLI-TARGET codegen branches functions known-call-parenthesized-infix-arg
+:TEST-EXPECT-STDOUT-B64 OQo=
 
 module Main
 

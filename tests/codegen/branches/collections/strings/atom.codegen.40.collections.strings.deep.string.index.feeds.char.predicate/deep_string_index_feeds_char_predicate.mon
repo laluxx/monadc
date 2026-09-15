@@ -17,6 +17,7 @@
 :TEST-MENU-PATH codegen/branches/collections/strings/atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate
 :TEST-ATOM-LEAF atom.codegen.40.collections.strings.deep.string.index.feeds.char.predicate
 :TEST-CLI-TARGET codegen branches collections strings
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQo=
 
 (module Main)
 (define s "abc")

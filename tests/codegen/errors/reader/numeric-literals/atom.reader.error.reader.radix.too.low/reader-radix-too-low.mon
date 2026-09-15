@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/numeric-literals/atom.reader.error.reader.radix.too.low
 :TEST-ATOM-LEAF atom.reader.error.reader.radix.too.low
 :TEST-CLI-TARGET codegen errors reader numeric-literals
+:TEST-EXPECT-STDOUT-B64 cmFkaXggMSBvdXQgb2YgcmFuZ2UgKG11c3QgYmUgMuKAkzM2KQo=
 
 (module Main)
 (show 1r0)

@@ -1,0 +1,14 @@
+:TEST-ID tests.interaction.interaction_string_refinement_import_layout
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE String refinement, import alias, and layout parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(import Strings [trim :as str-trim])
+(type Route { s ∈ String | (and (starts-with? s "/") (not (contains? s " "))) })
+(layout Endpoint [path :: Route] [handler :: Fn])

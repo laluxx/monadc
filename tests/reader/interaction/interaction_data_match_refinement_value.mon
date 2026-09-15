@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_data_match_refinement_value
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Data match and refinement-annotated value parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(data MaybeInt | None | Some Int)
+(type Positive { n ∈ Int | (> n 0) })
+(define [n :: Positive] 3)
+(match (Some n) with (Some x) -> x _ -> 0)

@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.cond.empty
 :TEST-ATOM-LEAF atom.reader.error.reader.cond.empty
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 J2NvbmQnIHJlcXVpcmVzIGF0IGxlYXN0IG9uZSBjbGF1c2UK
 
 (module Main)
 (cond)

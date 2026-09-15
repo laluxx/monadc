@@ -1,0 +1,13 @@
+:TEST-ID tests.language.layout_keyword_partial
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Layout keyword constructor with partial args parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY layout_keyword_partial
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(Point :x 3)

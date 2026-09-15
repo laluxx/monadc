@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/collections/lists/atom.codegen.stateful.collection.list.append.concat
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.list.append.concat
 :TEST-CLI-TARGET codegen branches collections lists
+:TEST-EXPECT-STDOUT-B64 KDQwIDIpCg==
 
 (module Main)
 (show (++ (list 40) (list 2)))

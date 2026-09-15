@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.lambda_lit_curried
+:TEST-CONTEXT monadc.context.reader.sugar.lambda-lit
+:TEST-PURPOSE Curried lambda literal desugars.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+λx.λy.+ x y

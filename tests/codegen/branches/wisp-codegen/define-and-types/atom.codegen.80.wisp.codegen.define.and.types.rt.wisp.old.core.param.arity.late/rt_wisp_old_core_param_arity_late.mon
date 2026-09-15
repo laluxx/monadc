@@ -1,3 +1,4 @@
+:TEST-EXPECT-STDOUT-B64 UEFTUyB0YWtlV2hpbGUgcmVtYWlucyBwb2x5bW9ycGhpYwo=
 module Coll
   [take drop takeWhile all?]
 

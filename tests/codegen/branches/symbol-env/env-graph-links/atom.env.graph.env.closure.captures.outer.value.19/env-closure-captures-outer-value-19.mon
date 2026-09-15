@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/env-graph-links/atom.env.graph.env.closure.captures.outer.value.19
 :TEST-ATOM-LEAF atom.env.graph.env.closure.captures.outer.value.19
 :TEST-CLI-TARGET codegen branches symbol-env env-graph-links
+:TEST-EXPECT-STDOUT-B64 MTMK
 
 (module Main)
 (define make-adder (lambda ([x : Int] -> Fn) (lambda ([y : Int] -> Int) (+ x y))))

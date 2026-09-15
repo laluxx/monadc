@@ -16,6 +16,7 @@
 :TEST-COVERAGE codegen.c:emit_type_cast conversion lattice
 :TEST-COVERAGE codegen.c:5765-5792 nil? scalar/pointer branches
 :TEST-COVERAGE codegen.c:12152 type conversion constructor dispatch
+:TEST-EXPECT-STDOUT-B64 Wgo=
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-USES-ATOM atom.codegen.subset.00.values.casts.predicates

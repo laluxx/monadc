@@ -18,6 +18,7 @@
 :TEST-TAG mod
 :TEST-COVERAGE codegen.c:9463-9492 mod/% dispatch branch
 :TEST-COVERAGE codegen.c:3775-3776 direct builtin %/mod branch
+:TEST-EXPECT-STDOUT-B64 MgoyCi0yCg==
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/arithmetic/atom.codegen.operator.mod-aliases

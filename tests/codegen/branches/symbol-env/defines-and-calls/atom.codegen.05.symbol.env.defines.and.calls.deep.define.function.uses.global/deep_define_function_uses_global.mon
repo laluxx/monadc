@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/defines-and-calls/atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global
 :TEST-ATOM-LEAF atom.codegen.05.symbol.env.defines.and.calls.deep.define.function.uses.global
 :TEST-CLI-TARGET codegen branches symbol-env defines-and-calls
+:TEST-EXPECT-STDOUT-B64 MTUK
 
 (module Main)
 (define base 10)

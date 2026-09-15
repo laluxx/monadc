@@ -10,6 +10,7 @@
 :TEST-PURPOSE Define a variable and show its value.
 :TEST-ATOM (define x 5) then (show x) prints 5.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NQo=
 
 :TEST-COVERAGE codegen.c:20-operators/boolean-logic branch family
 :TEST-USES-ATOM atom.codegen.category.20.operators

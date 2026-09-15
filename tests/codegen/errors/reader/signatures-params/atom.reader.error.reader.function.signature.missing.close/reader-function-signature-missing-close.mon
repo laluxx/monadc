@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/signatures-params/atom.reader.error.reader.function.signature.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.function.signature.missing.close
 :TEST-CLI-TARGET codegen errors reader signatures-params
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJyknIHRvIGNsb3NlIGZ1bmN0aW9uIHNpZ25hdHVyZQo=
 
 (module Main)
 (define (bad [x : Int] -> Int x)

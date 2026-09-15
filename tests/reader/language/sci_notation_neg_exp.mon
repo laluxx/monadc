@@ -1,0 +1,13 @@
+:TEST-ID tests.language.sci_notation_neg_exp
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Negative exponent scientific notation parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY sci_notation_neg_exp
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+1e-5

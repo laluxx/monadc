@@ -3,6 +3,7 @@
 :TEST-PURPOSE Unary constructor pipes perform nominal pattern matching rather than value equality.
 :TEST-EXPECT compile, run, stdout
 :TEST-TIER regression
+:TEST-EXPECT-STDOUT-B64 MQoyCjMKNAo=
 
 module Main []
 

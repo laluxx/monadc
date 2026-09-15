@@ -11,6 +11,7 @@
 :TEST-ATOM Arithmetic dispatch should preserve nested expression order.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:operator dispatch + - * numeric paths
+:TEST-EXPECT-STDOUT-B64 NDIKMAoxNDQK
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/arithmetic/atom.codegen.operators.arithmetic.deep.arithmetic.composed.dispatch

@@ -1,0 +1,15 @@
+.{
+    .name = .catface,
+    .version = "0.11.8",
+    .fingerprint = 0xcc98b78d52b16d9d,
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "examples",
+        "README.md",
+        "catface.svg",
+    },
+}

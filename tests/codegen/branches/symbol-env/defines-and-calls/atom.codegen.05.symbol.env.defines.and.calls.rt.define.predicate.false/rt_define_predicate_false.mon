@@ -10,6 +10,7 @@
 :TEST-PURPOSE Define Bool function returning False works.
 :TEST-ATOM (define (is-pos? [x : Int] -> Bool) (> x 0)) then (show (is-pos? -1)) prints False.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 RmFsc2UK
 
 :TEST-COVERAGE codegen.c:05-symbol-env/defines-and-calls branch family
 :TEST-USES-ATOM atom.codegen.category.05.symbol.env

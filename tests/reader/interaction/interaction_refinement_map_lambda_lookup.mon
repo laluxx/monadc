@@ -1,0 +1,14 @@
+:TEST-ID tests.interaction.interaction_refinement_map_lambda_lookup
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Refinement annotation, map literal, and typed lambda lookup parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(type NonEmptyMap { m ∈ Map | (> (count m) 0) })
+(define [cfg :: NonEmptyMap] #{:score 9})
+((lambda ([m : Map] -> Int) (find m :score)) cfg)

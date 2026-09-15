@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.lambda_array_range
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Typed lambda combines with a bound range array argument.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET lambda-typed,range-array
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(define xs [0..3])
+((lambda ([ys : Arr] -> Arr) ys) xs)

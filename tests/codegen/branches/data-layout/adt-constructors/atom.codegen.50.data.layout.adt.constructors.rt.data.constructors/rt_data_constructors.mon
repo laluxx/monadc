@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime ADT declarations and constructors compile and execute.
 :TEST-ATOM Nullary and fielded ADT constructors can be referenced and called in a program.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64
 
 :TEST-COVERAGE codegen.c:50-data-layout/adt-constructors branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

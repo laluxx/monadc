@@ -1,0 +1,76 @@
+# Catface metadata / context-contract probes
+# These lean on the structured metadata already present in the category context.
+
+# Existing category records by record class
+@obs
+@dec
+@inf
+@records
+:Record @obs
+:Record @dec
+:Record @inf
+
+# Newly indexed metadata lanes
+@contracts
+@contract
+@quality
+@trust
+@risk
+@metadata
+@meta
+@properties
+
+# Contract/evidence joins
+@contracts -> @source
+@contracts <- @tests
+%supports @obs -> @contracts
+%verifies @tests -> @contracts
+%blocks @todo -> @contracts
+
+# Exact/fielded probes for metadata-heavy files
+preview:CONTEXT_KIND
+preview:CONFIDENCE
+preview:CONTEXT_STATUS
+preview:#+PROPERTY
+preview:#+FILETAGS
+id:monadc.context
+path:category @metadata
+path:quality @quality
+path:contract @contracts
+
+
+# Living right-pane probes: links, file/id buttons, Org tables, readable cards
+org link
+org table
+file: context @info
+id: monadc @metadata
+right pane
+clickable
+viewer
+
+@links
+
+@tables
+
+@docs
+
+# v0.10 first-class context lanes
+@failures
+@regressions
+@performance
+@coverage
+@examples
+@tutorials
+@api
+@cli
+@cache
+@diagnostics
+@design
+
+# Org-superset rendering probes
+preview:#+TITLE
+preview:#+BEGIN_SRC
+preview::PROPERTIES:
+preview:SCHEDULED:
+preview:checkbox
+preview:[[file:

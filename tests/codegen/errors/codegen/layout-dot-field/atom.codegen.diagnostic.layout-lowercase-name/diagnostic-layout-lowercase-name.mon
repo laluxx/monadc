@@ -16,6 +16,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG layout
 :TEST-COVERAGE codegen.c:2223 layout uppercase diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGxheW91dCBuYW1lCg==
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/layout-dot-field/atom.codegen.diagnostic.layout-lowercase-name

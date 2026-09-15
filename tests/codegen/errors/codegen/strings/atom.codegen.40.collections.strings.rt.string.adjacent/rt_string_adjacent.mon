@@ -11,6 +11,7 @@
 :TEST-PURPOSE Duplicate coverage for the connected-string diagnostic in the runtime/codegen corpus.
 :TEST-ATOM "hello""world" is not implicit compile-time concatenation.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 PHJlcG8+L3Rlc3RzL2NvZGVnZW4vcnRfc3RyaW5nX2FkamFjZW50Lm1vbjo4OjE0OiBlcnJvcjogYWRqYWNlbnQgc3RyaW5nIGxpdGVyYWxzIGFyZSBub3Qgc3VwcG9ydGVkCiAgLSBIaW50OiB3cml0ZSBvbmUgc3RyaW5nIGxpdGVyYWwsIGZvciBleGFtcGxlICJoZWxsb3dvcmxkIjsgc3RyaW5ncyBtYXkgYWxyZWFkeSBzcGFuIG11bHRpcGxlIGxpbmVzIGluc2lkZSBvbmUgcGFpciBvZiBxdW90ZXMKICAgIDggfCAoc2hvdyAiaGVsbG8iIndvcmxkIikKICAgICAgfCAgICAgICAgICAgICAgXgo=
 
 :TEST-COVERAGE codegen.c:40-collections/strings branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

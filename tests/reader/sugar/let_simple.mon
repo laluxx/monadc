@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.let_simple
+:TEST-CONTEXT monadc.context.reader.sugar.let-desugar
+:TEST-PURPOSE Let desugars to immediately-invoked lambda.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR ((lambda ([x]) x) 1)
+:TEST-STATUS passing-baseline-2026-06-15
+
+(let [x 1] x)

@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.size_array_include
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Wisp size-array sugar combines with C include.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET size-array,include,wisp
+:TEST-STATUS passing-baseline-2026-06-15
+
+module Main
+include "stdint.h"
+define buf :: [1kb U8]

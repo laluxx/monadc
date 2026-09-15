@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/types/dep/finite-type-set/atom.type.dep.finite-type-set.bool-core-definition
 :TEST-ATOM-LEAF atom.type.dep.finite-type-set.bool-core-definition
 :TEST-CLI-TARGET codegen types dep finite-type-sets
+:TEST-EXPECT-STDOUT-B64 QW1iZXIKVHJ1ZQpGYWxzZQo=
 
 (module Main)
 (import Data.Bool)

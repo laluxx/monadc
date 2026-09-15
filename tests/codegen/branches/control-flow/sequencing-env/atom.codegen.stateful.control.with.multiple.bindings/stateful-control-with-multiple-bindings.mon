@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/sequencing-env/atom.codegen.stateful.control.with.multiple.bindings
 :TEST-ATOM-LEAF atom.codegen.stateful.control.with.multiple.bindings
 :TEST-CLI-TARGET codegen branches control-flow sequencing-env
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (with [a 20 b 22] (+ a b)))

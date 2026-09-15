@@ -1,0 +1,13 @@
+:TEST-ID tests.language.do_let_inline_body
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Do with inline let body parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY do_let_inline_body
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(do [x <- (list 1 2)] (let [y x] y))

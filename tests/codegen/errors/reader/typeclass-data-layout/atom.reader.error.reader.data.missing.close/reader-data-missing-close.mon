@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.data.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.data.missing.close
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJyknIHRvIGNsb3NlIGRhdGEgJ01heWJlJwo=
 
 (module Main)
 (data Maybe Nothing | Just Int

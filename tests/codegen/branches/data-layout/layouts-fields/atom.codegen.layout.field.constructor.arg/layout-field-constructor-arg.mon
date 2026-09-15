@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/data-layout/layouts-fields/atom.codegen.layout.field.constructor.arg
 :TEST-ATOM-LEAF atom.codegen.layout.field.constructor.arg
 :TEST-CLI-TARGET codegen branches data-layout layouts-fields
+:TEST-EXPECT-STDOUT-B64 MwozCg==
 
 module Main
 

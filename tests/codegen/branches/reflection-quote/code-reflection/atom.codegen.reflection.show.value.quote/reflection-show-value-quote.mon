@@ -15,6 +15,7 @@
 :TEST-COVERAGE codegen.c:6024 expand branch
 :TEST-COVERAGE codegen.c:7530 show-value branch
 :TEST-COVERAGE codegen.c:1020 ast_to_runtime_value
+:TEST-EXPECT-STDOUT-B64 KDEgMiAzKQooKyAxIDIpCg==
 
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote
 :TEST-MENU branches/reflection-quote/code-reflection/atom.codegen.reflection.show.value.quote

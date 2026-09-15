@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/define-type-asm/atom.reader.error.reader.naked.function.needs.asm
 :TEST-ATOM-LEAF atom.reader.error.reader.naked.function.needs.asm
 :TEST-CLI-TARGET codegen errors reader define-type-asm
+:TEST-EXPECT-STDOUT-B64 bmFrZWQgZnVuY3Rpb24gJ25ha2VkX2JhZCcgbXVzdCBjb250YWluIGF0IGxlYXN0IG9uZSAoYXNtIC4uLikgYmxvY2sK
 
 (module Main)
 (define (naked_bad [] -> Int :naked True) 1)

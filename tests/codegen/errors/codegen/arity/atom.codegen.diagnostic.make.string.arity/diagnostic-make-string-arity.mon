@@ -12,6 +12,7 @@
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:6947 make-string arity diagnostic
 :TEST-COVERAGE codegen.c:3476 REQUIRE_ARGS
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdtYWtlLXN0cmluZycgcmVxdWlyZXMgMiBhcmd1bWVudChzKQo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.make.string.arity

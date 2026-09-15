@@ -11,6 +11,7 @@
 :TEST-ATOM A static negative quoted-list index should fail at codegen with list length context.
 :TEST-EXPECT fail:compile
 :TEST-COVERAGE codegen.c:4212 quoted-list compile-time index check
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGluZGV4IC0xIGlzIG91dCBvZiBib3VuZHMgZm9yIGxpdGVyYWwgbGlzdCBvZiBsZW5ndGggMwo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/reflection-address/atom.codegen.diagnostic.quoted.list.negative.index

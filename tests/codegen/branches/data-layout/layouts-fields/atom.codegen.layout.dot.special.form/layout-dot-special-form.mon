@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:12902 explicit dot special form
 :TEST-COVERAGE codegen.c:12925 layout field lookup
+:TEST-EXPECT-STDOUT-B64 NQo2Cg==
 
 :TEST-USES-ATOM atom.codegen.category.50.data.layout
 :TEST-MENU branches/data-layout/layouts-fields/atom.codegen.layout.dot.special.form

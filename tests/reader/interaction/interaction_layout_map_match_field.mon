@@ -1,0 +1,15 @@
+:TEST-ID tests.interaction.interaction_layout_map_match_field
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Layout field inside map and match parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(layout Item [id :: Int] [price :: Ratio])
+(define item (Item 1 22%))
+(define row #{:id item.id :price item.price})
+(match (find row :id) with 1 -> item.price _ -> 0%)

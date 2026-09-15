@@ -1,0 +1,24 @@
+:TEST-ID tests.data-int.integer-family
+:TEST-CONTEXT feature.type.int-family-2026-09-15
+:TEST-PURPOSE Data.Int predicates accept every primitive fixed-width integer through Self.
+:TEST-EXPECT compile, run, all integer-family assertions pass
+:TEST-TIER regression
+:TEST-SECTION core
+:TEST-CATEGORY types
+
+module Tests.DataIntIntegerFamily
+  []
+
+import Data.Int
+
+tests
+  assert-eq (Int.zero? (I8 0))       True  "Data.Int accepts I8"
+  assert-eq (Int.nonzero? (U8 3))    True  "Data.Int accepts U8"
+  assert-eq (Int.positive? (I16 7))  True  "Data.Int accepts I16"
+  assert-eq (Int.zero? (U16 0))      True  "Data.Int accepts U16"
+  assert-eq (Int.negative? (I32 -7)) True  "Data.Int accepts I32"
+  assert-eq (Int.positive? (U32 7))  True  "Data.Int accepts U32"
+  assert-eq (Int.negative? (I64 -7)) True  "Data.Int accepts I64"
+  assert-eq (Int.divisible? (U64 12) (U64 3)) True "Data.Int accepts U64"
+  assert-eq (Int.zero? (I128 0))     True  "Data.Int accepts I128"
+  assert-eq (Int.nonzero? (U128 3))  True  "Data.Int accepts U128"

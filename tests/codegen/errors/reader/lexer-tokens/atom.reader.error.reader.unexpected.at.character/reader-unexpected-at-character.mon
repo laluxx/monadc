@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/lexer-tokens/atom.reader.error.reader.unexpected.at.character
 :TEST-ATOM-LEAF atom.reader.error.reader.unexpected.at.character
 :TEST-CLI-TARGET codegen errors reader lexer-tokens
+:TEST-EXPECT-STDOUT-B64 dW5leHBlY3RlZCBjaGFyYWN0ZXIgJ0AnCg==
 
 (module Main)
 @

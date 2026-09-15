@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.mul_implicit_hex_single
+:TEST-CONTEXT monadc.context.reader.sugar.implicit-mul
+:TEST-PURPOSE Single hex digit adjacent to variable becomes multiplication.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (* 0xA x)
+:TEST-STATUS passing-baseline-2026-06-15
+
+0xAx

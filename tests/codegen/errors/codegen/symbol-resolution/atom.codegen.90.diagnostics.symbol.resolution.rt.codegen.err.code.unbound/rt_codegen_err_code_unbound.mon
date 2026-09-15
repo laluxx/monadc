@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen reports code reflection on an unbound symbol.
 :TEST-ATOM (code missing) must fail with unbound symbol.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IHVuYm91bmQgc3ltYm9sOiBtaXNzaW5nCg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/symbol-resolution branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

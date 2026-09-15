@@ -1,0 +1,13 @@
+:TEST-ID tests.language.set_strings
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Set literals of strings parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY set_strings
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+{"a" "b"}

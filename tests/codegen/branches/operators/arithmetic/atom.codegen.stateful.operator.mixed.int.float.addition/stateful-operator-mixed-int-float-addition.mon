@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/arithmetic/atom.codegen.stateful.operator.mixed.int.float.addition
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.mixed.int.float.addition
 :TEST-CLI-TARGET codegen branches operators arithmetic
+:TEST-EXPECT-STDOUT-B64 NDIuNQo=
 
 (module Main)
 (show (+ 40 2.5))

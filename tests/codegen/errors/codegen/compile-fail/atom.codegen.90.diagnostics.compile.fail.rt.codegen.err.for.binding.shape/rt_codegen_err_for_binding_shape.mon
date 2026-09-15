@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects non-array/object for bindings.
 :TEST-ATOM (for {} (show 1)) must fail because for bindings must be a count or bracketed array form.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdmb3InIGJpbmRpbmcgbXVzdCBiZSBbbl0sIFt2YXIgc3RhcnQgZW5kXSwgb3IgW3ZhciBzdGFydCBlbmQgc3RlcF0K
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

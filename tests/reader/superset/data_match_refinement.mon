@@ -1,0 +1,16 @@
+:TEST-ID tests.superset.data_match_refinement
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Data match combines with refinement-annotated value.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET data,match,refinement
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(data MaybeInt | None | Some Int)
+(type Positive { n ∈ Int | (> n 0) })
+(define [n :: Positive] 5)
+(match (Some n) with (Some x) -> x _ -> 0)

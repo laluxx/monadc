@@ -1,0 +1,13 @@
+:TEST-ID tests.language.layout_record_constructor
+:TEST-CONTEXT monadc.context.language.layout-records
+:TEST-PURPOSE Record-like named fields are layout declarations, not ADT brace fields.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY layout_record_constructor
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(layout Person [name :: String] [age :: Int])

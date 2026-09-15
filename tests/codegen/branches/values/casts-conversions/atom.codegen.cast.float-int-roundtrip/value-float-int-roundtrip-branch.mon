@@ -20,6 +20,7 @@
 :TEST-COVERAGE codegen.c:44-72 emit_type_cast numeric conversions
 :TEST-COVERAGE codegen.c:1236 TYPE_F32 show branch
 :TEST-COVERAGE codegen.c:12513-12535 Int/Float/F32 cast targets
+:TEST-EXPECT-STDOUT-B64 OAo4CjIKMi41Cg==
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/casts-conversions/atom.codegen.cast.float-int-roundtrip

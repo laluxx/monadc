@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/collections/strings/atom.codegen.collections.strings.hex.escape.typed.define
 :TEST-ATOM-LEAF atom.codegen.collections.strings.hex.escape.typed.define
 :TEST-CLI-TARGET codegen branches collections strings hex-escape-typed-define
+:TEST-EXPECT-STDOUT-B64 Ngo=
 module Main
 
 define [punctuation :: String] "!\"#$%&'()*+,-./:\x3B<=>?@[\\]^_`{|}~"

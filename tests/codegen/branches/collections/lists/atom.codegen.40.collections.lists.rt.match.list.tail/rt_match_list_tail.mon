@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern codegen coverage for list tail patterns.
 :TEST-ATOM (match [1 2 3] with | [1 | xs] -> 1 | _ -> 0) should bind a tail after the pipe.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

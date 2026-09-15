@@ -10,6 +10,7 @@
 :TEST-PURPOSE Define an identity function, call it with show.
 :TEST-ATOM (define id ...) compiles and (show (id 42)) prints 42
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:00-values/show-dispatch branch family
 :TEST-USES-ATOM atom.codegen.category.00.values

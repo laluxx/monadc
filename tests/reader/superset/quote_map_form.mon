@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.quote_map_form
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Quote combines with map-shaped syntax.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET quote,map-literal
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(quote (define cfg #{:a 1 :b 2}))

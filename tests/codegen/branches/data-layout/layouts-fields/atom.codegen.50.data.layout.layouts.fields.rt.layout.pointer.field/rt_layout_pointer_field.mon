@@ -11,6 +11,7 @@
 :TEST-PURPOSE Runtime layout declarations cover pointer fields from reader.h.
 :TEST-ATOM (layout Node [value :: Int] [next -> Node]) compiles before executable code.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:50-data-layout/layouts-fields branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

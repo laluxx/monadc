@@ -11,6 +11,7 @@
 :TEST-PURPOSE Quasiquoted expressions with unquote evaluate the unquoted parts.
 :TEST-ATOM (eval ⌜+ 1 2⌝) evaluates to 3.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 Mwo=
 
 :TEST-COVERAGE codegen.c:60-reflection-quote/quasiquote-unquote branch family
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote

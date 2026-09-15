@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_map_small
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Small map refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type SmallMap { m ∈ Map | (< (count m) 16) })

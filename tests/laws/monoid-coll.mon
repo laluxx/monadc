@@ -1,0 +1,15 @@
+:TEST-ID tests.laws.monoid-coll
+:TEST-CONTEXT dec.core.laws
+:TEST-PURPOSE Monoid Coll seeded law
+:TEST-EXPECT test
+:TEST-MENU laws
+:TEST-MENU-PATH laws
+:TEST-CLI-TARGET laws
+:TEST-TIER regression
+
+import Data.Eq
+import Data.Semigroup
+import Test.QuickCheck
+module CoreMonoidLaws []
+tests
+  seeded law Monoid Coll

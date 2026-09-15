@@ -10,6 +10,7 @@
 :TEST-PURPOSE append! destructively appends a value to a list in place.
 :TEST-ATOM (append! xs 1) appends 1 to list xs, observable via car.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 :TEST-COVERAGE codegen.c:40-collections/lists branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

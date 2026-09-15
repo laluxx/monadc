@@ -1,0 +1,12 @@
+:TEST-ID tests.interaction.interaction_quote_layout_map_form
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Quote preserves layout and map shaped forms.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(module Main)
+(quote (begin (layout Point [x :: Int] [y :: Int]) (define p (Point 1 2)) (define m #{:x p.x})))

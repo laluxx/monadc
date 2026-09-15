@@ -1,0 +1,13 @@
+:TEST-ID tests.language.make_list_n
+:TEST-CONTEXT monadc.context.language.runtime-codegen-corpus
+:TEST-PURPOSE Make-list (n copies of val) parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY make_list_n
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(make-list 3 "x")

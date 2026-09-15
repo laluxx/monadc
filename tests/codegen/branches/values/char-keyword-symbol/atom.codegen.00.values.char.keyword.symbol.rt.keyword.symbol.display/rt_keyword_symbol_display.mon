@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime display of keyword and symbol values.
 :TEST-ATOM Keywords print with colon prefix; quoted symbols print as words.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 OmhlbGxvCjpmb28tYmFyCmhlbGxvCmZvby1iYXIK
 
 :TEST-COVERAGE codegen.c:00-values/char-keyword-symbol branch family
 :TEST-USES-ATOM atom.codegen.category.00.values

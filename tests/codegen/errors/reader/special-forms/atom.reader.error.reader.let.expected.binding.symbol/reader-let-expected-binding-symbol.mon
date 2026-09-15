@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.let.expected.binding.symbol
 :TEST-ATOM-LEAF atom.reader.error.reader.let.expected.binding.symbol
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgc3ltYm9sIGluIGxldCBiaW5kaW5nCg==
 
 (module Main)
 (let ([1 2]) 1)

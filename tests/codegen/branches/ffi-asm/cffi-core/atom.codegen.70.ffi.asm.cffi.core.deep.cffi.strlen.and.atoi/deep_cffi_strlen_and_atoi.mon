@@ -17,6 +17,7 @@
 :TEST-MENU-PATH codegen/branches/ffi-asm/cffi-core/atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi
 :TEST-ATOM-LEAF atom.codegen.70.ffi.asm.cffi.core.deep.cffi.strlen.and.atoi
 :TEST-CLI-TARGET codegen branches ffi-asm cffi-core
+:TEST-EXPECT-STDOUT-B64 NQoxMjMK
 
 (module Main)
 (show (c/strlen "hello"))

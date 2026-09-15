@@ -1,0 +1,13 @@
+:TEST-ID tests.language.dep_succ
+:TEST-CONTEXT monadc.context.language.type-system-surface
+:TEST-PURPOSE Nat successor term parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY dep_succ
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(succ 0)

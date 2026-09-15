@@ -15,6 +15,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG map
 :TEST-COVERAGE codegen.c:10107 map used as function arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IG1hcCB1c2VkIGFzIGZ1bmN0aW9uIHJlcXVpcmVzIDEgb3IgMiBhcmd1bWVudHMK
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.map-function-arity

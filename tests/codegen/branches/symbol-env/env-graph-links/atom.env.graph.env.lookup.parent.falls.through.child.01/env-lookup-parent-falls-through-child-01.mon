@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/env-graph-links/atom.env.graph.env.lookup.parent.falls.through.child.01
 :TEST-ATOM-LEAF atom.env.graph.env.lookup.parent.falls.through.child.01
 :TEST-CLI-TARGET codegen branches symbol-env env-graph-links
+:TEST-EXPECT-STDOUT-B64 MTIK
 
 (module Main)
 (define x 7)

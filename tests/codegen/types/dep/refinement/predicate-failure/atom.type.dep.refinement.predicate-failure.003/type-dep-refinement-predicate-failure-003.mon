@@ -29,6 +29,7 @@
 :TEST-USES-ATOM atom.type.dep.check
 :TEST-DEPENDS-ON atom.type.hm.refinement-bridge
 :TEST-REFINES atom.type.dep.predicate-failure
+:TEST-EXPECT-STDOUT-B64 RGVwZW5kZW50IFR5cGUgRXJyb3IK
 
 (module Main)
 (type DepPos03 { x ∈ Int | (> x 3) })

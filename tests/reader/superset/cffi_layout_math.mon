@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.cffi_layout_math
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE C math include combines with layout float fields.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET include,layout,float-call
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(include "math.h")
+(layout Vec [x :: Float] [y :: Float])
+(define len (sqrt 16.0))

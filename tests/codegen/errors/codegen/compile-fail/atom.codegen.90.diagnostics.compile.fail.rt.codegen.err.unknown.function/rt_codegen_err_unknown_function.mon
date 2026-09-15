@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen reports an unknown function in call head position.
 :TEST-ATOM (missing 1) must fail with unknown function.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IHVua25vd24gZnVuY3Rpb246IG1pc3NpbmcK
 
 :TEST-COVERAGE codegen.c:90-diagnostics/compile-fail branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

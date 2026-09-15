@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/collections-refinements/atom.reader.error.reader.array.infinite.disallowed
 :TEST-ATOM-LEAF atom.reader.error.reader.array.infinite.disallowed
 :TEST-CLI-TARGET codegen errors reader collections-refinements
+:TEST-EXPECT-STDOUT-B64 Q2FuJ3QgZG8gaW5maW5pdGUgYXJyYXlzLiBBcmUgeW91IHRyeWluZyB0byBibG93IHVwIHRoZSBzdGFjaz8K
 
 (module Main)
 (show [1..])

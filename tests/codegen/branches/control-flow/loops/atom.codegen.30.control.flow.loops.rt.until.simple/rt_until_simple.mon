@@ -11,6 +11,7 @@
 :TEST-PURPOSE Until loop iterates until condition is met.
 :TEST-ATOM (until (>= i 3) (set! i (+ i 1))) with i=0 loops 3 times.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MAoxCjIK
 
 :TEST-COVERAGE codegen.c:30-control-flow/loops branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/symbol-env/env-graph-links/atom.env.graph.env.polymorphic.id.string.specialization.13
 :TEST-ATOM-LEAF atom.env.graph.env.polymorphic.id.string.specialization.13
 :TEST-CLI-TARGET codegen branches symbol-env env-graph-links
+:TEST-EXPECT-STDOUT-B64 b2sK
 
 (module Main)
 (define id (lambda (x) x))

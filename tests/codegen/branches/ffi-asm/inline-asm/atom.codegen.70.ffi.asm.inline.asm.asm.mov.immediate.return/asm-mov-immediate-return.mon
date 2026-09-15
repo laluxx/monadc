@@ -10,6 +10,7 @@
 :TEST-PURPOSE Immediate mov can seed a return value independent of input.
 :TEST-ATOM mov 42 %rax ret returns 42.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:70-ffi-asm/inline-asm branch family
 :TEST-USES-ATOM atom.codegen.category.70.ffi.asm

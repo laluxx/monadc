@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/arithmetic/atom.codegen.stateful.operator.modulo.word.alias
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.modulo.word.alias
 :TEST-CLI-TARGET codegen branches operators arithmetic
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (mod 422 95))

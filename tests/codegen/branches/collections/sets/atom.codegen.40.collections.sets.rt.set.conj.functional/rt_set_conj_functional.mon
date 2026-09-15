@@ -10,6 +10,7 @@
 :TEST-PURPOSE conj (functional) returns a new set with the element added, leaving original unchanged.
 :TEST-ATOM (conj s 3) returns new set {1 2 3}; original set {1 2} unchanged.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQozCg==
 
 :TEST-COVERAGE codegen.c:40-collections/sets branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

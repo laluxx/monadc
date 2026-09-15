@@ -5,6 +5,7 @@
 :TEST-TIER regression
 :TEST-COMPILE-FLAGS -O
 :TEST-MENU-PATH codegen/branches/semantic-analysis/constants
+:TEST-EXPECT-DESUGAR-B64 KG1vZHVsZSBNYWluIFtdKQooZGVmaW5lICh4IDo6IEludCkgMzApCihkZWZpbmUgeSAxMikKKHNob3cgKCsgMzAgeSkpCg==
 
 (module Main)
 x :: Int = 30

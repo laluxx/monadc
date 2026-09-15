@@ -1,0 +1,13 @@
+:TEST-ID tests.superset.quasiquote_refinement_form
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Quasiquote combines with refinement-shaped syntax.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET quasiquote,refinement
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+⌜type Positive { n ∈ Int | (> n 0) }⌝

@@ -1,4 +1,0 @@
-[
-  {"line":20,"col":2,"type":"list","items":[{"line":0,"col":0,"type":"symbol","name":"module"},{"line":0,"col":0,"type":"symbol","name":"Main"},{"line":0,"col":0,"type":"array","is_heap":false,"elements":[]}]},
-  {"line":21,"col":1,"type":"list","items":[{"line":21,"col":2,"type":"symbol","name":"undefined"}]}
-]

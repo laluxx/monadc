@@ -10,6 +10,7 @@
 :TEST-PURPOSE Wisp simple value defines compile and run correctly.
 :TEST-ATOM Wisp-defined x, y, and z values compile and print.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MTAwCg==
 
 :TEST-COVERAGE codegen.c:80-wisp-codegen/basic-values branch family
 :TEST-USES-ATOM atom.codegen.category.80.wisp.codegen

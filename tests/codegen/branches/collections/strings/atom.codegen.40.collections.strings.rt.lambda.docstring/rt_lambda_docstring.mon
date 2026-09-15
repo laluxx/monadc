@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime lambda payload coverage includes docstring-bearing lambdas.
 :TEST-ATOM A lambda with a docstring and typed parameter compiles and can be called.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 :TEST-COVERAGE codegen.c:40-collections/strings branch family
 :TEST-USES-ATOM atom.codegen.category.40.collections

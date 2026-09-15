@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/conditionals-phi/atom.codegen.stateful.control.if.float.phi
 :TEST-ATOM-LEAF atom.codegen.stateful.control.if.float.phi
 :TEST-CLI-TARGET codegen branches control-flow conditionals-phi
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (if True 42.0 0.0))

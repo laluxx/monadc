@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/when-unless/atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin
 :TEST-ATOM-LEAF atom.codegen.30.control.flow.when.unless.deep.when.unless.nested.begin
 :TEST-CLI-TARGET codegen branches control-flow when-unless
+:TEST-EXPECT-STDOUT-B64 NAo=
 
 (module Main)
 (define x 1)

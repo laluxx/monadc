@@ -1,0 +1,13 @@
+:TEST-ID tests.sugar.wisp_arrow_value_binding
+:TEST-CONTEXT monadc.context.wisp.sugar.arrow-value-binding
+:TEST-PURPOSE Top-level name arrow value binding desugars to define.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define i 3)\n(show i)
+:TEST-STATUS regression-2026-07-22
+
+i -> 3
+show i

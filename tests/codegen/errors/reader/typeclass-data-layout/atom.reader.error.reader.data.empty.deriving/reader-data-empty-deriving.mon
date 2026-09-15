@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.data.empty.deriving
 :TEST-ATOM-LEAF atom.reader.error.reader.data.empty.deriving
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 J2Rlcml2aW5nJyByZXF1aXJlcyBhdCBsZWFzdCBvbmUgdHlwZWNsYXNzCg==
 
 (module Main)
 (data Color Red deriving [])

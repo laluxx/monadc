@@ -15,6 +15,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG count
 :TEST-COVERAGE codegen.c:8860 count arity diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdjb3VudCcgcmVxdWlyZXMgMSBhcmd1bWVudAo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/arity/atom.codegen.diagnostic.count-arity

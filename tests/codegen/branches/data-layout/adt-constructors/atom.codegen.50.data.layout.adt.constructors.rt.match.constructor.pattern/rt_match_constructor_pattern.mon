@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern codegen coverage for ADT constructor patterns with a bound field.
 :TEST-ATOM (match (Just 4) with | (Just x) -> x | _ -> 0) should bind x from the constructor.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NAo=
 
 :TEST-COVERAGE codegen.c:50-data-layout/adt-constructors branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

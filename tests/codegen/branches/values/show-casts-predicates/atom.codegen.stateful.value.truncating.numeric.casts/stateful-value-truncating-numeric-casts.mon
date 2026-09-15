@@ -22,6 +22,7 @@
 :TEST-MENU-PATH codegen/branches/values/show-casts-predicates/atom.codegen.stateful.value.truncating.numeric.casts
 :TEST-ATOM-LEAF atom.codegen.stateful.value.truncating.numeric.casts
 :TEST-CLI-TARGET codegen branches values show-casts-predicates
+:TEST-EXPECT-STDOUT-B64 OAoxCjEK
 
 (module Main)
 (show (Int 8.9))

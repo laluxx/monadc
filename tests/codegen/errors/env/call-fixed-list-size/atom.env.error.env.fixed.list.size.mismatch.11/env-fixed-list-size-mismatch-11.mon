@@ -31,6 +31,7 @@
 :TEST-MENU-PATH codegen/errors/env/call-fixed-list-size/atom.env.error.env.fixed.list.size.mismatch.11
 :TEST-ATOM-LEAF atom.env.error.env.fixed.list.size.mismatch.11
 :TEST-CLI-TARGET codegen errors env call-fixed-list-size
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IENvdWxkbid0IG1hdGNoIGV4cGVjdGVkIGxpc3Qgc2l6ZQo=
 
 (module Main)
 (define (env_list_size_11 [xs : [Char Int]] -> Int) 0)

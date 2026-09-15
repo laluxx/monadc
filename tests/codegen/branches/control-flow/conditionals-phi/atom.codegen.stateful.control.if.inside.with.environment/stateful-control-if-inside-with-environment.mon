@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/branches/control-flow/conditionals-phi/atom.codegen.stateful.control.if.inside.with.environment
 :TEST-ATOM-LEAF atom.codegen.stateful.control.if.inside.with.environment
 :TEST-CLI-TARGET codegen branches control-flow conditionals-phi
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (with [x 42 y 0] (if (> x y) x y)))

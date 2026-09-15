@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_percent_ratio
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Percent literal predicate refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type Majority { r ∈ Ratio | (> r 50%) })

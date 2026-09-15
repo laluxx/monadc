@@ -1,0 +1,13 @@
+:TEST-ID tests.sugar.wisp_define_variadic_signature
+:TEST-CONTEXT monadc.context.wisp.sugar.def, monadc.context.core-libs.math
+:TEST-PURPOSE Wisp define keeps . Type signatures as rest parameters.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (define gcd (lambda ([__pm_args :: Int] -> (Int)) (if (rt_coll_is_empty __pm_args) 0 (undefined))))
+:TEST-STATUS passing-baseline-2026-06-18
+
+define gcd :: . Int -> Int
+  [] -> 0

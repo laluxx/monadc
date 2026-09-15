@@ -28,6 +28,7 @@
 :TEST-USES-ATOM atom.type.hm.error.cannot-unify
 :TEST-DEPENDS-ON atom.env.error.signature.mismatch
 :TEST-REFINES atom.type.hm.ground.mismatch
+:TEST-EXPECT-STDOUT-B64 dHlwZSBlcnJvcjogY2Fubm90IHVuaWZ5Cg==
 
 (module Main)
 (define (hm_mismatch_00 [x : Int] -> Int) "not-an-int")

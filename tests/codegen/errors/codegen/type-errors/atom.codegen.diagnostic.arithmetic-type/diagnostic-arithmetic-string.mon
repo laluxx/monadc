@@ -16,6 +16,7 @@
 :TEST-TAG diagnostic
 :TEST-TAG operator
 :TEST-COVERAGE codegen.c:9512 arithmetic type diagnostic
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IGNhbm5vdCBwZXJmb3JtIGFyaXRobWV0aWMgb24gdHlwZQo=
 
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics
 :TEST-MENU errors/codegen/type-errors/atom.codegen.diagnostic.arithmetic-type

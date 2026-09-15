@@ -1,0 +1,15 @@
+:TEST-ID tests.superset.while_layout_mutation
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE While combines layout field access and mutation.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET while,layout-field,set-bang
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(layout Counter [n :: Int])
+(define c (Counter 0))
+(while (< c.n 3) (set! c.n (+ c.n 1)))

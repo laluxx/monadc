@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces mod arity.
 :TEST-ATOM (mod 4) must fail because mod requires dividend and divisor.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdtb2QnIHJlcXVpcmVzIDIgYXJndW1lbnRzCg==
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

@@ -23,6 +23,7 @@
 :TEST-MENU-PATH codegen/branches/operators/comparisons/atom.codegen.stateful.operator.comparison.result.as.if.condition
 :TEST-ATOM-LEAF atom.codegen.stateful.operator.comparison.result.as.if.condition
 :TEST-CLI-TARGET codegen branches operators comparisons
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 (module Main)
 (show (if (= (+ 20 22) 42) 1 0))

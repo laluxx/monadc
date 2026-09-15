@@ -1,0 +1,13 @@
+:TEST-ID tests.language.wisp_define_heap_array
+:TEST-CONTEXT monadc.context.reader.heap-arrays
+:TEST-PURPOSE Wisp heap array defines parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY wisp_define_heap_array
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+define xs ~[1 2 3]

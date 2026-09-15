@@ -1,0 +1,13 @@
+:TEST-ID tests.language.heap_array_numbers
+:TEST-CONTEXT monadc.context.reader.heap-arrays
+:TEST-PURPOSE Heap array literals of numbers parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY heap_array_numbers
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+~[1 2 3]

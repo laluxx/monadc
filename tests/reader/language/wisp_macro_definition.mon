@@ -1,0 +1,13 @@
+:TEST-ID tests.language.wisp_macro_definition
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Wisp-form macro definition parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY wisp_macro_definition
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+define when :: condition . body -> Syntax

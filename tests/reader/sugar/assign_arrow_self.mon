@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.assign_arrow_self
+:TEST-CONTEXT monadc.context.reader.sugar.assign-arrow
+:TEST-PURPOSE Set! self-increment.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (set! x (+ x 1))
+:TEST-STATUS passing-baseline-2026-06-15
+
+x <- x + 1

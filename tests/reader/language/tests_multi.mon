@@ -1,0 +1,13 @@
+:TEST-ID tests.language.tests_multi
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Tests block with multiple assertions parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY tests_multi
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(tests (= 1 1) (= 2 2))

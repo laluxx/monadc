@@ -1,0 +1,17 @@
+:TEST-ID tests.interaction.interaction_feature_conditional_wisp_cffi_map
+:TEST-CONTEXT monadc.context.language.feature-interactions
+:TEST-PURPOSE Wisp feature conditional, C include, and map literal parse together.
+:TEST-EXPECT parse-json
+:TEST-MENU interaction
+:TEST-MENU-PATH reader/interaction
+:TEST-CLI-TARGET reader interaction
+:TEST-TIER future
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+module Main
+#+LINUX
+include "math.h"
+#---
+define root sqrt 9.0
+define cfg #{:root root}
+show Map? cfg

@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/operators/arithmetic/atom.codegen.20.operators.arithmetic.rt.arith.chained
 :TEST-ATOM-LEAF atom.codegen.20.operators.arithmetic.rt.arith.chained
 :TEST-CLI-TARGET codegen branches operators arithmetic
+:TEST-EXPECT-STDOUT-B64 MTUKNzAKMjQKMTAK
 (module Main)
 (show (+ 1 2 3 4 5))
 (show (- 100 10 20))

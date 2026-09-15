@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:codegen_show_value TYPE_HEX/TYPE_BIN/TYPE_OCT
 :TEST-COVERAGE codegen.c:get_or_declare_print_binary nonzero branch
+:TEST-EXPECT-STDOUT-B64 MHgxMAoKMGIxMDAwCgowbzEwCgo=
 
 :TEST-USES-ATOM atom.codegen.category.00.values
 :TEST-MENU branches/values/radix-printing/atom.codegen.values.radix.printing.deep.radix.nonzero.edges

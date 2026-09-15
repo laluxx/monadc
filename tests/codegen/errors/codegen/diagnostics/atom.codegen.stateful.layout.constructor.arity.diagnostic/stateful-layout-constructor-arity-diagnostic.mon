@@ -24,6 +24,7 @@
 :TEST-MENU-PATH codegen/errors/codegen/diagnostics/atom.codegen.stateful.layout.constructor.arity.diagnostic
 :TEST-ATOM-LEAF atom.codegen.stateful.layout.constructor.arity.diagnostic
 :TEST-CLI-TARGET codegen errors codegen diagnostics
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6
 
 (module Main)
 (layout Point [x :: Int] [y :: Int])

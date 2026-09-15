@@ -1,0 +1,14 @@
+:TEST-ID tests.language.string_multiline_raw
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE String literals spanning multiple lines parse.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY string_multiline_raw
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+"hello
+world"

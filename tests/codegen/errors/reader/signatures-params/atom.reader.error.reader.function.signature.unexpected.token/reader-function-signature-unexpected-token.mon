@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/signatures-params/atom.reader.error.reader.function.signature.unexpected.token
 :TEST-ATOM-LEAF atom.reader.error.reader.function.signature.unexpected.token
 :TEST-CLI-TARGET codegen errors reader signatures-params
+:TEST-EXPECT-STDOUT-B64 VW5leHBlY3RlZCB0b2tlbiBpbiBmdW5jdGlvbiBzaWduYXR1cmUK
 
 (module Main)
 (define (bad [x : Int] , -> Int) x)

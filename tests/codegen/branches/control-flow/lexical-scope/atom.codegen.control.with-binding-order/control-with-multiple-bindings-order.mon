@@ -17,6 +17,7 @@
 :TEST-TAG control
 :TEST-TAG with
 :TEST-COVERAGE codegen.c:8012-8047 with binding loop and child environment
+:TEST-EXPECT-STDOUT-B64 MTYK
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/lexical-scope/atom.codegen.control.with-binding-order

@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:8486-8489 assoc/assoc!/dissoc/dissoc! map branches
 :TEST-COVERAGE codegen.c:8858 count map branch
+:TEST-EXPECT-STDOUT-B64 MQoyCjIKMgoxCjEK
 
 :TEST-USES-ATOM atom.codegen.category.40.collections
 :TEST-MENU branches/collections/maps/atom.codegen.collection.map.assoc.dissoc.counts

@@ -25,6 +25,7 @@
 :TEST-MENU-PATH codegen/branches/collections/lists/atom.codegen.stateful.collection.list.in.with.counted
 :TEST-ATOM-LEAF atom.codegen.stateful.collection.list.in.with.counted
 :TEST-CLI-TARGET codegen branches collections lists
+:TEST-EXPECT-STDOUT-B64 Mwo=
 
 (module Main)
 (show (with [xs (list 1 2 3)] (count xs)))

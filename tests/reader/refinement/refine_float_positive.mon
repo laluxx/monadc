@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_float_positive
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Positive float refinement parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type PositiveFloat { x ∈ Float | (> x 0.0) })

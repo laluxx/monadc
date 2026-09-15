@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen enforces null-coalescing arity.
 :TEST-ATOM (?? 1) must fail because ?? requires fallback and alternative operands.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICc/PycgcmVxdWlyZXMgZXhhY3RseSAyIGFyZ3VtZW50cwo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/arity branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

@@ -1,3 +1,4 @@
+:TEST-EXPECT-STDOUT-B64 UEFTUyBhbnk/IGZpbmRzIG1hdGNoaW5nIGVsZW1lbnQKUEFTUyBhbnk/IHJldHVybnMgZmFsc2Ugd2hlbiBubyBlbGVtZW50IG1hdGNoZXMKUEFTUyBhbnk/IGVtcHR5IGNvbGxlY3Rpb24K
 module Main
 
 define any? :: (a -> Bool) -> [a] -> Bool

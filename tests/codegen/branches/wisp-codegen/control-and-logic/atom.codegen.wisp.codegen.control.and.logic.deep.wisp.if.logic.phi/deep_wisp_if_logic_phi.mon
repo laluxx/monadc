@@ -13,6 +13,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE wisp.c if/logic lowering
 :TEST-COVERAGE codegen.c if/boolean dispatch
+:TEST-EXPECT-STDOUT-B64 NwpUcnVlCg==
 
 :TEST-USES-ATOM atom.codegen.category.80.wisp.codegen
 :TEST-MENU branches/wisp-codegen/control-and-logic/atom.codegen.wisp.codegen.control.and.logic.deep.wisp.if.logic.phi

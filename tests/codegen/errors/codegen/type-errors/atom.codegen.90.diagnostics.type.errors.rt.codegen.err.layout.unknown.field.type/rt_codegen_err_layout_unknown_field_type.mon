@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects layout fields with unknown types.
 :TEST-ATOM [x :: Nope] must fail because Nope is not a known type.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6IHVua25vd24gdHlwZSDigJhOb3Bl4oCZIGZvciBmaWVsZCDigJh44oCZIGluIGxheW91dCDigJhQb2ludOKAmQo=
 
 :TEST-COVERAGE codegen.c:90-diagnostics/type-errors branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

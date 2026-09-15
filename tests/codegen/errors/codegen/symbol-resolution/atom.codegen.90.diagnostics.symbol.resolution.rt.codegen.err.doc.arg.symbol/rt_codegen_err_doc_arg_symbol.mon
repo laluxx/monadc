@@ -10,6 +10,7 @@
 :TEST-PURPOSE Codegen rejects non-symbol doc reflection arguments.
 :TEST-ATOM (doc 1) must fail because doc arguments must be symbols.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 ZXJyb3I6ICdkb2MnIGFyZ3VtZW50IG11c3QgYmUgYSBzeW1ib2wK
 
 :TEST-COVERAGE codegen.c:90-diagnostics/symbol-resolution branch family
 :TEST-USES-ATOM atom.codegen.category.90.diagnostics

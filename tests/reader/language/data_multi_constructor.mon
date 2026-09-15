@@ -1,0 +1,13 @@
+:TEST-ID tests.language.data_multi_constructor
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE ADT with many constructors and fields parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY data_multi_constructor
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(data Shape Circle Float | Rectangle Float Float | Triangle Point Point Point)

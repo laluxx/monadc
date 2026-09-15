@@ -11,6 +11,7 @@
 :TEST-PURPOSE Desired layout-local method syntax is captured as an expected compiler gap.
 :TEST-ATOM Color.fromRGB and red.eql red should eventually compile as layout methods.
 :TEST-EXPECT fail:compile
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ1snIGZvciBsYXlvdXQgZmllbGQsIGdvdCAnd2hlcmUnCg==
 
 :TEST-COVERAGE codegen.c:50-data-layout/layouts-fields branch family
 :TEST-USES-ATOM atom.codegen.category.50.data.layout

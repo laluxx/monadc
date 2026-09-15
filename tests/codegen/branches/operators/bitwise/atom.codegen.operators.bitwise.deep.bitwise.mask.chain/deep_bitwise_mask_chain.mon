@@ -12,6 +12,7 @@
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:bitwise operator dispatch
 :TEST-COVERAGE codegen.c:shift left/right branches
+:TEST-EXPECT-STDOUT-B64 MAo3CjcKNAoyCg==
 
 :TEST-USES-ATOM atom.codegen.category.20.operators
 :TEST-MENU branches/operators/bitwise/atom.codegen.operators.bitwise.deep.bitwise.mask.chain

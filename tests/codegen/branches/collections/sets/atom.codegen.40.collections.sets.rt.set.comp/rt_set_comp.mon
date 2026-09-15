@@ -16,6 +16,7 @@
 :TEST-MENU-PATH codegen/branches/collections/sets/atom.codegen.40.collections.sets.rt.set.comp
 :TEST-ATOM-LEAF atom.codegen.40.collections.sets.rt.set.comp
 :TEST-CLI-TARGET codegen branches collections sets
+:TEST-EXPECT-STDOUT-B64 VHJ1ZQpGYWxzZQpUcnVlCkZhbHNlClRydWUKRmFsc2UKVHJ1ZQpGYWxzZQo=
 (module Main)
 (show (Set? {1 2 3}))
 (show (Set? 42))

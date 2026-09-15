@@ -10,6 +10,7 @@
 :TEST-PURPOSE Pattern codegen coverage for guarded pattern clauses.
 :TEST-ATOM A variable pattern with guards should select the first true guard.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MQo=
 
 :TEST-COVERAGE codegen.c:30-control-flow/pattern-match branch family
 :TEST-USES-ATOM atom.codegen.category.30.control.flow

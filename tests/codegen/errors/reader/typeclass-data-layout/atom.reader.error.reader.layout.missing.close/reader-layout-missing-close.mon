@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/typeclass-data-layout/atom.reader.error.reader.layout.missing.close
 :TEST-ATOM-LEAF atom.reader.error.reader.layout.missing.close
 :TEST-CLI-TARGET codegen errors reader typeclass-data-layout
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJyknIHRvIGNsb3NlIGxheW91dCAnUG9pbnQnCg==
 
 (module Main)
 (layout Point [x :: Int]

@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime ?? null-coalescing operator works.
 :TEST-ATOM (?? nil 42) = 42, (?? 0 99) = 0.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 NDIKMAo=
 
 :TEST-COVERAGE codegen.c:60-reflection-quote/nil-null-coalesce branch family
 :TEST-USES-ATOM atom.codegen.category.60.reflection.quote

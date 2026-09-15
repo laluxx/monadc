@@ -1,0 +1,11 @@
+:TEST-ID tests.refinement.refine_nested_array_count
+:TEST-CONTEXT monadc.context.language.refinement-types
+:TEST-PURPOSE Nested array count predicate parses.
+:TEST-EXPECT parse-json
+:TEST-MENU refinement
+:TEST-MENU-PATH reader/refinement
+:TEST-CLI-TARGET reader refinement
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+(type TripleArr { xs ∈ Arr | (= (count xs) 3) })

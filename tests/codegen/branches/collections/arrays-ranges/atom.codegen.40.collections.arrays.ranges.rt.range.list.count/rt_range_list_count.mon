@@ -10,6 +10,7 @@
 :TEST-PURPOSE Closed list ranges report their finite element count.
 :TEST-ATOM (count (1..30)) returns 30 for the raw RuntimeList* range path.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MzAKMzAKMQozMAo=
 
 :TEST-COVERAGE codegen.c count special form for TYPE_LIST
 :TEST-USES-ATOM atom.codegen.category.40.collections

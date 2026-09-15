@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.postfix_call_chained
+:TEST-CONTEXT monadc.context.reader.sugar.postfix-call
+:TEST-PURPOSE Chained postfix calls ((f a)(b)).
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR ((f a) b)
+:TEST-STATUS passing-baseline-2026-06-15
+
+(f a)(b)

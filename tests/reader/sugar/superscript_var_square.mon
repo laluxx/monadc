@@ -1,0 +1,12 @@
+:TEST-ID tests.sugar.superscript_var_square
+:TEST-CONTEXT monadc.context.reader.sugar.superscript
+:TEST-PURPOSE Variable superscript with identifier.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-EXPECT-DESUGAR (^ y 2)
+:TEST-STATUS passing-baseline-2026-06-15
+
+y²

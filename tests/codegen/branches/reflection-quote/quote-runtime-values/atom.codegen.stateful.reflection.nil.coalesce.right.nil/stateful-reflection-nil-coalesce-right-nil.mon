@@ -29,6 +29,7 @@
 :TEST-MENU-PATH codegen/branches/reflection-quote/quote-runtime-values/atom.codegen.stateful.reflection.nil.coalesce.right.nil
 :TEST-ATOM-LEAF atom.codegen.stateful.reflection.nil.coalesce.right.nil
 :TEST-CLI-TARGET codegen branches reflection-quote quote-runtime-values
+:TEST-EXPECT-STDOUT-B64 NDIK
 
 (module Main)
 (show (?? nil 42))

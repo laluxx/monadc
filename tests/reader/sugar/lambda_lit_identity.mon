@@ -1,0 +1,11 @@
+:TEST-ID tests.sugar.lambda_lit_identity
+:TEST-CONTEXT monadc.context.reader.sugar.lambda-lit
+:TEST-PURPOSE Lambda literal desugars to lambda expression.
+:TEST-EXPECT parse-json
+:TEST-MENU sugar
+:TEST-MENU-PATH reader/sugar
+:TEST-CLI-TARGET reader sugar
+:TEST-TIER regression
+:TEST-STATUS passing-baseline-2026-06-15
+
+λx.x

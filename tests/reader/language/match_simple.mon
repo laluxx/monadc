@@ -1,0 +1,13 @@
+:TEST-ID tests.language.match_simple
+:TEST-CONTEXT monadc.context.language.syntax-corpus
+:TEST-PURPOSE Match with two clauses parses.
+:TEST-EXPECT parse-json
+:TEST-MENU language
+:TEST-MENU-PATH reader/language
+:TEST-CLI-TARGET reader language
+:TEST-TIER future
+:TEST-EXPECT-JSON-TABLE src/testing/data/reader-atoms.golden.jsonl
+:TEST-EXPECT-JSON-KEY match_simple
+:TEST-STATUS unregistered-baseline-2026-06-15
+
+(match 1 with | 0 => "zero" | _ => "other")

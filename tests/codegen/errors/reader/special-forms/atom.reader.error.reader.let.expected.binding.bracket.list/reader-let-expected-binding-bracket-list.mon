@@ -27,6 +27,7 @@
 :TEST-MENU-PATH codegen/errors/reader/special-forms/atom.reader.error.reader.let.expected.binding.bracket.list
 :TEST-ATOM-LEAF atom.reader.error.reader.let.expected.binding.bracket.list
 :TEST-CLI-TARGET codegen errors reader special-forms
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgJ1snIGluIGxldCBiaW5kaW5nCg==
 
 (module Main)
 (let ([x 1] y) x)

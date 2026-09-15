@@ -1,0 +1,14 @@
+:TEST-ID tests.superset.doc_refinement_layout
+:TEST-CONTEXT monadc.context.language.atom-supersets
+:TEST-PURPOSE Refinement metadata combines with layout field type.
+:TEST-EXPECT parse-json
+:TEST-MENU superset
+:TEST-MENU-PATH reader/superset
+:TEST-CLI-TARGET reader superset
+:TEST-TIER regression
+:TEST-SUPERSET refinement-doc,layout
+:TEST-STATUS passing-baseline-2026-06-15
+
+(module Main)
+(type Positive { n ∈ Int | (> n 0) } :doc "positive" :alias Natural)
+(layout Score [value :: Positive])

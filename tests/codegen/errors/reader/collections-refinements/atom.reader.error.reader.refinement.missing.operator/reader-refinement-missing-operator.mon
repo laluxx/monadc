@@ -28,6 +28,7 @@
 :TEST-MENU-PATH codegen/errors/reader/collections-refinements/atom.reader.error.reader.refinement.missing.operator
 :TEST-ATOM-LEAF atom.reader.error.reader.refinement.missing.operator
 :TEST-CLI-TARGET codegen errors reader collections-refinements
+:TEST-EXPECT-STDOUT-B64 RXhwZWN0ZWQgb3BlcmF0b3IgaW4gcmVmaW5lbWVudCBwcmVkaWNhdGUK
 
 (module Main)
 (type Positive { x ∈ Int | 0 })

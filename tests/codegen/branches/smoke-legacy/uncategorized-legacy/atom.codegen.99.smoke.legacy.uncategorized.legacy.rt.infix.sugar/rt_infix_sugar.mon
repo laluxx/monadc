@@ -10,6 +10,7 @@
 :TEST-PURPOSE Runtime infix sugar compiles with arithmetic precedence and comparison operators.
 :TEST-ATOM Infix +, *, /, and >= desugar and run.
 :TEST-EXPECT compile, run
+:TEST-EXPECT-STDOUT-B64 MjMKNQpUcnVlCg==
 
 :TEST-COVERAGE codegen.c:99-smoke-legacy/uncategorized-legacy branch family
 :TEST-USES-ATOM atom.codegen.category.99.smoke.legacy

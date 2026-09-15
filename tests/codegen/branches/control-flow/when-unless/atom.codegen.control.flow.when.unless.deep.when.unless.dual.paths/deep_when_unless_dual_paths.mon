@@ -11,6 +11,7 @@
 :TEST-ATOM when/unless should only execute side effects on the correct condition.
 :TEST-EXPECT compile, run
 :TEST-COVERAGE codegen.c:when/unless conditional branches
+:TEST-EXPECT-STDOUT-B64 MQozCg==
 
 :TEST-USES-ATOM atom.codegen.category.30.control.flow
 :TEST-MENU branches/control-flow/when-unless/atom.codegen.control.flow.when.unless.deep.when.unless.dual.paths

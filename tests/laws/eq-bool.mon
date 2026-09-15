@@ -1,0 +1,13 @@
+:TEST-ID tests.laws.eq-bool
+:TEST-CONTEXT dec.core.laws
+:TEST-PURPOSE Eq Bool laws
+:TEST-EXPECT test
+:TEST-MENU laws
+:TEST-MENU-PATH laws
+:TEST-CLI-TARGET laws
+:TEST-TIER regression
+
+import Data.Eq
+module CoreEqLaws []
+tests
+  laws Eq Bool
