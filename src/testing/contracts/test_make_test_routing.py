@@ -1,10 +1,24 @@
 """Make test families remain independently selectable."""
 
 from pathlib import Path
+import importlib.machinery
+import importlib.util
+import sys
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def load_make_tool():
+    loader = importlib.machinery.SourceFileLoader(
+        "monadc_make_tar_contract", str(ROOT / "make"))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class MakeTestRoutingTests(unittest.TestCase):
@@ -26,6 +40,13 @@ class MakeTestRoutingTests(unittest.TestCase):
         frontend = (ROOT / "make").read_text(encoding="utf-8")
         self.assertNotIn('    "Makefile",\n    "CMakeLists.txt",', frontend)
         self.assertIn('    "CMakeLists.txt",\n    "make",', frontend)
+
+    def test_source_archive_accepts_generated_metadata_and_ast_goldens(self):
+        make_tool = load_make_tool()
+
+        # .mqti files are generated beside fixtures and checked-in .json files
+        # are AST goldens; neither should make ./make tar reject the source tree.
+        make_tool.validate_source_package_surface(ROOT)
 
     def test_core_does_not_run_embedding_suite(self):
         frontend = (ROOT / "make").read_text(encoding="utf-8")

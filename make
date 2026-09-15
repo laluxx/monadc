@@ -1794,13 +1794,31 @@ SOURCE_PACKAGE_REQUIRED = (
     "tests",
 )
 
+# These JSON files are checked-in reader/codegen goldens, not executable test
+# fixtures.  Generated .mqti interfaces are accepted by validation as well but
+# are filtered from the source archive by tar_source_ignore().
+SOURCE_TEST_JSON_GOLDENS = frozenset({
+    "tests/web_html_reader.json",
+    "tests/codegen/branches/wisp-codegen/where-guards/"
+    "atom.codegen.80.wisp.codegen.where.guarded.helper.param/"
+    "rt_wisp_where_guarded_helper_param.json",
+    "tests/codegen/errors/codegen/finite-type-set/"
+    "atom.type.dep.finite-type-set.non-member-literal/"
+    "finite-type-set-non-member-literal.json",
+})
+
 
 def validate_source_package_surface(root: Path = ROOT) -> None:
     missing = [item for item in SOURCE_PACKAGE_REQUIRED if not (root / item).exists()]
     if missing:
         raise CliError("source package surface is incomplete", details=("missing: " + ", ".join(missing),))
     test_files = [path for path in (root / "tests").rglob("*") if path.is_file()]
-    non_monad = [rel(path) for path in test_files if path.suffix != ".mon"]
+    non_monad = []
+    for path in test_files:
+        relative = path.relative_to(root).as_posix()
+        if path.suffix in {".mon", ".mqti"} or relative in SOURCE_TEST_JSON_GOLDENS:
+            continue
+        non_monad.append(rel(path))
     if non_monad:
         preview = ", ".join(non_monad[:8])
         suffix = " ..." if len(non_monad) > 8 else ""

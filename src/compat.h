@@ -63,7 +63,7 @@ static inline int monad_asprintf(char **out, const char *format, ...)
 
 #define asprintf monad_asprintf
 #ifndef lstat
-#define lstat _stat
+#define lstat stat
 #endif
 #endif
 

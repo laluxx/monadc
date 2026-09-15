@@ -6,6 +6,9 @@
 #define TokenType WindowsTokenType
 #include <windows.h>
 #undef TokenType
+#ifdef RT_STRING
+#undef RT_STRING
+#endif
 #else
 #include <dirent.h>
 #endif

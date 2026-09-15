@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
+#include "compat.h"
 #include "infer.h"
 #include "qtt/constraints.h"
 #include "qtt/environment.h"

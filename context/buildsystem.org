@@ -513,3 +513,9 @@
   compiling =runtime.c=. CLI, formatter, and linter translation units include
   the shim directly, so MinGW UCRT64 no longer fails on POSIX-only declarations
   or corrupts the runtime enum declarations.
+
+[FIX id:fix.buildsystem.source-tar-generated-test-artifacts-2026-09-15 date:2026-09-15 by:codex src:make,src/testing/contracts/test_make_test_routing.py conf:high]
+  Source archive validation accepts generated =.mqti= interfaces and the
+  exact checked-in JSON AST goldens while continuing to reject arbitrary test
+  files. Generated interfaces remain excluded from the source archive, so
+  =./make tar= works safely before or after =./make clean=.
