@@ -269,7 +269,8 @@ class CheckoutLocalPathTests(unittest.TestCase):
 
             warm = compile_bool()
             self.assertEqual(warm.returncode, 0, warm.stdout)
-            self.assertTrue(output.exists(), warm.stdout)
+            # Native Windows appends `.exe` to the requested output stem.
+            self.assertTrue(generated_executable(output).exists(), warm.stdout)
 
     def test_core_cache_override_keeps_shared_objects_outside_fixture_home(self):
         with tempfile.TemporaryDirectory(prefix="monadc-core-cache-override-") as td:

@@ -525,3 +525,8 @@
   compatibility header supplies a conservative =S_ISLNK= fallback where the
   UCRT lacks the macro. This keeps the Windows CMake build portable while
   preserving mode-copying behavior on POSIX hosts.
+
+[FIX id:fix.buildsystem.windows-checkout-executable-suffix-2026-09-15 date:2026-09-15 by:codex src:src/testing/contracts/test_checkout_local_paths.py conf:high]
+  The warm core-cache contract now checks the executable through
+  =generated_executable=, matching native Windows' automatic =.exe= suffix
+  while retaining the unsuffixed POSIX path.
