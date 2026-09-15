@@ -1,4 +1,4 @@
-#+TITLE: Build System (Makefile)
+#+TITLE: Build System (Python ./make)
 #+AUTHOR: Codex
 #+DATE: 2026-06-13
 #+CREATED: 2026-06-13
@@ -35,19 +35,25 @@
 :CONTEXT_AUDIENCE: human,llm
 :CONTEXT_OPEN_POLICY: showeverything
 :CONTEXT_CREATED: 2026-06-13
-:CONTEXT_DESCRIPTION: Build system (Makefile) — targets, flags, libraries, discovery
+:CONTEXT_DESCRIPTION: Python build frontend — targets, flags, libraries, discovery
 :CONTEXT_UPDATED: 2026-06-13
 :CONTEXT_STABILITY: evolving
 :CONTEXT_STATUS: active
-:SOURCE: Makefile
+:SOURCE: make
 :CONFIDENCE: high
 :END:
 
-[OBS id:obs.makefile.file src:Makefile conf:high]
-  Single Makefile at project root (112 lines). Drives compilation of the
-  monadc compiler, the runtime static library (libmonad.a), and ancillary
-  targets (test, install, uninstall, clean). Uses GCC, llvm-config for
-  LLVM-C flags, and pkg-config for libclang.
+[OBS id:obs.makefile.file src:make conf:high]
+  The executable Python script =make= at project root drives compilation of
+  the monad compiler, runtime libraries, tests, packaging, installation, and
+  cleanup. It owns the build plan and does not delegate to a root Makefile.
+
+[DEC id:dec.makefile.python-single-source-2026-09-15 date:2026-09-15 by:human+codex src:make conf:high supersedes:obs.makefile.file]
+  The executable =./make= Python frontend is the single source of truth for
+  build modes, native compilation, tests, packaging, installation, and cleanup.
+  A root =Makefile= is intentionally absent. Generated state is removed by the
+  Python clean policy, and all user-facing workflows are invoked as =./make
+  <command>=.
 
 * Build Targets
 :PROPERTIES:

@@ -9895,6 +9895,27 @@ static AST *parse_bracket_list(Parser *p) {
             strcmp(p->current.value, ",") == 0) {
             p->current = lexer_next_token(p->lexer);
             step = parse_expr(p);
+
+            /* parse_expr recognizes an unwrapped range, so in [start,step..end]
+             * it may consume the ``step..end`` tail as AST_RANGE before the
+             * bracket parser gets to its own DOTDOT branch.  Recover the two
+             * components here and construct the array range below. */
+            if (step && step->type == AST_RANGE &&
+                step->range.start && step->range.end &&
+                p->current.type == TOK_RBRACKET) {
+                AST *range_step = step->range.start;
+                AST *range_end = step->range.end;
+                step->range.start = NULL;
+                step->range.end = NULL;
+                ast_free_shell(step);
+                ast_free(list);
+                AST *node = ast_new_range(first, range_step, range_end, true);
+                node->line = start_line;
+                node->column = start_column;
+                node->end_column = p->current.column + 1;
+                p->current = lexer_next_token(p->lexer);
+                return node;
+            }
         }
 
         if (p->current.type == TOK_DOTDOT) {

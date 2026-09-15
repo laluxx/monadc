@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -607,11 +608,13 @@ def discover_project() -> Project:
         target_base = parse_make_var("TARGET_BASE")
         target = target_base or parse_make_var("TARGET")
         if "$(" in target:
-            target = target_base or ROOT.name
+            target = target_base or "monad"
+        if not target and (ROOT / "src" / "main.c").exists():
+            target = "monad"
     if host_os() == "windows" and target.endswith(".exe"):
         target = target[:-4]
     name = os.environ.get("MAKE_PROJECT_NAME", "").strip() or target or ROOT.name
-    runtime_lib = os.environ.get("MAKE_RUNTIME_LIB", "").strip() or parse_make_var("RUNTIME_LIB")
+    runtime_lib = os.environ.get("MAKE_RUNTIME_LIB", "").strip() or parse_make_var("RUNTIME_LIB") or "libmonad.a"
     source_dirs = [p for p in ("src", "include", "core", "lib", "tests", "context", "docs", "scripts") if (ROOT / p).exists()]
     source_files = [p for p in ("Makefile", "makefile", "GNUmakefile", "make", "main.c", "runtime.c", "runtime.h") if (ROOT / p).exists()]
     package_files = [
@@ -622,8 +625,10 @@ def discover_project() -> Project:
         )
         if (ROOT / p).exists()
     ]
-    build_target = os.environ.get("MAKE_BUILD_TARGET", "").strip() or ("all" if make_has_target("all") else "")
-    release_target = os.environ.get("MAKE_RELEASE_TARGET", "").strip() or ("release" if make_has_target("release") else build_target)
+    # The Python frontend is the build system.  Keep the target names as
+    # descriptive metadata even when no legacy Makefile is present.
+    build_target = os.environ.get("MAKE_BUILD_TARGET", "").strip() or ("all" if (ROOT / "src" / "main.c").exists() else "")
+    release_target = os.environ.get("MAKE_RELEASE_TARGET", "").strip() or ("release" if build_target else "")
     return Project(
         name=name,
         target=target,
@@ -647,6 +652,202 @@ class AppContext:
     jobs: int
     jobs_source: str
     ui: Renderer
+
+
+@dataclass(frozen=True)
+class BuildConfig:
+    """Canonical native build configuration owned by the Python frontend."""
+
+    mode: str = "debug"
+
+    @property
+    def cc(self) -> str:
+        return os.environ.get("CC", "cc")
+
+    @property
+    def ar(self) -> str:
+        return os.environ.get("AR", "ar")
+
+    @property
+    def cppflags(self) -> list[str]:
+        return shlex.split(os.environ.get("CPPFLAGS", "")) + [
+            "-iquote", str(ROOT / "src"),
+            "-iquote", str(ROOT / "src" / "tooling"),
+            "-I", str(ROOT / "src" / "embed" / "include"),
+        ]
+
+    @property
+    def llvm_cflags(self) -> list[str]:
+        result = run_capture(["llvm-config", "--cflags"])
+        return shlex.split(result.stdout.strip()) if result.returncode == 0 else []
+
+    @property
+    def ffi_cflags(self) -> list[str]:
+        result = run_capture(["pkg-config", "--cflags", "libclang"])
+        if result.returncode == 0:
+            return shlex.split(result.stdout.strip())
+        return ["-I/usr/lib/llvm/include"]
+
+    @property
+    def common_cflags(self) -> list[str]:
+        flags = ["-Wall", "-Wextra", "-std=c99", "-fPIC"]
+        flags.extend(self.llvm_cflags)
+        flags.extend(shlex.split(os.environ.get("CFLAGS", "")))
+        if self.mode == "debug":
+            flags.extend(["-g", "-DDEBUG"])
+        elif self.mode == "release":
+            flags.extend(["-DNDEBUG", "-O2"])
+        elif self.mode == "asan":
+            flags.extend(["-g", "-fsanitize=address", "-fno-omit-frame-pointer", "-DDEBUG"])
+        elif self.mode == "ubsan":
+            flags.extend(["-g", "-fsanitize=undefined", "-fno-omit-frame-pointer",
+                          "-fno-sanitize-recover=undefined", "-DDEBUG"])
+        elif self.mode == "perf":
+            flags.extend(["-O2", "-g", "-fno-omit-frame-pointer", "-DNDEBUG"])
+        else:
+            raise CliError(f"unknown build mode '{self.mode}'")
+        return flags
+
+    @property
+    def link_flags(self) -> list[str]:
+        llvm = run_capture(["llvm-config", "--ldflags", "--libs", "core", "orcjit", "native", "passes"])
+        llvm_flags = shlex.split(llvm.stdout.strip()) if llvm.returncode == 0 else []
+        flags = ["-lm", "-lreadline", "-lpthread", "-lgmp", *llvm_flags, "-lclang"]
+        flags.extend(shlex.split(os.environ.get("LDFLAGS", "")))
+        if self.mode == "asan":
+            flags.extend(["-fsanitize=address", "-fno-omit-frame-pointer"])
+        elif self.mode == "ubsan":
+            flags.extend(["-fsanitize=undefined", "-fno-sanitize-recover=undefined"])
+        return flags
+
+
+def _source_sets() -> dict[str, list[Path]]:
+    src = ROOT / "src"
+    runtime = [src / name for name in ("arena.c", "runtime.c", "runtime_errors.c")]
+    compiler = sorted(src.glob("*.c"))
+    compiler = [path for path in compiler if path not in runtime]
+    if host_os() == "windows":
+        compiler = [path for path in compiler if path.name != "debugger.c"]
+    for directory in ("qtt", "concurrency", "effects", "tooling"):
+        compiler.extend(sorted((src / directory).glob("*.c")))
+    embed = [src / "embed" / name for name in ("embed.c", "monad.c")]
+    api_names = (
+        "embed/compiler.c", "embed/surface_compiler.c", "embed/surface_load.c",
+        "embed/compiler_native.c", "embed/frontend_transaction.c", "embed/native_compile.c",
+        "embed/infer_support.c", "infer.c", "features.c", "macro.c", "pmatch.c",
+        "reader.c", "reader_diagnostic.c", "reader_syntax.c", "types.c", "wisp.c",
+        "wisp_syntax_policy.c", "codegen.c", "env.c", "typeclass.c", "module.c",
+        "asm.c", "ffi.c", "effects/effect.c", "effects/constraints.c",
+        "qtt/foreign_type.c", "qtt/type_identity.c", "qtt/constraints.c",
+        "qtt/environment.c", "qtt/quantity.c", "qtt/bindings.c", "qtt/elaboration.c",
+        "qtt/pipeline.c", "qtt/anf.c", "qtt/core.c", "qtt/demand.c", "qtt/graded.c",
+        "qtt/signature.c", "qtt/call.c", "qtt/resource.c", "qtt/signature_env.c",
+        "qtt/backend.c", "qtt/compiler.c", "qtt/compiler_module.c", "qtt/core_effect.c",
+        "qtt/interface.c", "qtt/semantic_ir.c", "qtt/effect_runtime.c", "qtt/module.c",
+        "qtt/drop.c", "qtt/evidence.c", "qtt/closure_policy.c", "qtt/closure.c",
+        "qtt/core_usage.c", "qtt/semantic_anf.c",
+    )
+    api = [src / name for name in api_names]
+    return {"runtime": runtime, "compiler": compiler, "embed": embed, "api": api}
+
+
+def _object_path(source: Path, kind: str) -> Path:
+    relative = source.relative_to(ROOT).with_suffix(".o")
+    return BUILD_ROOT / "obj" / kind / relative
+
+
+def _header_dependencies() -> list[Path]:
+    return sorted(path for path in (ROOT / "src").rglob("*.h"))
+
+
+def _compile_command(source: Path, output: Path, config: BuildConfig, *, embed: bool = False) -> list[str]:
+    flags = config.common_cflags.copy()
+    if embed:
+        flags.extend(["-fvisibility=hidden", "-DMONAD_EMBED_BUILD"])
+    elif source.name == "ffi.c":
+        flags.extend(config.ffi_cflags)
+    return [config.cc, *config.cppflags, *flags, "-c", str(source), "-o", str(output)]
+
+
+def _compile_sources(
+    sources: list[Path], kind: str, config: BuildConfig, *, embed: bool = False,
+    jobs: int = 1, executor: ThreadPoolExecutor | None = None,
+) -> list[dict[str, object]]:
+    headers = _header_dependencies()
+    entries: list[dict[str, object]] = []
+    pending: list[tuple[Path, list[str]]] = []
+    for source in sources:
+        output = _object_path(source, kind)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        command = _compile_command(source, output, config, embed=embed)
+        entries.append({"directory": str(ROOT), "file": str(source.resolve()), "arguments": command})
+        newest_dependency = max([source, *headers], key=lambda path: path.stat().st_mtime_ns)
+        if output.exists() and output.stat().st_mtime_ns >= newest_dependency.stat().st_mtime_ns:
+            continue
+        pending.append((source, command))
+
+    def compile_one(item: tuple[Path, list[str]]) -> None:
+        _source, command = item
+        run(command, announce=False)
+
+    if pending:
+        if executor is not None:
+            list(executor.map(compile_one, pending))
+        else:
+            with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+                list(pool.map(compile_one, pending))
+    return entries
+
+
+def build_project(mode: str = "debug", *, jobs: int = 0) -> Path:
+    """Build all native outputs without delegating policy back to GNU Make."""
+    config = BuildConfig(mode)
+    sets = _source_sets()
+    worker_count = jobs if jobs > 0 else resolve_jobs(0)[0]
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        runtime_objects = _compile_sources(sets["runtime"], "runtime", config, jobs=worker_count, executor=executor)
+        compiler_objects = _compile_sources(sets["compiler"], "compiler", config, jobs=worker_count, executor=executor)
+        embed_objects = _compile_sources(sets["embed"], "embed", config, embed=True, jobs=worker_count, executor=executor)
+        api_objects = _compile_sources(sets["api"], "compiler-api", config, jobs=worker_count, executor=executor)
+
+    lib_dir = BUILD_ROOT / "lib"
+    bin_dir = BUILD_ROOT / "bin"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    runtime_lib = lib_dir / "libmonad.a"
+    embed_static = lib_dir / "libmonad-embed.a"
+    embed_shared = lib_dir / ("libmonad-embed.dll" if host_os() == "windows" else "libmonad-embed.so")
+    compiler_static = lib_dir / "libmonad-compiler.a"
+    compiler_shared = lib_dir / ("libmonad-compiler.dll" if host_os() == "windows" else "libmonad-compiler.so")
+    target = bin_dir / ("monad.exe" if host_os() == "windows" else "monad")
+
+    def archive(output: Path, objects: list[Path]) -> None:
+        if output.exists() and output.stat().st_mtime_ns >= max(path.stat().st_mtime_ns for path in objects):
+            return
+        run([config.ar, "rcs", str(output), *(str(path) for path in objects)])
+
+    runtime_paths = [_object_path(source, "runtime") for source in sets["runtime"]]
+    embed_paths = [_object_path(source, "embed") for source in sets["embed"]]
+    compiler_paths = [_object_path(source, "compiler") for source in sets["compiler"]]
+    api_paths = [_object_path(source, "compiler-api") for source in sets["api"]]
+    archive(runtime_lib, runtime_paths)
+    archive(embed_static, embed_paths)
+    if not embed_shared.exists() or embed_shared.stat().st_mtime_ns < max(path.stat().st_mtime_ns for path in embed_paths):
+        run([config.cc, "-shared", "-o", str(embed_shared), *(str(path) for path in embed_paths), "-lpthread"])
+    archive(compiler_static, [*api_paths, *runtime_paths])
+    if not compiler_shared.exists() or compiler_shared.stat().st_mtime_ns < max(path.stat().st_mtime_ns for path in [*api_paths, *runtime_paths, embed_shared]):
+        run([config.cc, "-shared", "-o", str(compiler_shared), *(str(path) for path in [*api_paths, *runtime_paths]),
+             f"-Wl,--version-script={ROOT / 'src' / 'embed' / 'compiler.exports'}",
+             f"-L{lib_dir}", "-lmonad-embed", "-lpthread", "-lgmp", "-lclang",
+             *shlex.split(run_capture(["llvm-config", "--ldflags", "--libs", "core", "orcjit", "native", "passes"]).stdout)])
+    if not target.exists() or target.stat().st_mtime_ns < max(path.stat().st_mtime_ns for path in [*compiler_paths, runtime_lib]):
+        link_flags = config.link_flags.copy()
+        link_prefix: list[str] = []
+        if host_os() != "windows":
+            link_prefix.append("-rdynamic")
+        run([config.cc, *config.cppflags, *config.common_cflags, *link_prefix, "-o", str(target),
+             *(str(path) for path in compiler_paths), str(runtime_lib), *link_flags])
+    return target
 
 
 def rel(path: Path) -> str:
@@ -754,20 +955,6 @@ def make_tar_gz(archive_base: Path, parent: Path, package_name: str) -> Path:
     return tar_path
 
 
-### Makefile bridge
-
-def run_make(targets: list[str] | None = None, *, jobs: int = 0, extra: list[str] | None = None, env: dict[str, str] | None = None) -> None:
-    cmd = [system_make()]
-    if jobs > 0:
-        cmd.append(f"-j{jobs}")
-    if targets:
-        cmd.extend(targets)
-    if extra:
-        cmd.extend(extra)
-    UI.log("MAKE", command_display(cmd), "info")
-    run(cmd, env=env, announce=False)
-
-
 def possible_binary_paths() -> list[Path]:
     exe = ".exe" if host_os() == "windows" else ""
     out: list[Path] = []
@@ -785,9 +972,8 @@ def find_binary(build_if_missing: bool = False, jobs: int = 0) -> Path:
         if p.exists() and p.is_file():
             return p
     if build_if_missing:
-        target = PROJECT.release_target if PROJECT.release_target and make_has_target(PROJECT.release_target) else PROJECT.build_target
-        UI.step(f"build: running make {target or 'all'}")
-        run_make([target] if target else None, jobs=jobs)
+        UI.step("build: running Python build plan")
+        build_project("debug", jobs=jobs)
         for p in possible_binary_paths():
             if p.exists() and p.is_file():
                 return p
@@ -810,6 +996,8 @@ def resolve_program(name_or_path: str) -> Path:
 
 def detected_link_libraries() -> list[str]:
     names = re.findall(r"(?:^|\s)-l([A-Za-z0-9_+.-]+)", makefile_text())
+    if (ROOT / "src" / "main.c").exists():
+        names.extend(("clang", "gmp", "m", "monad-embed", "pthread", "readline"))
     names.extend(env_list("MAKE_VENDOR_LIBS"))
     return sorted(dict.fromkeys(names))
 
@@ -832,6 +1020,8 @@ def detected_pkg_config_packages() -> list[str]:
                 continue
             if re.fullmatch(r"[A-Za-z0-9_.+-]+", token):
                 pkgs.append(token)
+    if (ROOT / "src" / "main.c").exists():
+        pkgs.append("libclang")
     pkgs.extend(env_list("MAKE_VENDOR_PKGS"))
     return sorted(dict.fromkeys(pkgs))
 
@@ -1599,13 +1789,13 @@ SOURCE_PACKAGE_REQUIRED = (
 def validate_source_package_surface(root: Path = ROOT) -> None:
     missing = [item for item in SOURCE_PACKAGE_REQUIRED if not (root / item).exists()]
     if missing:
-        raise CliError("source package surface is incomplete", detail="missing: " + ", ".join(missing))
+        raise CliError("source package surface is incomplete", details=("missing: " + ", ".join(missing),))
     test_files = [path for path in (root / "tests").rglob("*") if path.is_file()]
     non_monad = [rel(path) for path in test_files if path.suffix != ".mon"]
     if non_monad:
         preview = ", ".join(non_monad[:8])
         suffix = " ..." if len(non_monad) > 8 else ""
-        raise CliError("tests/ must contain authored .mon files only", detail=preview + suffix)
+        raise CliError("tests/ must contain authored .mon files only", details=(preview + suffix,))
 
 
 def source_package_entry(path: Path, *, with_context: bool) -> bool:
@@ -1968,6 +2158,7 @@ GENERATED_TREE_PATHS = frozenset({
     ".dryc",
     "tests/.last-failures",
 })
+PRESERVED_SOURCE_ARTIFACTS = frozenset()
 
 
 def generated_root_outputs() -> set[Path]:
@@ -2020,10 +2211,17 @@ def generated_artifacts() -> list[Path]:
         for name in files:
             path = base / name
             rel = path.relative_to(ROOT).as_posix()
+            if rel in PRESERVED_SOURCE_ARTIFACTS:
+                continue
             if name.startswith(".#") or name.endswith("~") or name == ".DS_Store":
                 found.add(path)
                 continue
             if path.suffix.lower() in GENERATED_SUFFIXES:
+                found.add(path)
+                continue
+            # Authored test inputs are exclusively .mon files; executable
+            # extensionless files under tests/ are compiler-produced fixtures.
+            if rel.startswith(("tests/", "how_to/")) and path.suffix == "" and os.access(path, os.X_OK):
                 found.add(path)
                 continue
             # Core JSON is compiler interface/cache output. JSON elsewhere may be source/golden data.
@@ -2056,10 +2254,6 @@ def command_clean(args: list[str], _ctx: AppContext) -> int:
     unknown = [arg for arg in args if arg != "--check"]
     if unknown:
         die("clean: unknown option(s): " + " ".join(unknown))
-
-    if not check_only and make_has_target("clean"):
-        UI.step("Makefile clean")
-        run_make(["clean"], jobs=1)
 
     artifacts = generated_artifacts()
     if check_only:
@@ -2097,29 +2291,14 @@ def append_flags(env: dict[str, str], name: str, flags: str) -> None:
 
 
 def command_sanitizer(kind: str, args: list[str], ctx: AppContext) -> int:
-    jobs = ctx.jobs
     build_only = "--build-only" in args
     forwarded = [a for a in args if a != "--build-only"]
-    if make_has_target(kind):
-        started = time.perf_counter()
-        run_make([kind], jobs=jobs, extra=forwarded)
-        UI.ok(f"{kind} completed in {format_elapsed(time.perf_counter() - started)}")
-        return 0
-    flags = {
-        "asan": "-fsanitize=address -fno-omit-frame-pointer -g",
-        "ubsan": "-fsanitize=undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined -g",
-    }[kind]
-    env = os.environ.copy()
-    append_flags(env, "CFLAGS", flags)
-    append_flags(env, "CXXFLAGS", flags)
-    append_flags(env, "LDFLAGS", flags.replace(" -g", ""))
-    target = ctx.project.build_target or ("all" if make_has_target("all") else "")
-    display_target = target or "the default target"
-    UI.step(f"{kind}: Makefile has no '{kind}' target; injecting sanitizer flags into {display_target}")
+    if forwarded:
+        die(f"{kind}: unknown option(s): " + " ".join(forwarded))
     started = time.perf_counter()
-    run_make([target] if target else None, jobs=jobs, env=env)
-    if not build_only and make_has_target("test"):
-        run_make(["test"], jobs=jobs, env=env)
+    build_project(kind, jobs=ctx.jobs)
+    if not build_only:
+        command_test(["--no-build"], ctx)
     UI.ok(f"{kind} completed in {format_elapsed(time.perf_counter() - started)}")
     return 0
 
@@ -2128,7 +2307,7 @@ def command_test(args: list[str], ctx: AppContext) -> int:
     """Run the project's canonical test frontend when one is present.
 
     Monad keeps authored fixtures in tests/ and the host runner in src/testing;
-    other projects continue to fall back to their Makefile test target.
+    the Python runner is the canonical test implementation for this project.
     """
     jobs = ctx.jobs
     no_build = "--no-build" in args
@@ -2143,8 +2322,7 @@ def command_test(args: list[str], ctx: AppContext) -> int:
             for arg in forwarded
         )
         if not no_build and not metadata_only:
-            target = ctx.project.build_target or ("all" if make_has_target("all") else "")
-            run_make([target] if target else None, jobs=jobs)
+            build_project("debug", jobs=jobs)
         env = os.environ.copy()
         if not metadata_only:
             binary = find_binary(build_if_missing=not no_build, jobs=jobs)
@@ -2157,13 +2335,118 @@ def command_test(args: list[str], ctx: AppContext) -> int:
             UI.ok(f"tests completed in {format_elapsed(time.perf_counter() - started)}")
         return proc.returncode
 
-    if not make_has_target("test"):
-        die("Makefile has no test target")
-    if forwarded:
-        die("this project exposes test arguments only through a canonical src/testing runner")
-    run_make(["test"], jobs=jobs)
-    UI.ok(f"tests completed in {format_elapsed(time.perf_counter() - started)}")
-    return 0
+    die("canonical src/testing runner is missing")
+
+
+def run_python_module(module: str, args: list[str] | None = None, *, env: dict[str, str] | None = None) -> int:
+    command = [sys.executable, "-B", "-m", module, *(args or [])]
+    proc = subprocess.run(command, cwd=str(ROOT), env={**os.environ, **(env or {})}, check=False)
+    return proc.returncode
+
+
+def command_core_tests(args: list[str], ctx: AppContext) -> int:
+    build_project("debug", jobs=ctx.jobs)
+    env = {"MONAD_BINARY": str(BUILD_ROOT / "bin" / ("monad.exe" if host_os() == "windows" else "monad"))}
+    return run_python_module("src.testing.core_runner", args, env=env)
+
+
+def command_embedding_tests(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("test-embedding: no arguments are supported")
+    binary = build_project("debug", jobs=ctx.jobs)
+    env = {"MONAD_BINARY": str(binary)}
+    return run_python_module("unittest", ["discover", "-s", "src/testing/contracts", "-p", "test_embedding*.py"], env=env)
+
+
+def command_repl_tests(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("repl: no arguments are supported")
+    binary = build_project("debug", jobs=ctx.jobs)
+    env = {"MONAD_BINARY": str(binary)}
+    return run_python_module(
+        "unittest",
+        ["src.testing.contracts.test_repl", "src.testing.contracts.test_repl_pty", "src.testing.contracts.test_repl_cache"],
+        env=env,
+    )
+
+
+def command_bytecode_tests(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("bytecode: no arguments are supported")
+    binary = build_project("debug", jobs=ctx.jobs)
+    return run_python_module("src.testing.contracts.test_bytecode", env={"MONAD_BINARY": str(binary), "BYTECODE_VISUAL": "1"})
+
+
+def command_runner_contract(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("test-runner: no arguments are supported")
+    binary = build_project("debug", jobs=ctx.jobs)
+    proc = subprocess.run([str(binary), "test", "runner"], cwd=str(ROOT), env={**os.environ, "MONAD_BINARY": str(binary)}, check=False)
+    return proc.returncode
+
+
+def command_how_to_tests(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("test-how-to: no arguments are supported")
+    binary = build_project("debug", jobs=ctx.jobs)
+    return run_python_module("src.testing.contracts.test_how_to_examples", env={"MONAD_BINARY": str(binary)})
+
+
+def command_context_tests(module: str) -> CommandFunc:
+    def handler(args: list[str], _ctx: AppContext) -> int:
+        return run_python_module(module, args)
+    return handler
+
+
+def command_verify_context(args: list[str], _ctx: AppContext) -> int:
+    if args:
+        die("verify-context: no arguments are supported")
+    for module, module_args in (
+        ("src.testing.contracts.test_context_lint", ["--verbose"]),
+        ("src.testing.contracts.test_context_refs", []),
+        ("src.testing.contracts.test_context_visualizer", []),
+        ("src.testing.contracts.test_context_graph", []),
+    ):
+        result = run_python_module(module, module_args)
+        if result != 0:
+            return result
+    return subprocess.run(
+        [sys.executable, "-B", "src/tooling/context/context_lint.py", "--skip-info",
+         "--check-src-refs", "--check-test-contexts", "--check-record-refs"],
+        cwd=str(ROOT), check=False,
+    ).returncode
+
+
+def command_verify_context_strict(args: list[str], _ctx: AppContext) -> int:
+    if args:
+        die("verify-context-strict: no arguments are supported")
+    return subprocess.run(
+        [sys.executable, "-B", "src/tooling/context/context_lint.py", "--skip-info", "--all",
+         "--check-src-refs", "--check-test-contexts", "--check-orphaned", "--check-empty-headings",
+         "--check-description"], cwd=str(ROOT), check=False,
+    ).returncode
+
+
+def command_fuzzing(args: list[str], ctx: AppContext) -> int:
+    binary = build_project("debug", jobs=ctx.jobs)
+    return run_python_module("src.testing.contracts.fuzzing.fuzz_codegen", args, env={"MONAD_BINARY": str(binary)})
+
+
+def command_generate_asm(which: str) -> CommandFunc:
+    def handler(args: list[str], _ctx: AppContext) -> int:
+        if args:
+            die(f"{which}: no arguments are supported")
+        script = "create_asm_tests.py" if which == "generate-asm-tests" else "create_asm_tests_extra.py"
+        return subprocess.run([sys.executable, "-B", f"src/tooling/generators/{script}"], cwd=str(ROOT), check=False).returncode
+    return handler
+
+
+def command_verify_push(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("verify-push: no arguments are supported")
+    if command_clean(["--check"], ctx) != 0:
+        return 1
+    return command_check([], ctx)
 
 
 def command_check(args: list[str], ctx: AppContext) -> int:
@@ -2180,24 +2463,18 @@ def command_check(args: list[str], ctx: AppContext) -> int:
     explicit = env_words("MAKE_CHECK_TARGETS")
     if explicit:
         for target in explicit:
-            if not make_has_target(target):
-                die(f"MAKE_CHECK_TARGETS names missing target: {target}")
-            run_make([target], jobs=jobs)
+            spec = COMMANDS.get(target)
+            if spec is None:
+                die(f"MAKE_CHECK_TARGETS names unknown Python command: {target}")
+            result = execute_command(spec, ["--no-build"] if target == "test" else [], ctx)
+            if result != 0:
+                return result
         UI.ok(f"check completed in {format_elapsed(time.perf_counter() - started)}")
         return 0
 
-    if make_has_target("check") and not args:
-        run_make(["check"], jobs=jobs)
-        UI.ok(f"check completed in {format_elapsed(time.perf_counter() - started)}")
-        return 0
-
-    for target in ("format-check", "fmt-check", "lint", "static-analysis"):
-        if make_has_target(target):
-            run_make([target], jobs=jobs)
     if not no_build:
-        target = PROJECT.build_target or ("all" if make_has_target("all") else "")
-        run_make([target] if target else None, jobs=jobs)
-    if not no_tests and make_has_target("test"):
+        build_project("debug", jobs=jobs)
+    if not no_tests:
         result = command_test(["--no-build"], ctx)
         if result != 0:
             return result
@@ -2233,8 +2510,6 @@ def pkg_config_exists(name: str) -> bool:
 
 def required_dependency_state() -> tuple[list[str], list[str]]:
     missing_tools: list[str] = []
-    if not find_system_make():
-        missing_tools.append("make")
     if not (os.environ.get("CC") or which("cc") or which("clang") or which("gcc")):
         missing_tools.append("cc")
     text = makefile_text().lower()
@@ -2246,7 +2521,10 @@ def required_dependency_state() -> tuple[list[str], list[str]]:
         missing_tools.append("ninja")
     if project_needs_llvm() and not llvm_config_path():
         missing_tools.append("llvm")
-    missing_pkgs = [pkg for pkg in detected_pkg_config_packages() if not pkg_config_exists(pkg)]
+    missing_pkgs = [
+        pkg for pkg in detected_pkg_config_packages()
+        if not pkg_config_exists(pkg) and not (pkg == "libclang" and llvm_config_path())
+    ]
     return list(dict.fromkeys(missing_tools)), missing_pkgs
 
 
@@ -2364,10 +2642,10 @@ def run_doctor(_args: list[str], ctx: AppContext) -> int:
     jobs, jobs_source = ctx.jobs, ctx.jobs_source
     UI.section("Layout")
     UI.row("root", None, str(ROOT), good=True)
-    UI.row("Makefile", None, rel(makefile_path()), good=makefile_path().exists())
+    UI.row("Python frontend", None, rel(ROOT / "make"), good=(ROOT / "make").is_file())
     build_state = UI.status_word(True) if BUILD_ROOT.exists() else UI.dim(UI.glyph("·", "-"))
     UI.row("build dir", build_state, rel(BUILD_ROOT))
-    bad = not makefile_path().exists()
+    bad = not (ROOT / "make").is_file()
     print("")
     missing_sources = report_source_integrity()
     bad = bad or bool(missing_sources)
@@ -2379,11 +2657,9 @@ def run_doctor(_args: list[str], ctx: AppContext) -> int:
     UI.row("jobs", None, f"{jobs} ({jobs_source})")
     print("")
     UI.section("Required tools")
-    make_path = find_system_make()
     cc = os.environ.get("CC") or which("cc") or which("clang") or which("gcc")
     checks = [
         ("python3", sys.executable, True),
-        ("make", make_path or "-", bool(make_path)),
         ("cc", cc or "-", bool(cc)),
     ]
     if project_needs_llvm():
@@ -2450,7 +2726,6 @@ def run_env(args: list[str], ctx: AppContext) -> int:
         "HOST_MEMORY_BYTES": total_memory_bytes(),
         "JOBS": jobs,
         "JOBS_SOURCE": jobs_source,
-        "SYSTEM_MAKE": find_system_make(),
         "DEPENDENCIES": dependency_report(),
     }
     if args and args[0] == "--json":
@@ -2497,7 +2772,7 @@ ENVIRONMENT_HELP: tuple[tuple[str, str], ...] = (
     ("MAKE_JOBS=N", "Override automatic parallelism when -j is absent."),
     ("MAKE_JOB_MEMORY_MB=1536", "Estimated memory budget per automatic build job."),
     ("MAKE_ASCII=1", "Force ASCII-only UI glyphs for constrained terminals and logs."),
-    ("MAKE_CHECK_TARGETS=a,b", "Ordered Makefile targets used by the composed quality gate."),
+    ("MAKE_CHECK_TARGETS=a,b", "Ordered ./make commands used by the composed quality gate."),
     ("MAKE_HYGIENE_EXTENSIONS=c,h,...", "Override text-source extensions scanned by source hygiene."),
     ("MAKE_COMPDB=0", "Disable automatic compilation-database refresh after successful builds."),
     ("MAKE_VENDOR_SOURCE_DIRS=a:b", "Local dependency source trees to preserve in a vendor bundle."),
@@ -2512,7 +2787,8 @@ ENVIRONMENT_HELP: tuple[tuple[str, str], ...] = (
 
 
 def list_make_targets(_args: list[str], _ctx: AppContext) -> int:
-    for target in sorted(make_targets()):
+    # Preserve the familiar command while sourcing it from Python's registry.
+    for target in sorted(COMMANDS):
         print(target)
     return 0
 
@@ -2539,37 +2815,19 @@ def _join_shell_continuations(text: str) -> list[str]:
 
 
 def _native_compdb_from_make() -> list[dict[str, object]]:
-    """Generate a clang compilation database from this project's Make dry-run.
-
-    Bear remains the preferred parser when installed; this deterministic fallback
-    keeps clangd usable on fresh checkouts without making Bear a hard dependency.
-    """
-    env = os.environ.copy()
-    env["LC_ALL"] = "C"
-    proc = subprocess.run(
-        [system_make(), "-Bnwk", "all"], cwd=str(ROOT), env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
-    )
-    if proc.returncode not in (0, 1):
-        raise CliError("could not obtain Make dry-run for compile_commands.json", detail=proc.stderr.strip())
+    """Generate a compilation database from the canonical Python build plan."""
+    config = BuildConfig("debug")
+    sets = _source_sets()
     candidates: dict[str, tuple[int, dict[str, object]]] = {}
-    compiler_names = {"cc", "gcc", "clang", "clang-cl", "c99", "c11"}
-    for line in _join_shell_continuations(proc.stdout):
-        try:
-            argv = shlex.split(line)
-        except ValueError:
-            continue
-        if not argv or Path(argv[0]).name not in compiler_names or "-c" not in argv:
-            continue
-        source = next((arg for arg in argv if arg.endswith((".c", ".cc", ".cpp", ".cxx")) and (ROOT / arg).exists()), None)
-        if source is None:
-            continue
-        output = argv[argv.index("-o") + 1] if "-o" in argv and argv.index("-o") + 1 < len(argv) else ""
-        rank = 0 if "/compiler/" in output else 1 if "/runtime/" in output else 2 if "/embed/" in output else 3
-        entry = {"directory": str(ROOT), "file": str((ROOT / source).resolve()), "arguments": argv}
-        current = candidates.get(entry["file"])
-        if current is None or rank < current[0]:
-            candidates[entry["file"]] = (rank, entry)
+    for kind, rank, embed in (("runtime", 1, False), ("compiler", 0, False),
+                              ("embed", 2, True), ("api", 3, False)):
+        for source in sets[kind]:
+            output = _object_path(source, kind)
+            command = _compile_command(source, output, config, embed=embed)
+            entry = {"directory": str(ROOT), "file": str(source.resolve()), "arguments": command}
+            current = candidates.get(entry["file"])
+            if current is None or rank < current[0]:
+                candidates[entry["file"]] = (rank, entry)
     return [item[1] for item in sorted(candidates.values(), key=lambda item: str(item[1]["file"]))]
 
 
@@ -2584,33 +2842,11 @@ def _publish_compdb(path: Path) -> None:
 
 def generate_compdb(ctx: AppContext, *, quiet: bool = False) -> int:
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
-    entries: list[dict[str, object]] | None = None
-    source = "Make dry-run"
-    bear = which("bear")
-    if bear:
-        env = os.environ.copy()
-        env["LC_ALL"] = "C"
-        dry = subprocess.run(
-            [system_make(), "-Bnwk", "all"], cwd=str(ROOT), env=env,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
-        )
-        parsed = subprocess.run(
-            [bear, "parse-sh", "-o", str(COMPDB_PATH)], cwd=str(ROOT), env=env,
-            input=dry.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False,
-        )
-        if parsed.returncode == 0 and COMPDB_PATH.is_file():
-            try:
-                loaded = json.loads(COMPDB_PATH.read_text(encoding="utf-8"))
-                if isinstance(loaded, list) and loaded:
-                    entries = loaded
-                    source = "Bear"
-            except (OSError, json.JSONDecodeError):
-                entries = None
-    if entries is None:
-        entries = _native_compdb_from_make()
-        if not entries:
-            raise CliError("no compiler invocations were found for compile_commands.json")
-        COMPDB_PATH.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+    entries = _native_compdb_from_make()
+    if not entries:
+        raise CliError("no compiler invocations were found for compile_commands.json")
+    source = "Python build plan"
+    COMPDB_PATH.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
     _publish_compdb(COMPDB_PATH)
     if not quiet:
         UI.ok(f"compilation database ready · {len(entries)} translation units · {source}")
@@ -2637,27 +2873,88 @@ def refresh_compdb(ctx: AppContext) -> None:
 
 def command_all(args: list[str], ctx: AppContext) -> int:
     started = time.perf_counter()
-    run_make(["all"] if make_has_target("all") else None, jobs=ctx.jobs, extra=args)
+    if args:
+        die("all: use global -j/--jobs for build parallelism")
+    build_project("debug", jobs=ctx.jobs)
     refresh_compdb(ctx)
     UI.ok(f"build completed in {format_elapsed(time.perf_counter() - started)}")
     return 0
 
 
-def command_make_target(target: str) -> CommandFunc:
+def command_build_mode(mode: str) -> CommandFunc:
     def handler(args: list[str], ctx: AppContext) -> int:
-        resolved = target
-        if target in {"release", "debug"} and not make_has_target(target):
-            resolved = ctx.project.build_target
-        if resolved and not make_has_target(resolved):
-            die(f"Makefile has no {resolved} target")
+        if args:
+            die(f"{mode}: use global -j/--jobs for build parallelism")
         started = time.perf_counter()
-        run_make([resolved] if resolved else None, jobs=ctx.jobs, extra=args)
-        if target in {"release", "debug"}:
+        build_project(mode, jobs=ctx.jobs)
+        if mode in {"release", "debug"}:
             refresh_compdb(ctx)
-        UI.ok(f"{target} completed in {format_elapsed(time.perf_counter() - started)}")
+        UI.ok(f"{mode} completed in {format_elapsed(time.perf_counter() - started)}")
         return 0
 
     return handler
+
+
+def command_install(args: list[str], ctx: AppContext) -> int:
+    if args:
+        die("install: use environment variables PREFIX, BINDIR, LIBDIR, or INCDIR")
+    started = time.perf_counter()
+    target = build_project("debug", jobs=ctx.jobs)
+    prefix = Path(os.environ.get("PREFIX", "/usr/local")).expanduser()
+    bindir = Path(os.environ.get("BINDIR", str(prefix / "bin")))
+    libdir = Path(os.environ.get("LIBDIR", str(prefix / "lib")))
+    incdir = Path(os.environ.get("INCDIR", str(prefix / "include" / "monad")))
+    core_dir = Path(os.environ.get("COREDIR", str(prefix / "lib" / "monad" / "core")))
+    for directory in (bindir, libdir, incdir):
+        directory.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(target, bindir / target.name)
+    libraries = [
+        "libmonad.a", "libmonad-embed.a", "libmonad-embed.so",
+        "libmonad-compiler.a", "libmonad-compiler.so",
+    ]
+    for name in libraries:
+        source = BUILD_ROOT / "lib" / name
+        if source.exists():
+            shutil.copy2(source, libdir / name)
+    for header in [ROOT / "src" / "runtime.h", *(ROOT / "src" / "embed" / "include" / "monad").glob("*.h")]:
+        shutil.copy2(header, incdir / ("runtime.h" if header.name == "runtime.h" else header.name))
+    if core_dir.exists():
+        shutil.rmtree(core_dir)
+    for source in (ROOT / "core").rglob("*.mon"):
+        if source.name.startswith(".#"):
+            continue
+        destination = core_dir / source.relative_to(ROOT / "core")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    if env_flag("PREWARM_REPL_CACHE", True):
+        cache_dir = Path(os.environ.get("CORE_CACHE_DIR", str(Path.home() / ".cache" / "monad" / "core")))
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run([str(bindir / target.name)], input=b"", stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=False)
+    UI.ok(f"install completed in {format_elapsed(time.perf_counter() - started)}")
+    return 0
+
+
+def command_uninstall(args: list[str], _ctx: AppContext) -> int:
+    if args:
+        die("uninstall: use environment variables PREFIX, BINDIR, LIBDIR, or INCDIR")
+    prefix = Path(os.environ.get("PREFIX", "/usr/local")).expanduser()
+    bindir = Path(os.environ.get("BINDIR", str(prefix / "bin")))
+    libdir = Path(os.environ.get("LIBDIR", str(prefix / "lib")))
+    incdir = Path(os.environ.get("INCDIR", str(prefix / "include" / "monad")))
+    core_dir = Path(os.environ.get("COREDIR", str(prefix / "lib" / "monad" / "core")))
+    for path in [bindir / "monad", *[libdir / name for name in (
+        "libmonad.a", "libmonad-embed.a", "libmonad-embed.so",
+        "libmonad-compiler.a", "libmonad-compiler.so",
+    )]]:
+        path.unlink(missing_ok=True)
+    for directory in (incdir, core_dir):
+        if directory.exists():
+            shutil.rmtree(directory)
+    UI.ok("uninstall completed")
+    return 0
 
 
 def command_help(args: list[str], _ctx: AppContext) -> int:
@@ -2681,24 +2978,28 @@ def command_ubsan(args: list[str], ctx: AppContext) -> int:
 
 COMMAND_SPECS: tuple[CommandSpec, ...] = (
     CommandSpec(
-        "all", "Build", "./make all [make args]",
+        "all", "Build", "./make [--jobs N] all",
         "Build the project's default target with CPU/RAM-aware parallelism.",
         command_all,
         (("-j, --jobs N", "Override automatic parallelism."),),
     ),
     CommandSpec(
-        "release", "Build", "./make release [make args]",
+        "release", "Build", "./make [--jobs N] release",
         "Run the release target, falling back to the default build target.",
-        command_make_target("release"),
+        command_build_mode("release"),
     ),
     CommandSpec(
-        "debug", "Build", "./make debug [make args]",
+        "debug", "Build", "./make [--jobs N] debug",
         "Run the debug target, falling back to the default build target.",
-        command_make_target("debug"),
+        command_build_mode("debug"),
+    ),
+    CommandSpec(
+        "perf", "Build", "./make perf",
+        "Build an optimized profiling binary and libraries.", command_build_mode("perf"),
     ),
     CommandSpec(
         "compdb", "Build", "./make compdb",
-        "Generate compile_commands.json for clangd from the canonical Make build.",
+        "Generate compile_commands.json for clangd from the canonical Python build plan.",
         command_compdb, no_args=True,
     ),
     CommandSpec(
@@ -2709,12 +3010,12 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         present=False,
     ),
     CommandSpec(
-        "install", "Build", "./make install [make args]",
-        "Delegate installation to the Makefile.", command_make_target("install"),
+        "install", "Build", "./make install",
+        "Install the compiler, libraries, headers, and core library.", command_install,
     ),
     CommandSpec(
-        "uninstall", "Build", "./make uninstall [make args]",
-        "Delegate uninstallation to the Makefile.", command_make_target("uninstall"),
+        "uninstall", "Build", "./make uninstall",
+        "Remove the installed compiler, libraries, headers, and core library.", command_uninstall,
     ),
     CommandSpec(
         "clean", "Build", "./make clean [--check]",
@@ -2731,7 +3032,7 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
             ("--quick", "Run hygiene and configured quality targets, but skip tests in the composed fallback gate."),
             ("--no-build", "Skip the build stage in the composed fallback gate."),
             ("--no-tests", "Skip the test stage in the composed fallback gate."),
-            ("MAKE_CHECK_TARGETS=a,b", "Use an explicit ordered set of Makefile targets for the gate."),
+            ("MAKE_CHECK_TARGETS=a,b", "Use an explicit ordered set of ./make commands for the gate."),
         ),
     ),
     CommandSpec(
@@ -2755,6 +3056,78 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         present=False,
     ),
     CommandSpec(
+        "test-core", "Quality", "./make test-core",
+        "Run the core module verification suite.", command_core_tests,
+    ),
+    CommandSpec(
+        "core", "Quality", "./make core",
+        "Alias for the core module verification suite.", command_core_tests,
+    ),
+    CommandSpec(
+        "test-embedding", "Quality", "./make test-embedding",
+        "Run the explicit native embedding contract suite.", command_embedding_tests,
+    ),
+    CommandSpec(
+        "repl", "Quality", "./make repl",
+        "Run the focused REPL contract suite.", command_repl_tests,
+    ),
+    CommandSpec(
+        "bytecode", "Quality", "./make bytecode",
+        "Run the bytecode contract suite with visual output enabled.", command_bytecode_tests,
+    ),
+    CommandSpec(
+        "test-bytecode", "Quality", "./make test-bytecode",
+        "Alias for the bytecode contract suite.", command_bytecode_tests,
+    ),
+    CommandSpec(
+        "test-runner", "Quality", "./make test-runner",
+        "Run the compiler-facing runner contract.", command_runner_contract,
+    ),
+    CommandSpec(
+        "test-how-to", "Quality", "./make test-how-to",
+        "Compile and execute the how-to examples contract.", command_how_to_tests,
+    ),
+    CommandSpec(
+        "test-context-visualizer", "Quality", "./make test-context-visualizer",
+        "Run context visualizer contract tests.", command_context_tests("src.testing.contracts.test_context_visualizer"),
+    ),
+    CommandSpec(
+        "test-context-lint", "Quality", "./make test-context-lint",
+        "Run context linter contract tests.", command_context_tests("src.testing.contracts.test_context_lint"),
+    ),
+    CommandSpec(
+        "test-context-refs", "Quality", "./make test-context-refs",
+        "Run context reference contract tests.", command_context_tests("src.testing.contracts.test_context_refs"),
+    ),
+    CommandSpec(
+        "test-context-graph", "Quality", "./make test-context-graph",
+        "Run context graph contract tests.", command_context_tests("src.testing.contracts.test_context_graph"),
+    ),
+    CommandSpec(
+        "verify-context", "Quality", "./make verify-context",
+        "Validate context IDs, references, and test links.", command_verify_context,
+    ),
+    CommandSpec(
+        "verify-context-strict", "Quality", "./make verify-context-strict",
+        "Run advisory strict context quality metrics.", command_verify_context_strict,
+    ),
+    CommandSpec(
+        "test-fuzzing", "Quality", "./make test-fuzzing",
+        "Run deterministic code-generation fuzz contracts.", command_fuzzing,
+    ),
+    CommandSpec(
+        "fuzzing", "Quality", "./make fuzzing",
+        "Alias for deterministic code-generation fuzz contracts.", command_fuzzing,
+    ),
+    CommandSpec(
+        "generate-asm-tests", "Quality", "./make generate-asm-tests",
+        "Generate the inline-assembly regression fixtures.", command_generate_asm("generate-asm-tests"),
+    ),
+    CommandSpec(
+        "generate-asm-tests-extra", "Quality", "./make generate-asm-tests-extra",
+        "Generate the extended inline-assembly regression fixtures.", command_generate_asm("generate-asm-tests-extra"),
+    ),
+    CommandSpec(
         "asan", "Quality", "./make asan [--build-only]",
         "Run AddressSanitizer through a native target or a generic compiler-flag fallback.",
         command_asan,
@@ -2770,6 +3143,24 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         "hooks", "Quality", "./make hooks",
         "Activate repository-managed .githooks for this checkout.", command_hooks,
         no_args=True,
+    ),
+    CommandSpec(
+        "install-git-hooks", "Quality", "./make install-git-hooks",
+        "Alias for installing repository-managed Git hooks.", command_hooks,
+        no_args=True,
+    ),
+    CommandSpec(
+        "verify-push", "Quality", "./make verify-push",
+        "Run the clean-tree and quality gates used before pushing.", command_verify_push,
+        no_args=True,
+    ),
+    CommandSpec(
+        "context-visualizer", "Quality", "./make context-visualizer",
+        "Render the context corpus visualization.",
+        lambda args, _ctx: subprocess.run(
+            [sys.executable, "-B", "src/tooling/context/visualizer.py", *args],
+            cwd=str(ROOT), check=False,
+        ).returncode,
     ),
     CommandSpec(
         "vendor", "Portable", "./make vendor [command-or-path] [dir]",
@@ -2829,7 +3220,7 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
     ),
     CommandSpec(
         "targets", "Inspect", "./make targets",
-        "List discovered Makefile targets, one per line for shell-friendly use.",
+        "List available ./make commands, one per line for shell-friendly use.",
         list_make_targets, present=False, no_args=True,
     ),
     CommandSpec(
@@ -2861,14 +3252,14 @@ COMMANDS = build_command_registry(COMMAND_SPECS)
 
 def command_summary(name: str) -> str:
     spec = COMMANDS.get(name)
-    return spec.summary if spec else "Run a Makefile target through the project build frontend."
+    return spec.summary if spec else "Run a command through the Python build frontend."
 
 
 def print_command_help(name: str) -> bool:
     spec = COMMANDS.get(name)
     if spec is None:
         if make_has_target(name):
-            UI.header(name, "Raw Makefile target exposed through the project build frontend.")
+            UI.header(name, "Legacy target exposed through the project build frontend.")
             UI.section("Usage")
             print(f"  {UI.paint(UI.theme.accent, './make ' + name)} {UI.dim('[make args]')}")
             print("")
@@ -2876,7 +3267,7 @@ def print_command_help(name: str) -> bool:
             UI.option_rows(list(GLOBAL_OPTIONS))
             return True
         UI.error(f"unknown help topic '{name}'")
-        UI.hint("use ./make help for the command index or ./make targets for raw Makefile targets")
+        UI.hint("use ./make help for the command index or ./make targets for available commands")
         return False
 
     UI.header(spec.name, spec.summary)
@@ -2954,6 +3345,12 @@ def parse(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
             global_args.extend([arg, argv[i + 1]])
             i += 2
             continue
+        if arg.startswith("-j") and arg[2:].isdigit():
+            if int(arg[2:]) <= 0:
+                raise CliError("-j requires a positive integer")
+            global_args.extend(["--jobs", arg[2:]])
+            i += 1
+            continue
         if arg.startswith("--color="):
             global_args.append(arg)
             i += 1
@@ -3025,21 +3422,9 @@ def _main(argv: list[str]) -> int:
     if spec is not None:
         return execute_command(spec, args, ctx)
 
-    if make_has_target(cmd):
-        if args and args[0] in HELP_TOKENS:
-            return 0 if print_command_help(cmd) else 2
-        UI.header(cmd, command_summary(cmd))
-        if UI.verbose:
-            UI.kv_rows([("jobs", f"{jobs} ({jobs_source})"), ("host", f"{host_os()} / {host_arch()}")])
-            print("")
-        started = time.perf_counter()
-        run_make([cmd], jobs=jobs, extra=args)
-        UI.ok(f"{cmd} completed in {format_elapsed(time.perf_counter() - started)}")
-        return 0
-
     die(
         f"unknown command '{cmd}'",
-        hint="run ./make help for commands or ./make targets for raw Makefile targets",
+        hint="run ./make help for the canonical command index",
     )
 
 

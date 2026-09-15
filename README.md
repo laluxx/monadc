@@ -20,7 +20,7 @@ The canonical developer front door is `./make`:
 ./make test
 ```
 
-The compiler produced by the Make build lives at:
+The compiler produced by the Python build frontend lives at:
 
 ```text
 build/bin/monad
@@ -77,7 +77,7 @@ The important boundary is simple:
 
 ## Building
 
-### Canonical Make build
+### Canonical Python build
 
 ```sh
 ./make all
@@ -85,8 +85,7 @@ The important boundary is simple:
 ./make release
 ```
 
-The underlying `Makefile` keeps objects, libraries, and executables under
-`build/`:
+The Python frontend keeps objects, libraries, and executables under `build/`:
 
 ```text
 build/obj/
@@ -94,16 +93,17 @@ build/lib/
 build/bin/
 ```
 
-Useful lower-level targets remain available when needed:
+The Python script is the only build implementation. There is intentionally no
+root `Makefile`; invoke it directly for all workflows:
 
 ```sh
-make all
-make release
-make asan
-make ubsan
-make test
-make test-core
-make test-embedding
+./make all
+./make release
+./make asan
+./make ubsan
+./make test
+./make core
+./make test-embedding
 ```
 
 ### CMake build
@@ -120,7 +120,7 @@ CMake exports a compilation database automatically.
 
 ## Editor / clangd Support
 
-`./make` maintains `compile_commands.json` for the Make build so clangd can
+`./make` maintains `compile_commands.json` for the Python build so clangd can
 understand files at any depth under `src/` without changing source includes to
 editor-only paths such as `../../...`.
 
@@ -137,9 +137,8 @@ build/compile_commands.json
 and a root `compile_commands.json` link is published for normal clangd ancestor
 discovery.
 
-If Bear is installed, `./make compdb` uses Bear to parse the Make dry-run. If it
-is not installed, Monad uses its deterministic Make-command parser instead.
-Bear is therefore a preferred integration, not a hard build dependency.
+The compilation database is generated directly from the Python build plan; GNU
+Make and Bear are not involved in its generation.
 Successful `./make all`, `./make debug`, and `./make release` refresh the
 database automatically. Set `MAKE_COMPDB=0` only when you explicitly do not want
 that behavior.
@@ -216,9 +215,9 @@ This makes a dirty source tree visible before garbage reaches Git history.
 ./make check
 ```
 
-The fallback quality gate is fail-closed: source hygiene, build, and canonical
-tests. Projects can layer additional Make quality targets without changing the
-front-end contract.
+The quality gate is fail-closed: source hygiene, build, and canonical tests.
+Additional checks belong in the Python frontend, which is the single source of
+truth for build, test, packaging, installation, and cleanup.
 
 Sanitizer workflows are first-class:
 
@@ -241,7 +240,7 @@ It contains the material needed to build and verify the language:
 - `core/`
 - `.mon` tests
 - `how_to/` and `examples/`
-- `Makefile`, `CMakeLists.txt`, and `./make`
+- `CMakeLists.txt` and `./make`
 - managed Git hooks and package metadata
 
 It does **not** copy `.git`, build products, caches, vendored toolchains,

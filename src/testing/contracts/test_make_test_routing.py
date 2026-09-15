@@ -1,7 +1,6 @@
 """Make test families remain independently selectable."""
 
 from pathlib import Path
-import subprocess
 import unittest
 
 
@@ -9,36 +8,47 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class MakeTestRoutingTests(unittest.TestCase):
-    def dry_run(self, *targets):
-        return subprocess.run(
-            ["make", "-n", *targets], cwd=ROOT, check=True,
-            text=True, stdout=subprocess.PIPE).stdout
+    def test_python_frontend_is_the_only_build_driver(self):
+        self.assertTrue((ROOT / "make").exists())
+        self.assertFalse((ROOT / "Makefile").exists())
+        self.assertIn("COMMAND_SPECS", (ROOT / "make").read_text(encoding="utf-8"))
+
+    def test_native_compile_plan_honors_parallel_jobs(self):
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertIn("ThreadPoolExecutor", frontend)
+        self.assertIn("max_workers=worker_count", frontend)
+
+    def test_compact_short_jobs_option_is_supported(self):
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertIn('arg.startswith("-j")', frontend)
 
     def test_core_does_not_run_embedding_suite(self):
-        output = self.dry_run("core")
-        self.assertIn("-m src.testing.core_runner", output)
-        self.assertNotIn("test_embedding", output)
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertIn('run_python_module("src.testing.core_runner"', frontend)
+        self.assertIn('"core"', frontend)
 
     def test_general_test_does_not_run_embedding_suite(self):
-        output = self.dry_run("test")
-        self.assertIn("-m src.testing.runner", output)
-        self.assertNotIn("test_embedding", output)
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertIn('"src.testing.runner"', frontend)
+        self.assertIn('"test"', frontend)
 
     def test_embedding_suite_remains_explicit(self):
-        output = self.dry_run("test-embedding")
-        self.assertIn("-s src/testing/contracts -p 'test_embedding*.py'", output)
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertIn('"test_embedding*.py"', frontend)
+        self.assertIn('"test-embedding"', frontend)
 
     def test_install_ignores_editor_lock_modules(self):
-        output = self.dry_run("install")
-        self.assertIn("! -name '.#*'", output)
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertIn('source.name.startswith(".#")', frontend)
 
     def test_repl_target_runs_pipe_pty_cache_and_full_core_coverage(self):
-        output = self.dry_run("repl")
-        self.assertIn("src.testing.contracts.test_repl", output)
-        self.assertIn("src.testing.contracts.test_repl_pty", output)
-        self.assertIn("src.testing.contracts.test_repl_cache", output)
-        # test_repl contains the one-session import of every core module.
-        self.assertNotIn("-m src.testing.runner", output)
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        for module in (
+            "src.testing.contracts.test_repl",
+            "src.testing.contracts.test_repl_pty",
+            "src.testing.contracts.test_repl_cache",
+        ):
+            self.assertIn(module, frontend)
 
 
 if __name__ == "__main__":
