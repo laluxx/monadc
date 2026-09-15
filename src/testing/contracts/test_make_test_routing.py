@@ -22,6 +22,11 @@ class MakeTestRoutingTests(unittest.TestCase):
         frontend = (ROOT / "make").read_text(encoding="utf-8")
         self.assertIn('arg.startswith("-j")', frontend)
 
+    def test_source_archive_does_not_require_makefile(self):
+        frontend = (ROOT / "make").read_text(encoding="utf-8")
+        self.assertNotIn('    "Makefile",\n    "CMakeLists.txt",', frontend)
+        self.assertIn('    "CMakeLists.txt",\n    "make",', frontend)
+
     def test_core_does_not_run_embedding_suite(self):
         frontend = (ROOT / "make").read_text(encoding="utf-8")
         self.assertIn('run_python_module("src.testing.core_runner"', frontend)

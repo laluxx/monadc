@@ -1772,7 +1772,6 @@ def tar_source_ignore(_dir: str, names: list[str]) -> set[str]:
 
 
 SOURCE_PACKAGE_REQUIRED = (
-    "Makefile",
     "CMakeLists.txt",
     "make",
     "src/main.c",
@@ -1806,7 +1805,7 @@ def source_package_entry(path: Path, *, with_context: bool) -> bool:
         # one opt-in documentation payload rather than a subtly incomplete one.
         essential_dirs.update({"context", "glyph", "etc"})
     essential_files = {
-        "Makefile", "CMakeLists.txt", "make", "README.md", ".gitignore",
+        "CMakeLists.txt", "make", "README.md", ".gitignore",
         "LICENSE", "LICENSE.txt", "COPYING", "CHANGELOG.md",
     }
     return path.name in essential_dirs or path.name in essential_files
@@ -1832,7 +1831,7 @@ def write_agent_build(package_dir: Path, *, with_binaries: bool, with_vendor: bo
         "core/ — shipped Monad core library",
         "tests/ — authored .mon verification corpus only",
         "how_to/ and examples/ — executable language examples",
-        "Makefile, CMakeLists.txt, and ./make — canonical build frontends",
+        "CMakeLists.txt and ./make — canonical build frontends",
         ".githooks/ and .github/ — clean-tree enforcement and CI verification contract",
         "SOURCE_MANIFEST.json — package hashes and build metadata",
     ]
