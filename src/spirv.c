@@ -1,4 +1,5 @@
 #include "spirv.h"
+#include "compat.h"
 
 #include <ctype.h>
 #include <errno.h>

@@ -1,4 +1,5 @@
 #include "typeclass.h"
+#include "compat.h"
 #include "codegen.h"
 #include "env.h"
 #include "types.h"
